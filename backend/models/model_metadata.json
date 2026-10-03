@@ -1,0 +1,109 @@
+{
+  "model_type": "RandomForestClassifier",
+  "n_estimators": 120,
+  "accuracy": 0.8833,
+  "precision": 0.92,
+  "recall": 0.9388,
+  "f1_score": 0.9293,
+  "confusion_matrix": [
+    [
+      7,
+      4
+    ],
+    [
+      3,
+      46
+    ]
+  ],
+  "n_train_samples": 240,
+  "n_val_samples": 60,
+  "total_samples": 300,
+  "trained_at": "2026-10-04T02:45:54.783669",
+  "feature_importances": [
+    {
+      "feature": "deadline_pressure",
+      "label": "Deadline Pressure",
+      "importance": 0.1907,
+      "percentage": 19.1
+    },
+    {
+      "feature": "days_remaining",
+      "label": "Days Remaining",
+      "importance": 0.1656,
+      "percentage": 16.6
+    },
+    {
+      "feature": "effort_ratio",
+      "label": "Effort-to-Time Ratio",
+      "importance": 0.1632,
+      "percentage": 16.3
+    },
+    {
+      "feature": "historical_risk",
+      "label": "Historical Bottleneck Risk",
+      "importance": 0.0665,
+      "percentage": 6.6
+    },
+    {
+      "feature": "estimated_effort",
+      "label": "Estimated Effort (Hours)",
+      "importance": 0.0658,
+      "percentage": 6.6
+    },
+    {
+      "feature": "workload_score",
+      "label": "Workload Pressure",
+      "importance": 0.064,
+      "percentage": 6.4
+    },
+    {
+      "feature": "historical_user_completion_rate",
+      "label": "Historical Completion Rate",
+      "importance": 0.0575,
+      "percentage": 5.7
+    },
+    {
+      "feature": "project_completion_rate",
+      "label": "Project Completion Rate",
+      "importance": 0.056,
+      "percentage": 5.6
+    },
+    {
+      "feature": "project_pending_tasks",
+      "label": "Project Pending Tasks",
+      "importance": 0.0501,
+      "percentage": 5.0
+    },
+    {
+      "feature": "task_age",
+      "label": "Task Age (Days)",
+      "importance": 0.0316,
+      "percentage": 3.2
+    },
+    {
+      "feature": "dependency_count",
+      "label": "Dependency Count",
+      "importance": 0.0308,
+      "percentage": 3.1
+    },
+    {
+      "feature": "dependency_pressure",
+      "label": "Dependency Pressure",
+      "importance": 0.0295,
+      "percentage": 2.9
+    },
+    {
+      "feature": "priority_score",
+      "label": "Task Priority",
+      "importance": 0.0174,
+      "percentage": 1.7
+    },
+    {
+      "feature": "previous_overdue_count",
+      "label": "Previous Overdue Count",
+      "importance": 0.0115,
+      "percentage": 1.2
+    }
+  ],
+  "is_trained": true
+}
