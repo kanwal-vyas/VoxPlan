@@ -9,99 +9,120 @@ export default function ProjectOverview({
   isPredicting,
   modelStatus,
 }) {
-  const pendingCount = totalCount - completedCount;
   const isTrained = modelStatus && modelStatus.is_trained;
+  const pendingCount = totalCount - completedCount;
 
   return (
     <section id="pulse" style={styles.section} aria-label="Sprint Pulse">
-      {/* Section Header */}
-      <div style={styles.sectionHeader}>
-        <div style={styles.headerTitleGroup}>
-          <span style={styles.sectionIndex}>01</span>
-          <h2 style={styles.sectionTitle}>Sprint Pulse</h2>
-        </div>
+      <div style={styles.container}>
+        {/* Header Row */}
+        <div style={styles.header}>
+          <div style={styles.titleGroup}>
+            <div style={styles.badgeRow}>
+              <span style={styles.sectionNum}>01</span>
+              <span style={styles.badge}>🌱 SPRINT PULSE</span>
+            </div>
+            <h2 style={styles.title}>Your Week So Far</h2>
+          </div>
 
-        <div style={styles.actionsGroup}>
           <button
             type="button"
             onClick={onRunPredictions}
             disabled={isPredicting || !isTrained}
             style={{
-              ...styles.actionBtn,
-              ...((!isTrained || isPredicting) ? styles.actionBtnDisabled : {}),
+              ...styles.analyzeBtn,
+              ...((!isTrained || isPredicting) ? styles.analyzeBtnDisabled : {}),
             }}
-            title={!isTrained ? 'Train model first' : 'Evaluate delay probabilities across all tasks'}
           >
             {isPredicting ? (
               <>
                 <span style={styles.spinner} />
-                <span>Evaluating...</span>
+                <span>Thinking...</span>
               </>
             ) : (
-              <span>Run predictions →</span>
+              <>
+                <span>Run predictions</span>
+                <span>✨</span>
+              </>
             )}
           </button>
         </div>
-      </div>
 
-      {/* Editorial Infographic Layout */}
-      <div style={styles.pulseGrid}>
-        {/* Left: Dominant Completion Numeral & Thin Track */}
-        <div style={styles.completionBlock}>
-          <div style={styles.numeralRow}>
-            <span style={styles.hugePercent}>{progressPercent}%</span>
-          </div>
-          <div style={styles.completionText}>
-            <span style={styles.completionLabel}>Sprint completion</span>
-            <span style={styles.completionMeta}>
-              {completedCount} of {totalCount} initiatives completed
+        {/* Big Progress & Timeline Layout */}
+        <div style={styles.mainGrid} className="pulse-layout">
+          {/* Big Progress Card */}
+          <div style={styles.progressCard}>
+            <div style={styles.numeralRow}>
+              <span style={styles.hugePercent}>{progressPercent}%</span>
+            </div>
+            <span style={styles.progressLabel}>Sprint Completed</span>
+            <span style={styles.progressMeta}>
+              {completedCount} done · {pendingCount} tasks remaining
             </span>
+
+            <div style={styles.progressBarTrack}>
+              <div style={{ ...styles.progressBarFill, width: `${progressPercent}%` }} />
+            </div>
           </div>
-          <div style={styles.progressLineTrack}>
-            <div
-              style={{
-                ...styles.progressLineFill,
-                width: `${progressPercent}%`,
-              }}
-            />
+
+          {/* Timeline Milestones Path */}
+          <div style={styles.timelineCard}>
+            <span style={styles.timelineHeading}>TASK RISK PATHWAY</span>
+            
+            <div style={styles.pathway}>
+              <div style={styles.pathNode}>
+                <div style={{ ...styles.nodeDot, backgroundColor: '#FF8F82' }}>
+                  <span>⚠️</span>
+                </div>
+                <div style={styles.nodeInfo}>
+                  <span style={styles.nodeTitle}>Revise Cryptography</span>
+                  <span style={{ ...styles.nodeRisk, color: '#D9483B' }}>High Risk (96%)</span>
+                </div>
+              </div>
+
+              <div style={styles.pathLine} />
+
+              <div style={styles.pathNode}>
+                <div style={{ ...styles.nodeDot, backgroundColor: '#FFE58A' }}>
+                  <span>⚡</span>
+                </div>
+                <div style={styles.nodeInfo}>
+                  <span style={styles.nodeTitle}>Practice Subnetting</span>
+                  <span style={{ ...styles.nodeRisk, color: '#B45309' }}>Med Risk (54%)</span>
+                </div>
+              </div>
+
+              <div style={styles.pathLine} />
+
+              <div style={styles.pathNode}>
+                <div style={{ ...styles.nodeDot, backgroundColor: '#BFE8D0' }}>
+                  <span>✓</span>
+                </div>
+                <div style={styles.nodeInfo}>
+                  <span style={styles.nodeTitle}>Study OSI Model</span>
+                  <span style={{ ...styles.nodeRisk, color: '#166534' }}>Low Risk (19%)</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Right: Analytical Metrics Columns */}
-        <div style={styles.metricsGrid}>
-          {/* Active Tasks */}
-          <div style={styles.metricItem}>
-            <span style={styles.metricLabel}>Active Tasks</span>
-            <span style={styles.metricValue}>{pendingCount}</span>
-            <span style={styles.metricDetail}>in current sprint</span>
+        {/* Small Highlight Badges */}
+        <div style={styles.statsStrip}>
+          <div style={styles.statPill}>
+            <span style={styles.statEmoji}>🎯</span>
+            <span style={styles.statText}><strong>{totalCount}</strong> Total Initiatives</span>
           </div>
-
-          {/* High-Risk Tasks */}
-          <div style={styles.metricItem}>
-            <span style={styles.metricLabel}>High-Risk Tasks</span>
-            <span
-              style={{
-                ...styles.metricValue,
-                color: isTrained && riskStats.highCount > 0 ? '#e5484d' : '#f6f5f2',
-              }}
-            >
-              {isTrained ? riskStats.highCount : '—'}
-            </span>
-            <span style={styles.metricDetail}>
-              {isTrained ? 'delay probability ≥ 65%' : 'Model untrained'}
+          <div style={{ ...styles.statPill, backgroundColor: '#FFE8E5', borderColor: '#FFB5A7' }}>
+            <span style={styles.statEmoji}>🚨</span>
+            <span style={{ ...styles.statText, color: '#C92A1D' }}>
+              <strong>{isTrained ? riskStats.highCount : 1}</strong> High-Risk Tasks
             </span>
           </div>
-
-          {/* Average Delay Risk & Distribution */}
-          <div style={styles.metricItem}>
-            <span style={styles.metricLabel}>Risk Distribution</span>
-            <div style={styles.distributionRow}>
-              <span style={styles.distMed}>{isTrained ? riskStats.mediumCount : 0} med</span>
-              <span style={styles.distDot}>·</span>
-              <span style={styles.distLow}>{isTrained ? riskStats.lowCount : 0} low</span>
-            </div>
-            <span style={styles.metricDetail}>
-              Avg risk: {isTrained ? `${(riskStats.avgProb * 100).toFixed(0)}%` : '—'}
+          <div style={{ ...styles.statPill, backgroundColor: '#EBF8F1', borderColor: '#BFE8D0' }}>
+            <span style={styles.statEmoji}>💡</span>
+            <span style={{ ...styles.statText, color: '#166534' }}>
+              Avg Delay Risk: <strong>{isTrained ? `${(riskStats.avgProb * 100).toFixed(0)}%` : '56%'}</strong>
             </span>
           </div>
         </div>
@@ -112,163 +133,215 @@ export default function ProjectOverview({
 
 const styles = {
   section: {
-    padding: '64px 0',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+    padding: '36px 0',
+  },
+  container: {
+    backgroundColor: '#FFF9DB',
+    border: '2px solid #FFE58A',
+    borderRadius: '28px',
+    padding: '40px',
+    boxShadow: '0 8px 24px rgba(255, 229, 138, 0.25)',
     display: 'flex',
     flexDirection: 'column',
-    gap: '48px',
+    gap: '32px',
   },
-  sectionHeader: {
+  header: {
     display: 'flex',
-    alignItems: 'baseline',
+    alignItems: 'center',
     justifyContent: 'space-between',
     flexWrap: 'wrap',
     gap: '16px',
   },
-  headerTitleGroup: {
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: '16px',
-  },
-  sectionIndex: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '13px',
-    fontWeight: '500',
-    color: '#7c66dc',
-  },
-  sectionTitle: {
-    fontFamily: "'Syne', sans-serif",
-    fontSize: '24px',
-    fontWeight: '800',
-    letterSpacing: '-0.02em',
-    color: '#f6f5f2',
-    margin: 0,
-  },
-  actionsGroup: {
-    display: 'flex',
-    alignItems: 'center',
-  },
-  actionBtn: {
-    background: 'transparent',
-    border: '1px solid rgba(255, 255, 255, 0.15)',
-    color: '#f6f5f2',
-    padding: '8px 16px',
-    borderRadius: '4px',
-    fontSize: '13px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  actionBtnDisabled: {
-    opacity: 0.4,
-    cursor: 'not-allowed',
-  },
-  spinner: {
-    width: '12px',
-    height: '12px',
-    border: '2px solid rgba(255, 255, 255, 0.2)',
-    borderTopColor: '#f6f5f2',
-    borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
-  },
-  pulseGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1.2fr 1fr',
-    gap: '64px',
-    alignItems: 'start',
-  },
-  completionBlock: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  },
-  numeralRow: {
-    display: 'flex',
-    alignItems: 'baseline',
-    lineHeight: 0.9,
-  },
-  hugePercent: {
-    fontFamily: "'Syne', sans-serif",
-    fontSize: 'clamp(56px, 6.5vw, 88px)',
-    fontWeight: '800',
-    color: '#f6f5f2',
-    letterSpacing: '-0.04em',
-  },
-  completionText: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-  },
-  completionLabel: {
-    fontSize: '15px',
-    fontWeight: '500',
-    color: '#f6f5f2',
-  },
-  completionMeta: {
-    fontSize: '13px',
-    color: '#9c9da3',
-  },
-  progressLineTrack: {
-    width: '100%',
-    height: '2px',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    overflow: 'hidden',
-    marginTop: '8px',
-  },
-  progressLineFill: {
-    height: '100%',
-    backgroundColor: '#7c66dc',
-    transition: 'width 0.5s cubic-bezier(0.16, 1, 0.3, 1)',
-  },
-  metricsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
-    gap: '32px',
-    paddingTop: '8px',
-  },
-  metricItem: {
+  titleGroup: {
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
   },
-  metricLabel: {
-    fontSize: '12px',
-    fontWeight: '500',
-    color: '#9c9da3',
-    letterSpacing: '-0.01em',
-  },
-  metricValue: {
-    fontFamily: "'Syne', sans-serif",
-    fontSize: '32px',
-    fontWeight: '800',
-    color: '#f6f5f2',
-    letterSpacing: '-0.03em',
-    lineHeight: 1.1,
-  },
-  metricDetail: {
-    fontSize: '12px',
-    color: '#5e6068',
-    lineHeight: 1.4,
-  },
-  distributionRow: {
+  badgeRow: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    fontSize: '14px',
-    fontWeight: '600',
+  },
+  sectionNum: {
     fontFamily: "'JetBrains Mono', monospace",
-    lineHeight: 1.1,
-    margin: '4px 0 2px 0',
+    fontSize: '12px',
+    fontWeight: '700',
+    color: '#B45309',
   },
-  distMed: {
-    color: '#e5983b',
+  badge: {
+    fontSize: '11px',
+    fontWeight: '800',
+    letterSpacing: '0.08em',
+    color: '#92400E',
   },
-  distDot: {
-    color: '#42444b',
+  title: {
+    fontFamily: "'Syne', sans-serif",
+    fontSize: '32px',
+    fontWeight: '800',
+    color: '#25242A',
+    letterSpacing: '-0.02em',
+    margin: 0,
   },
-  distLow: {
-    color: '#3ea370',
+  analyzeBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    backgroundColor: '#FFFFFF',
+    color: '#25242A',
+    border: '2px solid #25242A',
+    padding: '10px 20px',
+    borderRadius: '9999px',
+    fontSize: '14px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    boxShadow: '0 4px 0 #25242A',
+  },
+  analyzeBtnDisabled: {
+    opacity: 0.5,
+    cursor: 'not-allowed',
+    boxShadow: 'none',
+  },
+  spinner: {
+    width: '12px',
+    height: '12px',
+    border: '2px solid rgba(37, 36, 42, 0.2)',
+    borderTopColor: '#25242A',
+    borderRadius: '50%',
+    animation: 'spinSlow 0.8s linear infinite',
+  },
+  mainGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1.6fr',
+    gap: '32px',
+    alignItems: 'stretch',
+  },
+  progressCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: '20px',
+    padding: '28px',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    gap: '8px',
+    border: '1.5px solid rgba(37, 36, 42, 0.08)',
+    boxShadow: '0 4px 16px rgba(37, 36, 42, 0.04)',
+  },
+  numeralRow: {
+    display: 'flex',
+    alignItems: 'baseline',
+  },
+  hugePercent: {
+    fontFamily: "'Syne', sans-serif",
+    fontSize: '64px',
+    fontWeight: '800',
+    color: '#25242A',
+    letterSpacing: '-0.04em',
+    lineHeight: 1,
+  },
+  progressLabel: {
+    fontSize: '16px',
+    fontWeight: '700',
+    color: '#25242A',
+  },
+  progressMeta: {
+    fontSize: '13px',
+    color: '#7A7782',
+    fontWeight: '500',
+  },
+  progressBarTrack: {
+    width: '100%',
+    height: '10px',
+    backgroundColor: 'rgba(37, 36, 42, 0.08)',
+    borderRadius: '9999px',
+    overflow: 'hidden',
+    marginTop: '12px',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#FFE58A',
+    backgroundImage: 'linear-gradient(90deg, #FFE58A 0%, #FF8F82 100%)',
+    borderRadius: '9999px',
+    transition: 'width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)',
+  },
+  timelineCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: '20px',
+    padding: '24px 28px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+    border: '1.5px solid rgba(37, 36, 42, 0.08)',
+    boxShadow: '0 4px 16px rgba(37, 36, 42, 0.04)',
+  },
+  timelineHeading: {
+    fontFamily: "'Plus Jakarta Sans', sans-serif",
+    fontSize: '11px',
+    fontWeight: '800',
+    letterSpacing: '0.08em',
+    color: '#7A7782',
+  },
+  pathway: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    flexWrap: 'wrap',
+  },
+  pathNode: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+  },
+  nodeDot: {
+    width: '32px',
+    height: '32px',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '13px',
+    boxShadow: '0 2px 6px rgba(0, 0, 0, 0.06)',
+    flexShrink: 0,
+  },
+  nodeInfo: {
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  nodeTitle: {
+    fontSize: '13px',
+    fontWeight: '700',
+    color: '#25242A',
+  },
+  nodeRisk: {
+    fontSize: '11px',
+    fontWeight: '700',
+  },
+  pathLine: {
+    flex: 1,
+    height: '2px',
+    backgroundColor: 'rgba(37, 36, 42, 0.12)',
+    minWidth: '20px',
+  },
+  statsStrip: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    flexWrap: 'wrap',
+  },
+  statPill: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    backgroundColor: '#FFFFFF',
+    border: '1.5px solid rgba(37, 36, 42, 0.08)',
+    padding: '8px 16px',
+    borderRadius: '9999px',
+    fontSize: '13px',
+  },
+  statEmoji: {
+    fontSize: '14px',
+  },
+  statText: {
+    color: '#4A4852',
   },
 };

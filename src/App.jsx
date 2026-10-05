@@ -8,6 +8,7 @@ import ProjectOverview from './components/ProjectOverview';
 import MLModelPanel from './components/MLModelPanel';
 import TaskList from './components/TaskList';
 import TaskExplanationModal from './components/TaskExplanationModal';
+import LoadingScreen from './components/LoadingScreen';
 import {
   checkBackendHealth,
   getModelStatus,
@@ -132,6 +133,8 @@ const loadSavedTasks = () => {
 };
 
 export default function App() {
+  const [isLoading, setIsLoading] = useState(true);
+  const [scrollProgress, setScrollProgress] = useState(0);
   const [tasks, setTasks] = useState(loadSavedTasks);
   const [activeFilter, setActiveFilter] = useState('all');
   const [feedback, setFeedback] = useState(null);
@@ -149,6 +152,18 @@ export default function App() {
   const [selectedTaskExplanation, setSelectedTaskExplanation] = useState(null);
 
   const mlPanelRef = useRef(null);
+
+  // Track scroll progress
+  useEffect(() => {
+    const handleScroll = () => {
+      const totalScroll = document.documentElement.scrollHeight - window.innerHeight;
+      if (totalScroll > 0) {
+        setScrollProgress((window.scrollY / totalScroll) * 100);
+      }
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // Persist tasks to localStorage whenever tasks change
   useEffect(() => {
@@ -625,18 +640,29 @@ export default function App() {
 
   return (
     <div style={styles.app}>
+      {/* Initial Branded Loading Sequence */}
+      {isLoading && <LoadingScreen onComplete={() => setIsLoading(false)} />}
+
+      {/* Subtle Scroll Progress Indicator */}
+      <div style={styles.progressBarWrapper}>
+        <div style={{ ...styles.progressBarTrack, width: `${scrollProgress}%` }} />
+      </div>
+
       <div style={styles.content}>
-        {/* Minimal Navigation & Observatory Header */}
+        {/* Floating Pastel Header */}
         <Header
           isBackendOnline={isBackendOnline}
           modelMetadata={modelStatus}
           onScrollToSection={handleScrollToSection}
         />
 
-        {/* Oversized Editorial Hero Lockup */}
-        <Hero modelMetadata={modelStatus} />
+        {/* Playful Hero */}
+        <Hero
+          modelMetadata={modelStatus}
+          onScrollToSection={handleScrollToSection}
+        />
 
-        {/* Section 01: Sprint Pulse */}
+        {/* Section 01: Sprint Pulse (Butter Yellow Panel) */}
         <ProjectOverview
           totalCount={totalCount}
           completedCount={completedCount}
@@ -647,7 +673,7 @@ export default function App() {
           modelStatus={modelStatus}
         />
 
-        {/* Section 02: Risk Landscape */}
+        {/* Section 02: Risk Landscape (Lavender Sticky Notes Wall) */}
         <TaskList
           tasks={tasks}
           predictionsMap={predictionsMap}
@@ -660,7 +686,7 @@ export default function App() {
           onOpenExplanation={(task, pred) => setSelectedTaskExplanation({ task, pred })}
         />
 
-        {/* Section 03: Model Intelligence */}
+        {/* Section 03: Model Intelligence (Soft Mint Brain Panel) */}
         <div ref={mlPanelRef}>
           <MLModelPanel
             modelStatus={modelStatus}
@@ -671,7 +697,7 @@ export default function App() {
           />
         </div>
 
-        {/* Section 04: Command Center */}
+        {/* Section 04: Command Center (Soft Peach Notebook Assistant) */}
         <CommandBar
           onExecuteCommand={executeCommand}
           feedback={feedback}
@@ -681,7 +707,7 @@ export default function App() {
         />
       </div>
 
-      {/* Task ML Explainability Modal */}
+      {/* Task ML Explainability Modal (Smart Note) */}
       {selectedTaskExplanation && (
         <TaskExplanationModal
           task={selectedTaskExplanation.task}
@@ -696,12 +722,27 @@ export default function App() {
 const styles = {
   app: {
     minHeight: '100vh',
-    backgroundColor: '#0a0b0e',
-    color: '#f6f5f2',
-    fontFamily: "'Instrument Sans', sans-serif",
+    backgroundColor: '#FFF8EF',
+    color: '#25242A',
+    fontFamily: "'Plus Jakarta Sans', 'Instrument Sans', sans-serif",
     position: 'relative',
     overflowX: 'hidden',
-    padding: '0 32px 100px 32px',
+    padding: '0 20px 80px 20px',
+  },
+  progressBarWrapper: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '3px',
+    zIndex: 999,
+    backgroundColor: 'rgba(37, 36, 42, 0.04)',
+  },
+  progressBarTrack: {
+    height: '100%',
+    backgroundColor: '#FF8F82',
+    backgroundImage: 'linear-gradient(90deg, #FF8F82 0%, #FFE58A 50%, #C9B6FF 100%)',
+    transition: 'width 0.1s ease',
   },
   content: {
     maxWidth: '1120px',
@@ -710,6 +751,7 @@ const styles = {
     zIndex: 1,
     display: 'flex',
     flexDirection: 'column',
+    gap: '12px',
   },
 };
 

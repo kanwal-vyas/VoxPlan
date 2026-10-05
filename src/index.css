@@ -1,51 +1,57 @@
 :root {
-  /* Warm Deep Charcoal Backgrounds */
-  --bg-primary: #0a0b0e;
-  --bg-surface: #111216;
-  --bg-surface-elevated: #16181f;
-  --bg-surface-subtle: rgba(255, 255, 255, 0.02);
+  /* Warm Pastel Cream Palette */
+  --bg-cream: #FFF8EF;
+  --bg-cream-alt: #FFF4E5;
+  --bg-white: #FFFFFF;
+  
+  /* Pastel Accent Colors */
+  --pastel-butter: #FFE58A;
+  --pastel-butter-light: #FFF9DB;
+  --pastel-peach: #FFB5A7;
+  --pastel-peach-light: #FFEFEA;
+  --pastel-coral: #FF8F82;
+  --pastel-coral-light: #FFE8E5;
+  --pastel-lilac: #C9B6FF;
+  --pastel-lilac-light: #F3EEFF;
+  --pastel-lavender: #DDD2FF;
+  --pastel-mint: #BFE8D0;
+  --pastel-mint-light: #EBF8F1;
+  --pastel-sky: #B9DDF7;
+  --pastel-sky-light: #EBF5FE;
 
-  /* Hairlines & Rules */
-  --rule-subtle: rgba(255, 255, 255, 0.08);
-  --rule-muted: rgba(255, 255, 255, 0.04);
-  --rule-accent: rgba(124, 102, 220, 0.35);
+  /* Typography Colors */
+  --text-dark: #25242A;
+  --text-body: #4A4852;
+  --text-muted: #7A7782;
+  --text-light: #9B98A3;
 
-  /* Editorial Typography */
-  --text-primary: #f6f5f2;      /* Warm ivory / soft white */
-  --text-secondary: #9c9da3;    /* Muted warm gray */
-  --text-tertiary: #5e6068;     /* Stone gray */
-  --text-muted: #42444b;
+  /* Card Borders & Shadows */
+  --border-subtle: rgba(37, 36, 42, 0.08);
+  --border-card: rgba(37, 36, 42, 0.12);
+  --border-dashed: rgba(37, 36, 42, 0.18);
+  --shadow-soft: 0 4px 16px rgba(37, 36, 42, 0.05);
+  --shadow-card: 0 8px 24px rgba(37, 36, 42, 0.06);
+  --shadow-hover: 0 14px 32px rgba(37, 36, 42, 0.1);
+  --shadow-pop: 0 6px 0 rgba(37, 36, 42, 0.9);
 
-  /* Single Restrained Accent */
-  --accent-primary: #7c66dc;    /* Restrained iris/indigo - NO GLOW */
-  --accent-subtle: rgba(124, 102, 220, 0.1);
-  --accent-hover: #8f7ae6;
-
-  /* Data Notation Colors (Editorial Data Pigments) */
-  --risk-high: #e5484d;         /* Restrained editorial coral/red */
-  --risk-high-subtle: rgba(229, 72, 77, 0.08);
-  --risk-medium: #e5983b;       /* Restrained warm amber */
-  --risk-medium-subtle: rgba(229, 152, 59, 0.08);
-  --risk-low: #3ea370;          /* Restrained sage green */
-  --risk-low-subtle: rgba(62, 163, 112, 0.08);
-
-  /* Typography Stacks */
-  --font-display: 'Syne', -apple-system, sans-serif;
-  --font-body: 'Instrument Sans', -apple-system, sans-serif;
+  /* Fonts */
+  --font-display: 'Syne', 'Plus Jakarta Sans', sans-serif;
+  --font-sans: 'Plus Jakarta Sans', 'Instrument Sans', sans-serif;
+  --font-hand: 'Caveat', cursive, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
-  /* Restrained Radius */
-  --radius-xs: 2px;
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --radius-full: 9999px;
 
-  font-family: var(--font-body);
+  font-family: var(--font-sans);
   line-height: 1.6;
-  font-weight: 400;
-  color-scheme: dark;
-  color: var(--text-primary);
-  background-color: var(--bg-primary);
+  font-weight: 500;
+  color: var(--text-dark);
+  background-color: var(--bg-cream);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -64,8 +70,8 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
+  background-color: var(--bg-cream);
+  color: var(--text-dark);
   overflow-x: hidden;
   letter-spacing: -0.01em;
 }
@@ -82,22 +88,23 @@ button, input {
 }
 
 ::selection {
-  background-color: rgba(124, 102, 220, 0.3);
-  color: #ffffff;
+  background-color: var(--pastel-butter);
+  color: var(--text-dark);
 }
 
-/* Subtle Scrollbar */
+/* Friendly Rounded Scrollbar */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--bg-primary);
+  background: var(--bg-cream);
 }
 ::-webkit-scrollbar-thumb {
-  background: #1c1e26;
-  border-radius: 2px;
+  background: #E8DCCF;
+  border-radius: 9999px;
+  border: 2px solid var(--bg-cream);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #2b2e3a;
+  background: #D4C5B5;
 }

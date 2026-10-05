@@ -8,83 +8,117 @@ export default function TaskExplanationModal({ task, prediction, onClose }) {
   const risk = prediction.risk || 'LOW';
   const explanation = prediction.explanation || [];
 
-  const getRiskColor = (r) => {
-    switch (r) {
+  const getTheme = () => {
+    switch (risk) {
       case 'HIGH':
-        return '#e5484d';
+        return {
+          cardBg: '#FFEFEA',
+          cardBorder: '#FF8F82',
+          badgeBg: '#FF8F82',
+          badgeText: '#FFFFFF',
+          riskCalloutBg: '#FFE0DC',
+          riskCalloutText: '#C92A1D',
+          emoji: '🚨',
+          tag: 'High Risk Alert',
+        };
       case 'MEDIUM':
-        return '#e5983b';
+        return {
+          cardBg: '#FFF9DB',
+          cardBorder: '#FFE58A',
+          badgeBg: '#FFE58A',
+          badgeText: '#92400E',
+          riskCalloutBg: '#FEF3C7',
+          riskCalloutText: '#B45309',
+          emoji: '⚡',
+          tag: 'Medium Risk Warning',
+        };
       case 'LOW':
       default:
-        return '#3ea370';
+        return {
+          cardBg: '#EBF8F1',
+          cardBorder: '#BFE8D0',
+          badgeBg: '#BFE8D0',
+          badgeText: '#166534',
+          riskCalloutBg: '#D1FAE5',
+          riskCalloutText: '#065F46',
+          emoji: '🌱',
+          tag: 'Looking Good',
+        };
     }
   };
 
-  const riskColor = getRiskColor(risk);
+  const theme = getTheme();
 
   return (
     <div style={styles.backdrop} onClick={onClose}>
-      <div style={styles.sheet} onClick={(e) => e.stopPropagation()}>
-        {/* Top Header */}
-        <div style={styles.header}>
-          <div style={styles.headerMeta}>
-            <span style={styles.headerLabel}>Analysis</span>
-            <span style={styles.headerDivider}>/</span>
-            <span style={styles.category}>{task.category || 'Initiative'}</span>
+      <div
+        style={{
+          ...styles.sheet,
+          backgroundColor: theme.cardBg,
+          borderColor: theme.cardBorder,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Top Decorative Tape */}
+        <div className="tape-top" />
+
+        {/* Modal Top Row */}
+        <div style={styles.topRow}>
+          <div style={styles.badgeGroup}>
+            <span style={styles.badgeEmoji}>{theme.emoji}</span>
+            <span style={{ ...styles.badgePill, backgroundColor: theme.badgeBg, color: theme.badgeText }}>
+              {theme.tag}
+            </span>
           </div>
           <button
             type="button"
             onClick={onClose}
             style={styles.closeBtn}
-            aria-label="Close analysis"
+            aria-label="Close smart note"
           >
             ✕
           </button>
         </div>
 
-        {/* Task Title & Primary Numeral */}
-        <div style={styles.titleSection}>
+        {/* Title & Risk Highlight */}
+        <div style={styles.titleGroup}>
+          <span style={styles.eyebrow}>SMART NOTE ANALYSIS</span>
           <h2 style={styles.taskTitle}>{task.title}</h2>
-          <div style={styles.riskRow}>
-            <span style={{ ...styles.riskBigNum, color: riskColor }}>
-              {percentage}%
-            </span>
-            <div style={styles.riskLabelGroup}>
-              <span style={{ ...styles.riskStatus, color: riskColor }}>
-                {risk} DELAY RISK
-              </span>
-              <span style={styles.riskSubtext}>
-                Random Forest probability estimate
-              </span>
+
+          <div style={{ ...styles.riskHighlightBox, backgroundColor: theme.riskCalloutBg, color: theme.riskCalloutText }}>
+            <span style={styles.riskNum}>{percentage}%</span>
+            <div style={styles.riskDescGroup}>
+              <span style={styles.riskStatus}>{risk} DELAY RISK</span>
+              <span style={styles.riskSub}>Estimated by Random Forest classifier</span>
             </div>
           </div>
         </div>
 
-        {/* Factors Breakdown */}
-        <div style={styles.factorsSection}>
-          <span style={styles.factorsHeading}>WHY THE MODEL FLAGS THIS TASK</span>
+        {/* Why the model flags this task */}
+        <div style={styles.factorsBlock}>
+          <span style={styles.factorsHeading}>WHY IS THIS TASK WORRYING VOXPLAN?</span>
           <div style={styles.factorsList}>
-            {explanation.map((item, index) => (
-              <div key={index} style={styles.factorRow}>
-                <span style={styles.factorIndex}>0{index + 1}</span>
+            {explanation.map((item, idx) => (
+              <div key={idx} style={styles.factorItem}>
+                <span style={styles.factorNum}>0{idx + 1}</span>
                 <span style={styles.factorText}>{item}</span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Methodological Disclaimer */}
-        <div style={styles.methodologyBox}>
-          <span style={styles.methodologyHeading}>Methodology</span>
-          <p style={styles.methodologyText}>
-            Estimates are derived from learned feature weights in the Random Forest model across historical deadline pressure, task complexity, and sprint workload.
+        {/* Friendly Methodology Notice */}
+        <div style={styles.noteBox}>
+          <span style={styles.noteHeading}>💡 How this works</span>
+          <p style={styles.noteText}>
+            VoxPlan checks historical patterns of deadline pressure, workload, and estimated effort to give you an early heads-up.
           </p>
         </div>
 
         {/* Footer */}
         <div style={styles.footer}>
           <button type="button" onClick={onClose} style={styles.dismissBtn}>
-            Close analysis
+            Got it, thanks! ✨
           </button>
         </div>
       </div>
@@ -99,169 +133,178 @@ const styles = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(5, 6, 8, 0.85)',
+    backgroundColor: 'rgba(37, 36, 42, 0.45)',
+    backdropFilter: 'blur(8px)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 200,
-    padding: '24px',
+    zIndex: 1000,
+    padding: '20px',
   },
   sheet: {
-    backgroundColor: '#0f1014',
-    border: '1px solid rgba(255, 255, 255, 0.12)',
-    borderRadius: '4px',
+    borderRadius: '24px',
+    border: '3px solid',
     maxWidth: '520px',
     width: '100%',
-    padding: '32px',
+    padding: '36px 32px 28px 32px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '24px',
-    boxShadow: '0 20px 40px rgba(0, 0, 0, 0.6)',
-    animation: 'scaleIn 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
+    gap: '20px',
+    boxShadow: '0 24px 48px rgba(37, 36, 42, 0.2)',
+    position: 'relative',
+    animation: 'checkPop 0.22s cubic-bezier(0.34, 1.56, 0.64, 1)',
   },
-  header: {
+  topRow: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-    paddingBottom: '14px',
   },
-  headerMeta: {
+  badgeGroup: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
   },
-  headerLabel: {
-    fontSize: '12px',
-    fontWeight: '600',
-    color: '#7c66dc',
+  badgeEmoji: {
+    fontSize: '18px',
   },
-  headerDivider: {
-    fontSize: '12px',
-    color: '#42444b',
-  },
-  category: {
-    fontSize: '12px',
-    color: '#9c9da3',
+  badgePill: {
+    fontSize: '11px',
+    fontWeight: '800',
+    letterSpacing: '0.06em',
+    padding: '4px 10px',
+    borderRadius: '9999px',
   },
   closeBtn: {
-    background: 'transparent',
-    border: 'none',
-    color: '#9c9da3',
-    fontSize: '16px',
+    background: '#FFFFFF',
+    border: '1.5px solid rgba(37, 36, 42, 0.1)',
+    borderRadius: '50%',
+    width: '32px',
+    height: '32px',
+    color: '#25242A',
+    fontSize: '14px',
     cursor: 'pointer',
-    padding: '0 4px',
-  },
-  titleSection: {
     display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  taskTitle: {
-    fontFamily: "'Syne', sans-serif",
-    fontSize: '26px',
-    fontWeight: '800',
-    color: '#f6f5f2',
-    letterSpacing: '-0.02em',
-    margin: 0,
-    lineHeight: 1.2,
-    textTransform: 'uppercase',
-  },
-  riskRow: {
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: '16px',
-    padding: '16px 0',
-    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-  },
-  riskBigNum: {
-    fontFamily: "'Syne', sans-serif",
-    fontSize: '36px',
-    fontWeight: '800',
-    letterSpacing: '-0.03em',
-    lineHeight: 1,
-  },
-  riskLabelGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-  },
-  riskStatus: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '12px',
-    fontWeight: '700',
-    letterSpacing: '0.06em',
-  },
-  riskSubtext: {
-    fontSize: '12px',
-    color: '#9c9da3',
-  },
-  factorsSection: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '14px',
-  },
-  factorsHeading: {
-    fontSize: '11px',
-    fontWeight: '700',
-    letterSpacing: '0.08em',
-    color: '#9c9da3',
-  },
-  factorsList: {
+  titleGroup: {
     display: 'flex',
     flexDirection: 'column',
     gap: '10px',
   },
-  factorRow: {
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: '12px',
-    fontSize: '14px',
-    lineHeight: 1.5,
+  eyebrow: {
+    fontFamily: "'Plus Jakarta Sans', sans-serif",
+    fontSize: '11px',
+    fontWeight: '800',
+    letterSpacing: '0.08em',
+    color: '#706D73',
   },
-  factorIndex: {
+  taskTitle: {
+    fontFamily: "'Syne', sans-serif",
+    fontSize: '28px',
+    fontWeight: '800',
+    color: '#25242A',
+    letterSpacing: '-0.02em',
+    margin: 0,
+    lineHeight: 1.2,
+  },
+  riskHighlightBox: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+    padding: '12px 16px',
+    borderRadius: '14px',
+    marginTop: '4px',
+  },
+  riskNum: {
+    fontFamily: "'Syne', sans-serif",
+    fontSize: '34px',
+    fontWeight: '800',
+    lineHeight: 1,
+  },
+  riskDescGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  riskStatus: {
+    fontFamily: "'Plus Jakarta Sans', sans-serif",
+    fontSize: '13px',
+    fontWeight: '800',
+  },
+  riskSub: {
+    fontSize: '11px',
+    opacity: 0.85,
+  },
+  factorsBlock: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
+  factorsHeading: {
+    fontFamily: "'Plus Jakarta Sans', sans-serif",
+    fontSize: '11px',
+    fontWeight: '800',
+    letterSpacing: '0.08em',
+    color: '#25242A',
+  },
+  factorsList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  factorItem: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: '10px',
+    padding: '10px 14px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    border: '1px solid rgba(37, 36, 42, 0.08)',
+  },
+  factorNum: {
     fontFamily: "'JetBrains Mono', monospace",
     fontSize: '11px',
-    fontWeight: '600',
-    color: '#7c66dc',
+    fontWeight: '700',
+    color: '#FF8F82',
   },
   factorText: {
-    color: '#f6f5f2',
+    fontSize: '13px',
+    fontWeight: '600',
+    color: '#25242A',
   },
-  methodologyBox: {
-    padding: '12px 14px',
-    border: '1px solid rgba(255, 255, 255, 0.06)',
-    borderRadius: '3px',
+  noteBox: {
+    backgroundColor: 'rgba(255, 255, 255, 0.65)',
+    borderRadius: '12px',
+    padding: '12px 16px',
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
+    border: '1px dashed rgba(37, 36, 42, 0.12)',
   },
-  methodologyHeading: {
-    fontSize: '11px',
-    fontWeight: '600',
-    color: '#9c9da3',
-  },
-  methodologyText: {
+  noteHeading: {
     fontSize: '12px',
-    color: '#5e6068',
+    fontWeight: '700',
+    color: '#25242A',
+  },
+  noteText: {
+    fontSize: '12px',
+    color: '#4A4852',
     margin: 0,
     lineHeight: 1.5,
   },
   footer: {
     display: 'flex',
     justifyContent: 'flex-end',
-    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-    paddingTop: '16px',
   },
   dismissBtn: {
-    backgroundColor: 'transparent',
-    border: '1px solid rgba(255, 255, 255, 0.15)',
-    color: '#f6f5f2',
-    padding: '6px 14px',
-    borderRadius: '3px',
-    fontSize: '12px',
-    fontWeight: '500',
+    backgroundColor: '#25242A',
+    color: '#FFFFFF',
+    border: 'none',
+    padding: '10px 22px',
+    borderRadius: '9999px',
+    fontSize: '13px',
+    fontWeight: '700',
     cursor: 'pointer',
+    boxShadow: '0 4px 0 rgba(0, 0, 0, 0.2)',
   },
 };

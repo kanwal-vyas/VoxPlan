@@ -24,75 +24,76 @@ export default function TaskList({
 
   return (
     <section id="landscape" style={styles.section} aria-label="Risk Landscape">
-      {/* Section Header */}
-      <div style={styles.sectionHeader}>
-        <div style={styles.titleGroup}>
-          <div style={styles.titleWithIndex}>
-            <span style={styles.sectionIndex}>02</span>
-            <h2 style={styles.sectionTitle}>Risk Landscape</h2>
-          </div>
-          <p style={styles.sectionSubtitle}>
-            Delay-risk estimates computed from deadline proximity, workload density, and task complexity
-          </p>
-        </div>
-
-        {/* Minimal Editorial Filter Navigation */}
-        <div style={styles.filterNav}>
-          {[
-            { id: 'all', label: 'All' },
-            { id: 'pending', label: 'Pending' },
-            { id: 'high-risk', label: 'High Risk' },
-            { id: 'completed', label: 'Completed' },
-          ].map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              onClick={() => onChangeFilter(f.id)}
-              style={{
-                ...styles.filterBtn,
-                ...(activeFilter === f.id ? styles.activeFilterBtn : {}),
-              }}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Task Index Sequence */}
-      <div style={styles.sequence}>
-        {filteredTasks.map((task, index) => (
-          <TaskCard
-            key={task.id}
-            index={index}
-            task={task}
-            prediction={predictionsMap[task.id]}
-            onToggleComplete={onToggleComplete}
-            onDelete={onDelete}
-            onUpdateTitle={onUpdateTitle}
-            onCyclePriority={onCyclePriority}
-            onOpenExplanation={onOpenExplanation}
-          />
-        ))}
-
-        {filteredTasks.length === 0 && (
-          <div style={styles.emptyState}>
-            <h4 style={styles.emptyTitle}>
-              {activeFilter === 'high-risk'
-                ? 'No high-risk tasks detected'
-                : activeFilter === 'pending'
-                ? 'All tasks completed'
-                : activeFilter === 'completed'
-                ? 'No completed tasks yet'
-                : 'No tasks in sprint'}
-            </h4>
-            <p style={styles.emptyDesc}>
-              {activeFilter === 'high-risk'
-                ? 'All active tasks are currently estimated within safe delivery parameters.'
-                : 'Add a new task using the command center below.'}
+      <div style={styles.container}>
+        {/* Section Header */}
+        <div style={styles.header}>
+          <div style={styles.titleGroup}>
+            <div style={styles.badgeRow}>
+              <span style={styles.sectionNum}>02</span>
+              <span style={styles.badge}>📌 RISK CHECK</span>
+            </div>
+            <h2 style={styles.title}>The Risk Landscape</h2>
+            <p style={styles.subtitle}>
+              Physical-style sticky notes showing real ML delay risk estimates
             </p>
           </div>
-        )}
+
+          {/* Filter Pills */}
+          <div style={styles.filterNav}>
+            {[
+              { id: 'all', label: 'All Notes', emoji: '📝' },
+              { id: 'pending', label: 'Pending', emoji: '⏳' },
+              { id: 'high-risk', label: 'Uh oh (High Risk)', emoji: '🚨' },
+              { id: 'completed', label: 'Done', emoji: '✨' },
+            ].map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => onChangeFilter(f.id)}
+                style={{
+                  ...styles.filterBtn,
+                  ...(activeFilter === f.id ? styles.activeFilterBtn : {}),
+                }}
+              >
+                <span>{f.emoji}</span>
+                <span>{f.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Grid Wall of Sticky Notes */}
+        <div style={styles.notesGrid}>
+          {filteredTasks.map((task, index) => (
+            <TaskCard
+              key={task.id}
+              index={index}
+              task={task}
+              prediction={predictionsMap[task.id]}
+              onToggleComplete={onToggleComplete}
+              onDelete={onDelete}
+              onUpdateTitle={onUpdateTitle}
+              onCyclePriority={onCyclePriority}
+              onOpenExplanation={onOpenExplanation}
+            />
+          ))}
+
+          {filteredTasks.length === 0 && (
+            <div style={styles.emptyCard}>
+              <span style={styles.emptyEmoji}>🎈</span>
+              <h4 style={styles.emptyTitle}>
+                {activeFilter === 'high-risk'
+                  ? 'All clear! No tasks panicking.'
+                  : activeFilter === 'pending'
+                  ? 'All caught up! Nice job.'
+                  : 'No sticky notes here yet.'}
+              </h4>
+              <p style={styles.emptyDesc}>
+                Use the voice or command assistant below to create a new task.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -100,96 +101,118 @@ export default function TaskList({
 
 const styles = {
   section: {
-    padding: '64px 0',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+    padding: '36px 0',
+  },
+  container: {
+    backgroundColor: '#F3EEFF',
+    border: '2px solid #C9B6FF',
+    borderRadius: '28px',
+    padding: '40px',
+    boxShadow: '0 8px 24px rgba(201, 182, 255, 0.25)',
     display: 'flex',
     flexDirection: 'column',
-    gap: '36px',
+    gap: '32px',
   },
-  sectionHeader: {
+  header: {
     display: 'flex',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
     flexWrap: 'wrap',
-    gap: '24px',
+    gap: '20px',
   },
   titleGroup: {
     display: 'flex',
     flexDirection: 'column',
+    gap: '4px',
+  },
+  badgeRow: {
+    display: 'flex',
+    alignItems: 'center',
     gap: '8px',
   },
-  titleWithIndex: {
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: '16px',
-  },
-  sectionIndex: {
+  sectionNum: {
     fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '13px',
-    fontWeight: '500',
-    color: '#7c66dc',
+    fontSize: '12px',
+    fontWeight: '700',
+    color: '#6E56CF',
   },
-  sectionTitle: {
-    fontFamily: "'Syne', sans-serif",
-    fontSize: '24px',
+  badge: {
+    fontSize: '11px',
     fontWeight: '800',
+    letterSpacing: '0.08em',
+    color: '#5B44BA',
+  },
+  title: {
+    fontFamily: "'Syne', sans-serif",
+    fontSize: '32px',
+    fontWeight: '800',
+    color: '#25242A',
     letterSpacing: '-0.02em',
-    color: '#f6f5f2',
     margin: 0,
   },
-  sectionSubtitle: {
+  subtitle: {
     fontSize: '14px',
-    color: '#9c9da3',
+    color: '#706D73',
     margin: 0,
-    maxWidth: '520px',
-    lineHeight: 1.5,
+    fontWeight: '500',
   },
   filterNav: {
     display: 'flex',
     alignItems: 'center',
-    gap: '6px',
+    gap: '8px',
     flexWrap: 'wrap',
   },
   filterBtn: {
-    background: 'transparent',
-    border: '1px solid transparent',
-    color: '#9c9da3',
-    padding: '6px 12px',
-    borderRadius: '4px',
-    fontSize: '12px',
-    fontWeight: '500',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    border: '1.5px solid rgba(37, 36, 42, 0.08)',
+    color: '#4A4852',
+    padding: '8px 16px',
+    borderRadius: '9999px',
+    fontSize: '13px',
+    fontWeight: '600',
     cursor: 'pointer',
-    transition: 'all 0.15s ease',
   },
   activeFilterBtn: {
-    color: '#f6f5f2',
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    border: '1px solid rgba(255, 255, 255, 0.12)',
+    backgroundColor: '#25242A',
+    borderColor: '#25242A',
+    color: '#FFFFFF',
+    boxShadow: '0 4px 12px rgba(37, 36, 42, 0.15)',
   },
-  sequence: {
-    display: 'flex',
-    flexDirection: 'column',
+  notesGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))',
+    gap: '28px',
+    padding: '16px 4px',
   },
-  emptyState: {
-    padding: '64px 0',
+  emptyCard: {
+    gridColumn: '1 / -1',
+    backgroundColor: '#FFFFFF',
+    borderRadius: '20px',
+    padding: '48px 24px',
     textAlign: 'center',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     gap: '8px',
+    border: '2px dashed rgba(37, 36, 42, 0.15)',
+  },
+  emptyEmoji: {
+    fontSize: '36px',
   },
   emptyTitle: {
     fontFamily: "'Syne', sans-serif",
-    fontSize: '18px',
+    fontSize: '20px',
     fontWeight: '700',
-    color: '#f6f5f2',
+    color: '#25242A',
     margin: 0,
   },
   emptyDesc: {
     fontSize: '14px',
-    color: '#5e6068',
+    color: '#706D73',
     margin: 0,
-    maxWidth: '380px',
-    lineHeight: 1.5,
+    maxWidth: '360px',
   },
 };
