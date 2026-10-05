@@ -13,12 +13,12 @@ export default function ProjectOverview({
   const isTrained = modelStatus && modelStatus.is_trained;
 
   return (
-    <section id="pulse" style={styles.section} aria-label="Project pulse and velocity">
+    <section id="pulse" style={styles.section} aria-label="Sprint Pulse">
       {/* Section Header */}
       <div style={styles.sectionHeader}>
         <div style={styles.headerTitleGroup}>
-          <span style={styles.sectionIndex}>01 / SPRINT PULSE</span>
-          <h2 style={styles.sectionTitle}>Project Trajectory & Health</h2>
+          <span style={styles.sectionIndex}>01</span>
+          <h2 style={styles.sectionTitle}>Sprint Pulse</h2>
         </div>
 
         <div style={styles.actionsGroup}>
@@ -27,37 +27,36 @@ export default function ProjectOverview({
             onClick={onRunPredictions}
             disabled={isPredicting || !isTrained}
             style={{
-              ...styles.analyzeBtn,
-              ...((!isTrained || isPredicting) ? styles.analyzeBtnDisabled : {}),
+              ...styles.actionBtn,
+              ...((!isTrained || isPredicting) ? styles.actionBtnDisabled : {}),
             }}
-            title={!isTrained ? 'Train ML model first' : 'Run live predict_proba on all tasks'}
+            title={!isTrained ? 'Train model first' : 'Evaluate delay probabilities across all tasks'}
           >
             {isPredicting ? (
               <>
                 <span style={styles.spinner} />
-                <span>EVALUATING MODEL PREDICTIONS...</span>
+                <span>Evaluating...</span>
               </>
             ) : (
-              <>
-                <span style={styles.btnDot} />
-                <span>RUN DELAY PREDICTIONS</span>
-              </>
+              <span>Run predictions →</span>
             )}
           </button>
         </div>
       </div>
 
-      {/* Large Editorial Progress Composition */}
+      {/* Editorial Infographic Layout */}
       <div style={styles.pulseGrid}>
-        {/* Left: Huge Completion Numeral */}
+        {/* Left: Dominant Completion Numeral & Thin Track */}
         <div style={styles.completionBlock}>
           <div style={styles.numeralRow}>
-            <span style={styles.hugePercent}>{progressPercent}</span>
-            <span style={styles.percentSymbol}>%</span>
+            <span style={styles.hugePercent}>{progressPercent}%</span>
           </div>
-          <span style={styles.completionSub}>
-            SPRINT COMPLETION • {completedCount} OF {totalCount} TASKS DONE
-          </span>
+          <div style={styles.completionText}>
+            <span style={styles.completionLabel}>Sprint completion</span>
+            <span style={styles.completionMeta}>
+              {completedCount} of {totalCount} initiatives completed
+            </span>
+          </div>
           <div style={styles.progressLineTrack}>
             <div
               style={{
@@ -68,48 +67,41 @@ export default function ProjectOverview({
           </div>
         </div>
 
-        {/* Right: Analytical Risk & Velocity Breakdown */}
-        <div style={styles.breakdownBlock}>
-          {/* Active Queue */}
-          <div style={styles.metricColumn}>
-            <span style={styles.metricKey}>ACTIVE WORKLOAD</span>
-            <div style={styles.metricValueGroup}>
-              <span style={styles.metricBig}>{pendingCount}</span>
-              <span style={styles.metricUnit}>TASKS REMAINING</span>
-            </div>
+        {/* Right: Analytical Metrics Columns */}
+        <div style={styles.metricsGrid}>
+          {/* Active Tasks */}
+          <div style={styles.metricItem}>
+            <span style={styles.metricLabel}>Active Tasks</span>
+            <span style={styles.metricValue}>{pendingCount}</span>
+            <span style={styles.metricDetail}>in current sprint</span>
+          </div>
+
+          {/* High-Risk Tasks */}
+          <div style={styles.metricItem}>
+            <span style={styles.metricLabel}>High-Risk Tasks</span>
+            <span
+              style={{
+                ...styles.metricValue,
+                color: isTrained && riskStats.highCount > 0 ? '#e5484d' : '#f6f5f2',
+              }}
+            >
+              {isTrained ? riskStats.highCount : '—'}
+            </span>
             <span style={styles.metricDetail}>
-              {completedCount} tasks marked complete
+              {isTrained ? 'delay probability ≥ 65%' : 'Model untrained'}
             </span>
           </div>
 
-          {/* High Risk Count */}
-          <div style={styles.metricColumn}>
-            <span style={{ ...styles.metricKey, color: '#fb7185' }}>CRITICAL DELAY RISK</span>
-            <div style={styles.metricValueGroup}>
-              <span style={{ ...styles.metricBig, color: '#f43f5e' }}>
-                {isTrained ? riskStats.highCount : '—'}
-              </span>
-              <span style={{ ...styles.metricUnit, color: '#fb7185' }}>TASKS AT RISK</span>
+          {/* Average Delay Risk & Distribution */}
+          <div style={styles.metricItem}>
+            <span style={styles.metricLabel}>Risk Distribution</span>
+            <div style={styles.distributionRow}>
+              <span style={styles.distMed}>{isTrained ? riskStats.mediumCount : 0} med</span>
+              <span style={styles.distDot}>·</span>
+              <span style={styles.distLow}>{isTrained ? riskStats.lowCount : 0} low</span>
             </div>
             <span style={styles.metricDetail}>
-              Predicted delay probability &ge; 65%
-            </span>
-          </div>
-
-          {/* Medium / Low Balance */}
-          <div style={styles.metricColumn}>
-            <span style={styles.metricKey}>RISK EQUILIBRIUM</span>
-            <div style={styles.equilibriumRow}>
-              <span style={{ color: '#fbbf24', fontWeight: '700', fontFamily: "'JetBrains Mono', monospace" }}>
-                {isTrained ? riskStats.mediumCount : '0'} MED
-              </span>
-              <span style={{ color: '#5e6473' }}>•</span>
-              <span style={{ color: '#34d399', fontWeight: '700', fontFamily: "'JetBrains Mono', monospace" }}>
-                {isTrained ? riskStats.lowCount : '0'} LOW
-              </span>
-            </div>
-            <span style={styles.metricDetail}>
-              Avg sprint delay risk: {isTrained ? `${(riskStats.avgProb * 100).toFixed(0)}%` : '—'}
+              Avg risk: {isTrained ? `${(riskStats.avgProb * 100).toFixed(0)}%` : '—'}
             </span>
           </div>
         </div>
@@ -120,178 +112,163 @@ export default function ProjectOverview({
 
 const styles = {
   section: {
-    padding: '20px 0 30px 0',
+    padding: '64px 0',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
     display: 'flex',
     flexDirection: 'column',
-    gap: '32px',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.07)',
-    paddingBottom: '48px',
+    gap: '48px',
   },
   sectionHeader: {
     display: 'flex',
-    alignItems: 'flex-end',
+    alignItems: 'baseline',
     justifyContent: 'space-between',
     flexWrap: 'wrap',
     gap: '16px',
   },
   headerTitleGroup: {
     display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
+    alignItems: 'baseline',
+    gap: '16px',
   },
   sectionIndex: {
-    fontSize: '10px',
-    fontWeight: '700',
-    letterSpacing: '0.14em',
-    color: '#7c5cfc',
     fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '13px',
+    fontWeight: '500',
+    color: '#7c66dc',
   },
   sectionTitle: {
     fontFamily: "'Syne', sans-serif",
-    fontSize: '28px',
+    fontSize: '24px',
     fontWeight: '800',
-    color: '#ffffff',
-    letterSpacing: '-0.03em',
+    letterSpacing: '-0.02em',
+    color: '#f6f5f2',
     margin: 0,
   },
   actionsGroup: {
     display: 'flex',
     alignItems: 'center',
   },
-  analyzeBtn: {
+  actionBtn: {
+    background: 'transparent',
+    border: '1px solid rgba(255, 255, 255, 0.15)',
+    color: '#f6f5f2',
+    padding: '8px 16px',
+    borderRadius: '4px',
+    fontSize: '13px',
+    fontWeight: '500',
+    cursor: 'pointer',
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '10px',
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    border: '1px solid rgba(255, 255, 255, 0.16)',
-    color: '#f5f5f7',
-    padding: '10px 18px',
-    borderRadius: '8px',
-    fontSize: '11px',
-    fontWeight: '700',
-    fontFamily: "'JetBrains Mono', monospace",
-    letterSpacing: '0.08em',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
+    gap: '8px',
   },
-  analyzeBtnDisabled: {
-    opacity: 0.45,
+  actionBtnDisabled: {
+    opacity: 0.4,
     cursor: 'not-allowed',
-  },
-  btnDot: {
-    width: '6px',
-    height: '6px',
-    borderRadius: '50%',
-    backgroundColor: '#38bdf8',
-    boxShadow: '0 0 8px #38bdf8',
   },
   spinner: {
     width: '12px',
     height: '12px',
     border: '2px solid rgba(255, 255, 255, 0.2)',
-    borderTopColor: '#ffffff',
+    borderTopColor: '#f6f5f2',
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
   },
   pulseGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-    gap: '48px',
-    alignItems: 'center',
+    gridTemplateColumns: '1.2fr 1fr',
+    gap: '64px',
+    alignItems: 'start',
   },
   completionBlock: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px',
+    gap: '16px',
   },
   numeralRow: {
     display: 'flex',
     alignItems: 'baseline',
-    gap: '4px',
     lineHeight: 0.9,
   },
   hugePercent: {
     fontFamily: "'Syne', sans-serif",
-    fontSize: 'clamp(64px, 8vw, 100px)',
+    fontSize: 'clamp(56px, 6.5vw, 88px)',
     fontWeight: '800',
-    color: '#ffffff',
-    letterSpacing: '-0.05em',
+    color: '#f6f5f2',
+    letterSpacing: '-0.04em',
   },
-  percentSymbol: {
-    fontFamily: "'Syne', sans-serif",
-    fontSize: 'clamp(28px, 4vw, 42px)',
-    fontWeight: '700',
-    color: '#7c5cfc',
+  completionText: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
   },
-  completionSub: {
-    fontSize: '11px',
-    fontWeight: '600',
-    letterSpacing: '0.08em',
-    color: '#868b98',
-    fontFamily: "'JetBrains Mono', monospace",
+  completionLabel: {
+    fontSize: '15px',
+    fontWeight: '500',
+    color: '#f6f5f2',
+  },
+  completionMeta: {
+    fontSize: '13px',
+    color: '#9c9da3',
   },
   progressLineTrack: {
     width: '100%',
-    height: '4px',
+    height: '2px',
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: '2px',
     overflow: 'hidden',
-    marginTop: '6px',
+    marginTop: '8px',
   },
   progressLineFill: {
     height: '100%',
-    background: 'linear-gradient(90deg, #7c5cfc 0%, #38bdf8 100%)',
-    borderRadius: '2px',
-    transition: 'width 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
+    backgroundColor: '#7c66dc',
+    transition: 'width 0.5s cubic-bezier(0.16, 1, 0.3, 1)',
   },
-  breakdownBlock: {
+  metricsGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-    gap: '28px',
-    borderLeft: '1px solid rgba(255, 255, 255, 0.08)',
-    paddingLeft: '32px',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+    gap: '32px',
+    paddingTop: '8px',
   },
-  metricColumn: {
+  metricItem: {
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
   },
-  metricKey: {
-    fontSize: '10px',
-    fontWeight: '700',
-    letterSpacing: '0.12em',
-    color: '#868b98',
-    fontFamily: "'JetBrains Mono', monospace",
+  metricLabel: {
+    fontSize: '12px',
+    fontWeight: '500',
+    color: '#9c9da3',
+    letterSpacing: '-0.01em',
   },
-  metricValueGroup: {
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: '6px',
-  },
-  metricBig: {
+  metricValue: {
     fontFamily: "'Syne', sans-serif",
     fontSize: '32px',
     fontWeight: '800',
-    color: '#ffffff',
+    color: '#f6f5f2',
     letterSpacing: '-0.03em',
     lineHeight: 1.1,
   },
-  metricUnit: {
-    fontSize: '10px',
-    fontWeight: '700',
-    color: '#868b98',
-    fontFamily: "'JetBrains Mono', monospace",
-  },
   metricDetail: {
     fontSize: '12px',
-    color: '#5e6473',
+    color: '#5e6068',
     lineHeight: 1.4,
   },
-  equilibriumRow: {
+  distributionRow: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    fontSize: '13px',
+    fontSize: '14px',
+    fontWeight: '600',
+    fontFamily: "'JetBrains Mono', monospace",
+    lineHeight: 1.1,
     margin: '4px 0 2px 0',
+  },
+  distMed: {
+    color: '#e5983b',
+  },
+  distDot: {
+    color: '#42444b',
+  },
+  distLow: {
+    color: '#3ea370',
   },
 };

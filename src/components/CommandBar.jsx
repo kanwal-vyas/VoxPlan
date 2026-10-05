@@ -23,36 +23,18 @@ export default function CommandBar({
   };
 
   return (
-    <section style={styles.commandSection} id="section-command" aria-label="Command Center">
+    <section style={styles.section} id="command" aria-label="Command Center">
       {/* Editorial Section Eyebrow */}
-      <div style={styles.headerRow}>
-        <div style={styles.titleGroup}>
-          <span style={styles.sectionIndex}>04 // INTELLIGENCE INTERFACE</span>
-          <h2 style={styles.sectionTitle}>COMMAND VOXPLAN</h2>
+      <div style={styles.sectionHeader}>
+        <div style={styles.titleWithIndex}>
+          <span style={styles.sectionIndex}>04</span>
+          <h2 style={styles.sectionTitle}>Ask VoxPlan</h2>
         </div>
-        <span style={styles.sectionTag}>VOICE & NATURAL LANGUAGE</span>
+        <span style={styles.sectionTag}>Voice & Natural Language</span>
       </div>
 
-      <div style={{
-        ...styles.commandConsole,
-        ...(isListening ? styles.consoleListening : {}),
-      }}>
-        {/* Top telemetry bar */}
-        <div style={styles.consoleBar}>
-          <div style={styles.consoleStatus}>
-            <span style={{
-              ...styles.statusLight,
-              backgroundColor: isListening ? '#f43f5e' : '#7c5cfc',
-              boxShadow: isListening ? '0 0 10px #f43f5e' : '0 0 10px #7c5cfc',
-            }} />
-            <span style={styles.statusText}>
-              {isListening ? 'WISPR FLOW LISTENING MODE ACTIVE' : 'AWAITING NATURAL LANGUAGE COMMAND'}
-            </span>
-          </div>
-          <span style={styles.consoleShortcut}>ENTER ↵ TO EXECUTE</span>
-        </div>
-
-        {/* Input area */}
+      <div style={styles.commandContainer}>
+        {/* Input Form */}
         <form onSubmit={handleSubmit} style={styles.form}>
           <div style={styles.inputRow}>
             <input
@@ -64,11 +46,11 @@ export default function CommandBar({
                   handleSubmit(e);
                 }
               }}
-              placeholder={isListening ? 'Speak your command clearly...' : 'Ask VoxPlan what you want to know or execute...'}
+              placeholder={isListening ? 'Listening via microphone...' : 'What would you like to know about your project?'}
               style={styles.input}
             />
 
-            {/* Mic / Wispr Button */}
+            {/* Subtle Microphone Button */}
             <button
               type="button"
               onClick={onToggleListening}
@@ -76,25 +58,24 @@ export default function CommandBar({
                 ...styles.micButton,
                 ...(isListening ? styles.micButtonActive : {}),
               }}
-              title={isListening ? 'Listening via Wispr Flow... click to stop' : 'Click or use Wispr Flow to speak commands'}
-              aria-label="Toggle voice command input"
+              title={isListening ? 'Listening... click to stop' : 'Click or use Wispr Flow to speak commands'}
+              aria-label="Toggle voice input"
             >
               {isListening ? (
                 <div style={styles.waveGroup}>
-                  <span style={{ ...styles.waveBar, animationDelay: '0ms' }} />
-                  <span style={{ ...styles.waveBar, animationDelay: '150ms' }} />
-                  <span style={{ ...styles.waveBar, animationDelay: '300ms' }} />
-                  <span style={{ ...styles.waveBar, animationDelay: '150ms' }} />
-                  <span style={{ ...styles.waveBar, animationDelay: '0ms' }} />
+                  <span style={{ ...styles.waveBar, animation: 'soundwave 0.8s ease-in-out infinite 0ms' }} />
+                  <span style={{ ...styles.waveBar, animation: 'soundwave 0.8s ease-in-out infinite 150ms' }} />
+                  <span style={{ ...styles.waveBar, animation: 'soundwave 0.8s ease-in-out infinite 300ms' }} />
+                  <span style={{ ...styles.waveBar, animation: 'soundwave 0.8s ease-in-out infinite 150ms' }} />
                 </div>
               ) : (
                 <svg
-                  width="20"
-                  height="20"
+                  width="18"
+                  height="18"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="2.2"
+                  strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 >
@@ -105,14 +86,14 @@ export default function CommandBar({
               )}
             </button>
 
-            {/* Submit Arrow Button */}
+            {/* Submit Arrow */}
             <button
               type="submit"
               style={styles.submitBtn}
               title="Execute command"
               aria-label="Execute command"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="5" y1="12" x2="19" y2="12" />
                 <polyline points="12 5 19 12 12 19" />
               </svg>
@@ -120,7 +101,7 @@ export default function CommandBar({
           </div>
         </form>
 
-        {/* Real-time Feedback Banner */}
+        {/* Real-time Feedback Message */}
         {feedback && (
           <div
             role="status"
@@ -133,72 +114,35 @@ export default function CommandBar({
                 : styles.feedbackInfo),
             }}
           >
-            <div style={styles.feedbackIcon}>
-              {feedback.type === 'success' && (
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              )}
-              {feedback.type === 'error' && (
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="8" x2="12" y2="12" />
-                  <line x1="12" y1="16" x2="12.01" y2="16" />
-                </svg>
-              )}
-              {feedback.type === 'info' && (
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="16" x2="12" y2="12" />
-                  <line x1="12" y1="8" x2="12.01" y2="8" />
-                </svg>
-              )}
-            </div>
             <span style={styles.feedbackText}>{feedback.message}</span>
             <button
               type="button"
               onClick={onDismissFeedback}
               style={styles.feedbackCloseBtn}
-              aria-label="Dismiss feedback"
+              aria-label="Dismiss message"
             >
-              ×
+              ✕
             </button>
           </div>
         )}
 
-        {/* Interactive Quick Command Suggestions */}
-        <div style={styles.chipsSection}>
-          <span style={styles.chipsPrompt}>RECOMMENDED DIRECTIVES</span>
-          <div style={styles.chipsGrid}>
+        {/* Suggested Directives */}
+        <div style={styles.suggestionsRow}>
+          {[
+            { label: 'SHOW HIGH RISK TASKS', cmd: 'show high risk tasks' },
+            { label: 'EXPLAIN PROJECT RISK', cmd: 'explain project risk' },
+            { label: 'TRAIN THE MODEL', cmd: 'train the model' },
+            { label: 'SHOW MODEL PERFORMANCE', cmd: 'show model performance' },
+          ].map((item) => (
             <button
+              key={item.cmd}
               type="button"
-              onClick={() => handleHintClick('show high risk tasks')}
-              style={styles.chip}
+              onClick={() => handleHintClick(item.cmd)}
+              style={styles.suggestionBtn}
             >
-              SHOW HIGH RISK TASKS
+              {item.label}
             </button>
-            <button
-              type="button"
-              onClick={() => handleHintClick('explain project risk')}
-              style={styles.chip}
-            >
-              EXPLAIN PROJECT RISK
-            </button>
-            <button
-              type="button"
-              onClick={() => handleHintClick('train the model')}
-              style={styles.chip}
-            >
-              TRAIN THE MODEL
-            </button>
-            <button
-              type="button"
-              onClick={() => handleHintClick('show model performance')}
-              style={styles.chip}
-            >
-              SHOW MODEL PERFORMANCE
-            </button>
-          </div>
+          ))}
         </div>
       </div>
     </section>
@@ -206,99 +150,54 @@ export default function CommandBar({
 }
 
 const styles = {
-  commandSection: {
+  section: {
+    padding: '64px 0 32px 0',
     display: 'flex',
     flexDirection: 'column',
-    gap: '20px',
+    gap: '32px',
     width: '100%',
-    padding: '40px 0 20px 0',
   },
-  headerRow: {
+  sectionHeader: {
     display: 'flex',
-    alignItems: 'flex-end',
+    alignItems: 'baseline',
     justifyContent: 'space-between',
     flexWrap: 'wrap',
     gap: '16px',
-    paddingBottom: '16px',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.07)',
   },
-  titleGroup: {
+  titleWithIndex: {
     display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
+    alignItems: 'baseline',
+    gap: '16px',
   },
   sectionIndex: {
     fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '11px',
-    fontWeight: '700',
-    letterSpacing: '0.12em',
-    color: '#7c5cfc',
+    fontSize: '13px',
+    fontWeight: '500',
+    color: '#7c66dc',
   },
   sectionTitle: {
     fontFamily: "'Syne', sans-serif",
-    fontSize: '28px',
+    fontSize: '24px',
     fontWeight: '800',
     letterSpacing: '-0.02em',
-    color: '#ffffff',
+    color: '#f6f5f2',
     margin: 0,
-    textTransform: 'uppercase',
   },
   sectionTag: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '11px',
-    color: '#5e6473',
-    letterSpacing: '0.08em',
+    fontSize: '13px',
+    color: '#5e6068',
   },
-  commandConsole: {
-    backgroundColor: '#101218',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '16px',
-    overflow: 'hidden',
-    transition: 'all 0.25s ease',
+  commandContainer: {
     display: 'flex',
     flexDirection: 'column',
-  },
-  consoleListening: {
-    borderColor: 'rgba(244, 63, 94, 0.5)',
-    boxShadow: '0 0 32px rgba(244, 63, 94, 0.15)',
-  },
-  consoleBar: {
-    padding: '12px 20px',
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: '10px',
-  },
-  consoleStatus: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  statusLight: {
-    width: '6px',
-    height: '6px',
-    borderRadius: '50%',
-    transition: 'all 0.2s ease',
-  },
-  statusText: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '10px',
-    fontWeight: '700',
-    letterSpacing: '0.1em',
-    color: '#868b98',
-  },
-  consoleShortcut: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '10px',
-    color: '#5e6473',
-    letterSpacing: '0.08em',
+    gap: '20px',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    borderRadius: '4px',
+    padding: '24px',
+    backgroundColor: 'rgba(255, 255, 255, 0.01)',
   },
   form: {
     width: '100%',
-    padding: '18px 20px',
   },
   inputRow: {
     display: 'flex',
@@ -310,91 +209,78 @@ const styles = {
     backgroundColor: 'transparent',
     border: 'none',
     outline: 'none',
-    color: '#ffffff',
+    color: '#f6f5f2',
     fontFamily: "'Instrument Sans', sans-serif",
     fontSize: '18px',
-    fontWeight: '500',
+    fontWeight: '400',
     letterSpacing: '-0.01em',
   },
   micButton: {
-    width: '46px',
-    height: '46px',
-    borderRadius: '12px',
-    backgroundColor: 'rgba(124, 92, 252, 0.12)',
-    border: '1px solid rgba(124, 92, 252, 0.3)',
-    color: '#7c5cfc',
+    width: '38px',
+    height: '38px',
+    borderRadius: '4px',
+    backgroundColor: 'transparent',
+    border: '1px solid rgba(255, 255, 255, 0.15)',
+    color: '#9c9da3',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     cursor: 'pointer',
     flexShrink: 0,
-    transition: 'all 0.2s ease',
   },
   micButtonActive: {
-    backgroundColor: '#f43f5e',
-    borderColor: '#fb7185',
-    color: '#ffffff',
-    boxShadow: '0 0 20px rgba(244, 63, 94, 0.6)',
+    backgroundColor: 'rgba(229, 72, 77, 0.15)',
+    borderColor: '#e5484d',
+    color: '#e5484d',
   },
   waveGroup: {
     display: 'flex',
     alignItems: 'center',
     gap: '3px',
-    height: '18px',
+    height: '16px',
   },
   waveBar: {
-    width: '3px',
-    height: '14px',
-    backgroundColor: '#ffffff',
-    borderRadius: '2px',
-    animation: 'pulse 0.8s ease-in-out infinite alternate',
+    width: '2px',
+    height: '10px',
+    backgroundColor: '#e5484d',
+    borderRadius: '1px',
   },
   submitBtn: {
-    width: '42px',
-    height: '42px',
-    borderRadius: '10px',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
-    color: '#d0d4dc',
+    width: '38px',
+    height: '38px',
+    borderRadius: '4px',
+    backgroundColor: 'transparent',
+    border: '1px solid rgba(255, 255, 255, 0.15)',
+    color: '#f6f5f2',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     cursor: 'pointer',
-    transition: 'all 0.15s ease',
     flexShrink: 0,
   },
   feedbackBanner: {
-    margin: '0 20px 16px 20px',
     display: 'flex',
     alignItems: 'center',
-    gap: '10px',
-    padding: '12px 16px',
-    borderRadius: '10px',
+    justifyContent: 'space-between',
+    gap: '12px',
+    padding: '10px 14px',
+    borderRadius: '4px',
     fontSize: '13px',
-    fontFamily: "'Instrument Sans', sans-serif",
-    fontWeight: '500',
-    transition: 'all 0.2s ease',
   },
   feedbackSuccess: {
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-    border: '1px solid rgba(16, 185, 129, 0.3)',
-    color: '#34d399',
+    backgroundColor: 'rgba(62, 163, 112, 0.08)',
+    border: '1px solid rgba(62, 163, 112, 0.2)',
+    color: '#3ea370',
   },
   feedbackError: {
-    backgroundColor: 'rgba(244, 63, 94, 0.1)',
-    border: '1px solid rgba(244, 63, 94, 0.3)',
-    color: '#fb7185',
+    backgroundColor: 'rgba(229, 72, 77, 0.08)',
+    border: '1px solid rgba(229, 72, 77, 0.2)',
+    color: '#e5484d',
   },
   feedbackInfo: {
-    backgroundColor: 'rgba(124, 92, 252, 0.1)',
-    border: '1px solid rgba(124, 92, 252, 0.3)',
-    color: '#a78bfa',
-  },
-  feedbackIcon: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
+    backgroundColor: 'rgba(124, 102, 220, 0.08)',
+    border: '1px solid rgba(124, 102, 220, 0.2)',
+    color: '#7c66dc',
   },
   feedbackText: {
     flex: 1,
@@ -405,44 +291,28 @@ const styles = {
     border: 'none',
     color: 'inherit',
     cursor: 'pointer',
-    fontSize: '18px',
-    lineHeight: 1,
+    fontSize: '14px',
     padding: '0 4px',
     opacity: 0.7,
   },
-  chipsSection: {
-    padding: '14px 20px 18px 20px',
-    borderTop: '1px solid rgba(255, 255, 255, 0.05)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-    backgroundColor: 'rgba(0, 0, 0, 0.2)',
-  },
-  chipsPrompt: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '9px',
-    fontWeight: '700',
-    letterSpacing: '0.14em',
-    color: '#5e6473',
-  },
-  chipsGrid: {
+  suggestionsRow: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
     flexWrap: 'wrap',
+    paddingTop: '12px',
+    borderTop: '1px solid rgba(255, 255, 255, 0.06)',
   },
-  chip: {
+  suggestionBtn: {
     fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '10px',
-    fontWeight: '600',
+    fontSize: '11px',
+    fontWeight: '500',
     letterSpacing: '0.04em',
-    padding: '7px 12px',
-    borderRadius: '6px',
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    padding: '6px 12px',
+    borderRadius: '3px',
+    backgroundColor: 'transparent',
     border: '1px solid rgba(255, 255, 255, 0.08)',
-    color: '#9da3b4',
+    color: '#9c9da3',
     cursor: 'pointer',
-    transition: 'all 0.15s ease',
   },
 };
-

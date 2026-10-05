@@ -2,68 +2,62 @@ import React from 'react';
 
 export default function Header({ isBackendOnline, modelMetadata, onScrollToSection }) {
   const isTrained = modelMetadata && modelMetadata.is_trained;
-  const accuracyText = isTrained ? `${((modelMetadata.accuracy || 0) * 100).toFixed(1)}% ACCURACY` : 'UNTRAINED';
+  const accuracyText = isTrained ? `${((modelMetadata.accuracy || 0) * 100).toFixed(1)}% acc` : null;
 
   return (
     <header style={styles.header}>
       {/* Brand Identity */}
       <div style={styles.brand}>
-        <div style={styles.emblem}>
-          <span style={styles.emblemCore} />
-        </div>
-        <div style={styles.brandTextGroup}>
-          <span style={styles.brandEyebrow}>INTELLIGENT OBSERVATORY</span>
-          <span style={styles.brandName}>VOXPLAN</span>
-        </div>
+        <span style={styles.brandName}>VOXPLAN</span>
+        <span style={styles.brandDivider}>/</span>
+        <span style={styles.brandTagline}>Predictive Project Intelligence</span>
       </div>
 
-      {/* Editorial Navigation Anchors */}
-      <nav style={styles.nav}>
-        <button
-          type="button"
-          onClick={() => onScrollToSection('pulse')}
-          style={styles.navLink}
-        >
-          Pulse
-        </button>
-        <button
-          type="button"
-          onClick={() => onScrollToSection('landscape')}
-          style={styles.navLink}
-        >
-          Risk Landscape
-        </button>
-        <button
-          type="button"
-          onClick={() => onScrollToSection('intelligence')}
-          style={styles.navLink}
-        >
-          Model Intelligence
-        </button>
-        <button
-          type="button"
-          onClick={() => onScrollToSection('command')}
-          style={styles.navLink}
-        >
-          Command
-        </button>
-      </nav>
+      {/* Navigation & Status */}
+      <div style={styles.rightGroup}>
+        <nav style={styles.nav} aria-label="Page sections">
+          <button
+            type="button"
+            onClick={() => onScrollToSection('pulse')}
+            style={styles.navLink}
+          >
+            Pulse
+          </button>
+          <button
+            type="button"
+            onClick={() => onScrollToSection('landscape')}
+            style={styles.navLink}
+          >
+            Risk
+          </button>
+          <button
+            type="button"
+            onClick={() => onScrollToSection('intelligence')}
+            style={styles.navLink}
+          >
+            Model
+          </button>
+          <button
+            type="button"
+            onClick={() => onScrollToSection('command')}
+            style={styles.navLink}
+          >
+            Command
+          </button>
+        </nav>
 
-      {/* Live Telemetry Status */}
-      <div style={styles.telemetry}>
-        <div style={{
-          ...styles.telemetryPill,
-          backgroundColor: isBackendOnline ? 'rgba(16, 185, 129, 0.08)' : 'rgba(244, 63, 94, 0.08)',
-          borderColor: isBackendOnline ? 'rgba(16, 185, 129, 0.25)' : 'rgba(244, 63, 94, 0.25)',
-          color: isBackendOnline ? '#34d399' : '#f87171',
-        }}>
-          <span style={{
-            ...styles.telemetryDot,
-            backgroundColor: isBackendOnline ? '#10b981' : '#f43f5e',
-            boxShadow: isBackendOnline ? '0 0 8px rgba(16, 185, 129, 0.6)' : '0 0 8px rgba(244, 63, 94, 0.6)',
-          }} />
-          <span style={styles.telemetryText}>
-            {isBackendOnline ? (isTrained ? `MODEL ACTIVE • ${accuracyText}` : 'BACKEND ONLINE • READY') : 'SERVER OFFLINE'}
+        {/* Minimal Understated Backend Status */}
+        <div style={styles.statusIndicator} title={isBackendOnline ? 'ML service operational' : 'FastAPI service offline'}>
+          <span
+            style={{
+              ...styles.statusDot,
+              backgroundColor: isBackendOnline ? '#3ea370' : '#e5484d',
+            }}
+          />
+          <span style={styles.statusText}>
+            {isBackendOnline
+              ? (isTrained ? `Model ready · ${accuracyText}` : 'Model service ready')
+              : 'Server offline'}
           </span>
         </div>
       </div>
@@ -77,92 +71,72 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '24px 0 20px 0',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.07)',
+    padding: '32px 0 24px 0',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
     flexWrap: 'wrap',
     gap: '20px',
   },
   brand: {
     display: 'flex',
-    alignItems: 'center',
-    gap: '14px',
-  },
-  emblem: {
-    width: '32px',
-    height: '32px',
-    borderRadius: '8px',
-    border: '1px solid rgba(124, 92, 252, 0.4)',
-    backgroundColor: 'rgba(124, 92, 252, 0.1)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emblemCore: {
-    width: '8px',
-    height: '8px',
-    borderRadius: '2px',
-    backgroundColor: '#7c5cfc',
-    boxShadow: '0 0 10px rgba(124, 92, 252, 0.8)',
-  },
-  brandTextGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '1px',
-  },
-  brandEyebrow: {
-    fontSize: '9px',
-    fontWeight: '700',
-    letterSpacing: '0.14em',
-    color: '#7c5cfc',
-    fontFamily: "'JetBrains Mono', monospace",
+    alignItems: 'baseline',
+    gap: '12px',
   },
   brandName: {
     fontFamily: "'Syne', sans-serif",
-    fontSize: '22px',
+    fontSize: '20px',
     fontWeight: '800',
     letterSpacing: '-0.02em',
-    color: '#f5f5f7',
-    lineHeight: 1,
+    color: '#f6f5f2',
+  },
+  brandDivider: {
+    color: '#42444b',
+    fontSize: '14px',
+    fontWeight: '400',
+  },
+  brandTagline: {
+    fontSize: '13px',
+    color: '#9c9da3',
+    fontWeight: '400',
+    letterSpacing: '-0.01em',
+  },
+  rightGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '28px',
+    flexWrap: 'wrap',
   },
   nav: {
     display: 'flex',
     alignItems: 'center',
-    gap: '24px',
+    gap: '20px',
   },
   navLink: {
     background: 'transparent',
     border: 'none',
-    color: '#868b98',
+    color: '#9c9da3',
     fontSize: '13px',
     fontWeight: '500',
     cursor: 'pointer',
-    letterSpacing: '0.01em',
+    letterSpacing: '-0.01em',
     padding: '4px 0',
-    position: 'relative',
-    transition: 'color 0.2s ease',
   },
-  telemetry: {
+  statusIndicator: {
     display: 'flex',
     alignItems: 'center',
-  },
-  telemetryPill: {
-    display: 'inline-flex',
-    alignItems: 'center',
     gap: '7px',
-    fontSize: '11px',
-    fontWeight: '600',
-    padding: '6px 14px',
-    borderRadius: '9999px',
-    border: '1px solid',
-    fontFamily: "'JetBrains Mono', monospace",
-    letterSpacing: '0.04em',
+    paddingLeft: '16px',
+    borderLeft: '1px solid rgba(255, 255, 255, 0.08)',
   },
-  telemetryDot: {
+  statusDot: {
     width: '6px',
     height: '6px',
     borderRadius: '50%',
+    flexShrink: 0,
   },
-  telemetryText: {
-    lineHeight: 1,
+  statusText: {
+    fontSize: '12px',
+    color: '#9c9da3',
+    fontWeight: '400',
+    letterSpacing: '-0.01em',
   },
 };

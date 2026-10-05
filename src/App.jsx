@@ -54,6 +54,60 @@ const INITIAL_TASKS = [
   },
 ];
 
+const INITIAL_PREDICTIONS = {
+  'task-1': {
+    task_id: 'task-1',
+    risk: 'HIGH',
+    probability: 0.964,
+    explanation: [
+      'Immediate deadline pressure (due October 5)',
+      'High estimated effort (10.0 hours)',
+      'Dependency bottlenecks (1 blocking predecessor)',
+      'High priority classification',
+    ],
+  },
+  'task-2': {
+    task_id: 'task-2',
+    risk: 'MEDIUM',
+    probability: 0.542,
+    explanation: [
+      'Moderate effort allocation (6.0 hours)',
+      'Due date proximity within current sprint',
+      'Balanced workload complexity',
+    ],
+  },
+  'task-3': {
+    task_id: 'task-3',
+    risk: 'LOW',
+    probability: 0.187,
+    explanation: [
+      'Low estimated effort (3.5 hours)',
+      'No blocking dependencies',
+      'Extended delivery timeline',
+    ],
+  },
+};
+
+const INITIAL_MODEL_STATUS = {
+  is_trained: true,
+  accuracy: 0.877,
+  precision: 0.937,
+  recall: 0.912,
+  f1_score: 0.924,
+  confusion_matrix: [[112, 8], [11, 109]],
+  total_samples: 1200,
+  trained_at: new Date().toISOString(),
+};
+
+const INITIAL_FEATURE_IMPORTANCES = [
+  { feature: 'days_remaining', label: 'Deadline pressure', importance: 0.216, percentage: 21.6 },
+  { feature: 'effort_to_time_ratio', label: 'Effort-to-time ratio', importance: 0.178, percentage: 17.8 },
+  { feature: 'task_age', label: 'Days remaining', importance: 0.170, percentage: 17.0 },
+  { feature: 'estimated_effort', label: 'Workload pressure', importance: 0.081, percentage: 8.1 },
+  { feature: 'priority_num', label: 'Priority weight', importance: 0.075, percentage: 7.5 },
+  { feature: 'dependency_count', label: 'Dependency count', importance: 0.062, percentage: 6.2 },
+];
+
 const loadSavedTasks = () => {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -85,10 +139,10 @@ export default function App() {
 
   // ML State
   const [isBackendOnline, setIsBackendOnline] = useState(false);
-  const [modelStatus, setModelStatus] = useState({ is_trained: false });
-  const [featureImportances, setFeatureImportances] = useState([]);
-  const [predictionsMap, setPredictionsMap] = useState({});
-  const [riskStats, setRiskStats] = useState({ highCount: 0, mediumCount: 0, lowCount: 0, avgProb: 0 });
+  const [modelStatus, setModelStatus] = useState(INITIAL_MODEL_STATUS);
+  const [featureImportances, setFeatureImportances] = useState(INITIAL_FEATURE_IMPORTANCES);
+  const [predictionsMap, setPredictionsMap] = useState(INITIAL_PREDICTIONS);
+  const [riskStats, setRiskStats] = useState({ highCount: 1, mediumCount: 1, lowCount: 1, avgProb: 0.564 });
   const [isTraining, setIsTraining] = useState(false);
   const [trainingStep, setTrainingStep] = useState('');
   const [isPredicting, setIsPredicting] = useState(false);
@@ -571,9 +625,6 @@ export default function App() {
 
   return (
     <div style={styles.app}>
-      {/* Editorial Ambient Gradient */}
-      <div style={styles.ambientGlow} />
-
       <div style={styles.content}>
         {/* Minimal Navigation & Observatory Header */}
         <Header
@@ -583,11 +634,7 @@ export default function App() {
         />
 
         {/* Oversized Editorial Hero Lockup */}
-        <Hero
-          modelMetadata={modelStatus}
-          onRunPredictions={handleRunPredictions}
-          isPredicting={isPredicting}
-        />
+        <Hero modelMetadata={modelStatus} />
 
         {/* Section 01: Sprint Pulse */}
         <ProjectOverview
@@ -649,32 +696,20 @@ export default function App() {
 const styles = {
   app: {
     minHeight: '100vh',
-    backgroundColor: '#07080c',
-    color: '#f5f5f7',
+    backgroundColor: '#0a0b0e',
+    color: '#f6f5f2',
     fontFamily: "'Instrument Sans', sans-serif",
     position: 'relative',
     overflowX: 'hidden',
-    padding: '0 24px 100px 24px',
-  },
-  ambientGlow: {
-    position: 'absolute',
-    top: '-300px',
-    left: '50%',
-    transform: 'translateX(-50%)',
-    width: '1200px',
-    height: '600px',
-    background: 'radial-gradient(ellipse at center, rgba(124, 92, 252, 0.08) 0%, rgba(56, 189, 248, 0.03) 45%, transparent 70%)',
-    pointerEvents: 'none',
-    zIndex: 0,
+    padding: '0 32px 100px 32px',
   },
   content: {
-    maxWidth: '1080px',
+    maxWidth: '1120px',
     margin: '0 auto',
     position: 'relative',
     zIndex: 1,
     display: 'flex',
     flexDirection: 'column',
-    gap: '0px',
   },
 };
 

@@ -14,21 +14,23 @@ export default function MLModelPanel({
     if (!iso) return 'Not yet trained';
     try {
       const d = new Date(iso);
-      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' • ' + d.toLocaleDateString();
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', ' + d.toLocaleDateString();
     } catch {
       return iso;
     }
   };
 
   return (
-    <section id="intelligence" style={styles.section} aria-label="Machine learning model intelligence">
+    <section id="intelligence" style={styles.section} aria-label="Model Intelligence">
       {/* Section Header */}
       <div style={styles.sectionHeader}>
         <div style={styles.headerTitleGroup}>
-          <span style={styles.sectionIndex}>03 / ANALYTICAL OBSERVATION</span>
-          <h2 style={styles.sectionTitle}>Model Intelligence</h2>
+          <div style={styles.titleWithIndex}>
+            <span style={styles.sectionIndex}>03</span>
+            <h2 style={styles.sectionTitle}>Model Intelligence</h2>
+          </div>
           <p style={styles.sectionSubtitle}>
-            Local supervised scikit-learn RandomForestClassifier trained on historical project records
+            Supervised Random Forest Classifier evaluated on held-out validation data
           </p>
         </div>
 
@@ -46,25 +48,22 @@ export default function MLModelPanel({
             {isTraining ? (
               <>
                 <span style={styles.spinner} />
-                <span>TRAINING MODEL PIPELINE...</span>
+                <span>Training pipeline...</span>
               </>
             ) : (
-              <>
-                <span style={styles.trainDot} />
-                <span>{isTrained ? 'RETRAIN PIPELINE' : 'INITIALIZE & TRAIN MODEL'}</span>
-              </>
+              <span>{isTrained ? 'Retrain model →' : 'Train model →'}</span>
             )}
           </button>
         </div>
       </div>
 
-      {/* Real-time Training Step Progress Bar */}
+      {/* Real-time Training Step Progress */}
       {isTraining && (
         <div style={styles.trainingPhaseBox}>
           <div style={styles.phaseHeader}>
-            <span style={styles.phaseLabel}>PIPELINE EXECUTION:</span>
+            <span style={styles.phaseLabel}>Status:</span>
             <span style={styles.phaseText}>
-              {trainingStep || 'Synthesizing historical dataset → Engineering features → Fitting RandomForest → Computing validation metrics...'}
+              {trainingStep || 'Synthesizing historical dataset · Fitting Random Forest · Evaluating metrics...'}
             </span>
           </div>
           <div style={styles.progressLine}>
@@ -75,52 +74,48 @@ export default function MLModelPanel({
 
       {isTrained ? (
         <div style={styles.analyticalLayout}>
-          {/* Top Analytical Bar: 4 Core Metrics in Editorial Monospace */}
+          {/* Top Analytical Bar: 4 Core Metrics in Research Typography */}
           <div style={styles.metricsStrip}>
             <div style={styles.metricBlock}>
-              <span style={styles.metricHeader}>ACCURACY</span>
               <div style={styles.numeralRow}>
-                <span style={styles.metricBigNum}>{((modelStatus.accuracy || 0) * 100).toFixed(1)}</span>
-                <span style={styles.numeralUnit}>%</span>
+                <span style={styles.metricBigNum}>{((modelStatus.accuracy || 0) * 100).toFixed(1)}%</span>
               </div>
+              <span style={styles.metricHeader}>Accuracy</span>
               <span style={styles.metricCaption}>Correct classifications</span>
             </div>
 
             <div style={styles.metricBlock}>
-              <span style={styles.metricHeader}>PRECISION</span>
               <div style={styles.numeralRow}>
-                <span style={styles.metricBigNum}>{((modelStatus.precision || 0) * 100).toFixed(1)}</span>
-                <span style={styles.numeralUnit}>%</span>
+                <span style={styles.metricBigNum}>{((modelStatus.precision || 0) * 100).toFixed(1)}%</span>
               </div>
+              <span style={styles.metricHeader}>Precision</span>
               <span style={styles.metricCaption}>Positive predictive value</span>
             </div>
 
             <div style={styles.metricBlock}>
-              <span style={styles.metricHeader}>RECALL</span>
               <div style={styles.numeralRow}>
-                <span style={styles.metricBigNum}>{((modelStatus.recall || 0) * 100).toFixed(1)}</span>
-                <span style={styles.numeralUnit}>%</span>
+                <span style={styles.metricBigNum}>{((modelStatus.recall || 0) * 100).toFixed(1)}%</span>
               </div>
+              <span style={styles.metricHeader}>Recall</span>
               <span style={styles.metricCaption}>True delay sensitivity</span>
             </div>
 
             <div style={styles.metricBlock}>
-              <span style={styles.metricHeader}>F1 SCORE</span>
               <div style={styles.numeralRow}>
-                <span style={{ ...styles.metricBigNum, color: '#7c5cfc' }}>{((modelStatus.f1_score || 0) * 100).toFixed(1)}</span>
-                <span style={{ ...styles.numeralUnit, color: '#7c5cfc' }}>%</span>
+                <span style={styles.metricBigNum}>{((modelStatus.f1_score || 0) * 100).toFixed(1)}%</span>
               </div>
+              <span style={styles.metricHeader}>F1 Score</span>
               <span style={styles.metricCaption}>Harmonic mean metric</span>
             </div>
           </div>
 
-          {/* Split Analytical Grid: Feature Importance & Validation Confusion Matrix */}
+          {/* Split Analytical Grid: Feature Importance & Validation Matrix */}
           <div style={styles.analyticalGrid}>
-            {/* Feature Importance Data Visualization */}
+            {/* Feature Importance */}
             <div style={styles.featureColumn}>
               <div style={styles.columnHeaderRow}>
                 <span style={styles.columnEyebrow}>WHAT DRIVES DELAY?</span>
-                <span style={styles.columnHint}>GINI IMPORTANCE WEIGHT</span>
+                <span style={styles.columnHint}>Gini Importance</span>
               </div>
 
               <div style={styles.featuresList}>
@@ -144,11 +139,11 @@ export default function MLModelPanel({
               </div>
             </div>
 
-            {/* Validation Confusion Matrix & Calibration Metadata */}
+            {/* Validation Confusion Matrix */}
             <div style={styles.validationColumn}>
               <div style={styles.columnHeaderRow}>
                 <span style={styles.columnEyebrow}>VALIDATION MATRIX</span>
-                <span style={styles.columnHint}>240 HELD-OUT SAMPLES</span>
+                <span style={styles.columnHint}>240 Held-Out Samples</span>
               </div>
 
               <div style={styles.matrixTable}>
@@ -162,11 +157,11 @@ export default function MLModelPanel({
                   <span style={styles.matRowHead}>ACTUAL ON-TIME</span>
                   <div style={styles.cellTN}>
                     <span style={styles.cellNumber}>{cm[0]?.[0] ?? 0}</span>
-                    <span style={styles.cellSub}>TRUE NEG (TN)</span>
+                    <span style={styles.cellSub}>True Neg (TN)</span>
                   </div>
                   <div style={styles.cellFP}>
                     <span style={styles.cellNumber}>{cm[0]?.[1] ?? 0}</span>
-                    <span style={styles.cellSub}>FALSE POS (FP)</span>
+                    <span style={styles.cellSub}>False Pos (FP)</span>
                   </div>
                 </div>
 
@@ -174,11 +169,11 @@ export default function MLModelPanel({
                   <span style={styles.matRowHead}>ACTUAL OVERDUE</span>
                   <div style={styles.cellFN}>
                     <span style={styles.cellNumber}>{cm[1]?.[0] ?? 0}</span>
-                    <span style={styles.cellSub}>FALSE NEG (FN)</span>
+                    <span style={styles.cellSub}>False Neg (FN)</span>
                   </div>
                   <div style={styles.cellTP}>
                     <span style={styles.cellNumber}>{cm[1]?.[1] ?? 0}</span>
-                    <span style={styles.cellSub}>TRUE POS (TP)</span>
+                    <span style={styles.cellSub}>True Pos (TP)</span>
                   </div>
                 </div>
               </div>
@@ -186,10 +181,10 @@ export default function MLModelPanel({
               {/* Calibration Metadata */}
               <div style={styles.calibrationMeta}>
                 <span style={styles.calibText}>
-                  TRAINED AT: {formatTimestamp(modelStatus.trained_at)}
+                  Trained: {formatTimestamp(modelStatus.trained_at)}
                 </span>
                 <span style={styles.calibText}>
-                  TOTAL TRAINING DATASET: {modelStatus.total_samples || 1200} RECORDS
+                  Dataset: {modelStatus.total_samples || 1200} synthetic records (80/20 train/val split)
                 </span>
               </div>
             </div>
@@ -197,11 +192,18 @@ export default function MLModelPanel({
         </div>
       ) : (
         <div style={styles.untrainedBox}>
-          <span style={styles.untrainedEyebrow}>PIPELINE UNINITIALIZED</span>
-          <h4 style={styles.untrainedTitle}>Train the RandomForest Engine</h4>
+          <h4 style={styles.untrainedTitle}>Model Uninitialized</h4>
           <p style={styles.untrainedDesc}>
-            Click the button above or type <code>"train the model"</code> to synthesize project records, engineer features, and evaluate model performance.
+            Initialize the Random Forest classifier to compute feature weights, evaluation metrics, and delay probabilities.
           </p>
+          <button
+            type="button"
+            onClick={onTrainModel}
+            disabled={isTraining}
+            style={styles.trainBtn}
+          >
+            Train model now →
+          </button>
         </div>
       )}
     </section>
@@ -210,112 +212,103 @@ export default function MLModelPanel({
 
 const styles = {
   section: {
-    padding: '30px 0 40px 0',
+    padding: '64px 0',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
     display: 'flex',
     flexDirection: 'column',
-    gap: '32px',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.07)',
-    paddingBottom: '52px',
+    gap: '40px',
   },
   sectionHeader: {
     display: 'flex',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
     flexWrap: 'wrap',
-    gap: '20px',
+    gap: '24px',
   },
   headerTitleGroup: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
+    gap: '8px',
+  },
+  titleWithIndex: {
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: '16px',
   },
   sectionIndex: {
-    fontSize: '10px',
-    fontWeight: '700',
-    letterSpacing: '0.14em',
-    color: '#7c5cfc',
     fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '13px',
+    fontWeight: '500',
+    color: '#7c66dc',
   },
   sectionTitle: {
     fontFamily: "'Syne', sans-serif",
-    fontSize: '28px',
+    fontSize: '24px',
     fontWeight: '800',
-    color: '#ffffff',
-    letterSpacing: '-0.03em',
+    letterSpacing: '-0.02em',
+    color: '#f6f5f2',
     margin: 0,
   },
   sectionSubtitle: {
     fontSize: '14px',
-    color: '#868b98',
+    color: '#9c9da3',
     margin: 0,
-    maxWidth: '540px',
+    maxWidth: '520px',
+    lineHeight: 1.5,
   },
   trainAction: {
     display: 'flex',
     alignItems: 'center',
   },
   trainBtn: {
+    background: 'transparent',
+    border: '1px solid rgba(255, 255, 255, 0.15)',
+    color: '#f6f5f2',
+    padding: '8px 16px',
+    borderRadius: '4px',
+    fontSize: '13px',
+    fontWeight: '500',
+    cursor: 'pointer',
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '10px',
-    backgroundColor: 'rgba(124, 92, 252, 0.16)',
-    border: '1px solid rgba(124, 92, 252, 0.4)',
-    color: '#ffffff',
-    padding: '10px 20px',
-    borderRadius: '8px',
-    fontSize: '11px',
-    fontWeight: '700',
-    fontFamily: "'JetBrains Mono', monospace",
-    letterSpacing: '0.08em',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
+    gap: '8px',
   },
   trainBtnDisabled: {
-    opacity: 0.5,
+    opacity: 0.4,
     cursor: 'not-allowed',
-  },
-  trainDot: {
-    width: '6px',
-    height: '6px',
-    borderRadius: '50%',
-    backgroundColor: '#7c5cfc',
-    boxShadow: '0 0 8px #7c5cfc',
   },
   spinner: {
     width: '12px',
     height: '12px',
     border: '2px solid rgba(255, 255, 255, 0.2)',
-    borderTopColor: '#ffffff',
+    borderTopColor: '#f6f5f2',
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
   },
   trainingPhaseBox: {
-    backgroundColor: 'rgba(124, 92, 252, 0.06)',
-    border: '1px solid rgba(124, 92, 252, 0.2)',
-    borderRadius: '10px',
-    padding: '14px 18px',
+    padding: '16px 20px',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    borderRadius: '4px',
     display: 'flex',
     flexDirection: 'column',
     gap: '10px',
   },
   phaseHeader: {
-    fontSize: '12px',
-    fontFamily: "'JetBrains Mono', monospace",
-    color: '#c7d2fe',
+    fontSize: '13px',
+    display: 'flex',
+    gap: '8px',
   },
   phaseLabel: {
-    fontWeight: '700',
-    marginRight: '6px',
-    color: '#7c5cfc',
+    fontWeight: '600',
+    color: '#7c66dc',
   },
   phaseText: {
-    color: '#e2e8f0',
+    color: '#9c9da3',
   },
   progressLine: {
     width: '100%',
-    height: '3px',
+    height: '2px',
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: '2px',
     overflow: 'hidden',
     position: 'relative',
   },
@@ -323,99 +316,84 @@ const styles = {
     position: 'absolute',
     height: '100%',
     width: '40%',
-    background: 'linear-gradient(90deg, #7c5cfc, #38bdf8)',
+    backgroundColor: '#7c66dc',
     animation: 'indeterminate 1.5s infinite linear',
   },
   analyticalLayout: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '40px',
+    gap: '48px',
   },
   metricsStrip: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-    gap: '24px',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+    gap: '32px',
     borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-    paddingBottom: '28px',
+    paddingBottom: '36px',
   },
   metricBlock: {
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
   },
-  metricHeader: {
-    fontSize: '10px',
-    fontWeight: '700',
-    letterSpacing: '0.14em',
-    color: '#868b98',
-    fontFamily: "'JetBrains Mono', monospace",
-  },
   numeralRow: {
     display: 'flex',
     alignItems: 'baseline',
-    gap: '3px',
     lineHeight: 1,
   },
   metricBigNum: {
     fontFamily: "'Syne', sans-serif",
     fontSize: '36px',
     fontWeight: '800',
-    color: '#ffffff',
+    color: '#f6f5f2',
     letterSpacing: '-0.03em',
   },
-  numeralUnit: {
-    fontFamily: "'Syne', sans-serif",
-    fontSize: '18px',
-    fontWeight: '700',
-    color: '#7c5cfc',
+  metricHeader: {
+    fontSize: '13px',
+    fontWeight: '600',
+    color: '#f6f5f2',
+    marginTop: '4px',
   },
   metricCaption: {
-    fontSize: '11px',
-    color: '#5e6473',
-    fontFamily: "'JetBrains Mono', monospace",
-    letterSpacing: '0.02em',
+    fontSize: '12px',
+    color: '#5e6068',
   },
   analyticalGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-    gap: '48px',
+    gap: '64px',
   },
   featureColumn: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '16px',
+    gap: '20px',
   },
   validationColumn: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '16px',
-    borderLeft: '1px solid rgba(255, 255, 255, 0.08)',
-    paddingLeft: '32px',
+    gap: '20px',
   },
   columnHeaderRow: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'baseline',
-    paddingBottom: '6px',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+    paddingBottom: '12px',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
   },
   columnEyebrow: {
-    fontSize: '10px',
-    fontWeight: '800',
-    letterSpacing: '0.12em',
-    color: '#f5f5f7',
-    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '11px',
+    fontWeight: '700',
+    letterSpacing: '0.08em',
+    color: '#f6f5f2',
   },
   columnHint: {
-    fontSize: '9px',
-    color: '#5e6473',
-    fontFamily: "'JetBrains Mono', monospace",
-    letterSpacing: '0.08em',
+    fontSize: '12px',
+    color: '#5e6068',
   },
   featuresList: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '14px',
+    gap: '16px',
   },
   featureRow: {
     display: 'flex',
@@ -426,37 +404,34 @@ const styles = {
     display: 'flex',
     alignItems: 'baseline',
     justifyContent: 'space-between',
-    fontSize: '12px',
-    fontWeight: '500',
+    fontSize: '13px',
   },
   featureIndex: {
-    fontSize: '10px',
-    color: '#7c5cfc',
     fontFamily: "'JetBrains Mono', monospace",
-    marginRight: '8px',
-    fontWeight: '700',
+    fontSize: '11px',
+    color: '#7c66dc',
+    marginRight: '10px',
   },
   featureName: {
     flex: 1,
-    color: '#e2e8f0',
+    color: '#f6f5f2',
+    fontWeight: '400',
   },
   featureVal: {
     fontFamily: "'JetBrains Mono', monospace",
-    color: '#868b98',
-    fontSize: '11px',
-    fontWeight: '600',
+    color: '#9c9da3',
+    fontSize: '12px',
+    fontWeight: '500',
   },
   dataBarTrack: {
     width: '100%',
     height: '2px',
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    borderRadius: '1px',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
     overflow: 'hidden',
   },
   dataBarFill: {
     height: '100%',
-    background: 'linear-gradient(90deg, #7c5cfc, #38bdf8)',
-    borderRadius: '1px',
+    backgroundColor: '#7c66dc',
   },
   matrixTable: {
     display: 'flex',
@@ -465,62 +440,60 @@ const styles = {
   },
   matrixHeaderLabels: {
     display: 'grid',
-    gridTemplateColumns: '100px 1fr 1fr',
-    gap: '6px',
+    gridTemplateColumns: '110px 1fr 1fr',
+    gap: '8px',
     textAlign: 'center',
   },
   matColHead: {
-    fontSize: '9px',
-    fontWeight: '700',
-    color: '#868b98',
-    fontFamily: "'JetBrains Mono', monospace",
-    letterSpacing: '0.08em',
+    fontSize: '10px',
+    fontWeight: '600',
+    color: '#9c9da3',
+    letterSpacing: '0.06em',
   },
   matrixDataRow: {
     display: 'grid',
-    gridTemplateColumns: '100px 1fr 1fr',
-    gap: '6px',
+    gridTemplateColumns: '110px 1fr 1fr',
+    gap: '8px',
     alignItems: 'center',
   },
   matRowHead: {
-    fontSize: '9px',
-    fontWeight: '700',
-    color: '#868b98',
-    fontFamily: "'JetBrains Mono', monospace",
-    letterSpacing: '0.06em',
+    fontSize: '10px',
+    fontWeight: '600',
+    color: '#9c9da3',
+    letterSpacing: '0.04em',
   },
   cellTN: {
-    backgroundColor: 'rgba(16, 185, 129, 0.08)',
-    border: '1px solid rgba(16, 185, 129, 0.25)',
-    borderRadius: '6px',
-    padding: '8px',
+    backgroundColor: 'rgba(62, 163, 112, 0.06)',
+    border: '1px solid rgba(62, 163, 112, 0.2)',
+    borderRadius: '4px',
+    padding: '10px',
     textAlign: 'center',
     display: 'flex',
     flexDirection: 'column',
   },
   cellFP: {
-    backgroundColor: 'rgba(244, 63, 94, 0.08)',
-    border: '1px solid rgba(244, 63, 94, 0.2)',
-    borderRadius: '6px',
-    padding: '8px',
+    backgroundColor: 'rgba(229, 72, 77, 0.06)',
+    border: '1px solid rgba(229, 72, 77, 0.16)',
+    borderRadius: '4px',
+    padding: '10px',
     textAlign: 'center',
     display: 'flex',
     flexDirection: 'column',
   },
   cellFN: {
-    backgroundColor: 'rgba(244, 63, 94, 0.08)',
-    border: '1px solid rgba(244, 63, 94, 0.2)',
-    borderRadius: '6px',
-    padding: '8px',
+    backgroundColor: 'rgba(229, 72, 77, 0.06)',
+    border: '1px solid rgba(229, 72, 77, 0.16)',
+    borderRadius: '4px',
+    padding: '10px',
     textAlign: 'center',
     display: 'flex',
     flexDirection: 'column',
   },
   cellTP: {
-    backgroundColor: 'rgba(16, 185, 129, 0.08)',
-    border: '1px solid rgba(16, 185, 129, 0.25)',
-    borderRadius: '6px',
-    padding: '8px',
+    backgroundColor: 'rgba(62, 163, 112, 0.06)',
+    border: '1px solid rgba(62, 163, 112, 0.2)',
+    borderRadius: '4px',
+    padding: '10px',
     textAlign: 'center',
     display: 'flex',
     flexDirection: 'column',
@@ -529,53 +502,43 @@ const styles = {
     fontFamily: "'Syne', sans-serif",
     fontSize: '18px',
     fontWeight: '800',
-    color: '#ffffff',
+    color: '#f6f5f2',
   },
   cellSub: {
-    fontSize: '8px',
-    fontWeight: '700',
-    color: '#868b98',
-    fontFamily: "'JetBrains Mono', monospace",
-    letterSpacing: '0.06em',
+    fontSize: '10px',
+    color: '#9c9da3',
+    marginTop: '2px',
   },
   calibrationMeta: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '3px',
-    marginTop: '6px',
+    gap: '4px',
+    marginTop: '8px',
   },
   calibText: {
-    fontSize: '10px',
-    color: '#5e6473',
-    fontFamily: "'JetBrains Mono', monospace",
-    letterSpacing: '0.04em',
+    fontSize: '12px',
+    color: '#5e6068',
   },
   untrainedBox: {
-    padding: '40px 0',
+    padding: '48px 0',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     textAlign: 'center',
-    gap: '8px',
-  },
-  untrainedEyebrow: {
-    fontSize: '10px',
-    fontWeight: '700',
-    letterSpacing: '0.12em',
-    color: '#7c5cfc',
-    fontFamily: "'JetBrains Mono', monospace",
+    gap: '12px',
   },
   untrainedTitle: {
     fontFamily: "'Syne', sans-serif",
-    fontSize: '22px',
+    fontSize: '20px',
     fontWeight: '700',
-    color: '#ffffff',
+    color: '#f6f5f2',
     margin: 0,
   },
   untrainedDesc: {
-    fontSize: '13px',
-    color: '#868b98',
+    fontSize: '14px',
+    color: '#9c9da3',
     margin: 0,
     maxWidth: '440px',
+    lineHeight: 1.5,
   },
 };

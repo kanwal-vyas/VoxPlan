@@ -1,20 +1,16 @@
 import React from 'react';
 
-export default function Hero({ modelMetadata, onRunPredictions, isPredicting }) {
+export default function Hero({ modelMetadata }) {
   const isTrained = modelMetadata && modelMetadata.is_trained;
   const accuracy = isTrained ? ((modelMetadata.accuracy || 0) * 100).toFixed(1) : null;
   const f1 = isTrained ? ((modelMetadata.f1_score || 0) * 100).toFixed(1) : null;
+  const totalRecords = modelMetadata?.total_samples || 1200;
 
   return (
-    <section style={styles.hero} aria-label="Observatory intro">
-      <div style={styles.eyebrowRow}>
-        <span style={styles.eyebrow}>PREDICTIVE PROJECT OBSERVATORY</span>
-        <span style={styles.coordinates}>SYS://V2.4 • ML_PIPELINE_ACTIVE</span>
-      </div>
-
-      <div style={styles.mainGrid}>
-        {/* Oversized Editorial Heading */}
-        <div style={styles.titleColumn}>
+    <section style={styles.hero} aria-label="Introduction">
+      <div style={styles.posterGrid} className="hero-poster-grid">
+        {/* Left Column (~60%): Massive Editorial Headline */}
+        <div style={styles.leftColumn}>
           <h1 style={styles.headline}>
             PREDICTIVE<br />
             PROJECT<br />
@@ -22,36 +18,25 @@ export default function Hero({ modelMetadata, onRunPredictions, isPredicting }) 
           </h1>
         </div>
 
-        {/* Narrative Narrative & Floating Metrics Anchor */}
-        <div style={styles.narrativeColumn}>
-          <p style={styles.statement}>
-            A project intelligence platform that doesn't merely track what needs to happen.
-            It uses continuous machine learning to estimate what is likely to go wrong.
-          </p>
+        {/* Right Column (~35%): Supporting Narrative & Analytical Metadata */}
+        <div style={styles.rightColumn}>
+          <div style={styles.narrativeGroup}>
+            <p style={styles.statement}>
+              A project intelligence platform that doesn't merely track what needs to happen.
+            </p>
+            <p style={styles.statementSecondary}>
+              It estimates what is likely to go wrong.
+            </p>
+          </div>
 
-          <div style={styles.heroMetricsBox}>
-            {isTrained ? (
-              <div style={styles.metricItem}>
-                <span style={styles.metricEyebrow}>SUPERVISED RANDOMFOREST</span>
-                <div style={styles.metricNumeralRow}>
-                  <span style={styles.metricNumeral}>{accuracy}%</span>
-                  <span style={styles.metricNumeralLabel}>ACCURACY</span>
-                </div>
-                <span style={styles.metricSubtext}>
-                  F1 SCORE {f1}% • {modelMetadata.total_samples || 1200} HISTORICAL RECORDS
-                </span>
-              </div>
-            ) : (
-              <div style={styles.metricItem}>
-                <span style={styles.metricEyebrow}>MACHINE LEARNING STATUS</span>
-                <div style={styles.metricNumeralRow}>
-                  <span style={{ ...styles.metricNumeral, color: '#fbbf24' }}>READY</span>
-                </div>
-                <span style={styles.metricSubtext}>
-                  Click "Train Model" to synthesize records and initialize intelligence
-                </span>
-              </div>
-            )}
+          <div style={styles.modelNote}>
+            <span style={styles.modelLabel}>MODEL</span>
+            <span style={styles.modelName}>Random Forest</span>
+            <span style={styles.modelMetrics}>
+              {isTrained
+                ? `${accuracy}% validation accuracy · ${f1}% F1 score · ${totalRecords} records`
+                : 'Ready for training on historical records'}
+            </span>
           </div>
         </div>
       </div>
@@ -61,110 +46,83 @@ export default function Hero({ modelMetadata, onRunPredictions, isPredicting }) 
 
 const styles = {
   hero: {
-    padding: '30px 0 20px 0',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '24px',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.07)',
-    paddingBottom: '44px',
+    padding: '72px 0 64px 0',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
   },
-  eyebrowRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: '12px',
-  },
-  eyebrow: {
-    fontSize: '11px',
-    fontWeight: '700',
-    letterSpacing: '0.16em',
-    color: '#7c5cfc',
-    fontFamily: "'JetBrains Mono', monospace",
-  },
-  coordinates: {
-    fontSize: '11px',
-    color: '#5e6473',
-    fontFamily: "'JetBrains Mono', monospace",
-    letterSpacing: '0.08em',
-  },
-  mainGrid: {
+  posterGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-    alignItems: 'flex-end',
-    gap: '40px',
+    gridTemplateColumns: '1.4fr 1fr',
+    gap: '64px',
+    alignItems: 'start',
   },
-  titleColumn: {
+  leftColumn: {
     display: 'flex',
     flexDirection: 'column',
   },
   headline: {
     fontFamily: "'Syne', sans-serif",
-    fontSize: 'clamp(42px, 5.5vw, 68px)',
+    fontSize: 'clamp(46px, 5.8vw, 84px)',
     fontWeight: '800',
-    lineHeight: '0.94',
+    lineHeight: '0.92',
     letterSpacing: '-0.04em',
-    color: '#ffffff',
+    color: '#f6f5f2',
     margin: 0,
     textTransform: 'uppercase',
   },
-  narrativeColumn: {
+  rightColumn: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '28px',
-    maxWidth: '440px',
+    justifyContent: 'space-between',
+    gap: '40px',
+    paddingTop: '8px',
+    maxWidth: '420px',
+  },
+  narrativeGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
   },
   statement: {
     fontSize: '17px',
-    lineHeight: 1.6,
-    color: '#9da3b4',
+    lineHeight: '1.6',
+    color: '#9c9da3',
     margin: 0,
     fontWeight: '400',
     letterSpacing: '-0.01em',
   },
-  heroMetricsBox: {
-    borderTop: '1px solid rgba(255, 255, 255, 0.1)',
-    paddingTop: '20px',
+  statementSecondary: {
+    fontSize: '17px',
+    lineHeight: '1.6',
+    color: '#f6f5f2',
+    margin: 0,
+    fontWeight: '500',
+    letterSpacing: '-0.01em',
+  },
+  modelNote: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '10px',
+    gap: '4px',
+    paddingTop: '24px',
+    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
   },
-  metricItem: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '3px',
-  },
-  metricEyebrow: {
-    fontSize: '10px',
-    fontWeight: '700',
-    letterSpacing: '0.12em',
-    color: '#868b98',
-    fontFamily: "'JetBrains Mono', monospace",
-  },
-  metricNumeralRow: {
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: '10px',
-  },
-  metricNumeral: {
-    fontFamily: "'Syne', sans-serif",
-    fontSize: '38px',
-    fontWeight: '800',
-    color: '#ffffff',
-    letterSpacing: '-0.03em',
-    lineHeight: 1,
-  },
-  metricNumeralLabel: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '12px',
-    fontWeight: '700',
-    letterSpacing: '0.1em',
-    color: '#7c5cfc',
-  },
-  metricSubtext: {
+  modelLabel: {
     fontSize: '11px',
-    color: '#5e6473',
-    fontFamily: "'JetBrains Mono', monospace",
-    letterSpacing: '0.04em',
+    fontWeight: '600',
+    letterSpacing: '0.08em',
+    color: '#5e6068',
+    textTransform: 'uppercase',
+  },
+  modelName: {
+    fontFamily: "'Syne', sans-serif",
+    fontSize: '18px',
+    fontWeight: '700',
+    color: '#f6f5f2',
+    letterSpacing: '-0.01em',
+  },
+  modelMetrics: {
+    fontSize: '13px',
+    color: '#9c9da3',
+    fontWeight: '400',
+    letterSpacing: '-0.01em',
   },
 };

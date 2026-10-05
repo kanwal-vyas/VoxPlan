@@ -23,24 +23,26 @@ export default function TaskList({
   });
 
   return (
-    <section id="landscape" style={styles.section} aria-label="Risk landscape">
+    <section id="landscape" style={styles.section} aria-label="Risk Landscape">
       {/* Section Header */}
       <div style={styles.sectionHeader}>
         <div style={styles.titleGroup}>
-          <span style={styles.sectionIndex}>02 / CENTERPIECE</span>
-          <h2 style={styles.sectionTitle}>Risk Landscape</h2>
+          <div style={styles.titleWithIndex}>
+            <span style={styles.sectionIndex}>02</span>
+            <h2 style={styles.sectionTitle}>Risk Landscape</h2>
+          </div>
           <p style={styles.sectionSubtitle}>
-            Continuous machine learning delay-risk estimates mapped across active sprint initiatives
+            Delay-risk estimates computed from deadline proximity, workload density, and task complexity
           </p>
         </div>
 
-        {/* Filter Navigation */}
+        {/* Minimal Editorial Filter Navigation */}
         <div style={styles.filterNav}>
           {[
-            { id: 'all', label: 'ALL TASKS' },
-            { id: 'pending', label: 'PENDING' },
-            { id: 'high-risk', label: 'HIGH RISK' },
-            { id: 'completed', label: 'COMPLETED' },
+            { id: 'all', label: 'All' },
+            { id: 'pending', label: 'Pending' },
+            { id: 'high-risk', label: 'High Risk' },
+            { id: 'completed', label: 'Completed' },
           ].map((f) => (
             <button
               key={f.id}
@@ -49,7 +51,6 @@ export default function TaskList({
               style={{
                 ...styles.filterBtn,
                 ...(activeFilter === f.id ? styles.activeFilterBtn : {}),
-                ...(f.id === 'high-risk' && activeFilter === f.id ? styles.activeHighRiskFilter : {}),
               }}
             >
               {f.label}
@@ -58,7 +59,7 @@ export default function TaskList({
         </div>
       </div>
 
-      {/* Task Vertical Sequence */}
+      {/* Task Index Sequence */}
       <div style={styles.sequence}>
         {filteredTasks.map((task, index) => (
           <TaskCard
@@ -76,20 +77,19 @@ export default function TaskList({
 
         {filteredTasks.length === 0 && (
           <div style={styles.emptyState}>
-            <span style={styles.emptyIndex}>[ EMPTY STATE ]</span>
             <h4 style={styles.emptyTitle}>
               {activeFilter === 'high-risk'
-                ? 'No High-Risk Anomalies Detected'
+                ? 'No high-risk tasks detected'
                 : activeFilter === 'pending'
-                ? 'All Tasks Cleared'
+                ? 'All tasks completed'
                 : activeFilter === 'completed'
-                ? 'No Tasks Completed Yet'
-                : 'No Tasks in Sequence'}
+                ? 'No completed tasks yet'
+                : 'No tasks in sprint'}
             </h4>
             <p style={styles.emptyDesc}>
               {activeFilter === 'high-risk'
                 ? 'All active tasks are currently estimated within safe delivery parameters.'
-                : 'Speak or type a command above (e.g. "add task Infrastructure Review") to begin.'}
+                : 'Add a new task using the command center below.'}
             </p>
           </div>
         )}
@@ -100,105 +100,96 @@ export default function TaskList({
 
 const styles = {
   section: {
-    padding: '30px 0 40px 0',
+    padding: '64px 0',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
     display: 'flex',
     flexDirection: 'column',
-    gap: '28px',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.07)',
-    paddingBottom: '52px',
+    gap: '36px',
   },
   sectionHeader: {
     display: 'flex',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
     flexWrap: 'wrap',
-    gap: '20px',
+    gap: '24px',
   },
   titleGroup: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
+    gap: '8px',
+  },
+  titleWithIndex: {
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: '16px',
   },
   sectionIndex: {
-    fontSize: '10px',
-    fontWeight: '700',
-    letterSpacing: '0.14em',
-    color: '#7c5cfc',
     fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '13px',
+    fontWeight: '500',
+    color: '#7c66dc',
   },
   sectionTitle: {
     fontFamily: "'Syne', sans-serif",
-    fontSize: '28px',
+    fontSize: '24px',
     fontWeight: '800',
-    color: '#ffffff',
-    letterSpacing: '-0.03em',
+    letterSpacing: '-0.02em',
+    color: '#f6f5f2',
     margin: 0,
   },
   sectionSubtitle: {
     fontSize: '14px',
-    color: '#868b98',
+    color: '#9c9da3',
     margin: 0,
-    maxWidth: '540px',
+    maxWidth: '520px',
+    lineHeight: 1.5,
   },
   filterNav: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    gap: '6px',
     flexWrap: 'wrap',
   },
   filterBtn: {
     background: 'transparent',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
-    color: '#868b98',
-    padding: '6px 14px',
-    borderRadius: '6px',
-    fontSize: '10px',
-    fontWeight: '700',
-    fontFamily: "'JetBrains Mono', monospace",
-    letterSpacing: '0.08em',
+    border: '1px solid transparent',
+    color: '#9c9da3',
+    padding: '6px 12px',
+    borderRadius: '4px',
+    fontSize: '12px',
+    fontWeight: '500',
     cursor: 'pointer',
     transition: 'all 0.15s ease',
   },
   activeFilterBtn: {
-    borderColor: '#7c5cfc',
-    backgroundColor: 'rgba(124, 92, 252, 0.14)',
-    color: '#ffffff',
-  },
-  activeHighRiskFilter: {
-    borderColor: '#f43f5e',
-    backgroundColor: 'rgba(244, 63, 94, 0.14)',
-    color: '#fb7185',
+    color: '#f6f5f2',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    border: '1px solid rgba(255, 255, 255, 0.12)',
   },
   sequence: {
     display: 'flex',
     flexDirection: 'column',
   },
   emptyState: {
-    padding: '60px 0',
+    padding: '64px 0',
     textAlign: 'center',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     gap: '8px',
   },
-  emptyIndex: {
-    fontSize: '10px',
-    fontWeight: '700',
-    letterSpacing: '0.12em',
-    color: '#7c5cfc',
-    fontFamily: "'JetBrains Mono', monospace",
-  },
   emptyTitle: {
     fontFamily: "'Syne', sans-serif",
-    fontSize: '20px',
+    fontSize: '18px',
     fontWeight: '700',
-    color: '#ffffff',
+    color: '#f6f5f2',
     margin: 0,
   },
   emptyDesc: {
-    fontSize: '13px',
-    color: '#5e6473',
+    fontSize: '14px',
+    color: '#5e6068',
     margin: 0,
     maxWidth: '380px',
+    lineHeight: 1.5,
   },
 };

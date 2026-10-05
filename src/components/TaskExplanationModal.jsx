@@ -8,67 +8,61 @@ export default function TaskExplanationModal({ task, prediction, onClose }) {
   const risk = prediction.risk || 'LOW';
   const explanation = prediction.explanation || [];
 
-  const getRiskTheme = (r) => {
+  const getRiskColor = (r) => {
     switch (r) {
       case 'HIGH':
-        return { color: '#f43f5e', label: 'CRITICAL DELAY RISK', bg: 'rgba(244, 63, 94, 0.08)', border: 'rgba(244, 63, 94, 0.25)' };
+        return '#e5484d';
       case 'MEDIUM':
-        return { color: '#fbbf24', label: 'MODERATE DELAY RISK', bg: 'rgba(251, 191, 36, 0.08)', border: 'rgba(251, 191, 36, 0.25)' };
+        return '#e5983b';
       case 'LOW':
       default:
-        return { color: '#34d399', label: 'NOMINAL DELIVERY PROFILE', bg: 'rgba(16, 185, 129, 0.08)', border: 'rgba(16, 185, 129, 0.25)' };
+        return '#3ea370';
     }
   };
 
-  const riskTheme = getRiskTheme(risk);
+  const riskColor = getRiskColor(risk);
 
   return (
     <div style={styles.backdrop} onClick={onClose}>
-      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-        {/* Top Intelligence Header */}
+      <div style={styles.sheet} onClick={(e) => e.stopPropagation()}>
+        {/* Top Header */}
         <div style={styles.header}>
-          <div style={styles.briefingEyebrowRow}>
-            <span style={styles.briefingTag}>INTELLIGENCE BRIEFING</span>
-            <span style={styles.taskKey}>TASK://{task.id || 'ACTIVE'}</span>
+          <div style={styles.headerMeta}>
+            <span style={styles.headerLabel}>Analysis</span>
+            <span style={styles.headerDivider}>/</span>
+            <span style={styles.category}>{task.category || 'Initiative'}</span>
           </div>
           <button
             type="button"
             onClick={onClose}
             style={styles.closeBtn}
-            aria-label="Close intelligence briefing"
+            aria-label="Close analysis"
           >
-            ×
+            ✕
           </button>
         </div>
 
-        {/* Task Name & Primary Numeral */}
+        {/* Task Title & Primary Numeral */}
         <div style={styles.titleSection}>
-          <span style={styles.sectionCategory}>PROJECT INITIATIVE</span>
           <h2 style={styles.taskTitle}>{task.title}</h2>
-        </div>
-
-        {/* Big Risk Callout */}
-        <div style={{
-          ...styles.riskCallout,
-          backgroundColor: riskTheme.bg,
-          borderColor: riskTheme.border,
-        }}>
-          <div style={styles.riskTopLine}>
-            <span style={{ ...styles.riskLabel, color: riskTheme.color }}>
-              {riskTheme.label}
-            </span>
-            <span style={{ ...styles.riskBigNum, color: riskTheme.color }}>
+          <div style={styles.riskRow}>
+            <span style={{ ...styles.riskBigNum, color: riskColor }}>
               {percentage}%
             </span>
+            <div style={styles.riskLabelGroup}>
+              <span style={{ ...styles.riskStatus, color: riskColor }}>
+                {risk} DELAY RISK
+              </span>
+              <span style={styles.riskSubtext}>
+                Random Forest probability estimate
+              </span>
+            </div>
           </div>
-          <span style={styles.riskFormulaNote}>
-            ESTIMATED VIA CONTINUOUS RANDOMFOREST DELAY PROBABILITY
-          </span>
         </div>
 
-        {/* Why the model flags this task */}
+        {/* Factors Breakdown */}
         <div style={styles.factorsSection}>
-          <span style={styles.factorsEyebrow}>WHY THE MODEL FLAGS THIS TASK</span>
+          <span style={styles.factorsHeading}>WHY THE MODEL FLAGS THIS TASK</span>
           <div style={styles.factorsList}>
             {explanation.map((item, index) => (
               <div key={index} style={styles.factorRow}>
@@ -79,18 +73,18 @@ export default function TaskExplanationModal({ task, prediction, onClose }) {
           </div>
         </div>
 
-        {/* Disclaimer / Model Interpretation Notice */}
-        <div style={styles.disclaimerBox}>
-          <span style={styles.disclaimerTag}>MODEL METHODOLOGY</span>
-          <p style={styles.disclaimerText}>
-            These factors represent weighted decision paths learned by the RandomForest classifier from project execution records. They serve as actionable predictive risk indicators rather than deterministic guarantees.
+        {/* Methodological Disclaimer */}
+        <div style={styles.methodologyBox}>
+          <span style={styles.methodologyHeading}>Methodology</span>
+          <p style={styles.methodologyText}>
+            Estimates are derived from learned feature weights in the Random Forest model across historical deadline pressure, task complexity, and sprint workload.
           </p>
         </div>
 
-        {/* Dismiss Footer */}
+        {/* Footer */}
         <div style={styles.footer}>
-          <button type="button" onClick={onClose} style={styles.closeActionBtn}>
-            DISMISS BRIEFING
+          <button type="button" onClick={onClose} style={styles.dismissBtn}>
+            Close analysis
           </button>
         </div>
       </div>
@@ -105,26 +99,25 @@ const styles = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(5, 7, 12, 0.85)',
-    backdropFilter: 'blur(12px)',
+    backgroundColor: 'rgba(5, 6, 8, 0.85)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 200,
     padding: '24px',
   },
-  modal: {
-    backgroundColor: '#0c0e15',
+  sheet: {
+    backgroundColor: '#0f1014',
     border: '1px solid rgba(255, 255, 255, 0.12)',
-    borderRadius: '16px',
-    maxWidth: '560px',
+    borderRadius: '4px',
+    maxWidth: '520px',
     width: '100%',
     padding: '32px',
     display: 'flex',
     flexDirection: 'column',
     gap: '24px',
-    boxShadow: '0 30px 60px -15px rgba(0, 0, 0, 0.9)',
-    animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+    boxShadow: '0 20px 40px rgba(0, 0, 0, 0.6)',
+    animation: 'scaleIn 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
   },
   header: {
     display: 'flex',
@@ -133,97 +126,87 @@ const styles = {
     borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
     paddingBottom: '14px',
   },
-  briefingEyebrowRow: {
+  headerMeta: {
     display: 'flex',
     alignItems: 'center',
-    gap: '10px',
+    gap: '8px',
   },
-  briefingTag: {
-    fontSize: '9px',
-    fontWeight: '800',
-    letterSpacing: '0.16em',
-    color: '#7c5cfc',
-    fontFamily: "'JetBrains Mono', monospace",
+  headerLabel: {
+    fontSize: '12px',
+    fontWeight: '600',
+    color: '#7c66dc',
   },
-  taskKey: {
-    fontSize: '10px',
-    color: '#5e6473',
-    fontFamily: "'JetBrains Mono', monospace",
+  headerDivider: {
+    fontSize: '12px',
+    color: '#42444b',
+  },
+  category: {
+    fontSize: '12px',
+    color: '#9c9da3',
   },
   closeBtn: {
     background: 'transparent',
     border: 'none',
-    color: '#868b98',
-    fontSize: '24px',
+    color: '#9c9da3',
+    fontSize: '16px',
     cursor: 'pointer',
-    lineHeight: 1,
     padding: '0 4px',
   },
   titleSection: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
-  },
-  sectionCategory: {
-    fontSize: '9px',
-    fontWeight: '700',
-    letterSpacing: '0.12em',
-    color: '#868b98',
-    fontFamily: "'JetBrains Mono', monospace",
+    gap: '16px',
   },
   taskTitle: {
     fontFamily: "'Syne', sans-serif",
     fontSize: '26px',
     fontWeight: '800',
-    color: '#ffffff',
+    color: '#f6f5f2',
     letterSpacing: '-0.02em',
     margin: 0,
     lineHeight: 1.2,
+    textTransform: 'uppercase',
   },
-  riskCallout: {
-    border: '1px solid',
-    borderRadius: '10px',
-    padding: '16px 20px',
+  riskRow: {
     display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-  },
-  riskTopLine: {
-    display: 'flex',
-    justifyContent: 'space-between',
     alignItems: 'baseline',
-  },
-  riskLabel: {
-    fontSize: '11px',
-    fontWeight: '800',
-    letterSpacing: '0.1em',
-    fontFamily: "'JetBrains Mono', monospace",
+    gap: '16px',
+    padding: '16px 0',
+    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
   },
   riskBigNum: {
     fontFamily: "'Syne', sans-serif",
-    fontSize: '32px',
+    fontSize: '36px',
     fontWeight: '800',
     letterSpacing: '-0.03em',
     lineHeight: 1,
   },
-  riskFormulaNote: {
-    fontSize: '9px',
-    fontWeight: '600',
-    color: '#868b98',
+  riskLabelGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  },
+  riskStatus: {
     fontFamily: "'JetBrains Mono', monospace",
-    letterSpacing: '0.04em',
+    fontSize: '12px',
+    fontWeight: '700',
+    letterSpacing: '0.06em',
+  },
+  riskSubtext: {
+    fontSize: '12px',
+    color: '#9c9da3',
   },
   factorsSection: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px',
+    gap: '14px',
   },
-  factorsEyebrow: {
-    fontSize: '10px',
-    fontWeight: '800',
-    letterSpacing: '0.12em',
-    color: '#f5f5f7',
-    fontFamily: "'JetBrains Mono', monospace",
+  factorsHeading: {
+    fontSize: '11px',
+    fontWeight: '700',
+    letterSpacing: '0.08em',
+    color: '#9c9da3',
   },
   factorsList: {
     display: 'flex',
@@ -234,38 +217,34 @@ const styles = {
     display: 'flex',
     alignItems: 'baseline',
     gap: '12px',
-    fontSize: '13px',
+    fontSize: '14px',
     lineHeight: 1.5,
   },
   factorIndex: {
-    fontSize: '10px',
-    fontWeight: '800',
-    color: '#7c5cfc',
     fontFamily: "'JetBrains Mono', monospace",
-    flexShrink: 0,
+    fontSize: '11px',
+    fontWeight: '600',
+    color: '#7c66dc',
   },
   factorText: {
-    color: '#e2e8f0',
+    color: '#f6f5f2',
   },
-  disclaimerBox: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.07)',
-    borderRadius: '8px',
-    padding: '12px 16px',
+  methodologyBox: {
+    padding: '12px 14px',
+    border: '1px solid rgba(255, 255, 255, 0.06)',
+    borderRadius: '3px',
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
   },
-  disclaimerTag: {
-    fontSize: '9px',
-    fontWeight: '700',
-    letterSpacing: '0.1em',
-    color: '#868b98',
-    fontFamily: "'JetBrains Mono', monospace",
+  methodologyHeading: {
+    fontSize: '11px',
+    fontWeight: '600',
+    color: '#9c9da3',
   },
-  disclaimerText: {
+  methodologyText: {
     fontSize: '12px',
-    color: '#9da3b4',
+    color: '#5e6068',
     margin: 0,
     lineHeight: 1.5,
   },
@@ -275,16 +254,14 @@ const styles = {
     borderTop: '1px solid rgba(255, 255, 255, 0.08)',
     paddingTop: '16px',
   },
-  closeActionBtn: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    border: '1px solid rgba(255, 255, 255, 0.16)',
-    color: '#ffffff',
-    padding: '8px 20px',
-    borderRadius: '6px',
-    fontSize: '11px',
-    fontWeight: '700',
-    fontFamily: "'JetBrains Mono', monospace",
-    letterSpacing: '0.08em',
+  dismissBtn: {
+    backgroundColor: 'transparent',
+    border: '1px solid rgba(255, 255, 255, 0.15)',
+    color: '#f6f5f2',
+    padding: '6px 14px',
+    borderRadius: '3px',
+    fontSize: '12px',
+    fontWeight: '500',
     cursor: 'pointer',
   },
 };

@@ -29,81 +29,74 @@ export default function TaskCard({
     setIsEditing(false);
   };
 
-  const getPriorityTheme = (priority) => {
+  const getPriorityLabel = (priority) => {
     switch (priority) {
       case 'high':
-        return { label: 'HIGH PRIORITY', color: '#fb7185', bg: 'rgba(244, 63, 94, 0.1)' };
+        return 'High Priority';
       case 'medium':
-        return { label: 'MEDIUM PRIORITY', color: '#fbbf24', bg: 'rgba(251, 191, 36, 0.1)' };
+        return 'Medium Priority';
       case 'low':
       default:
-        return { label: 'LOW PRIORITY', color: '#34d399', bg: 'rgba(16, 185, 129, 0.1)' };
+        return 'Low Priority';
     }
   };
-
-  const priorityTheme = getPriorityTheme(task.priority);
 
   const prob = prediction ? prediction.probability : 0.5;
   const riskPercent = (prob * 100).toFixed(1);
   const riskCategory = prediction ? prediction.risk : 'MEDIUM';
 
-  const getRiskTheme = (cat) => {
+  const getRiskColor = (cat) => {
     switch (cat) {
       case 'HIGH':
-        return { color: '#f43f5e', barColor: '#f43f5e', glow: 'rgba(244, 63, 94, 0.3)' };
+        return '#e5484d';
       case 'MEDIUM':
-        return { color: '#fbbf24', barColor: '#fbbf24', glow: 'rgba(251, 191, 36, 0.3)' };
+        return '#e5983b';
       case 'LOW':
       default:
-        return { color: '#34d399', barColor: '#34d399', glow: 'rgba(16, 185, 129, 0.3)' };
+        return '#3ea370';
     }
   };
 
-  const riskTheme = getRiskTheme(riskCategory);
+  const riskColor = getRiskColor(riskCategory);
 
   return (
     <article
       style={{
-        ...styles.card,
-        ...(task.completed ? styles.cardCompleted : {}),
+        ...styles.row,
+        ...(task.completed ? styles.rowCompleted : {}),
       }}
       onClick={() => {
         if (!isEditing && onOpenExplanation && prediction) {
           onOpenExplanation(task, prediction);
         }
       }}
-      title="Click to view detailed ML delay risk explanation"
+      title="Click to view model explanation"
     >
-      {/* Top Meta Line: Index, Category, Priority, Due Date */}
-      <div style={styles.topRow}>
+      {/* Top Metadata Row */}
+      <div style={styles.topMeta}>
         <div style={styles.leftMeta}>
-          <span style={styles.indexTag}>{formattedIndex}</span>
-          <span style={styles.categoryTag}>{task.category || 'PRODUCTIVITY'}</span>
+          <span style={styles.indexNum}>{formattedIndex}</span>
+          <span style={styles.metaDivider}>/</span>
+          <span style={styles.category}>{task.category || 'Productivity'}</span>
+          <span style={styles.metaDot}>·</span>
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onCyclePriority(task.id);
             }}
-            style={{
-              ...styles.priorityPill,
-              color: priorityTheme.color,
-              backgroundColor: priorityTheme.bg,
-            }}
-            title="Click to cycle priority"
+            style={styles.priorityBtn}
+            title="Click to change priority"
           >
-            {priorityTheme.label}
+            {getPriorityLabel(task.priority)}
           </button>
         </div>
 
         <div style={styles.rightMeta}>
-          <span style={styles.dueDate}>
-            DUE {String(task.dueDate || 'OCT 7').toUpperCase()}
-          </span>
+          <span style={styles.dueDate}>Due {task.dueDate || 'Oct 7'}</span>
 
-          {/* Quick Action Icons */}
-          <div style={styles.quickActions}>
-            {/* Custom Checkbox */}
+          <div style={styles.actionIcons}>
+            {/* Minimal Square Checkbox */}
             <button
               type="button"
               onClick={(e) => {
@@ -114,11 +107,11 @@ export default function TaskCard({
                 ...styles.checkbox,
                 ...(task.completed ? styles.checkboxChecked : {}),
               }}
-              title={task.completed ? 'Mark pending' : 'Mark completed'}
+              title={task.completed ? 'Mark as pending' : 'Mark as complete'}
               aria-label={`Mark ${task.title} as completed`}
             >
               {task.completed && (
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#f6f5f2" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
               )}
@@ -135,7 +128,7 @@ export default function TaskCard({
               title="Delete task"
               aria-label="Delete task"
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
@@ -145,11 +138,10 @@ export default function TaskCard({
       </div>
 
       {/* Main Row: Task Title & Visual Dominant Risk Numeral */}
-      <div style={styles.mainRow}>
-        {/* Title / Inline Edit */}
+      <div style={styles.mainContent}>
         <div style={styles.titleArea}>
           {isEditing ? (
-            <div style={styles.editContainer} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.editGroup} onClick={(e) => e.stopPropagation()}>
               <input
                 type="text"
                 value={editTitle}
@@ -162,15 +154,15 @@ export default function TaskCard({
                 autoFocus
                 style={styles.editInput}
               />
-              <button type="button" onClick={handleSave} style={styles.editSaveBtn}>
+              <button type="button" onClick={handleSave} style={styles.editBtn}>
                 ✓
               </button>
               <button type="button" onClick={handleCancel} style={styles.editCancelBtn}>
-                ×
+                ✕
               </button>
             </div>
           ) : (
-            <div style={styles.titleDisplayRow}>
+            <div style={styles.titleDisplay}>
               <h3
                 style={{
                   ...styles.title,
@@ -189,10 +181,10 @@ export default function TaskCard({
                   e.stopPropagation();
                   setIsEditing(true);
                 }}
-                style={styles.editTriggerBtn}
+                style={styles.editIconBtn}
                 title="Edit title"
               >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                   <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                 </svg>
@@ -201,34 +193,33 @@ export default function TaskCard({
           )}
         </div>
 
-        {/* Visually Dominant Risk Block */}
-        <div style={styles.riskBlock}>
+        {/* Visually Dominant Risk % */}
+        <div style={styles.riskArea}>
           {task.completed ? (
-            <span style={styles.completedTag}>COMPLETED</span>
+            <span style={styles.completedTag}>Completed</span>
           ) : prediction ? (
             <div style={styles.riskDisplay}>
-              <span style={{ ...styles.riskBigPercent, color: riskTheme.color }}>
+              <span style={{ ...styles.riskNumeral, color: riskColor }}>
                 {riskPercent}%
               </span>
-              <span style={{ ...styles.riskCategoryLabel, color: riskTheme.color }}>
+              <span style={{ ...styles.riskLabel, color: riskColor }}>
                 {riskCategory} RISK
               </span>
             </div>
           ) : (
-            <span style={styles.evaluatingTag}>PREDICTING...</span>
+            <span style={styles.evaluatingTag}>Estimating...</span>
           )}
         </div>
       </div>
 
-      {/* Thin Animated Landscape Risk Bar */}
+      {/* Extremely Thin Restrained Risk Bar */}
       {!task.completed && (
-        <div style={styles.riskBarTrack}>
+        <div style={styles.riskTrack}>
           <div
             style={{
-              ...styles.riskBarFill,
-              width: `${Math.max(4, prob * 100)}%`,
-              backgroundColor: riskTheme.barColor,
-              boxShadow: `0 0 10px ${riskTheme.glow}`,
+              ...styles.riskFill,
+              width: `${Math.max(3, prob * 100)}%`,
+              backgroundColor: riskColor,
             }}
           />
         </div>
@@ -238,100 +229,104 @@ export default function TaskCard({
 }
 
 const styles = {
-  card: {
+  row: {
     padding: '24px 0',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
     display: 'flex',
     flexDirection: 'column',
-    gap: '14px',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+    gap: '12px',
     cursor: 'pointer',
     position: 'relative',
-    transition: 'background-color 0.2s ease, padding 0.2s ease',
+    transition: 'background-color 0.15s ease',
   },
-  cardCompleted: {
-    opacity: 0.55,
+  rowCompleted: {
+    opacity: 0.45,
   },
-  topRow: {
+  topMeta: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: '12px',
+    gap: '16px',
     flexWrap: 'wrap',
   },
   leftMeta: {
     display: 'flex',
     alignItems: 'center',
-    gap: '10px',
+    gap: '8px',
   },
-  indexTag: {
+  indexNum: {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '12px',
+    fontWeight: '600',
+    color: '#7c66dc',
+  },
+  metaDivider: {
+    color: '#42444b',
     fontSize: '11px',
-    fontWeight: '800',
-    color: '#7c5cfc',
-    fontFamily: "'JetBrains Mono', monospace",
-    letterSpacing: '0.05em',
   },
-  categoryTag: {
-    fontSize: '10px',
-    fontWeight: '700',
-    letterSpacing: '0.1em',
-    color: '#868b98',
-    fontFamily: "'JetBrains Mono', monospace",
+  category: {
+    fontSize: '12px',
+    color: '#9c9da3',
+    fontWeight: '500',
   },
-  priorityPill: {
-    fontSize: '9px',
-    fontWeight: '800',
-    letterSpacing: '0.1em',
-    padding: '2px 8px',
-    borderRadius: '4px',
+  metaDot: {
+    color: '#42444b',
+    fontSize: '11px',
+  },
+  priorityBtn: {
+    background: 'transparent',
     border: 'none',
+    fontSize: '12px',
+    fontWeight: '500',
+    color: '#9c9da3',
     cursor: 'pointer',
-    fontFamily: "'JetBrains Mono', monospace",
+    padding: 0,
+    textDecoration: 'underline',
+    textDecorationColor: 'rgba(255, 255, 255, 0.15)',
+    textUnderlineOffset: '3px',
   },
   rightMeta: {
     display: 'flex',
     alignItems: 'center',
-    gap: '16px',
+    gap: '20px',
   },
   dueDate: {
-    fontSize: '11px',
-    fontWeight: '600',
-    color: '#868b98',
-    fontFamily: "'JetBrains Mono', monospace",
-    letterSpacing: '0.06em',
+    fontSize: '12px',
+    color: '#9c9da3',
+    fontWeight: '400',
   },
-  quickActions: {
+  actionIcons: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
   },
   checkbox: {
-    width: '20px',
-    height: '20px',
-    borderRadius: '5px',
-    border: '1.5px solid rgba(255, 255, 255, 0.3)',
+    width: '18px',
+    height: '18px',
+    borderRadius: '3px',
+    border: '1px solid rgba(255, 255, 255, 0.25)',
     backgroundColor: 'transparent',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     cursor: 'pointer',
     padding: 0,
-    transition: 'all 0.15s ease',
   },
   checkboxChecked: {
-    backgroundColor: '#7c5cfc',
-    borderColor: '#7c5cfc',
+    backgroundColor: '#7c66dc',
+    borderColor: '#7c66dc',
   },
   deleteBtn: {
     background: 'transparent',
     border: 'none',
-    color: '#5e6473',
+    color: '#5e6068',
     cursor: 'pointer',
     padding: '4px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  mainRow: {
+  mainContent: {
     display: 'flex',
     alignItems: 'baseline',
     justifyContent: 'space-between',
@@ -340,78 +335,72 @@ const styles = {
   },
   titleArea: {
     flex: 1,
-    minWidth: '240px',
+    minWidth: '260px',
   },
-  titleDisplayRow: {
+  titleDisplay: {
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'baseline',
     gap: '10px',
   },
   title: {
     fontFamily: "'Syne', sans-serif",
     fontSize: '22px',
     fontWeight: '700',
-    color: '#ffffff',
+    color: '#f6f5f2',
     letterSpacing: '-0.02em',
     margin: 0,
-    lineHeight: 1.2,
+    lineHeight: 1.25,
+    textTransform: 'uppercase',
   },
   titleCompleted: {
     textDecoration: 'line-through',
-    color: '#5e6473',
+    color: '#5e6068',
   },
-  editTriggerBtn: {
+  editIconBtn: {
     background: 'transparent',
     border: 'none',
-    color: '#5e6473',
+    color: '#5e6068',
     cursor: 'pointer',
     padding: '2px',
-    opacity: 0.6,
+    opacity: 0.5,
   },
-  editContainer: {
+  editGroup: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    gap: '6px',
   },
   editInput: {
-    backgroundColor: '#11141e',
-    border: '1px solid #7c5cfc',
-    borderRadius: '6px',
-    color: '#ffffff',
+    backgroundColor: '#111216',
+    border: '1px solid #7c66dc',
+    borderRadius: '4px',
+    color: '#f6f5f2',
     fontSize: '18px',
-    fontWeight: '600',
+    fontWeight: '700',
     fontFamily: "'Syne', sans-serif",
-    padding: '4px 10px',
+    padding: '4px 8px',
     outline: 'none',
     width: '100%',
-    maxWidth: '340px',
+    maxWidth: '360px',
   },
-  editSaveBtn: {
-    backgroundColor: '#7c5cfc',
+  editBtn: {
+    backgroundColor: '#7c66dc',
     border: 'none',
-    color: '#ffffff',
-    borderRadius: '4px',
+    color: '#f6f5f2',
+    borderRadius: '3px',
     width: '24px',
     height: '24px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
     cursor: 'pointer',
   },
   editCancelBtn: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     border: 'none',
-    color: '#9da3b4',
-    borderRadius: '4px',
+    color: '#9c9da3',
+    borderRadius: '3px',
     width: '24px',
     height: '24px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
     cursor: 'pointer',
-    fontSize: '15px',
   },
-  riskBlock: {
+  riskArea: {
     display: 'flex',
     alignItems: 'baseline',
     flexShrink: 0,
@@ -419,45 +408,39 @@ const styles = {
   riskDisplay: {
     display: 'flex',
     alignItems: 'baseline',
-    gap: '8px',
+    gap: '10px',
   },
-  riskBigPercent: {
+  riskNumeral: {
     fontFamily: "'Syne', sans-serif",
-    fontSize: '28px',
+    fontSize: '26px',
     fontWeight: '800',
     letterSpacing: '-0.03em',
     lineHeight: 1,
   },
-  riskCategoryLabel: {
-    fontSize: '10px',
-    fontWeight: '800',
-    letterSpacing: '0.12em',
+  riskLabel: {
     fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '10px',
+    fontWeight: '600',
+    letterSpacing: '0.08em',
   },
   completedTag: {
-    fontSize: '11px',
-    fontWeight: '700',
-    letterSpacing: '0.08em',
-    color: '#34d399',
-    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '12px',
+    color: '#3ea370',
+    fontWeight: '500',
   },
   evaluatingTag: {
-    fontSize: '11px',
-    fontWeight: '600',
-    color: '#868b98',
-    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '12px',
+    color: '#5e6068',
   },
-  riskBarTrack: {
+  riskTrack: {
     width: '100%',
     height: '2px',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: '1px',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
     overflow: 'hidden',
-    marginTop: '2px',
+    marginTop: '4px',
   },
-  riskBarFill: {
+  riskFill: {
     height: '100%',
-    borderRadius: '1px',
-    transition: 'width 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
+    transition: 'width 0.5s cubic-bezier(0.16, 1, 0.3, 1)',
   },
 };
