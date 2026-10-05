@@ -110,103 +110,89 @@ export function initCinematicScrollStory() {
       const heroContent = document.querySelector('.hero-composition');
       if (heroContent) gsap.set(heroContent, { opacity: 1 });
 
-      const heroTl = gsap.timeline({
-        scrollTrigger: {
-          trigger: heroSection,
-          start: 'top top',
-          end: isMobile ? 'bottom top' : '+=110%',
-          scrub: 1,
-          pin: !isMobile,
-          anticipatePin: 1,
-        },
-      });
-
-      // Phase 1 (0 -> 30%): Hero typography & cards gently separate
-      if (heroHeadline) {
-        heroTl.to(
-          heroHeadline,
-          {
-            scale: isMobile ? 1.04 : 1.08,
-            y: isMobile ? -25 : -45,
-            ease: 'power1.inOut',
+      if (!isMobile) {
+        const heroTl = gsap.timeline({
+          scrollTrigger: {
+            trigger: heroSection,
+            start: 'top top',
+            end: '+=110%',
+            scrub: 1,
+            pin: true,
+            anticipatePin: 1,
           },
-          0
-        );
-      }
+        });
 
-      if (heroStatement) {
-        heroTl.to(
-          heroStatement,
-          {
-            y: isMobile ? -15 : -30,
-            opacity: 0.7,
-            ease: 'power1.inOut',
-          },
-          0
-        );
-      }
+        // Phase 1 (0 -> 30%): Hero typography & cards gently separate
+        if (heroHeadline) {
+          heroTl.to(
+            heroHeadline,
+            { scale: 1.08, y: -45, ease: 'power1.inOut' },
+            0
+          );
+        }
 
-      if (heroCards.length >= 3 && !isMobile) {
-        heroTl.to(
-          heroCards[0],
-          { x: -35, y: 25, rotation: -3, ease: 'power1.inOut' },
-          0
-        );
-        heroTl.to(
-          heroCards[1],
-          { x: 35, y: -20, rotation: 3, ease: 'power1.inOut' },
-          0
-        );
-        heroTl.to(
-          heroCards[2],
-          { x: -15, y: 35, rotation: 2, ease: 'power1.inOut' },
-          0
-        );
-      }
+        if (heroStatement) {
+          heroTl.to(
+            heroStatement,
+            { y: -30, opacity: 0.7, ease: 'power1.inOut' },
+            0
+          );
+        }
 
-      // Phase 2 (30 -> 75%): Yellow curtain wipe expands from bottom-right
-      if (yellowWipe) {
-        heroTl.set(yellowWipe, { visibility: 'visible', autoAlpha: 1 }, 0.28);
-        heroTl.fromTo(
-          yellowWipe,
-          {
-            scale: 0,
-            opacity: 0,
-            transformOrigin: 'bottom right',
-          },
-          {
-            scale: isMobile ? 2.5 : 4,
-            opacity: 1,
-            ease: 'power2.inOut',
-          },
-          0.3
-        );
-      }
+        if (heroCards.length >= 3) {
+          heroTl.to(
+            heroCards[0],
+            { x: -35, y: 25, rotation: -3, ease: 'power1.inOut' },
+            0
+          );
+          heroTl.to(
+            heroCards[1],
+            { x: 35, y: -20, rotation: 3, ease: 'power1.inOut' },
+            0
+          );
+          heroTl.to(
+            heroCards[2],
+            { x: -15, y: 35, rotation: 2, ease: 'power1.inOut' },
+            0
+          );
+        }
 
-      // Phase 3 (35 -> 65%): Hero elements fade out cleanly behind the yellow curtain
-      if (heroContent) {
-        heroTl.to(
-          heroContent,
-          {
-            opacity: 0,
-            ease: 'power1.in',
-          },
-          0.35
-        );
-      }
+        // Phase 2 (30 -> 75%): Yellow curtain wipe expands from bottom-right
+        if (yellowWipe) {
+          heroTl.set(yellowWipe, { visibility: 'visible', autoAlpha: 1 }, 0.28);
+          heroTl.fromTo(
+            yellowWipe,
+            {
+              scale: 0,
+              opacity: 0,
+              transformOrigin: 'bottom right',
+            },
+            {
+              scale: 4,
+              opacity: 1,
+              ease: 'power2.inOut',
+            },
+            0.3
+          );
+        }
 
-      if (heroBlobs.length > 0) {
-        heroTl.to(
-          heroBlobs,
-          {
-            opacity: 0,
-            ease: 'power1.in',
-          },
-          0.35
-        );
-      }
+        // Phase 3 (35 -> 65%): Hero elements fade out cleanly behind the yellow curtain
+        if (heroContent) {
+          heroTl.to(
+            heroContent,
+            { opacity: 0, ease: 'power1.in' },
+            0.35
+          );
+        }
 
-      // Phase 4 (80 -> 100%): Settle and prepare clean unpin
+        if (heroBlobs.length > 0) {
+          heroTl.to(
+            heroBlobs,
+            { opacity: 0, ease: 'power1.in' },
+            0.35
+          );
+        }
+      }
     }
 
     // ========================================================================

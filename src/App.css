@@ -312,20 +312,182 @@ button:active {
 }
 
 /* --------------------------------------------------------------------------
-   Responsive & Accessibility
+   Responsive & Accessibility System
    -------------------------------------------------------------------------- */
+
+/* Focus Visible for Keyboard Accessibility */
+:focus-visible {
+  outline: 2px solid #25242A !important;
+  outline-offset: 3px !important;
+}
+
+button:focus-visible,
+input:focus-visible,
+a:focus-visible {
+  box-shadow: 0 0 0 3px rgba(255, 229, 138, 0.8) !important;
+}
 
 @media (max-width: 960px) {
   .hero-composition {
     grid-template-columns: 1fr !important;
-    gap: 40px !important;
+    gap: 36px !important;
   }
   .pulse-layout {
     grid-template-columns: 1fr !important;
-    gap: 32px !important;
+    gap: 24px !important;
   }
+}
+
+/* Mobile Devices & Phones (< 768px): Compact, Accessible, Need-to-Know Layout */
+@media (max-width: 768px) {
+  /* Eliminate giant decorative ribbons to remove 800px+ of scrolling */
   .editorial-ribbon-wrap {
-    padding: 24px 0;
+    display: none !important;
+  }
+
+  /* Compact content wrapper */
+  .voxplan-app {
+    padding: 0 12px !important;
+  }
+
+  /* Compact Section Containers */
+  section {
+    padding: 16px 0 !important;
+  }
+
+  /* Universal Container Padding Reduction */
+  #pulse > div,
+  #landscape > div,
+  #intelligence > div,
+  #command > div {
+    padding: 20px 16px !important;
+    border-radius: 18px !important;
+    gap: 20px !important;
+  }
+
+  /* Header Optimization */
+  header {
+    top: 8px !important;
+    padding: 0 4px !important;
+  }
+
+  header > div {
+    padding: 8px 14px !important;
+    border-radius: 20px !important;
+    gap: 8px !important;
+    justify-content: space-between !important;
+  }
+
+  .taglineNote {
+    display: none !important;
+  }
+
+  nav[aria-label="Sections"] {
+    width: 100% !important;
+    order: 3 !important;
+    justify-content: space-between !important;
+    padding: 4px 6px !important;
+    overflow-x: auto !important;
+  }
+
+  nav[aria-label="Sections"] button {
+    padding: 6px 10px !important;
+    min-height: 38px !important;
+    font-size: 12px !important;
+    flex: 1 !important;
+    text-align: center !important;
+  }
+
+  /* Hero Section Mobile */
+  .hero-section {
+    padding: 24px 0 16px 0 !important;
+    min-height: auto !important;
+  }
+
+  .hero-headline {
+    font-size: clamp(34px, 8.5vw, 44px) !important;
+    line-height: 1.05 !important;
+  }
+
+  .hero-statement {
+    font-size: 15px !important;
+    line-height: 1.45 !important;
+  }
+
+  /* Full-width CTA with touch target */
+  .hero-composition .ctaRow {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .hero-composition button {
+    min-height: 48px !important;
+    justify-content: center !important;
+    width: 100% !important;
+  }
+
+  /* Task Cards Mobile Spacing */
+  .hero-card-item {
+    padding: 16px !important;
+  }
+
+  /* ML Metrics: 2x2 Grid */
+  .ml-metrics-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  .ml-card-accuracy,
+  .ml-card-secondary {
+    padding: 14px 12px !important;
+  }
+
+  .ml-card-accuracy div:nth-child(2),
+  .ml-card-secondary div:nth-child(2) {
+    font-size: 24px !important;
+  }
+
+  /* Feature importance & Matrix stack */
+  #intelligence div[style*="gridTemplateColumns"] {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+
+  /* Filter Navigation: Horizontal Swipeable List */
+  #landscape .filterNav,
+  #landscape div[style*="display: flex"][style*="gap: 8px"] {
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding-bottom: 6px !important;
+  }
+
+  #landscape button {
+    min-height: 42px !important;
+    padding: 6px 14px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Command Bar Mobile */
+  .command-notebook-card {
+    padding: 16px !important;
+  }
+
+  .command-hints-row {
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    padding-bottom: 6px !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .command-hints-row button {
+    flex-shrink: 0 !important;
+    min-height: 38px !important;
+  }
+
+  /* Touch Targets for interactive elements */
+  button, input, [role="button"] {
+    min-height: 44px;
   }
 }
 
