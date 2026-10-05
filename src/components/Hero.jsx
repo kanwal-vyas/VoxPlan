@@ -216,6 +216,9 @@ const styles = {
     zIndex: 2,
     pointerEvents: 'none',
     transformOrigin: 'bottom right',
+    opacity: 0,
+    transform: 'scale(0)',
+    visibility: 'hidden',
   },
   grid: {
     display: 'grid',

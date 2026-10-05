@@ -271,6 +271,9 @@ button:active {
 }
 
 .hero-wipe-yellow {
+  opacity: 0;
+  transform: scale(0);
+  visibility: hidden;
   pointer-events: none;
   will-change: transform, opacity;
 }

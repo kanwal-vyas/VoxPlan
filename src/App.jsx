@@ -155,6 +155,14 @@ export default function App() {
 
   const mlPanelRef = useRef(null);
 
+  // Initial viewport setup: ensure page starts at top with manual scroll restoration
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'scrollRestoration' in history) {
+      history.scrollRestoration = 'manual';
+    }
+    window.scrollTo(0, 0);
+  }, []);
+
   // Track scroll progress
   useEffect(() => {
     const handleScroll = () => {

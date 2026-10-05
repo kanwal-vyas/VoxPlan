@@ -5,17 +5,17 @@ export default function LoadingScreen({ onComplete }) {
   const [isExiting, setIsExiting] = useState(false);
 
   useEffect(() => {
-    // Organically step from 0 to 100% in ~1.0 seconds
+    // Organically step from 0 to 100% in ~0.95 seconds
     const interval = setInterval(() => {
       setProgress((prev) => {
         if (prev >= 100) {
           clearInterval(interval);
           return 100;
         }
-        const jump = Math.floor(Math.random() * 20) + 14;
+        const jump = Math.floor(Math.random() * 22) + 16;
         return Math.min(100, prev + jump);
       });
-    }, 110);
+    }, 100);
 
     return () => clearInterval(interval);
   }, []);
@@ -24,11 +24,11 @@ export default function LoadingScreen({ onComplete }) {
     if (progress === 100) {
       const exitTimer = setTimeout(() => {
         setIsExiting(true);
-      }, 150);
+      }, 100);
 
       const doneTimer = setTimeout(() => {
         onComplete();
-      }, 550);
+      }, 400);
 
       return () => {
         clearTimeout(exitTimer);
@@ -42,11 +42,17 @@ export default function LoadingScreen({ onComplete }) {
       style={{
         ...styles.overlay,
         opacity: isExiting ? 0 : 1,
-        transform: isExiting ? 'translateY(-30px)' : 'translateY(0)',
         pointerEvents: isExiting ? 'none' : 'auto',
       }}
     >
-      <div style={styles.centerContainer}>
+      <div
+        style={{
+          ...styles.centerContainer,
+          opacity: isExiting ? 0 : 1,
+          transform: isExiting ? 'scale(0.96) translateY(-16px)' : 'scale(1) translateY(0)',
+          transition: 'opacity 0.28s ease, transform 0.28s ease',
+        }}
+      >
         {/* Animated Pastel Blob */}
         <div style={styles.blobGlow} />
 
@@ -90,7 +96,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    transition: 'opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1), transform 0.45s cubic-bezier(0.16, 1, 0.3, 1)',
+    transition: 'opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
   },
   centerContainer: {
     display: 'flex',

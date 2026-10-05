@@ -101,6 +101,15 @@ export function initCinematicScrollStory() {
     const heroBlobs = document.querySelectorAll('.hero-bg-blob');
 
     if (heroSection) {
+      // Explicitly guarantee the resting state of all hero elements at scrollY = 0
+      if (heroHeadline) gsap.set(heroHeadline, { scale: 1, y: 0, opacity: 1 });
+      if (heroStatement) gsap.set(heroStatement, { y: 0, opacity: 1 });
+      if (heroCards.length > 0) gsap.set(heroCards, { x: 0, y: 0, rotation: 0, scale: 1, opacity: 1 });
+      if (yellowWipe) gsap.set(yellowWipe, { scale: 0, opacity: 0, autoAlpha: 0, visibility: 'hidden' });
+      if (heroBlobs.length > 0) gsap.set(heroBlobs, { opacity: 1 });
+      const heroContent = document.querySelector('.hero-composition');
+      if (heroContent) gsap.set(heroContent, { opacity: 1 });
+
       const heroTl = gsap.timeline({
         scrollTrigger: {
           trigger: heroSection,
@@ -157,6 +166,7 @@ export function initCinematicScrollStory() {
 
       // Phase 2 (30 -> 75%): Yellow curtain wipe expands from bottom-right
       if (yellowWipe) {
+        heroTl.set(yellowWipe, { visibility: 'visible', autoAlpha: 1 }, 0.28);
         heroTl.fromTo(
           yellowWipe,
           {
@@ -174,7 +184,6 @@ export function initCinematicScrollStory() {
       }
 
       // Phase 3 (35 -> 65%): Hero elements fade out cleanly behind the yellow curtain
-      const heroContent = document.querySelector('.hero-composition');
       if (heroContent) {
         heroTl.to(
           heroContent,
