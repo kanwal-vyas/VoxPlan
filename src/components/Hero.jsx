@@ -2,16 +2,6 @@ import React, { useState, useEffect } from 'react';
 
 export default function Hero({ modelMetadata }) {
   const [counts, setCounts] = useState({ task1: 0, task2: 0, task3: 0 });
-  const [scrollY, setScrollY] = useState(0);
-
-  // Parallax tracking
-  useEffect(() => {
-    const handleScroll = () => {
-      setScrollY(window.scrollY);
-    };
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
 
   // Smooth count-up on load
   useEffect(() => {
@@ -34,48 +24,19 @@ export default function Hero({ modelMetadata }) {
     return () => clearTimeout(timer);
   }, []);
 
-  // Parallax offsets (subtle)
-  const bgParallax = scrollY * 0.18;
-  const textParallax = scrollY * 0.12;
-  const cardParallax = scrollY * 0.06;
-  const heroOpacity = Math.max(0.2, 1 - scrollY / 750);
-
   return (
     <section
       className="hero-section"
-      style={{
-        ...styles.hero,
-      }}
+      style={styles.hero}
       aria-label="Hero"
     >
-      {/* Parallax Background Blobs */}
-      <div
-        className="hero-bg-blob"
-        style={{
-          ...styles.bgBlobYellow,
-          transform: `translate3d(0, ${bgParallax * 0.8}px, 0)`,
-        }}
-      />
-      <div
-        className="hero-bg-blob"
-        style={{
-          ...styles.bgBlobPeach,
-          transform: `translate3d(0, ${bgParallax * 1.2}px, 0)`,
-        }}
-      />
-      <div
-        className="hero-bg-blob"
-        style={{
-          ...styles.bgBlobMint,
-          transform: `translate3d(0, ${bgParallax * 0.5}px, 0)`,
-        }}
-      />
+      {/* Background Blobs */}
+      <div className="hero-bg-blob" style={styles.bgBlobYellow} />
+      <div className="hero-bg-blob" style={styles.bgBlobPeach} />
+      <div className="hero-bg-blob" style={styles.bgBlobMint} />
 
       {/* Large Yellow Wipe Transition Shape */}
-      <div
-        className="hero-wipe-yellow"
-        style={styles.heroWipeYellow}
-      />
+      <div className="hero-wipe-yellow" style={styles.heroWipeYellow} />
 
       <div style={styles.grid} className="hero-composition">
         {/* Left: Choreographed Editorial Typography */}
@@ -121,7 +82,7 @@ export default function Hero({ modelMetadata }) {
               ...styles.cleanCard,
               borderLeft: '4px solid #FF8F82',
             }}
-            className="digital-card card-enter-1 hero-card-item"
+            className="digital-card hero-card-item"
           >
             <div style={styles.cardHeader}>
               <div style={styles.categoryWrap}>
@@ -147,7 +108,7 @@ export default function Hero({ modelMetadata }) {
               ...styles.cleanCard,
               borderLeft: '4px solid #FFE58A',
             }}
-            className="digital-card card-enter-2 hero-card-item"
+            className="digital-card hero-card-item"
           >
             <div style={styles.cardHeader}>
               <div style={styles.categoryWrap}>
@@ -173,7 +134,7 @@ export default function Hero({ modelMetadata }) {
               ...styles.cleanCard,
               borderLeft: '4px solid #BFE8D0',
             }}
-            className="digital-card card-enter-3 hero-card-item"
+            className="digital-card hero-card-item"
           >
             <div style={styles.cardHeader}>
               <div style={styles.categoryWrap}>
@@ -242,14 +203,13 @@ const styles = {
   },
   heroWipeYellow: {
     position: 'absolute',
-    bottom: '-100px',
-    right: '-100px',
-    width: '500px',
-    height: '500px',
-    backgroundColor: 'rgba(255, 249, 219, 0.95)',
+    bottom: '-80px',
+    right: '-80px',
+    width: '600px',
+    height: '600px',
+    backgroundColor: '#FFF9DB',
     borderRadius: '50%',
-    filter: 'blur(60px)',
-    zIndex: -1,
+    zIndex: 2,
     pointerEvents: 'none',
     transformOrigin: 'bottom right',
   },
@@ -258,6 +218,8 @@ const styles = {
     gridTemplateColumns: '1.2fr 1fr',
     gap: '64px',
     alignItems: 'center',
+    position: 'relative',
+    zIndex: 1,
   },
   leftColumn: {
     display: 'flex',

@@ -109,9 +109,6 @@ export default function TaskCard({
       style={{
         ...styles.card,
         borderTop: `4px solid ${theme.accent}`,
-        opacity: parentVisible ? (task.completed ? 0.6 : 1) : 0,
-        transform: parentVisible ? 'translateY(0)' : 'translateY(32px)',
-        transition: `opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1) ${enterDelay}, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) ${enterDelay}, box-shadow 0.22s ease`,
       }}
       className="digital-card task-card-item"
       onClick={() => {

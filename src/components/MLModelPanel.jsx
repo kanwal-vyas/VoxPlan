@@ -212,9 +212,8 @@ export default function MLModelPanel({
                       data-target-width={`${Math.max(6, feat.percentage * 3.6)}%`}
                       style={{
                         ...styles.barFill,
-                        width: isVisible ? `${Math.max(6, feat.percentage * 3.6)}%` : '0%',
+                        width: '0%',
                         backgroundColor: idx === 0 ? '#FF8F82' : idx === 1 ? '#FFE58A' : idx === 2 ? '#C9B6FF' : '#BFE8D0',
-                        transition: `width 0.9s cubic-bezier(0.16, 1, 0.3, 1) ${0.2 + idx * 0.12}s`,
                       }}
                     />
                   </div>

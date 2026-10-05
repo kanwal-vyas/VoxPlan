@@ -211,6 +211,8 @@ export default function ProjectOverview({
 const styles = {
   section: {
     padding: '36px 0',
+    position: 'relative',
+    zIndex: 5,
   },
   container: {
     backgroundColor: '#FFF9DB',
