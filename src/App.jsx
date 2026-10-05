@@ -154,6 +154,7 @@ export default function App() {
   const [selectedTaskExplanation, setSelectedTaskExplanation] = useState(null);
 
   const mlPanelRef = useRef(null);
+  const gsapCleanupRef = useRef(null);
 
   // Initial viewport setup: ensure page starts at top with manual scroll restoration
   useEffect(() => {
@@ -644,39 +645,27 @@ export default function App() {
     }
   };
 
-  // GSAP context cleanup reference
-  const gsapCleanupRef = useRef(null);
-
-  // Initialize GSAP Cinematic Scroll Storytelling EXACTLY ONCE when loading completes
+  // Initialize GSAP Cinematic Scroll Storytelling on mount so all pin spacers and layouts are ready
   useEffect(() => {
-    if (isLoading) return;
-
-    // Small delay to ensure DOM is painted and computed dimensions are ready
-    const timer = setTimeout(() => {
-      if (gsapCleanupRef.current) {
-        gsapCleanupRef.current();
-        gsapCleanupRef.current = null;
-      }
-      gsapCleanupRef.current = initCinematicScrollStory();
-    }, 80);
+    // Immediate initialization so DOM pin-spacers are in place before loader lifts
+    const cleanup = initCinematicScrollStory();
+    gsapCleanupRef.current = cleanup;
 
     return () => {
-      clearTimeout(timer);
       if (gsapCleanupRef.current) {
         gsapCleanupRef.current();
         gsapCleanupRef.current = null;
       }
     };
-  }, [isLoading]);
+  }, []);
 
   // Debounced ScrollTrigger refresh when layout height changes (without recreating timelines)
   useEffect(() => {
-    if (isLoading) return;
     const refreshTimer = setTimeout(() => {
       ScrollTrigger.refresh();
-    }, 200);
+    }, 150);
     return () => clearTimeout(refreshTimer);
-  }, [isLoading, tasks.length]);
+  }, [tasks.length]);
 
   const handleLoadingComplete = useCallback(() => {
     setIsLoading(false);
