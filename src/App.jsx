@@ -194,8 +194,12 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [feedback]);
 
+  const tasksRef = useRef(tasks);
+  tasksRef.current = tasks;
+
   // Fetch ML status and predictions from backend
-  const refreshMLState = useCallback(async (currentTasks = tasks) => {
+  const refreshMLState = useCallback(async (customTasks) => {
+    const activeTasks = customTasks || tasksRef.current;
     const health = await checkBackendHealth();
     setIsBackendOnline(health.online);
 
@@ -212,7 +216,7 @@ export default function App() {
         }
 
         // Run batch prediction
-        const predRes = await predictBatchTasks(currentTasks);
+        const predRes = await predictBatchTasks(activeTasks);
         if (predRes && predRes.predictions) {
           const map = {};
           predRes.predictions.forEach((p) => {
@@ -230,14 +234,14 @@ export default function App() {
     } catch (err) {
       console.warn('Error refreshing ML state:', err);
     }
-  }, [tasks]);
+  }, []);
 
-  // Initial load: verify backend & sync predictions
+  // Initial load: verify backend once on mount and gentle polling every 30s
   useEffect(() => {
     refreshMLState();
     const interval = setInterval(() => {
       checkBackendHealth().then((h) => setIsBackendOnline(h.online));
-    }, 15000);
+    }, 30000);
     return () => clearInterval(interval);
   }, [refreshMLState]);
 

@@ -7,7 +7,13 @@ const API_BASE_URL = 'http://127.0.0.1:8000';
 
 export async function checkBackendHealth() {
   try {
-    const res = await fetch(`${API_BASE_URL}/health`, { method: 'GET' });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1500);
+    const res = await fetch(`${API_BASE_URL}/health`, {
+      method: 'GET',
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
     if (!res.ok) return { online: false };
     const data = await res.json();
     return { online: true, data };
