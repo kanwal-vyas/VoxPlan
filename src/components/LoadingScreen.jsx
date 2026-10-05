@@ -6,17 +6,17 @@ export default function LoadingScreen({ onComplete }) {
   const completedRef = useRef(false);
 
   useEffect(() => {
-    // Organically step from 0 to 100% in ~0.85 seconds
+    // Organically step from 0 to 100% in ~1.8 - 2.0 seconds
     const interval = setInterval(() => {
       setProgress((prev) => {
         if (prev >= 100) {
           clearInterval(interval);
           return 100;
         }
-        const jump = Math.floor(Math.random() * 24) + 16;
+        const jump = Math.floor(Math.random() * 11) + 6;
         return Math.min(100, prev + jump);
       });
-    }, 90);
+    }, 130);
 
     return () => clearInterval(interval);
   }, []);
@@ -24,13 +24,14 @@ export default function LoadingScreen({ onComplete }) {
   useEffect(() => {
     if (progress === 100 && !completedRef.current) {
       completedRef.current = true;
+      // Hold briefly at 100% for visual polish
       const exitTimer = setTimeout(() => {
         setIsExiting(true);
-      }, 80);
+      }, 250);
 
       const doneTimer = setTimeout(() => {
         if (onComplete) onComplete();
-      }, 350);
+      }, 600);
 
       return () => {
         clearTimeout(exitTimer);
