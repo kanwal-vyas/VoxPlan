@@ -9,6 +9,7 @@ import MLModelPanel from './components/MLModelPanel';
 import TaskList from './components/TaskList';
 import TaskExplanationModal from './components/TaskExplanationModal';
 import LoadingScreen from './components/LoadingScreen';
+import { initCinematicScrollStory } from './animations/scrollStory';
 import {
   checkBackendHealth,
   getModelStatus,
@@ -634,12 +635,23 @@ export default function App() {
     }
   };
 
+  // Initialize GSAP Cinematic Scroll Storytelling
+  useEffect(() => {
+    if (!isLoading) {
+      const timer = setTimeout(() => {
+        const cleanup = initCinematicScrollStory();
+        return cleanup;
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading, tasks.length, modelStatus.is_trained]);
+
   const completedCount = tasks.filter((t) => t.completed).length;
   const totalCount = tasks.length;
   const progressPercent = totalCount === 0 ? 0 : Math.round((completedCount / totalCount) * 100);
 
   return (
-    <div style={styles.app}>
+    <div className="voxplan-app" style={styles.app}>
       {/* Initial Branded Loading Sequence */}
       {isLoading && <LoadingScreen onComplete={() => setIsLoading(false)} />}
 
@@ -662,6 +674,11 @@ export default function App() {
           onScrollToSection={handleScrollToSection}
         />
 
+        {/* Giant Editorial Typography Ribbon 1 */}
+        <div className="editorial-ribbon-wrap" aria-hidden="true">
+          <span className="editorial-ribbon-word">PLAN</span>
+        </div>
+
         {/* Section 01: Sprint Pulse (Butter Yellow Panel) */}
         <ProjectOverview
           totalCount={totalCount}
@@ -672,6 +689,11 @@ export default function App() {
           isPredicting={isPredicting}
           modelStatus={modelStatus}
         />
+
+        {/* Giant Editorial Typography Ribbon 2 */}
+        <div className="editorial-ribbon-wrap" aria-hidden="true">
+          <span className="editorial-ribbon-word">PREDICT</span>
+        </div>
 
         {/* Section 02: Risk Landscape (Lavender Sticky Notes Wall) */}
         <TaskList
@@ -686,6 +708,11 @@ export default function App() {
           onOpenExplanation={(task, pred) => setSelectedTaskExplanation({ task, pred })}
         />
 
+        {/* Giant Editorial Typography Ribbon 3 */}
+        <div className="editorial-ribbon-wrap" aria-hidden="true">
+          <span className="editorial-ribbon-word">UNDERSTAND</span>
+        </div>
+
         {/* Section 03: Model Intelligence (Soft Mint Brain Panel) */}
         <div ref={mlPanelRef}>
           <MLModelPanel
@@ -695,6 +722,11 @@ export default function App() {
             isTraining={isTraining}
             trainingStep={trainingStep}
           />
+        </div>
+
+        {/* Giant Editorial Typography Ribbon 4 */}
+        <div className="editorial-ribbon-wrap" aria-hidden="true">
+          <span className="editorial-ribbon-word">ACT</span>
         </div>
 
         {/* Section 04: Command Center (Soft Peach Notebook Assistant) */}

@@ -105,6 +105,7 @@ export default function TaskCard({
 
   return (
     <article
+      data-risk={riskCategory}
       style={{
         ...styles.card,
         borderTop: `4px solid ${theme.accent}`,
@@ -112,7 +113,7 @@ export default function TaskCard({
         transform: parentVisible ? 'translateY(0)' : 'translateY(32px)',
         transition: `opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1) ${enterDelay}, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) ${enterDelay}, box-shadow 0.22s ease`,
       }}
-      className="digital-card"
+      className="digital-card task-card-item"
       onClick={() => {
         if (!isEditing && onOpenExplanation && prediction) {
           onOpenExplanation(task, prediction);

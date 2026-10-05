@@ -42,51 +42,55 @@ export default function Hero({ modelMetadata }) {
 
   return (
     <section
+      className="hero-section"
       style={{
         ...styles.hero,
-        opacity: heroOpacity,
       }}
       aria-label="Hero"
     >
       {/* Parallax Background Blobs */}
       <div
+        className="hero-bg-blob"
         style={{
           ...styles.bgBlobYellow,
           transform: `translate3d(0, ${bgParallax * 0.8}px, 0)`,
         }}
       />
       <div
+        className="hero-bg-blob"
         style={{
           ...styles.bgBlobPeach,
           transform: `translate3d(0, ${bgParallax * 1.2}px, 0)`,
         }}
       />
       <div
+        className="hero-bg-blob"
         style={{
           ...styles.bgBlobMint,
           transform: `translate3d(0, ${bgParallax * 0.5}px, 0)`,
         }}
       />
 
+      {/* Large Yellow Wipe Transition Shape */}
+      <div
+        className="hero-wipe-yellow"
+        style={styles.heroWipeYellow}
+      />
+
       <div style={styles.grid} className="hero-composition">
         {/* Left: Choreographed Editorial Typography */}
-        <div
-          style={{
-            ...styles.leftColumn,
-            transform: `translate3d(0, -${textParallax}px, 0)`,
-          }}
-        >
+        <div style={styles.leftColumn}>
           <div style={styles.eyebrowPill}>
             <span>✦</span>
             <span style={styles.eyebrowText}>PREDICTIVE STUDY & TASK INTELLIGENCE</span>
           </div>
 
-          <h1 style={styles.headline}>
+          <h1 className="hero-headline" style={styles.headline}>
             PLAN <span className="hl hl-butter hl-sweep">LESS.</span><br />
             DO <span className="hl hl-lilac hl-sweep">MORE.</span>
           </h1>
 
-          <p style={styles.statement}>
+          <p className="hero-statement" style={styles.statement}>
             VoxPlan turns your messy to-do list into a structured plan, then uses <span className="hl hl-mint hl-sweep">supervised machine learning</span> to highlight which initiatives are likely to fall behind.
           </p>
 
@@ -110,19 +114,14 @@ export default function Hero({ modelMetadata }) {
         </div>
 
         {/* Right: Layered Task Cards */}
-        <div
-          style={{
-            ...styles.rightColumn,
-            transform: `translate3d(0, -${cardParallax}px, 0)`,
-          }}
-        >
+        <div style={styles.rightColumn}>
           {/* Card 1: High Risk */}
           <div
             style={{
               ...styles.cleanCard,
               borderLeft: '4px solid #FF8F82',
             }}
-            className="digital-card card-enter-1"
+            className="digital-card card-enter-1 hero-card-item"
           >
             <div style={styles.cardHeader}>
               <div style={styles.categoryWrap}>
@@ -148,7 +147,7 @@ export default function Hero({ modelMetadata }) {
               ...styles.cleanCard,
               borderLeft: '4px solid #FFE58A',
             }}
-            className="digital-card card-enter-2"
+            className="digital-card card-enter-2 hero-card-item"
           >
             <div style={styles.cardHeader}>
               <div style={styles.categoryWrap}>
@@ -174,7 +173,7 @@ export default function Hero({ modelMetadata }) {
               ...styles.cleanCard,
               borderLeft: '4px solid #BFE8D0',
             }}
-            className="digital-card card-enter-3"
+            className="digital-card card-enter-3 hero-card-item"
           >
             <div style={styles.cardHeader}>
               <div style={styles.categoryWrap}>
@@ -240,6 +239,19 @@ const styles = {
     filter: 'blur(90px)',
     zIndex: -1,
     pointerEvents: 'none',
+  },
+  heroWipeYellow: {
+    position: 'absolute',
+    bottom: '-100px',
+    right: '-100px',
+    width: '500px',
+    height: '500px',
+    backgroundColor: 'rgba(255, 249, 219, 0.95)',
+    borderRadius: '50%',
+    filter: 'blur(60px)',
+    zIndex: -1,
+    pointerEvents: 'none',
+    transformOrigin: 'bottom right',
   },
   grid: {
     display: 'grid',

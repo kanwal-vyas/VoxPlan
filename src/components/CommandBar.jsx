@@ -50,7 +50,9 @@ export default function CommandBar({
               <span style={styles.badge}>VOICE & NATURAL LANGUAGE</span>
             </div>
             <h2 style={styles.title}>
-              TELL <span className={`hl hl-peach ${isVisible ? 'hl-sweep' : ''}`}>VOXPLAN</span> WHAT YOU NEED
+              <span className="command-title-word">TELL </span>
+              <span className={`command-title-word command-word-voxplan hl hl-peach ${isVisible ? 'hl-sweep' : ''}`}>VOXPLAN </span>
+              <span className="command-title-word">WHAT YOU NEED</span>
             </h2>
             <p style={styles.subtitle}>
               Voice interaction powered by Wispr Flow with direct natural language task execution
@@ -65,7 +67,7 @@ export default function CommandBar({
             borderColor: isListening ? '#FF8F82' : 'rgba(37, 36, 42, 0.08)',
             boxShadow: isListening ? '0 12px 32px rgba(255, 143, 130, 0.2)' : '0 4px 16px rgba(37, 36, 42, 0.04)',
           }}
-          className="digital-card"
+          className="digital-card command-notebook-card"
         >
           {/* Input Form */}
           <form onSubmit={handleSubmit} style={styles.form}>

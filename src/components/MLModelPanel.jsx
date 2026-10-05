@@ -136,11 +136,8 @@ export default function MLModelPanel({
             style={{
               ...styles.metricCard,
               borderTop: '4px solid #C9B6FF',
-              opacity: isVisible ? 1 : 0,
-              transform: isVisible ? 'translateY(0)' : 'translateY(24px)',
-              transition: 'all 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.1s',
             }}
-            className="digital-card"
+            className="digital-card ml-card-accuracy"
           >
             <span style={styles.metricName}>Accuracy</span>
             <span style={styles.metricValue}>{metrics.accuracy}%</span>
@@ -152,11 +149,8 @@ export default function MLModelPanel({
             style={{
               ...styles.metricCard,
               borderTop: '4px solid #B9DDF7',
-              opacity: isVisible ? 1 : 0,
-              transform: isVisible ? 'translateY(0)' : 'translateY(24px)',
-              transition: 'all 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.22s',
             }}
-            className="digital-card"
+            className="digital-card ml-card-secondary"
           >
             <span style={styles.metricName}>Precision</span>
             <span style={styles.metricValue}>{metrics.precision}%</span>
@@ -168,11 +162,8 @@ export default function MLModelPanel({
             style={{
               ...styles.metricCard,
               borderTop: '4px solid #BFE8D0',
-              opacity: isVisible ? 1 : 0,
-              transform: isVisible ? 'translateY(0)' : 'translateY(24px)',
-              transition: 'all 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.34s',
             }}
-            className="digital-card"
+            className="digital-card ml-card-secondary"
           >
             <span style={styles.metricName}>Recall</span>
             <span style={styles.metricValue}>{metrics.recall}%</span>
@@ -184,11 +175,8 @@ export default function MLModelPanel({
             style={{
               ...styles.metricCard,
               borderTop: '4px solid #FFE58A',
-              opacity: isVisible ? 1 : 0,
-              transform: isVisible ? 'translateY(0)' : 'translateY(24px)',
-              transition: 'all 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.46s',
             }}
-            className="digital-card"
+            className="digital-card ml-card-secondary"
           >
             <span style={styles.metricName}>F1 Score</span>
             <span style={styles.metricValue}>{metrics.f1}%</span>
@@ -220,6 +208,8 @@ export default function MLModelPanel({
                   </div>
                   <div style={styles.barTrack}>
                     <div
+                      className="feature-bar-fill"
+                      data-target-width={`${Math.max(6, feat.percentage * 3.6)}%`}
                       style={{
                         ...styles.barFill,
                         width: isVisible ? `${Math.max(6, feat.percentage * 3.6)}%` : '0%',
@@ -251,24 +241,22 @@ export default function MLModelPanel({
               <div style={styles.matrixRow}>
                 <span style={styles.rowLabel}>Actual: On Time</span>
                 <div
+                  className="cm-cell-item"
                   style={{
                     ...styles.cell,
                     backgroundColor: '#EBF8F1',
                     border: '1px solid #BFE8D0',
-                    opacity: isVisible ? 1 : 0,
-                    transition: 'opacity 0.4s ease 0.2s',
                   }}
                 >
                   <span style={styles.cellVal}>{cmCounts.tn}</span>
                   <span style={{ ...styles.cellTag, color: '#166534' }}>Nice prediction ✓</span>
                 </div>
                 <div
+                  className="cm-cell-item"
                   style={{
                     ...styles.cell,
                     backgroundColor: '#FFF9DB',
                     border: '1px solid #FFE58A',
-                    opacity: isVisible ? 1 : 0,
-                    transition: 'opacity 0.4s ease 0.35s',
                   }}
                 >
                   <span style={styles.cellVal}>{cmCounts.fp}</span>
@@ -280,24 +268,22 @@ export default function MLModelPanel({
               <div style={styles.matrixRow}>
                 <span style={styles.rowLabel}>Actual: Late</span>
                 <div
+                  className="cm-cell-item"
                   style={{
                     ...styles.cell,
                     backgroundColor: '#FFEFEA',
                     border: '1px solid #FFB5A7',
-                    opacity: isVisible ? 1 : 0,
-                    transition: 'opacity 0.4s ease 0.5s',
                   }}
                 >
                   <span style={styles.cellVal}>{cmCounts.fn}</span>
                   <span style={{ ...styles.cellTag, color: '#991B1B' }}>Missed risk 🌧️</span>
                 </div>
                 <div
+                  className="cm-cell-item"
                   style={{
                     ...styles.cell,
                     backgroundColor: '#EBF8F1',
                     border: '1px solid #BFE8D0',
-                    opacity: isVisible ? 1 : 0,
-                    transition: 'opacity 0.4s ease 0.65s',
                   }}
                 >
                   <span style={styles.cellVal}>{cmCounts.tp}</span>

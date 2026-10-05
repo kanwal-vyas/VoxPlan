@@ -248,7 +248,89 @@ button:active {
   transform: scale(0.97);
 }
 
-/* Responsive */
+/* --------------------------------------------------------------------------
+   Giant Editorial Typography Ribbons (Scene Dividers)
+   -------------------------------------------------------------------------- */
+
+.editorial-ribbon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 48px 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+.editorial-ribbon-word {
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(80px, 14vw, 190px);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 0.8;
+  color: #25242A;
+  opacity: 0.08;
+  will-change: transform, opacity;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   App Atmosphere & Transform Layers
+   -------------------------------------------------------------------------- */
+
+.voxplan-app {
+  transition: background-color 0.3s ease;
+  will-change: background-color;
+}
+
+.hero-section {
+  position: relative;
+  will-change: transform, opacity;
+}
+
+.hero-wipe-yellow {
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+.pulse-pathway-track {
+  will-change: transform;
+}
+
+.pulse-node-item {
+  will-change: transform, opacity;
+}
+
+.task-card-item {
+  will-change: transform, opacity, box-shadow;
+}
+
+.ml-card-accuracy {
+  will-change: transform, opacity;
+}
+
+.ml-card-secondary {
+  will-change: transform, opacity;
+}
+
+.feature-bar-fill {
+  will-change: width;
+}
+
+.cm-cell-item {
+  will-change: transform, opacity;
+}
+
+.command-title-word {
+  display: inline-block;
+  will-change: transform, opacity;
+}
+
+/* --------------------------------------------------------------------------
+   Responsive & Accessibility
+   -------------------------------------------------------------------------- */
+
 @media (max-width: 960px) {
   .hero-composition {
     grid-template-columns: 1fr !important;
@@ -257,6 +339,9 @@ button:active {
   .pulse-layout {
     grid-template-columns: 1fr !important;
     gap: 32px !important;
+  }
+  .editorial-ribbon-wrap {
+    padding: 24px 0;
   }
 }
 
@@ -267,4 +352,9 @@ button:active {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+  .editorial-ribbon-word {
+    transform: none !important;
+    opacity: 0.08 !important;
+  }
 }
+

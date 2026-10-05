@@ -118,13 +118,11 @@ export default function ProjectOverview({
               <span className="note-tag">annotated sequence →</span>
             </div>
             
-            <div style={styles.pathway}>
+            <div style={styles.pathway} className="pulse-pathway-track">
               <div
+                className="pulse-node-item"
                 style={{
                   ...styles.pathNode,
-                  opacity: isVisible ? 1 : 0,
-                  transform: isVisible ? 'translateY(0)' : 'translateY(16px)',
-                  transition: 'all 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.2s',
                 }}
               >
                 <div style={{ ...styles.nodeDot, backgroundColor: '#FFEFEA', border: '2px solid #FF8F82' }}>
@@ -139,20 +137,16 @@ export default function ProjectOverview({
               </div>
 
               <div
+                className="pulse-path-line"
                 style={{
                   ...styles.pathLine,
-                  transform: isVisible ? 'scaleX(1)' : 'scaleX(0)',
-                  transformOrigin: 'left',
-                  transition: 'transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.35s',
                 }}
               />
 
               <div
+                className="pulse-node-item"
                 style={{
                   ...styles.pathNode,
-                  opacity: isVisible ? 1 : 0,
-                  transform: isVisible ? 'translateY(0)' : 'translateY(16px)',
-                  transition: 'all 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.5s',
                 }}
               >
                 <div style={{ ...styles.nodeDot, backgroundColor: '#FFF9DB', border: '2px solid #F59E0B' }}>
@@ -167,20 +161,16 @@ export default function ProjectOverview({
               </div>
 
               <div
+                className="pulse-path-line"
                 style={{
                   ...styles.pathLine,
-                  transform: isVisible ? 'scaleX(1)' : 'scaleX(0)',
-                  transformOrigin: 'left',
-                  transition: 'transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.65s',
                 }}
               />
 
               <div
+                className="pulse-node-item"
                 style={{
                   ...styles.pathNode,
-                  opacity: isVisible ? 1 : 0,
-                  transform: isVisible ? 'translateY(0)' : 'translateY(16px)',
-                  transition: 'all 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.8s',
                 }}
               >
                 <div style={{ ...styles.nodeDot, backgroundColor: '#EBF8F1', border: '2px solid #3EA370' }}>
