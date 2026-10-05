@@ -15,6 +15,14 @@ gsap.registerPlugin(ScrollTrigger);
  * @returns {Function} cleanup - Reverts all GSAP contexts and kills ScrollTriggers.
  */
 export function initCinematicScrollStory() {
+  // Ensure ScrollTrigger never restores previous scroll memory on reload
+  if (typeof ScrollTrigger !== 'undefined' && ScrollTrigger.clearScrollMemory) {
+    ScrollTrigger.clearScrollMemory('manual');
+  }
+  if (typeof window !== 'undefined') {
+    window.scrollTo(0, 0);
+  }
+
   // Respect prefers-reduced-motion
   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (prefersReducedMotion) {

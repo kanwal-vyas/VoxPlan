@@ -156,12 +156,20 @@ export default function App() {
   const mlPanelRef = useRef(null);
   const gsapCleanupRef = useRef(null);
 
-  // Initial viewport setup: ensure page starts at top with manual scroll restoration
+  // Initial viewport setup: ensure page ALWAYS starts at top on every reload/refresh
   useEffect(() => {
-    if (typeof window !== 'undefined' && 'scrollRestoration' in history) {
-      history.scrollRestoration = 'manual';
+    if (typeof window !== 'undefined') {
+      if ('scrollRestoration' in history) {
+        history.scrollRestoration = 'manual';
+      }
+      window.scrollTo(0, 0);
+
+      const handleBeforeUnload = () => {
+        window.scrollTo(0, 0);
+      };
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      return () => window.removeEventListener('beforeunload', handleBeforeUnload);
     }
-    window.scrollTo(0, 0);
   }, []);
 
   // Track scroll progress
