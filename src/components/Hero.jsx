@@ -2,7 +2,18 @@ import React, { useState, useEffect } from 'react';
 
 export default function Hero({ modelMetadata }) {
   const [counts, setCounts] = useState({ task1: 0, task2: 0, task3: 0 });
+  const [scrollY, setScrollY] = useState(0);
 
+  // Parallax tracking
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrollY(window.scrollY);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Smooth count-up on load
   useEffect(() => {
     const timer = setTimeout(() => {
       let step = 0;
@@ -18,33 +29,65 @@ export default function Hero({ modelMetadata }) {
         if (progress >= 1) clearInterval(interval);
       }, 30);
       return () => clearInterval(interval);
-    }, 400);
+    }, 450);
 
     return () => clearTimeout(timer);
   }, []);
 
+  // Parallax offsets (subtle)
+  const bgParallax = scrollY * 0.18;
+  const textParallax = scrollY * 0.12;
+  const cardParallax = scrollY * 0.06;
+  const heroOpacity = Math.max(0.2, 1 - scrollY / 750);
+
   return (
-    <section style={styles.hero} aria-label="Hero">
-      {/* Background Organic Shapes */}
-      <div style={styles.bgBlobYellow} />
-      <div style={styles.bgBlobPeach} />
-      <div style={styles.bgBlobMint} />
+    <section
+      style={{
+        ...styles.hero,
+        opacity: heroOpacity,
+      }}
+      aria-label="Hero"
+    >
+      {/* Parallax Background Blobs */}
+      <div
+        style={{
+          ...styles.bgBlobYellow,
+          transform: `translate3d(0, ${bgParallax * 0.8}px, 0)`,
+        }}
+      />
+      <div
+        style={{
+          ...styles.bgBlobPeach,
+          transform: `translate3d(0, ${bgParallax * 1.2}px, 0)`,
+        }}
+      />
+      <div
+        style={{
+          ...styles.bgBlobMint,
+          transform: `translate3d(0, ${bgParallax * 0.5}px, 0)`,
+        }}
+      />
 
       <div style={styles.grid} className="hero-composition">
-        {/* Left: Modern Editorial Typography with Highlighter Strokes */}
-        <div style={styles.leftColumn}>
+        {/* Left: Choreographed Editorial Typography */}
+        <div
+          style={{
+            ...styles.leftColumn,
+            transform: `translate3d(0, -${textParallax}px, 0)`,
+          }}
+        >
           <div style={styles.eyebrowPill}>
             <span>✦</span>
             <span style={styles.eyebrowText}>PREDICTIVE STUDY & TASK INTELLIGENCE</span>
           </div>
 
           <h1 style={styles.headline}>
-            PLAN <span className="hl hl-butter hl-animated">LESS.</span><br />
-            DO <span className="hl hl-lilac hl-animated">MORE.</span>
+            PLAN <span className="hl hl-butter hl-sweep">LESS.</span><br />
+            DO <span className="hl hl-lilac hl-sweep">MORE.</span>
           </h1>
 
           <p style={styles.statement}>
-            VoxPlan turns your messy to-do list into a structured plan, then uses <span className="hl hl-mint">supervised machine learning</span> to highlight which initiatives are likely to fall behind.
+            VoxPlan turns your messy to-do list into a structured plan, then uses <span className="hl hl-mint hl-sweep">supervised machine learning</span> to highlight which initiatives are likely to fall behind.
           </p>
 
           <div style={styles.ctaRow}>
@@ -60,22 +103,26 @@ export default function Hero({ modelMetadata }) {
               <span>↓</span>
             </button>
 
-            <span className="note-tag" style={{ marginLeft: '4px' }}>
+            <span className="note-tag" style={{ marginLeft: '6px' }}>
               ✎ real-time risk predictions
             </span>
           </div>
         </div>
 
-        {/* Right: Clean Modern Editorial Task Cards */}
-        <div style={styles.rightColumn}>
-          {/* Card 1: High Risk (Coral Highlight) */}
+        {/* Right: Layered Task Cards */}
+        <div
+          style={{
+            ...styles.rightColumn,
+            transform: `translate3d(0, -${cardParallax}px, 0)`,
+          }}
+        >
+          {/* Card 1: High Risk */}
           <div
             style={{
               ...styles.cleanCard,
-              backgroundColor: '#FFFFFF',
               borderLeft: '4px solid #FF8F82',
             }}
-            className="digital-card"
+            className="digital-card card-enter-1"
           >
             <div style={styles.cardHeader}>
               <div style={styles.categoryWrap}>
@@ -95,14 +142,13 @@ export default function Hero({ modelMetadata }) {
             </div>
           </div>
 
-          {/* Card 2: Medium Risk (Butter Yellow Highlight) */}
+          {/* Card 2: Medium Risk */}
           <div
             style={{
               ...styles.cleanCard,
-              backgroundColor: '#FFFFFF',
               borderLeft: '4px solid #FFE58A',
             }}
-            className="digital-card"
+            className="digital-card card-enter-2"
           >
             <div style={styles.cardHeader}>
               <div style={styles.categoryWrap}>
@@ -122,14 +168,13 @@ export default function Hero({ modelMetadata }) {
             </div>
           </div>
 
-          {/* Card 3: Low Risk (Mint Highlight) */}
+          {/* Card 3: Low Risk */}
           <div
             style={{
               ...styles.cleanCard,
-              backgroundColor: '#FFFFFF',
               borderLeft: '4px solid #BFE8D0',
             }}
-            className="digital-card"
+            className="digital-card card-enter-3"
           >
             <div style={styles.cardHeader}>
               <div style={styles.categoryWrap}>
@@ -158,6 +203,7 @@ const styles = {
   hero: {
     padding: '72px 0 84px 0',
     position: 'relative',
+    transition: 'opacity 0.2s ease',
   },
   bgBlobYellow: {
     position: 'absolute',
@@ -169,6 +215,7 @@ const styles = {
     borderRadius: '50%',
     filter: 'blur(90px)',
     zIndex: -1,
+    pointerEvents: 'none',
   },
   bgBlobPeach: {
     position: 'absolute',
@@ -180,6 +227,7 @@ const styles = {
     borderRadius: '50%',
     filter: 'blur(100px)',
     zIndex: -1,
+    pointerEvents: 'none',
   },
   bgBlobMint: {
     position: 'absolute',
@@ -191,6 +239,7 @@ const styles = {
     borderRadius: '50%',
     filter: 'blur(90px)',
     zIndex: -1,
+    pointerEvents: 'none',
   },
   grid: {
     display: 'grid',
@@ -202,6 +251,7 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     gap: '24px',
+    transition: 'transform 0.1s linear',
   },
   eyebrowPill: {
     display: 'inline-flex',
@@ -214,6 +264,7 @@ const styles = {
     width: 'fit-content',
     boxShadow: '0 2px 8px rgba(37, 36, 42, 0.04)',
     color: '#706D73',
+    animation: 'riseIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both',
   },
   eyebrowText: {
     fontFamily: "'Plus Jakarta Sans', sans-serif",
@@ -230,6 +281,7 @@ const styles = {
     letterSpacing: '-0.04em',
     color: '#25242A',
     margin: 0,
+    animation: 'riseIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.22s both',
   },
   statement: {
     fontSize: '18px',
@@ -238,6 +290,7 @@ const styles = {
     maxWidth: '480px',
     margin: 0,
     fontWeight: '500',
+    animation: 'riseIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.38s both',
   },
   ctaRow: {
     display: 'flex',
@@ -245,6 +298,7 @@ const styles = {
     gap: '18px',
     flexWrap: 'wrap',
     marginTop: '6px',
+    animation: 'riseIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.5s both',
   },
   primaryBtn: {
     display: 'inline-flex',
@@ -264,8 +318,10 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     gap: '16px',
+    transition: 'transform 0.1s linear',
   },
   cleanCard: {
+    backgroundColor: '#FFFFFF',
     borderRadius: '16px',
     padding: '20px 24px',
     boxShadow: '0 4px 16px rgba(37, 36, 42, 0.05)',

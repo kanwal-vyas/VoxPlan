@@ -94,7 +94,14 @@ export default function TaskExplanationModal({ task, prediction, onClose }) {
           <span style={styles.factorsHeading}>WHY IS THIS TASK FLAGGED BY THE MODEL?</span>
           <div style={styles.factorsList}>
             {explanation.map((item, idx) => (
-              <div key={idx} style={styles.factorItem}>
+              <div
+                key={idx}
+                style={{
+                  ...styles.factorItem,
+                  animation: 'factorStagger 0.4s cubic-bezier(0.16, 1, 0.3, 1) both',
+                  animationDelay: `${120 + idx * 80}ms`,
+                }}
+              >
                 <span style={{ ...styles.factorNum, color: theme.textColor }}>0{idx + 1}</span>
                 <span style={styles.factorText}>{item}</span>
               </div>

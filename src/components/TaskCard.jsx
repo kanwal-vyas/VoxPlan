@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 export default function TaskCard({
   index,
@@ -9,9 +9,35 @@ export default function TaskCard({
   onUpdateTitle,
   onCyclePriority,
   onOpenExplanation,
+  parentVisible,
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(task.title);
+  const [displayRisk, setDisplayRisk] = useState(0);
+
+  const prob = prediction ? prediction.probability : 0.5;
+  const targetPercent = prob * 100;
+  const riskCategory = prediction ? prediction.risk : 'MEDIUM';
+
+  // Staggered count-up triggered on parent visibility
+  useEffect(() => {
+    if (parentVisible) {
+      const delay = 100 + index * 120;
+      const timer = setTimeout(() => {
+        let step = 0;
+        const interval = setInterval(() => {
+          step += 1;
+          const p = Math.min(1, step / 20);
+          const ease = 1 - Math.pow(1 - p, 3);
+          setDisplayRisk(Math.round(ease * targetPercent * 10) / 10);
+          if (p >= 1) clearInterval(interval);
+        }, 30);
+        return () => clearInterval(interval);
+      }, delay);
+
+      return () => clearTimeout(timer);
+    }
+  }, [parentVisible, targetPercent, index]);
 
   const handleSave = () => {
     const trimmed = editTitle.trim();
@@ -26,10 +52,6 @@ export default function TaskCard({
     setEditTitle(task.title);
     setIsEditing(false);
   };
-
-  const prob = prediction ? prediction.probability : 0.5;
-  const riskPercent = (prob * 100).toFixed(1);
-  const riskCategory = prediction ? prediction.risk : 'MEDIUM';
 
   const getTheme = () => {
     if (task.completed) {
@@ -79,13 +101,16 @@ export default function TaskCard({
   };
 
   const theme = getTheme();
+  const enterDelay = `${0.1 + index * 0.12}s`;
 
   return (
     <article
       style={{
         ...styles.card,
         borderTop: `4px solid ${theme.accent}`,
-        opacity: task.completed ? 0.6 : 1,
+        opacity: parentVisible ? (task.completed ? 0.6 : 1) : 0,
+        transform: parentVisible ? 'translateY(0)' : 'translateY(32px)',
+        transition: `opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1) ${enterDelay}, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) ${enterDelay}, box-shadow 0.22s ease`,
       }}
       className="digital-card"
       onClick={() => {
@@ -212,7 +237,7 @@ export default function TaskCard({
         </span>
       </div>
 
-      {/* Bottom Footer: Circled Risk Numeral & Explanation Hint */}
+      {/* Bottom Footer: Circled Risk Numeral with count-up */}
       <div style={styles.cardFooter}>
         <div style={styles.riskWrap}>
           {task.completed ? (
@@ -227,7 +252,7 @@ export default function TaskCard({
                   fontWeight: '800',
                 }}
               >
-                {riskPercent}%
+                {displayRisk}%
               </span>
               <span style={{ ...styles.riskLabel, color: theme.textColor }}>
                 {riskCategory} RISK

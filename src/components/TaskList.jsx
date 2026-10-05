@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import TaskCard from './TaskCard';
 
 export default function TaskList({
@@ -12,6 +12,25 @@ export default function TaskList({
   onCyclePriority,
   onOpenExplanation,
 }) {
+  const sectionRef = useRef(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+        }
+      },
+      { threshold: 0.15 }
+    );
+
+    if (sectionRef.current) {
+      observer.observe(sectionRef.current);
+    }
+    return () => observer.disconnect();
+  }, []);
+
   const filteredTasks = tasks.filter((task) => {
     if (activeFilter === 'pending') return !task.completed;
     if (activeFilter === 'completed') return task.completed;
@@ -23,7 +42,7 @@ export default function TaskList({
   });
 
   return (
-    <section id="landscape" style={styles.section} aria-label="Risk Landscape">
+    <section id="landscape" ref={sectionRef} style={styles.section} aria-label="Risk Landscape">
       <div style={styles.container}>
         {/* Section Header */}
         <div style={styles.header}>
@@ -33,7 +52,7 @@ export default function TaskList({
               <span style={styles.badge}>ANALYTICAL OVERVIEW</span>
             </div>
             <h2 style={styles.title}>
-              THE <span className="hl hl-peach">RISK</span> LANDSCAPE
+              THE <span className={`hl hl-peach ${isVisible ? 'hl-sweep' : ''}`}>RISK</span> LANDSCAPE
             </h2>
             <p style={styles.subtitle}>
               Continuous machine learning delay-risk estimates mapped across active initiatives
@@ -77,6 +96,7 @@ export default function TaskList({
               onUpdateTitle={onUpdateTitle}
               onCyclePriority={onCyclePriority}
               onOpenExplanation={onOpenExplanation}
+              parentVisible={isVisible}
             />
           ))}
 

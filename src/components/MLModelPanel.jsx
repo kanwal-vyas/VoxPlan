@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 export default function MLModelPanel({
   modelStatus,
@@ -9,6 +9,8 @@ export default function MLModelPanel({
 }) {
   const isTrained = modelStatus && modelStatus.is_trained;
   const cm = modelStatus?.confusion_matrix || [[112, 8], [11, 109]];
+  const sectionRef = useRef(null);
+  const [isVisible, setIsVisible] = useState(false);
 
   const [metrics, setMetrics] = useState({
     accuracy: 0,
@@ -17,12 +19,41 @@ export default function MLModelPanel({
     f1: 0,
   });
 
+  const [cmCounts, setCmCounts] = useState({
+    tn: 0,
+    fp: 0,
+    fn: 0,
+    tp: 0,
+  });
+
   useEffect(() => {
-    if (isTrained) {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+        }
+      },
+      { threshold: 0.15 }
+    );
+
+    if (sectionRef.current) {
+      observer.observe(sectionRef.current);
+    }
+    return () => observer.disconnect();
+  }, []);
+
+  // Staggered count-up when section scrolls into view
+  useEffect(() => {
+    if (isVisible && isTrained) {
       const targetAcc = (modelStatus.accuracy || 0.877) * 100;
       const targetPrec = (modelStatus.precision || 0.937) * 100;
       const targetRec = (modelStatus.recall || 0.912) * 100;
       const targetF1 = (modelStatus.f1_score || 0.924) * 100;
+
+      const targetTN = cm[0]?.[0] ?? 112;
+      const targetFP = cm[0]?.[1] ?? 8;
+      const targetFN = cm[1]?.[0] ?? 11;
+      const targetTP = cm[1]?.[1] ?? 109;
 
       let step = 0;
       const interval = setInterval(() => {
@@ -35,15 +66,21 @@ export default function MLModelPanel({
           recall: Math.round(ease * targetRec * 10) / 10,
           f1: Math.round(ease * targetF1 * 10) / 10,
         });
+        setCmCounts({
+          tn: Math.round(ease * targetTN),
+          fp: Math.round(ease * targetFP),
+          fn: Math.round(ease * targetFN),
+          tp: Math.round(ease * targetTP),
+        });
         if (p >= 1) clearInterval(interval);
       }, 30);
 
       return () => clearInterval(interval);
     }
-  }, [isTrained, modelStatus]);
+  }, [isVisible, isTrained, modelStatus, cm]);
 
   return (
-    <section id="intelligence" style={styles.section} aria-label="Model Intelligence">
+    <section id="intelligence" ref={sectionRef} style={styles.section} aria-label="Model Intelligence">
       <div style={styles.container}>
         {/* Section Header */}
         <div style={styles.header}>
@@ -53,7 +90,7 @@ export default function MLModelPanel({
               <span style={styles.badge}>MACHINE LEARNING EVALUATION</span>
             </div>
             <h2 style={styles.title}>
-              THE <span className="hl hl-mint">SMART</span> PART
+              THE <span className={`hl hl-mint ${isVisible ? 'hl-sweep' : ''}`}>SMART</span> PART
             </h2>
             <p style={styles.subtitle}>
               VoxPlan learns from project history to spot trouble before it happens
@@ -92,31 +129,67 @@ export default function MLModelPanel({
           </div>
         )}
 
-        {/* Big 4 Pastel Metrics Cards */}
+        {/* Big 4 Pastel Metrics Cards with Staggered Visual Entrance */}
         <div style={styles.metricsGrid}>
           {/* Card 1: Accuracy */}
-          <div style={{ ...styles.metricCard, borderTop: '4px solid #C9B6FF' }} className="digital-card">
+          <div
+            style={{
+              ...styles.metricCard,
+              borderTop: '4px solid #C9B6FF',
+              opacity: isVisible ? 1 : 0,
+              transform: isVisible ? 'translateY(0)' : 'translateY(24px)',
+              transition: 'all 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.1s',
+            }}
+            className="digital-card"
+          >
             <span style={styles.metricName}>Accuracy</span>
             <span style={styles.metricValue}>{metrics.accuracy}%</span>
             <span style={styles.metricCaption}>overall correct classifications</span>
           </div>
 
           {/* Card 2: Precision */}
-          <div style={{ ...styles.metricCard, borderTop: '4px solid #B9DDF7' }} className="digital-card">
+          <div
+            style={{
+              ...styles.metricCard,
+              borderTop: '4px solid #B9DDF7',
+              opacity: isVisible ? 1 : 0,
+              transform: isVisible ? 'translateY(0)' : 'translateY(24px)',
+              transition: 'all 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.22s',
+            }}
+            className="digital-card"
+          >
             <span style={styles.metricName}>Precision</span>
             <span style={styles.metricValue}>{metrics.precision}%</span>
             <span style={styles.metricCaption}>positive delay predictive value</span>
           </div>
 
           {/* Card 3: Recall */}
-          <div style={{ ...styles.metricCard, borderTop: '4px solid #BFE8D0' }} className="digital-card">
+          <div
+            style={{
+              ...styles.metricCard,
+              borderTop: '4px solid #BFE8D0',
+              opacity: isVisible ? 1 : 0,
+              transform: isVisible ? 'translateY(0)' : 'translateY(24px)',
+              transition: 'all 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.34s',
+            }}
+            className="digital-card"
+          >
             <span style={styles.metricName}>Recall</span>
             <span style={styles.metricValue}>{metrics.recall}%</span>
             <span style={styles.metricCaption}>true delay anomaly sensitivity</span>
           </div>
 
           {/* Card 4: F1 Score */}
-          <div style={{ ...styles.metricCard, borderTop: '4px solid #FFE58A' }} className="digital-card">
+          <div
+            style={{
+              ...styles.metricCard,
+              borderTop: '4px solid #FFE58A',
+              opacity: isVisible ? 1 : 0,
+              transform: isVisible ? 'translateY(0)' : 'translateY(24px)',
+              transition: 'all 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.46s',
+            }}
+            className="digital-card"
+          >
             <span style={styles.metricName}>F1 Score</span>
             <span style={styles.metricValue}>{metrics.f1}%</span>
             <span style={styles.metricCaption}>harmonic mean evaluation metric</span>
@@ -129,7 +202,7 @@ export default function MLModelPanel({
           <div style={styles.featurePanel} className="digital-card">
             <div style={styles.panelHeader}>
               <span style={styles.panelTitle}>
-                WHAT MAKES A TASK <span className="hl hl-butter" style={{ padding: '0 4px' }}>PANIC?</span>
+                WHAT MAKES A TASK <span className={`hl hl-butter ${isVisible ? 'hl-sweep' : ''}`} style={{ padding: '0 4px' }}>PANIC?</span>
               </span>
               <span className="note-tag" style={{ color: '#D9483B' }}>
                 biggest signals ↗
@@ -149,8 +222,9 @@ export default function MLModelPanel({
                     <div
                       style={{
                         ...styles.barFill,
-                        width: `${Math.max(6, feat.percentage * 3.6)}%`,
+                        width: isVisible ? `${Math.max(6, feat.percentage * 3.6)}%` : '0%',
                         backgroundColor: idx === 0 ? '#FF8F82' : idx === 1 ? '#FFE58A' : idx === 2 ? '#C9B6FF' : '#BFE8D0',
+                        transition: `width 0.9s cubic-bezier(0.16, 1, 0.3, 1) ${0.2 + idx * 0.12}s`,
                       }}
                     />
                   </div>
@@ -176,12 +250,28 @@ export default function MLModelPanel({
               {/* Row 1: Actual On-Time */}
               <div style={styles.matrixRow}>
                 <span style={styles.rowLabel}>Actual: On Time</span>
-                <div style={{ ...styles.cell, backgroundColor: '#EBF8F1', border: '1px solid #BFE8D0' }}>
-                  <span style={styles.cellVal}>{cm[0]?.[0] ?? 112}</span>
+                <div
+                  style={{
+                    ...styles.cell,
+                    backgroundColor: '#EBF8F1',
+                    border: '1px solid #BFE8D0',
+                    opacity: isVisible ? 1 : 0,
+                    transition: 'opacity 0.4s ease 0.2s',
+                  }}
+                >
+                  <span style={styles.cellVal}>{cmCounts.tn}</span>
                   <span style={{ ...styles.cellTag, color: '#166534' }}>Nice prediction ✓</span>
                 </div>
-                <div style={{ ...styles.cell, backgroundColor: '#FFF9DB', border: '1px solid #FFE58A' }}>
-                  <span style={styles.cellVal}>{cm[0]?.[1] ?? 8}</span>
+                <div
+                  style={{
+                    ...styles.cell,
+                    backgroundColor: '#FFF9DB',
+                    border: '1px solid #FFE58A',
+                    opacity: isVisible ? 1 : 0,
+                    transition: 'opacity 0.4s ease 0.35s',
+                  }}
+                >
+                  <span style={styles.cellVal}>{cmCounts.fp}</span>
                   <span style={{ ...styles.cellTag, color: '#92400E' }}>False alarm ⚡</span>
                 </div>
               </div>
@@ -189,12 +279,28 @@ export default function MLModelPanel({
               {/* Row 2: Actual Late */}
               <div style={styles.matrixRow}>
                 <span style={styles.rowLabel}>Actual: Late</span>
-                <div style={{ ...styles.cell, backgroundColor: '#FFEFEA', border: '1px solid #FFB5A7' }}>
-                  <span style={styles.cellVal}>{cm[1]?.[0] ?? 11}</span>
+                <div
+                  style={{
+                    ...styles.cell,
+                    backgroundColor: '#FFEFEA',
+                    border: '1px solid #FFB5A7',
+                    opacity: isVisible ? 1 : 0,
+                    transition: 'opacity 0.4s ease 0.5s',
+                  }}
+                >
+                  <span style={styles.cellVal}>{cmCounts.fn}</span>
                   <span style={{ ...styles.cellTag, color: '#991B1B' }}>Missed risk 🌧️</span>
                 </div>
-                <div style={{ ...styles.cell, backgroundColor: '#EBF8F1', border: '1px solid #BFE8D0' }}>
-                  <span style={styles.cellVal}>{cm[1]?.[1] ?? 109}</span>
+                <div
+                  style={{
+                    ...styles.cell,
+                    backgroundColor: '#EBF8F1',
+                    border: '1px solid #BFE8D0',
+                    opacity: isVisible ? 1 : 0,
+                    transition: 'opacity 0.4s ease 0.65s',
+                  }}
+                >
+                  <span style={styles.cellVal}>{cmCounts.tp}</span>
                   <span style={{ ...styles.cellTag, color: '#166534' }}>Correct warning 🚨</span>
                 </div>
               </div>
@@ -415,7 +521,6 @@ const styles = {
   barFill: {
     height: '100%',
     borderRadius: '9999px',
-    transition: 'width 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)',
   },
   matrixTable: {
     display: 'flex',

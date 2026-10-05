@@ -1,23 +1,81 @@
 /* ==========================================================================
-   VOXPLAN — Modern Editorial Study Notes & Highlighter Visual System
+   VOXPLAN — Choreographed Scroll Storytelling & Editorial Motion System
    ========================================================================== */
 
-/* Keyframes */
-@keyframes sweepIn {
-  from {
-    clip-path: inset(0 100% 0 0);
+/* --------------------------------------------------------------------------
+   Keyframe Animations
+   -------------------------------------------------------------------------- */
+
+@keyframes sweepHighlight {
+  0% {
+    clip-path: inset(0 100% 0 0 round 4px);
+    opacity: 0.3;
   }
-  to {
-    clip-path: inset(0 0 0 0);
+  100% {
+    clip-path: inset(0 0 0 0 round 4px);
+    opacity: 1;
   }
 }
 
-@keyframes drawUnderline {
+@keyframes drawLine {
   from {
-    stroke-dashoffset: 100;
+    transform: scaleX(0);
   }
   to {
-    stroke-dashoffset: 0;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes riseIn {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes cardEnterLeft {
+  from {
+    opacity: 0;
+    transform: translateY(40px) rotate(-1.5deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(0deg);
+  }
+}
+
+@keyframes cardEnterRight {
+  from {
+    opacity: 0;
+    transform: translateY(40px) rotate(1.5deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(0deg);
+  }
+}
+
+@keyframes factorStagger {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes waveBar {
+  0%, 100% {
+    height: 6px;
+  }
+  50% {
+    height: 22px;
   }
 }
 
@@ -32,21 +90,12 @@
   }
 }
 
-@keyframes waveBar {
-  0%, 100% {
-    height: 6px;
-  }
-  50% {
-    height: 22px;
-  }
-}
-
 @keyframes checkPop {
   0% {
     transform: scale(0.7);
   }
   70% {
-    transform: scale(1.15);
+    transform: scale(1.12);
   }
   100% {
     transform: scale(1);
@@ -65,7 +114,7 @@
 @keyframes loadingDot {
   0%, 80%, 100% {
     transform: translateY(0);
-    opacity: 0.5;
+    opacity: 0.4;
   }
   40% {
     transform: translateY(-8px);
@@ -73,62 +122,53 @@
   }
 }
 
-@keyframes floatGentle {
-  0%, 100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-6px);
-  }
-}
-
 /* --------------------------------------------------------------------------
-   Highlighter Marks (Organic Soft Marker Sweeps)
+   Digital Highlighter Marks
    -------------------------------------------------------------------------- */
 
 .hl {
   position: relative;
-  display: inline;
+  display: inline-block;
   z-index: 1;
-  padding: 0.12em 0.35em;
+  padding: 0.08em 0.32em;
   margin: 0 -0.05em;
   border-radius: 4px;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
+  transform-origin: left center;
 }
 
 .hl-butter {
-  background-color: rgba(255, 229, 138, 0.75);
+  background-color: rgba(255, 229, 138, 0.78);
 }
 
 .hl-peach {
-  background-color: rgba(255, 181, 167, 0.65);
+  background-color: rgba(255, 181, 167, 0.7);
 }
 
 .hl-coral {
-  background-color: rgba(255, 143, 130, 0.65);
+  background-color: rgba(255, 143, 130, 0.7);
 }
 
 .hl-lilac {
-  background-color: rgba(201, 182, 255, 0.65);
+  background-color: rgba(201, 182, 255, 0.7);
 }
 
 .hl-mint {
-  background-color: rgba(191, 232, 208, 0.75);
+  background-color: rgba(191, 232, 208, 0.78);
 }
 
 .hl-sky {
-  background-color: rgba(185, 221, 247, 0.7);
+  background-color: rgba(185, 221, 247, 0.75);
 }
 
-/* Animated sweep for hero */
-.hl-animated {
-  display: inline-block;
-  animation: sweepIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+/* Auto-sweep on reveal */
+.hl-sweep {
+  animation: sweepHighlight 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 /* --------------------------------------------------------------------------
-   Hand-Drawn / Marker Underlines & Annotations
+   Underline & Annotations
    -------------------------------------------------------------------------- */
 
 .annotated-underline {
@@ -139,13 +179,15 @@
 .annotated-underline::after {
   content: '';
   position: absolute;
-  left: -2%;
-  bottom: -4px;
-  width: 104%;
+  left: 0;
+  bottom: -3px;
+  width: 100%;
   height: 4px;
   border-radius: 2px;
   background-color: currentColor;
   opacity: 0.35;
+  transform-origin: left;
+  animation: drawLine 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .annotated-circle {
@@ -153,7 +195,7 @@
   display: inline-flex;
   align-items: center;
   justifyContent: center;
-  padding: 0.08em 0.25em;
+  padding: 0.1em 0.3em;
   border-radius: 9999px;
   border: 2px solid currentColor;
 }
@@ -168,19 +210,36 @@
 }
 
 /* --------------------------------------------------------------------------
-   Digital Clean Card Styles
+   Choreographed Entrance Classes
    -------------------------------------------------------------------------- */
 
+.reveal-heading {
+  animation: riseIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.card-enter-1 {
+  animation: cardEnterLeft 0.65s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+}
+
+.card-enter-2 {
+  animation: cardEnterRight 0.65s cubic-bezier(0.16, 1, 0.3, 1) 0.22s both;
+}
+
+.card-enter-3 {
+  animation: cardEnterLeft 0.65s cubic-bezier(0.16, 1, 0.3, 1) 0.34s both;
+}
+
+/* Clean Hover Physics */
 .digital-card {
-  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s ease, border-color 0.22s ease;
 }
 
 .digital-card:hover {
-  transform: translateY(-4px) scale(1.005);
-  box-shadow: 0 14px 32px rgba(37, 36, 42, 0.08) !important;
+  transform: translateY(-5px);
+  box-shadow: 0 16px 36px rgba(37, 36, 42, 0.09) !important;
 }
 
-/* Buttons & Inputs */
+/* Interactive elements */
 button, input, a {
   transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.18s ease, background-color 0.18s ease, color 0.18s ease;
 }
@@ -197,10 +256,11 @@ button:active {
   }
   .pulse-layout {
     grid-template-columns: 1fr !important;
-    gap: 36px !important;
+    gap: 32px !important;
   }
 }
 
+/* Reduced Motion */
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after {
     animation-duration: 0.01ms !important;

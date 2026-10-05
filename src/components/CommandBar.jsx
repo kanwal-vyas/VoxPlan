@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 export default function CommandBar({
   onExecuteCommand,
@@ -8,6 +8,23 @@ export default function CommandBar({
   onToggleListening,
 }) {
   const [inputVal, setInputVal] = useState('');
+  const [isVisible, setIsVisible] = useState(false);
+  const sectionRef = useRef(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+        }
+      },
+      { threshold: 0.15 }
+    );
+    if (sectionRef.current) {
+      observer.observe(sectionRef.current);
+    }
+    return () => observer.disconnect();
+  }, []);
 
   const handleSubmit = (e) => {
     if (e && e.preventDefault) e.preventDefault();
@@ -23,7 +40,7 @@ export default function CommandBar({
   };
 
   return (
-    <section style={styles.section} id="command" aria-label="Command Assistant">
+    <section ref={sectionRef} style={styles.section} id="command" aria-label="Command Assistant">
       <div style={styles.container}>
         {/* Header */}
         <div style={styles.header}>
@@ -33,7 +50,7 @@ export default function CommandBar({
               <span style={styles.badge}>VOICE & NATURAL LANGUAGE</span>
             </div>
             <h2 style={styles.title}>
-              TELL <span className="hl hl-peach">VOXPLAN</span> WHAT YOU NEED
+              TELL <span className={`hl hl-peach ${isVisible ? 'hl-sweep' : ''}`}>VOXPLAN</span> WHAT YOU NEED
             </h2>
             <p style={styles.subtitle}>
               Voice interaction powered by Wispr Flow with direct natural language task execution

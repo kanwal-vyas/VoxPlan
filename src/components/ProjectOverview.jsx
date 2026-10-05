@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 export default function ProjectOverview({
   totalCount,
@@ -11,9 +11,44 @@ export default function ProjectOverview({
 }) {
   const isTrained = modelStatus && modelStatus.is_trained;
   const pendingCount = totalCount - completedCount;
+  const sectionRef = useRef(null);
+  const [isVisible, setIsVisible] = useState(false);
+  const [displayProgress, setDisplayProgress] = useState(0);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+        }
+      },
+      { threshold: 0.2 }
+    );
+
+    if (sectionRef.current) {
+      observer.observe(sectionRef.current);
+    }
+    return () => observer.disconnect();
+  }, []);
+
+  // Smooth count-up when section enters view
+  useEffect(() => {
+    if (isVisible) {
+      let step = 0;
+      const target = progressPercent;
+      const interval = setInterval(() => {
+        step += 1;
+        const p = Math.min(1, step / 20);
+        const ease = 1 - Math.pow(1 - p, 3);
+        setDisplayProgress(Math.round(ease * target));
+        if (p >= 1) clearInterval(interval);
+      }, 30);
+      return () => clearInterval(interval);
+    }
+  }, [isVisible, progressPercent]);
 
   return (
-    <section id="pulse" style={styles.section} aria-label="Sprint Pulse">
+    <section id="pulse" ref={sectionRef} style={styles.section} aria-label="Sprint Pulse">
       <div style={styles.container}>
         {/* Header Row */}
         <div style={styles.header}>
@@ -23,7 +58,7 @@ export default function ProjectOverview({
               <span style={styles.badge}>SPRINT PROGRESSION</span>
             </div>
             <h2 style={styles.title}>
-              YOUR WEEK <span className="hl hl-butter">SO FAR</span>
+              YOUR WEEK <span className={`hl hl-butter ${isVisible ? 'hl-sweep' : ''}`}>SO FAR</span>
             </h2>
           </div>
 
@@ -60,14 +95,19 @@ export default function ProjectOverview({
             </div>
 
             <div style={styles.numeralRow}>
-              <span style={styles.hugePercent}>{progressPercent}%</span>
+              <span style={styles.hugePercent}>{displayProgress}%</span>
               <span className="hl hl-mint" style={styles.percentBadge}>
                 {completedCount} of {totalCount} completed
               </span>
             </div>
 
             <div style={styles.progressBarTrack}>
-              <div style={{ ...styles.progressBarFill, width: `${progressPercent}%` }} />
+              <div
+                style={{
+                  ...styles.progressBarFill,
+                  width: isVisible ? `${progressPercent}%` : '0%',
+                }}
+              />
             </div>
           </div>
 
@@ -79,7 +119,14 @@ export default function ProjectOverview({
             </div>
             
             <div style={styles.pathway}>
-              <div style={styles.pathNode}>
+              <div
+                style={{
+                  ...styles.pathNode,
+                  opacity: isVisible ? 1 : 0,
+                  transform: isVisible ? 'translateY(0)' : 'translateY(16px)',
+                  transition: 'all 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.2s',
+                }}
+              >
                 <div style={{ ...styles.nodeDot, backgroundColor: '#FFEFEA', border: '2px solid #FF8F82' }}>
                   <span>🚨</span>
                 </div>
@@ -91,9 +138,23 @@ export default function ProjectOverview({
                 </div>
               </div>
 
-              <div style={styles.pathLine} />
+              <div
+                style={{
+                  ...styles.pathLine,
+                  transform: isVisible ? 'scaleX(1)' : 'scaleX(0)',
+                  transformOrigin: 'left',
+                  transition: 'transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.35s',
+                }}
+              />
 
-              <div style={styles.pathNode}>
+              <div
+                style={{
+                  ...styles.pathNode,
+                  opacity: isVisible ? 1 : 0,
+                  transform: isVisible ? 'translateY(0)' : 'translateY(16px)',
+                  transition: 'all 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.5s',
+                }}
+              >
                 <div style={{ ...styles.nodeDot, backgroundColor: '#FFF9DB', border: '2px solid #F59E0B' }}>
                   <span>⚡</span>
                 </div>
@@ -105,9 +166,23 @@ export default function ProjectOverview({
                 </div>
               </div>
 
-              <div style={styles.pathLine} />
+              <div
+                style={{
+                  ...styles.pathLine,
+                  transform: isVisible ? 'scaleX(1)' : 'scaleX(0)',
+                  transformOrigin: 'left',
+                  transition: 'transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.65s',
+                }}
+              />
 
-              <div style={styles.pathNode}>
+              <div
+                style={{
+                  ...styles.pathNode,
+                  opacity: isVisible ? 1 : 0,
+                  transform: isVisible ? 'translateY(0)' : 'translateY(16px)',
+                  transition: 'all 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.8s',
+                }}
+              >
                 <div style={{ ...styles.nodeDot, backgroundColor: '#EBF8F1', border: '2px solid #3EA370' }}>
                   <span>✓</span>
                 </div>
@@ -280,7 +355,7 @@ const styles = {
     backgroundColor: '#FFE58A',
     backgroundImage: 'linear-gradient(90deg, #FFE58A 0%, #FF8F82 100%)',
     borderRadius: '9999px',
-    transition: 'width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)',
+    transition: 'width 0.9s cubic-bezier(0.16, 1, 0.3, 1)',
   },
   timelineCard: {
     backgroundColor: '#FFFFFF',
