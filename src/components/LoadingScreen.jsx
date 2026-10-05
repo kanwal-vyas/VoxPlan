@@ -5,17 +5,17 @@ export default function LoadingScreen({ onComplete }) {
   const [isExiting, setIsExiting] = useState(false);
 
   useEffect(() => {
-    // Organically step from 0 to 100% in ~1.1 seconds
+    // Organically step from 0 to 100% in ~1.0 seconds
     const interval = setInterval(() => {
       setProgress((prev) => {
         if (prev >= 100) {
           clearInterval(interval);
           return 100;
         }
-        const jump = Math.floor(Math.random() * 22) + 12;
+        const jump = Math.floor(Math.random() * 20) + 14;
         return Math.min(100, prev + jump);
       });
-    }, 120);
+    }, 110);
 
     return () => clearInterval(interval);
   }, []);
@@ -24,11 +24,11 @@ export default function LoadingScreen({ onComplete }) {
     if (progress === 100) {
       const exitTimer = setTimeout(() => {
         setIsExiting(true);
-      }, 250);
+      }, 150);
 
       const doneTimer = setTimeout(() => {
         onComplete();
-      }, 650);
+      }, 550);
 
       return () => {
         clearTimeout(exitTimer);

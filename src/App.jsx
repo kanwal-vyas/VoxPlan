@@ -9,6 +9,7 @@ import MLModelPanel from './components/MLModelPanel';
 import TaskList from './components/TaskList';
 import TaskExplanationModal from './components/TaskExplanationModal';
 import LoadingScreen from './components/LoadingScreen';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { initCinematicScrollStory } from './animations/scrollStory';
 import {
   checkBackendHealth,
@@ -635,16 +636,39 @@ export default function App() {
     }
   };
 
-  // Initialize GSAP Cinematic Scroll Storytelling
+  // GSAP context cleanup reference
+  const gsapCleanupRef = useRef(null);
+
+  // Initialize GSAP Cinematic Scroll Storytelling EXACTLY ONCE when loading completes
   useEffect(() => {
-    if (!isLoading) {
-      const timer = setTimeout(() => {
-        const cleanup = initCinematicScrollStory();
-        return cleanup;
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [isLoading, tasks.length, modelStatus.is_trained]);
+    if (isLoading) return;
+
+    // Small delay to ensure DOM is painted and computed dimensions are ready
+    const timer = setTimeout(() => {
+      if (gsapCleanupRef.current) {
+        gsapCleanupRef.current();
+        gsapCleanupRef.current = null;
+      }
+      gsapCleanupRef.current = initCinematicScrollStory();
+    }, 80);
+
+    return () => {
+      clearTimeout(timer);
+      if (gsapCleanupRef.current) {
+        gsapCleanupRef.current();
+        gsapCleanupRef.current = null;
+      }
+    };
+  }, [isLoading]);
+
+  // Debounced ScrollTrigger refresh when layout height changes (without recreating timelines)
+  useEffect(() => {
+    if (isLoading) return;
+    const refreshTimer = setTimeout(() => {
+      ScrollTrigger.refresh();
+    }, 200);
+    return () => clearTimeout(refreshTimer);
+  }, [isLoading, tasks.length]);
 
   const completedCount = tasks.filter((t) => t.completed).length;
   const totalCount = tasks.length;
@@ -670,6 +694,7 @@ export default function App() {
 
         {/* Playful Hero */}
         <Hero
+          isReady={!isLoading}
           modelMetadata={modelStatus}
           onScrollToSection={handleScrollToSection}
         />

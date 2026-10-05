@@ -1,10 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
-export default function Hero({ modelMetadata }) {
+export default function Hero({ modelMetadata, isReady = true }) {
   const [counts, setCounts] = useState({ task1: 0, task2: 0, task3: 0 });
+  const hasAnimatedRef = useRef(false);
 
-  // Smooth count-up on load
+  // Smooth count-up on load - executes EXACTLY ONCE when isReady becomes true
   useEffect(() => {
+    if (!isReady || hasAnimatedRef.current) return;
+    hasAnimatedRef.current = true;
+
     const timer = setTimeout(() => {
       let step = 0;
       const interval = setInterval(() => {
@@ -19,10 +23,10 @@ export default function Hero({ modelMetadata }) {
         if (progress >= 1) clearInterval(interval);
       }, 30);
       return () => clearInterval(interval);
-    }, 450);
+    }, 150);
 
     return () => clearTimeout(timer);
-  }, []);
+  }, [isReady]);
 
   return (
     <section
@@ -47,12 +51,12 @@ export default function Hero({ modelMetadata }) {
           </div>
 
           <h1 className="hero-headline" style={styles.headline}>
-            PLAN <span className="hl hl-butter hl-sweep">LESS.</span><br />
-            DO <span className="hl hl-lilac hl-sweep">MORE.</span>
+            PLAN <span className={`hl hl-butter ${isReady ? 'hl-sweep' : ''}`}>LESS.</span><br />
+            DO <span className={`hl hl-lilac ${isReady ? 'hl-sweep' : ''}`}>MORE.</span>
           </h1>
 
           <p className="hero-statement" style={styles.statement}>
-            VoxPlan turns your messy to-do list into a structured plan, then uses <span className="hl hl-mint hl-sweep">supervised machine learning</span> to highlight which initiatives are likely to fall behind.
+            VoxPlan turns your messy to-do list into a structured plan, then uses <span className={`hl hl-mint ${isReady ? 'hl-sweep' : ''}`}>supervised machine learning</span> to highlight which initiatives are likely to fall behind.
           </p>
 
           <div style={styles.ctaRow}>
