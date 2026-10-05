@@ -1,34 +1,36 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 export default function LoadingScreen({ onComplete }) {
   const [progress, setProgress] = useState(0);
   const [isExiting, setIsExiting] = useState(false);
+  const completedRef = useRef(false);
 
   useEffect(() => {
-    // Organically step from 0 to 100% in ~0.95 seconds
+    // Organically step from 0 to 100% in ~0.85 seconds
     const interval = setInterval(() => {
       setProgress((prev) => {
         if (prev >= 100) {
           clearInterval(interval);
           return 100;
         }
-        const jump = Math.floor(Math.random() * 22) + 16;
+        const jump = Math.floor(Math.random() * 24) + 16;
         return Math.min(100, prev + jump);
       });
-    }, 100);
+    }, 90);
 
     return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
-    if (progress === 100) {
+    if (progress === 100 && !completedRef.current) {
+      completedRef.current = true;
       const exitTimer = setTimeout(() => {
         setIsExiting(true);
-      }, 100);
+      }, 80);
 
       const doneTimer = setTimeout(() => {
-        onComplete();
-      }, 400);
+        if (onComplete) onComplete();
+      }, 350);
 
       return () => {
         clearTimeout(exitTimer);

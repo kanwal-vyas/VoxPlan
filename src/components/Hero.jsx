@@ -1,32 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React from 'react';
 
-export default function Hero({ modelMetadata, isReady = true }) {
-  const [counts, setCounts] = useState({ task1: 0, task2: 0, task3: 0 });
-  const hasAnimatedRef = useRef(false);
-
-  // Smooth count-up on load - executes EXACTLY ONCE when isReady becomes true
-  useEffect(() => {
-    if (!isReady || hasAnimatedRef.current) return;
-    hasAnimatedRef.current = true;
-
-    const timer = setTimeout(() => {
-      let step = 0;
-      const interval = setInterval(() => {
-        step += 1;
-        const progress = Math.min(1, step / 30);
-        const ease = 1 - Math.pow(1 - progress, 3);
-        setCounts({
-          task1: Math.round(ease * 96.4 * 10) / 10,
-          task2: Math.round(ease * 54.2 * 10) / 10,
-          task3: Math.round(ease * 18.7 * 10) / 10,
-        });
-        if (progress >= 1) clearInterval(interval);
-      }, 30);
-      return () => clearInterval(interval);
-    }, 150);
-
-    return () => clearTimeout(timer);
-  }, [isReady]);
+export default function Hero({ modelMetadata }) {
+  const counts = { task1: 96.4, task2: 54.2, task3: 18.7 };
 
   return (
     <section
@@ -51,12 +26,12 @@ export default function Hero({ modelMetadata, isReady = true }) {
           </div>
 
           <h1 className="hero-headline" style={styles.headline}>
-            PLAN <span className={`hl hl-butter ${isReady ? 'hl-sweep' : ''}`}>LESS.</span><br />
-            DO <span className={`hl hl-lilac ${isReady ? 'hl-sweep' : ''}`}>MORE.</span>
+            PLAN <span className="hl hl-butter">LESS.</span><br />
+            DO <span className="hl hl-lilac">MORE.</span>
           </h1>
 
           <p className="hero-statement" style={styles.statement}>
-            VoxPlan turns your messy to-do list into a structured plan, then uses <span className={`hl hl-mint ${isReady ? 'hl-sweep' : ''}`}>supervised machine learning</span> to highlight which initiatives are likely to fall behind.
+            VoxPlan turns your messy to-do list into a structured plan, then uses <span className="hl hl-mint">supervised machine learning</span> to highlight which initiatives are likely to fall behind.
           </p>
 
           <div style={styles.ctaRow}>
@@ -245,7 +220,6 @@ const styles = {
     width: 'fit-content',
     boxShadow: '0 2px 8px rgba(37, 36, 42, 0.04)',
     color: '#706D73',
-    animation: 'riseIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both',
   },
   eyebrowText: {
     fontFamily: "'Plus Jakarta Sans', sans-serif",

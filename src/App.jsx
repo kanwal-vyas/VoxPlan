@@ -678,6 +678,10 @@ export default function App() {
     return () => clearTimeout(refreshTimer);
   }, [isLoading, tasks.length]);
 
+  const handleLoadingComplete = useCallback(() => {
+    setIsLoading(false);
+  }, []);
+
   const completedCount = tasks.filter((t) => t.completed).length;
   const totalCount = tasks.length;
   const progressPercent = totalCount === 0 ? 0 : Math.round((completedCount / totalCount) * 100);
@@ -685,7 +689,7 @@ export default function App() {
   return (
     <div className="voxplan-app" style={styles.app}>
       {/* Initial Branded Loading Sequence */}
-      {isLoading && <LoadingScreen onComplete={() => setIsLoading(false)} />}
+      {isLoading && <LoadingScreen onComplete={handleLoadingComplete} />}
 
       {/* Subtle Scroll Progress Indicator */}
       <div style={styles.progressBarWrapper}>
@@ -702,7 +706,6 @@ export default function App() {
 
         {/* Playful Hero */}
         <Hero
-          isReady={!isLoading}
           modelMetadata={modelStatus}
           onScrollToSection={handleScrollToSection}
         />
