@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-export default function Hero({ modelMetadata, onScrollToSection }) {
+export default function Hero({ modelMetadata }) {
   const [counts, setCounts] = useState({ task1: 0, task2: 0, task3: 0 });
 
   useEffect(() => {
@@ -25,26 +25,26 @@ export default function Hero({ modelMetadata, onScrollToSection }) {
 
   return (
     <section style={styles.hero} aria-label="Hero">
-      {/* Background Decorative Pastels */}
+      {/* Background Organic Shapes */}
       <div style={styles.bgBlobYellow} />
       <div style={styles.bgBlobPeach} />
+      <div style={styles.bgBlobMint} />
 
       <div style={styles.grid} className="hero-composition">
-        {/* Left: Joyful Big Headline */}
+        {/* Left: Modern Editorial Typography with Highlighter Strokes */}
         <div style={styles.leftColumn}>
           <div style={styles.eyebrowPill}>
-            <span>✨</span>
-            <span style={styles.eyebrowText}>YOUR PROJECT, BUT SMARTER</span>
+            <span>✦</span>
+            <span style={styles.eyebrowText}>PREDICTIVE STUDY & TASK INTELLIGENCE</span>
           </div>
 
           <h1 style={styles.headline}>
-            YOUR TO-DO LIST<br />
-            JUST GOT<br />
-            <span style={styles.highlightText}>A BRAIN.</span>
+            PLAN <span className="hl hl-butter hl-animated">LESS.</span><br />
+            DO <span className="hl hl-lilac hl-animated">MORE.</span>
           </h1>
 
           <p style={styles.statement}>
-            VoxPlan turns your messy tasks into an intelligent project plan, then uses machine learning to predict which ones are likely to fall behind.
+            VoxPlan turns your messy to-do list into a structured plan, then uses <span className="hl hl-mint">supervised machine learning</span> to highlight which initiatives are likely to fall behind.
           </p>
 
           <div style={styles.ctaRow}>
@@ -56,104 +56,96 @@ export default function Hero({ modelMetadata, onScrollToSection }) {
               }}
               style={styles.primaryBtn}
             >
-              <span>Explore My Tasks</span>
+              <span>Explore active notes</span>
               <span>↓</span>
             </button>
 
-            <span style={styles.handwrittenHint}>
-              ← smart predictions included!
+            <span className="note-tag" style={{ marginLeft: '4px' }}>
+              ✎ real-time risk predictions
             </span>
           </div>
         </div>
 
-        {/* Right: Tactile Floating Sticky Note Tasks Stack */}
-        <div style={styles.rightColumn} className="hero-cards-stack">
-          {/* Sticky Note 1: High Risk (Peach/Coral) */}
+        {/* Right: Clean Modern Editorial Task Cards */}
+        <div style={styles.rightColumn}>
+          {/* Card 1: High Risk (Coral Highlight) */}
           <div
             style={{
-              ...styles.stickyCard,
-              backgroundColor: '#FFEFEA',
-              border: '2px solid #FF8F82',
-              transform: 'rotate(-2.5deg)',
-              animation: 'floatSlow 4.5s ease-in-out infinite',
-              zIndex: 3,
+              ...styles.cleanCard,
+              backgroundColor: '#FFFFFF',
+              borderLeft: '4px solid #FF8F82',
             }}
-            className="note-tilt-left"
+            className="digital-card"
           >
-            <div className="tape-top" />
             <div style={styles.cardHeader}>
-              <span style={{ ...styles.cardCategory, color: '#D9483B' }}>SECURITY</span>
-              <span style={{ ...styles.cardPriority, backgroundColor: '#FF8F82', color: '#FFFFFF' }}>
-                HIGH PRIORITY
+              <div style={styles.categoryWrap}>
+                <span style={styles.categoryLabel}>SECURITY</span>
+                <span className="hl hl-coral" style={styles.priorityHighlight}>
+                  HIGH PRIORITY
+                </span>
+              </div>
+              <span className="annotated-circle" style={{ color: '#D9483B', fontSize: '13px', fontWeight: '800' }}>
+                {counts.task1}% risk
               </span>
             </div>
             <h3 style={styles.cardTitle}>Revise Cryptography</h3>
             <div style={styles.cardFooter}>
-              <span style={styles.cardDue}>Due Today</span>
-              <div style={{ ...styles.riskBadge, backgroundColor: '#FFE0DC', color: '#C92A1D' }}>
-                <span>⚠️</span>
-                <span style={styles.riskNum}>{counts.task1}% risk</span>
-              </div>
+              <span style={styles.cardDue}>Due today · 10h effort</span>
+              <span className="note-tag" style={{ color: '#D9483B' }}>urgent bottleneck ↗</span>
             </div>
           </div>
 
-          {/* Sticky Note 2: Medium Risk (Butter Yellow) */}
+          {/* Card 2: Medium Risk (Butter Yellow Highlight) */}
           <div
             style={{
-              ...styles.stickyCard,
-              backgroundColor: '#FFF9DB',
-              border: '2px solid #F59E0B',
-              transform: 'rotate(2.8deg) translateY(-20px)',
-              animation: 'floatGentle 5s ease-in-out infinite 0.5s',
-              zIndex: 2,
-              marginLeft: '30px',
+              ...styles.cleanCard,
+              backgroundColor: '#FFFFFF',
+              borderLeft: '4px solid #FFE58A',
             }}
-            className="note-tilt-right"
+            className="digital-card"
           >
-            <div className="tape-top" />
             <div style={styles.cardHeader}>
-              <span style={{ ...styles.cardCategory, color: '#B45309' }}>NETWORKING</span>
-              <span style={{ ...styles.cardPriority, backgroundColor: '#FFE58A', color: '#92400E' }}>
-                MEDIUM
+              <div style={styles.categoryWrap}>
+                <span style={styles.categoryLabel}>NETWORKING</span>
+                <span className="hl hl-butter" style={styles.priorityHighlight}>
+                  MEDIUM
+                </span>
+              </div>
+              <span className="annotated-circle" style={{ color: '#B45309', fontSize: '13px', fontWeight: '800' }}>
+                {counts.task2}% risk
               </span>
             </div>
             <h3 style={styles.cardTitle}>Practice Subnetting</h3>
             <div style={styles.cardFooter}>
-              <span style={styles.cardDue}>Due Today</span>
-              <div style={{ ...styles.riskBadge, backgroundColor: '#FEF3C7', color: '#B45309' }}>
-                <span>⚡</span>
-                <span style={styles.riskNum}>{counts.task2}% risk</span>
-              </div>
+              <span style={styles.cardDue}>Due today · 6h effort</span>
+              <span className="note-tag" style={{ color: '#B45309' }}>in progress →</span>
             </div>
           </div>
 
-          {/* Sticky Note 3: Low Risk (Mint Green) */}
+          {/* Card 3: Low Risk (Mint Highlight) */}
           <div
             style={{
-              ...styles.stickyCard,
-              backgroundColor: '#EBF8F1',
-              border: '2px solid #3EA370',
-              transform: 'rotate(-1.2deg) translateY(-40px)',
-              animation: 'floatSlow 4.8s ease-in-out infinite 1s',
-              zIndex: 1,
-              marginLeft: '-10px',
+              ...styles.cleanCard,
+              backgroundColor: '#FFFFFF',
+              borderLeft: '4px solid #BFE8D0',
             }}
-            className="note-tilt-slight"
+            className="digital-card"
           >
-            <div className="tape-top" />
             <div style={styles.cardHeader}>
-              <span style={{ ...styles.cardCategory, color: '#27754E' }}>ARCHITECTURE</span>
-              <span style={{ ...styles.cardPriority, backgroundColor: '#BFE8D0', color: '#166534' }}>
-                LOW PRIORITY
+              <div style={styles.categoryWrap}>
+                <span style={styles.categoryLabel}>ARCHITECTURE</span>
+                <span className="hl hl-mint" style={styles.priorityHighlight}>
+                  LOW
+                </span>
+              </div>
+              <span className="annotated-circle" style={{ color: '#166534', fontSize: '13px', fontWeight: '800' }}>
+                {counts.task3}% risk
               </span>
             </div>
             <h3 style={styles.cardTitle}>Study OSI Model</h3>
             <div style={styles.cardFooter}>
-              <span style={styles.cardDue}>Due Tomorrow</span>
-              <div style={{ ...styles.riskBadge, backgroundColor: '#D1FAE5', color: '#065F46' }}>
-                <span>✓</span>
-                <span style={styles.riskNum}>{counts.task3}% risk</span>
-              </div>
+              <span style={styles.cardDue}>Due tomorrow · 3.5h effort</span>
+              <span className="note-tag" style={{ color: '#166534' }}>on track ✓</span>
             </div>
           </div>
         </div>
@@ -169,31 +161,40 @@ const styles = {
   },
   bgBlobYellow: {
     position: 'absolute',
-    top: '10%',
-    left: '-80px',
-    width: '320px',
-    height: '320px',
-    backgroundColor: '#FFE58A',
+    top: '5%',
+    left: '-60px',
+    width: '340px',
+    height: '340px',
+    backgroundColor: 'rgba(255, 229, 138, 0.45)',
     borderRadius: '50%',
     filter: 'blur(90px)',
-    opacity: 0.45,
     zIndex: -1,
   },
   bgBlobPeach: {
     position: 'absolute',
-    top: '30%',
-    right: '-60px',
+    top: '35%',
+    right: '-40px',
     width: '360px',
     height: '360px',
-    backgroundColor: '#FFB5A7',
+    backgroundColor: 'rgba(255, 181, 167, 0.35)',
     borderRadius: '50%',
     filter: 'blur(100px)',
-    opacity: 0.4,
+    zIndex: -1,
+  },
+  bgBlobMint: {
+    position: 'absolute',
+    bottom: '-10%',
+    left: '30%',
+    width: '280px',
+    height: '280px',
+    backgroundColor: 'rgba(191, 232, 208, 0.4)',
+    borderRadius: '50%',
+    filter: 'blur(90px)',
     zIndex: -1,
   },
   grid: {
     display: 'grid',
-    gridTemplateColumns: '1.15fr 1fr',
+    gridTemplateColumns: '1.2fr 1fr',
     gap: '64px',
     alignItems: 'center',
   },
@@ -207,36 +208,32 @@ const styles = {
     alignItems: 'center',
     gap: '8px',
     backgroundColor: '#FFFFFF',
-    border: '1.5px solid rgba(37, 36, 42, 0.08)',
+    border: '1px solid rgba(37, 36, 42, 0.1)',
     padding: '6px 14px',
     borderRadius: '9999px',
     width: 'fit-content',
     boxShadow: '0 2px 8px rgba(37, 36, 42, 0.04)',
+    color: '#706D73',
   },
   eyebrowText: {
     fontFamily: "'Plus Jakarta Sans', sans-serif",
-    fontSize: '12px',
-    fontWeight: '700',
+    fontSize: '11px',
+    fontWeight: '800',
     letterSpacing: '0.08em',
     color: '#25242A',
   },
   headline: {
     fontFamily: "'Syne', sans-serif",
-    fontSize: 'clamp(44px, 5.5vw, 76px)',
+    fontSize: 'clamp(48px, 6vw, 82px)',
     fontWeight: '800',
-    lineHeight: '0.96',
+    lineHeight: '0.94',
     letterSpacing: '-0.04em',
     color: '#25242A',
     margin: 0,
   },
-  highlightText: {
-    color: '#FF8F82',
-    position: 'relative',
-    display: 'inline-block',
-  },
   statement: {
     fontSize: '18px',
-    lineHeight: '1.6',
+    lineHeight: '1.65',
     color: '#4A4852',
     maxWidth: '480px',
     margin: 0,
@@ -245,67 +242,64 @@ const styles = {
   ctaRow: {
     display: 'flex',
     alignItems: 'center',
-    gap: '20px',
+    gap: '18px',
     flexWrap: 'wrap',
-    marginTop: '8px',
+    marginTop: '6px',
   },
   primaryBtn: {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '10px',
-    backgroundColor: '#FFE58A',
-    color: '#25242A',
-    border: '2px solid #25242A',
+    backgroundColor: '#25242A',
+    color: '#FFFFFF',
+    border: 'none',
     padding: '14px 28px',
     borderRadius: '9999px',
     fontSize: '15px',
     fontWeight: '700',
     cursor: 'pointer',
-    boxShadow: '0 5px 0 #25242A',
-  },
-  handwrittenHint: {
-    fontFamily: "'Caveat', cursive",
-    fontSize: '22px',
-    color: '#7A7782',
-    fontWeight: '600',
+    boxShadow: '0 4px 14px rgba(37, 36, 42, 0.15)',
   },
   rightColumn: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '0px',
-    position: 'relative',
-    padding: '20px 0',
+    gap: '16px',
   },
-  stickyCard: {
+  cleanCard: {
     borderRadius: '16px',
     padding: '20px 24px',
-    boxShadow: '0 10px 28px rgba(37, 36, 42, 0.08)',
+    boxShadow: '0 4px 16px rgba(37, 36, 42, 0.05)',
+    border: '1px solid rgba(37, 36, 42, 0.08)',
     display: 'flex',
     flexDirection: 'column',
     gap: '10px',
-    position: 'relative',
     cursor: 'pointer',
   },
   cardHeader: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: '10px',
   },
-  cardCategory: {
+  categoryWrap: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  categoryLabel: {
     fontSize: '11px',
-    fontWeight: '800',
-    letterSpacing: '0.06em',
-  },
-  cardPriority: {
-    fontSize: '10px',
     fontWeight: '700',
-    padding: '3px 8px',
-    borderRadius: '9999px',
+    color: '#706D73',
+    letterSpacing: '0.04em',
+  },
+  priorityHighlight: {
+    fontSize: '10px',
+    fontWeight: '800',
+    letterSpacing: '0.04em',
+    color: '#25242A',
   },
   cardTitle: {
     fontFamily: "'Syne', sans-serif",
-    fontSize: '22px',
+    fontSize: '20px',
     fontWeight: '700',
     color: '#25242A',
     margin: 0,
@@ -316,24 +310,11 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingTop: '6px',
-    borderTop: '1px dashed rgba(37, 36, 42, 0.12)',
+    borderTop: '1px solid rgba(37, 36, 42, 0.06)',
   },
   cardDue: {
-    fontSize: '13px',
-    color: '#7A7782',
-    fontWeight: '600',
-  },
-  riskBadge: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '4px 10px',
-    borderRadius: '9999px',
     fontSize: '12px',
-    fontWeight: '700',
-  },
-  riskNum: {
-    fontFamily: "'Plus Jakarta Sans', sans-serif",
-    fontWeight: '800',
+    color: '#706D73',
+    fontWeight: '500',
   },
 };

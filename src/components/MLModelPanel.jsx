@@ -50,11 +50,13 @@ export default function MLModelPanel({
           <div style={styles.titleGroup}>
             <div style={styles.badgeRow}>
               <span style={styles.sectionNum}>03</span>
-              <span style={styles.badge}>🧠 THE SMART PART</span>
+              <span style={styles.badge}>MACHINE LEARNING EVALUATION</span>
             </div>
-            <h2 style={styles.title}>VoxPlan's Brain</h2>
+            <h2 style={styles.title}>
+              THE <span className="hl hl-mint">SMART</span> PART
+            </h2>
             <p style={styles.subtitle}>
-              Learns from historical project patterns to spot trouble before it happens
+              VoxPlan learns from project history to spot trouble before it happens
             </p>
           </div>
 
@@ -70,12 +72,12 @@ export default function MLModelPanel({
             {isTraining ? (
               <>
                 <span style={styles.spinner} />
-                <span>Training brain...</span>
+                <span>Training pipeline...</span>
               </>
             ) : (
               <>
-                <span>{isTrained ? 'Retrain brain' : 'Train brain now'}</span>
-                <span>⚡</span>
+                <span>{isTrained ? 'Retrain model' : 'Train model'}</span>
+                <span>→</span>
               </>
             )}
           </button>
@@ -85,53 +87,53 @@ export default function MLModelPanel({
         {isTraining && (
           <div style={styles.trainingBox}>
             <span style={styles.trainingStepText}>
-              ⚙️ {trainingStep || 'Generating synthetic records · Fitting Random Forest model · Computing validation scores...'}
+              ⚙️ {trainingStep || 'Synthesizing historical dataset · Fitting Random Forest model · Computing validation scores...'}
             </span>
           </div>
         )}
 
         {/* Big 4 Pastel Metrics Cards */}
         <div style={styles.metricsGrid}>
-          {/* Card 1: Accuracy (Lilac) */}
-          <div style={{ ...styles.metricCard, backgroundColor: '#F3EEFF', borderColor: '#C9B6FF' }}>
-            <span style={styles.metricEmoji}>🎯</span>
-            <span style={styles.metricValue}>{metrics.accuracy}%</span>
+          {/* Card 1: Accuracy */}
+          <div style={{ ...styles.metricCard, borderTop: '4px solid #C9B6FF' }} className="digital-card">
             <span style={styles.metricName}>Accuracy</span>
-            <span style={styles.metricCaption}>overall correct predictions</span>
+            <span style={styles.metricValue}>{metrics.accuracy}%</span>
+            <span style={styles.metricCaption}>overall correct classifications</span>
           </div>
 
-          {/* Card 2: Precision (Sky Blue) */}
-          <div style={{ ...styles.metricCard, backgroundColor: '#EBF5FE', borderColor: '#B9DDF7' }}>
-            <span style={styles.metricEmoji}>🔍</span>
-            <span style={styles.metricValue}>{metrics.precision}%</span>
+          {/* Card 2: Precision */}
+          <div style={{ ...styles.metricCard, borderTop: '4px solid #B9DDF7' }} className="digital-card">
             <span style={styles.metricName}>Precision</span>
-            <span style={styles.metricCaption}>reliable delay alarms</span>
+            <span style={styles.metricValue}>{metrics.precision}%</span>
+            <span style={styles.metricCaption}>positive delay predictive value</span>
           </div>
 
-          {/* Card 3: Recall (Mint Green) */}
-          <div style={{ ...styles.metricCard, backgroundColor: '#EBF8F1', borderColor: '#BFE8D0' }}>
-            <span style={styles.metricEmoji}>📡</span>
-            <span style={styles.metricValue}>{metrics.recall}%</span>
+          {/* Card 3: Recall */}
+          <div style={{ ...styles.metricCard, borderTop: '4px solid #BFE8D0' }} className="digital-card">
             <span style={styles.metricName}>Recall</span>
-            <span style={styles.metricCaption}>true delay sensitivity</span>
+            <span style={styles.metricValue}>{metrics.recall}%</span>
+            <span style={styles.metricCaption}>true delay anomaly sensitivity</span>
           </div>
 
-          {/* Card 4: F1 Score (Butter Yellow) */}
-          <div style={{ ...styles.metricCard, backgroundColor: '#FFF9DB', borderColor: '#FFE58A' }}>
-            <span style={styles.metricEmoji}>⚖️</span>
-            <span style={styles.metricValue}>{metrics.f1}%</span>
+          {/* Card 4: F1 Score */}
+          <div style={{ ...styles.metricCard, borderTop: '4px solid #FFE58A' }} className="digital-card">
             <span style={styles.metricName}>F1 Score</span>
-            <span style={styles.metricCaption}>harmonic balance score</span>
+            <span style={styles.metricValue}>{metrics.f1}%</span>
+            <span style={styles.metricCaption}>harmonic mean evaluation metric</span>
           </div>
         </div>
 
-        {/* Split Grid: What Makes a Task Panic & Confusion Matrix */}
+        {/* Split Grid: Feature Importance & Confusion Matrix */}
         <div style={styles.bottomGrid}>
-          {/* Feature Importance: What makes a task panic? */}
-          <div style={styles.featurePanel}>
+          {/* Feature Importance */}
+          <div style={styles.featurePanel} className="digital-card">
             <div style={styles.panelHeader}>
-              <span style={styles.panelTitle}>WHAT MAKES A TASK PANIC?</span>
-              <span style={styles.panelNote}>Gini Importance</span>
+              <span style={styles.panelTitle}>
+                WHAT MAKES A TASK <span className="hl hl-butter" style={{ padding: '0 4px' }}>PANIC?</span>
+              </span>
+              <span className="note-tag" style={{ color: '#D9483B' }}>
+                biggest signals ↗
+              </span>
             </div>
 
             <div style={styles.featuresList}>
@@ -157,11 +159,11 @@ export default function MLModelPanel({
             </div>
           </div>
 
-          {/* Confusion Matrix: Did the model get it right? */}
-          <div style={styles.matrixPanel}>
+          {/* Confusion Matrix */}
+          <div style={styles.matrixPanel} className="digital-card">
             <div style={styles.panelHeader}>
               <span style={styles.panelTitle}>DID THE MODEL GET IT RIGHT?</span>
-              <span style={styles.panelNote}>240 test tasks</span>
+              <span style={styles.panelNote}>240 held-out validation samples</span>
             </div>
 
             <div style={styles.matrixTable}>
@@ -174,11 +176,11 @@ export default function MLModelPanel({
               {/* Row 1: Actual On-Time */}
               <div style={styles.matrixRow}>
                 <span style={styles.rowLabel}>Actual: On Time</span>
-                <div style={{ ...styles.cell, backgroundColor: '#EBF8F1', borderColor: '#BFE8D0' }}>
+                <div style={{ ...styles.cell, backgroundColor: '#EBF8F1', border: '1px solid #BFE8D0' }}>
                   <span style={styles.cellVal}>{cm[0]?.[0] ?? 112}</span>
-                  <span style={{ ...styles.cellTag, color: '#166534' }}>Nice prediction ✨</span>
+                  <span style={{ ...styles.cellTag, color: '#166534' }}>Nice prediction ✓</span>
                 </div>
-                <div style={{ ...styles.cell, backgroundColor: '#FFF9DB', borderColor: '#FFE58A' }}>
+                <div style={{ ...styles.cell, backgroundColor: '#FFF9DB', border: '1px solid #FFE58A' }}>
                   <span style={styles.cellVal}>{cm[0]?.[1] ?? 8}</span>
                   <span style={{ ...styles.cellTag, color: '#92400E' }}>False alarm ⚡</span>
                 </div>
@@ -187,11 +189,11 @@ export default function MLModelPanel({
               {/* Row 2: Actual Late */}
               <div style={styles.matrixRow}>
                 <span style={styles.rowLabel}>Actual: Late</span>
-                <div style={{ ...styles.cell, backgroundColor: '#FFEFEA', borderColor: '#FFB5A7' }}>
+                <div style={{ ...styles.cell, backgroundColor: '#FFEFEA', border: '1px solid #FFB5A7' }}>
                   <span style={styles.cellVal}>{cm[1]?.[0] ?? 11}</span>
                   <span style={{ ...styles.cellTag, color: '#991B1B' }}>Missed risk 🌧️</span>
                 </div>
-                <div style={{ ...styles.cell, backgroundColor: '#EBF8F1', borderColor: '#BFE8D0' }}>
+                <div style={{ ...styles.cell, backgroundColor: '#EBF8F1', border: '1px solid #BFE8D0' }}>
                   <span style={styles.cellVal}>{cm[1]?.[1] ?? 109}</span>
                   <span style={{ ...styles.cellTag, color: '#166534' }}>Correct warning 🚨</span>
                 </div>
@@ -210,13 +212,13 @@ const styles = {
   },
   container: {
     backgroundColor: '#EBF8F1',
-    border: '2px solid #BFE8D0',
-    borderRadius: '28px',
+    borderRadius: '24px',
     padding: '40px',
-    boxShadow: '0 8px 24px rgba(191, 232, 208, 0.25)',
+    boxShadow: '0 8px 24px rgba(191, 232, 208, 0.2)',
     display: 'flex',
     flexDirection: 'column',
     gap: '32px',
+    border: '1px solid rgba(191, 232, 208, 0.4)',
   },
   header: {
     display: 'flex',
@@ -265,15 +267,15 @@ const styles = {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '8px',
-    backgroundColor: '#FFFFFF',
-    color: '#25242A',
-    border: '2px solid #25242A',
+    backgroundColor: '#25242A',
+    color: '#FFFFFF',
+    border: 'none',
     padding: '10px 20px',
     borderRadius: '9999px',
-    fontSize: '14px',
+    fontSize: '13px',
     fontWeight: '700',
     cursor: 'pointer',
-    boxShadow: '0 4px 0 #25242A',
+    boxShadow: '0 4px 12px rgba(37, 36, 42, 0.12)',
   },
   trainBtnDisabled: {
     opacity: 0.5,
@@ -283,14 +285,14 @@ const styles = {
   spinner: {
     width: '12px',
     height: '12px',
-    border: '2px solid rgba(37, 36, 42, 0.2)',
-    borderTopColor: '#25242A',
+    border: '2px solid rgba(255, 255, 255, 0.3)',
+    borderTopColor: '#FFFFFF',
     borderRadius: '50%',
     animation: 'spinSlow 0.8s linear infinite',
   },
   trainingBox: {
     backgroundColor: '#FFFFFF',
-    border: '1.5px dashed #3EA370',
+    border: '1px solid rgba(37, 36, 42, 0.08)',
     borderRadius: '12px',
     padding: '12px 18px',
     fontSize: '13px',
@@ -306,58 +308,56 @@ const styles = {
     gap: '20px',
   },
   metricCard: {
-    borderRadius: '20px',
-    border: '2px solid',
-    padding: '24px',
+    backgroundColor: '#FFFFFF',
+    borderRadius: '16px',
+    padding: '22px 24px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '6px',
-    boxShadow: '0 4px 14px rgba(37, 36, 42, 0.04)',
+    gap: '4px',
+    boxShadow: '0 4px 16px rgba(37, 36, 42, 0.04)',
+    border: '1px solid rgba(37, 36, 42, 0.08)',
   },
-  metricEmoji: {
-    fontSize: '22px',
+  metricName: {
+    fontSize: '13px',
+    fontWeight: '700',
+    color: '#706D73',
   },
   metricValue: {
     fontFamily: "'Syne', sans-serif",
-    fontSize: '38px',
+    fontSize: '36px',
     fontWeight: '800',
     color: '#25242A',
     letterSpacing: '-0.03em',
-    lineHeight: 1,
-  },
-  metricName: {
-    fontSize: '15px',
-    fontWeight: '700',
-    color: '#25242A',
-    marginTop: '4px',
+    lineHeight: 1.1,
   },
   metricCaption: {
     fontSize: '12px',
     color: '#706D73',
+    marginTop: '2px',
   },
   bottomGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-    gap: '28px',
+    gap: '24px',
   },
   featurePanel: {
     backgroundColor: '#FFFFFF',
-    borderRadius: '20px',
-    border: '1.5px solid rgba(37, 36, 42, 0.08)',
-    padding: '28px',
+    borderRadius: '18px',
+    border: '1px solid rgba(37, 36, 42, 0.08)',
+    padding: '26px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '18px',
+    gap: '16px',
     boxShadow: '0 4px 16px rgba(37, 36, 42, 0.04)',
   },
   matrixPanel: {
     backgroundColor: '#FFFFFF',
-    borderRadius: '20px',
-    border: '1.5px solid rgba(37, 36, 42, 0.08)',
-    padding: '28px',
+    borderRadius: '18px',
+    border: '1px solid rgba(37, 36, 42, 0.08)',
+    padding: '26px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '18px',
+    gap: '16px',
     boxShadow: '0 4px 16px rgba(37, 36, 42, 0.04)',
   },
   panelHeader: {
@@ -365,20 +365,19 @@ const styles = {
     alignItems: 'baseline',
     justifyContent: 'space-between',
     paddingBottom: '8px',
-    borderBottom: '1.5px solid rgba(37, 36, 42, 0.06)',
+    borderBottom: '1px solid rgba(37, 36, 42, 0.06)',
   },
   panelTitle: {
     fontFamily: "'Plus Jakarta Sans', sans-serif",
     fontSize: '12px',
     fontWeight: '800',
-    letterSpacing: '0.08em',
+    letterSpacing: '0.06em',
     color: '#25242A',
   },
   panelNote: {
-    fontFamily: "'Caveat', cursive",
-    fontSize: '16px',
+    fontSize: '12px',
     color: '#706D73',
-    fontWeight: '600',
+    fontWeight: '500',
   },
   featuresList: {
     display: 'flex',
@@ -408,7 +407,7 @@ const styles = {
   },
   barTrack: {
     width: '100%',
-    height: '8px',
+    height: '6px',
     backgroundColor: 'rgba(37, 36, 42, 0.06)',
     borderRadius: '9999px',
     overflow: 'hidden',
@@ -421,12 +420,12 @@ const styles = {
   matrixTable: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '10px',
+    gap: '8px',
   },
   matrixColLabels: {
     display: 'grid',
     gridTemplateColumns: '110px 1fr 1fr',
-    gap: '10px',
+    gap: '8px',
     textAlign: 'center',
   },
   colLabel: {
@@ -437,7 +436,7 @@ const styles = {
   matrixRow: {
     display: 'grid',
     gridTemplateColumns: '110px 1fr 1fr',
-    gap: '10px',
+    gap: '8px',
     alignItems: 'center',
   },
   rowLabel: {
@@ -446,9 +445,8 @@ const styles = {
     color: '#706D73',
   },
   cell: {
-    borderRadius: '12px',
-    border: '1.5px solid',
-    padding: '12px 8px',
+    borderRadius: '10px',
+    padding: '10px 6px',
     textAlign: 'center',
     display: 'flex',
     flexDirection: 'column',
@@ -456,7 +454,7 @@ const styles = {
   },
   cellVal: {
     fontFamily: "'Syne', sans-serif",
-    fontSize: '20px',
+    fontSize: '18px',
     fontWeight: '800',
     color: '#25242A',
   },

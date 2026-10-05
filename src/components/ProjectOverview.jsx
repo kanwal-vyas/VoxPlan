@@ -20,9 +20,11 @@ export default function ProjectOverview({
           <div style={styles.titleGroup}>
             <div style={styles.badgeRow}>
               <span style={styles.sectionNum}>01</span>
-              <span style={styles.badge}>🌱 SPRINT PULSE</span>
+              <span style={styles.badge}>SPRINT PROGRESSION</span>
             </div>
-            <h2 style={styles.title}>Your Week So Far</h2>
+            <h2 style={styles.title}>
+              YOUR WEEK <span className="hl hl-butter">SO FAR</span>
+            </h2>
           </div>
 
           <button
@@ -37,12 +39,12 @@ export default function ProjectOverview({
             {isPredicting ? (
               <>
                 <span style={styles.spinner} />
-                <span>Thinking...</span>
+                <span>Evaluating risk...</span>
               </>
             ) : (
               <>
                 <span>Run predictions</span>
-                <span>✨</span>
+                <span>→</span>
               </>
             )}
           </button>
@@ -51,14 +53,18 @@ export default function ProjectOverview({
         {/* Big Progress & Timeline Layout */}
         <div style={styles.mainGrid} className="pulse-layout">
           {/* Big Progress Card */}
-          <div style={styles.progressCard}>
+          <div style={styles.progressCard} className="digital-card">
+            <div style={styles.progressHeader}>
+              <span style={styles.progressLabel}>Sprint Completion</span>
+              <span className="note-tag" style={{ color: '#27754E' }}>✎ active cycle</span>
+            </div>
+
             <div style={styles.numeralRow}>
               <span style={styles.hugePercent}>{progressPercent}%</span>
+              <span className="hl hl-mint" style={styles.percentBadge}>
+                {completedCount} of {totalCount} completed
+              </span>
             </div>
-            <span style={styles.progressLabel}>Sprint Completed</span>
-            <span style={styles.progressMeta}>
-              {completedCount} done · {pendingCount} tasks remaining
-            </span>
 
             <div style={styles.progressBarTrack}>
               <div style={{ ...styles.progressBarFill, width: `${progressPercent}%` }} />
@@ -66,63 +72,69 @@ export default function ProjectOverview({
           </div>
 
           {/* Timeline Milestones Path */}
-          <div style={styles.timelineCard}>
-            <span style={styles.timelineHeading}>TASK RISK PATHWAY</span>
+          <div style={styles.timelineCard} className="digital-card">
+            <div style={styles.timelineHeader}>
+              <span style={styles.timelineHeading}>TASK RISK PATHWAY</span>
+              <span className="note-tag">annotated sequence →</span>
+            </div>
             
             <div style={styles.pathway}>
               <div style={styles.pathNode}>
-                <div style={{ ...styles.nodeDot, backgroundColor: '#FF8F82' }}>
-                  <span>⚠️</span>
+                <div style={{ ...styles.nodeDot, backgroundColor: '#FFEFEA', border: '2px solid #FF8F82' }}>
+                  <span>🚨</span>
                 </div>
                 <div style={styles.nodeInfo}>
                   <span style={styles.nodeTitle}>Revise Cryptography</span>
-                  <span style={{ ...styles.nodeRisk, color: '#D9483B' }}>High Risk (96%)</span>
+                  <span style={{ ...styles.nodeRisk, color: '#D9483B' }}>
+                    <span className="hl hl-coral" style={{ fontSize: '10px', padding: '1px 5px' }}>96% High Risk</span>
+                  </span>
                 </div>
               </div>
 
               <div style={styles.pathLine} />
 
               <div style={styles.pathNode}>
-                <div style={{ ...styles.nodeDot, backgroundColor: '#FFE58A' }}>
+                <div style={{ ...styles.nodeDot, backgroundColor: '#FFF9DB', border: '2px solid #F59E0B' }}>
                   <span>⚡</span>
                 </div>
                 <div style={styles.nodeInfo}>
                   <span style={styles.nodeTitle}>Practice Subnetting</span>
-                  <span style={{ ...styles.nodeRisk, color: '#B45309' }}>Med Risk (54%)</span>
+                  <span style={{ ...styles.nodeRisk, color: '#B45309' }}>
+                    <span className="hl hl-butter" style={{ fontSize: '10px', padding: '1px 5px' }}>54% Med Risk</span>
+                  </span>
                 </div>
               </div>
 
               <div style={styles.pathLine} />
 
               <div style={styles.pathNode}>
-                <div style={{ ...styles.nodeDot, backgroundColor: '#BFE8D0' }}>
+                <div style={{ ...styles.nodeDot, backgroundColor: '#EBF8F1', border: '2px solid #3EA370' }}>
                   <span>✓</span>
                 </div>
                 <div style={styles.nodeInfo}>
                   <span style={styles.nodeTitle}>Study OSI Model</span>
-                  <span style={{ ...styles.nodeRisk, color: '#166534' }}>Low Risk (19%)</span>
+                  <span style={{ ...styles.nodeRisk, color: '#166534' }}>
+                    <span className="hl hl-mint" style={{ fontSize: '10px', padding: '1px 5px' }}>19% Low Risk</span>
+                  </span>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Small Highlight Badges */}
+        {/* Small Annotation Badges */}
         <div style={styles.statsStrip}>
           <div style={styles.statPill}>
-            <span style={styles.statEmoji}>🎯</span>
-            <span style={styles.statText}><strong>{totalCount}</strong> Total Initiatives</span>
+            <span style={styles.statText}><strong>{totalCount}</strong> Total Tasks</span>
           </div>
-          <div style={{ ...styles.statPill, backgroundColor: '#FFE8E5', borderColor: '#FFB5A7' }}>
-            <span style={styles.statEmoji}>🚨</span>
+          <div style={{ ...styles.statPill, backgroundColor: '#FFFFFF' }}>
             <span style={{ ...styles.statText, color: '#C92A1D' }}>
-              <strong>{isTrained ? riskStats.highCount : 1}</strong> High-Risk Tasks
+              <strong>{isTrained ? riskStats.highCount : 1}</strong> Critical Delay Risk
             </span>
           </div>
-          <div style={{ ...styles.statPill, backgroundColor: '#EBF8F1', borderColor: '#BFE8D0' }}>
-            <span style={styles.statEmoji}>💡</span>
+          <div style={{ ...styles.statPill, backgroundColor: '#FFFFFF' }}>
             <span style={{ ...styles.statText, color: '#166534' }}>
-              Avg Delay Risk: <strong>{isTrained ? `${(riskStats.avgProb * 100).toFixed(0)}%` : '56%'}</strong>
+              Average Risk: <strong>{isTrained ? `${(riskStats.avgProb * 100).toFixed(0)}%` : '56%'}</strong>
             </span>
           </div>
         </div>
@@ -137,13 +149,13 @@ const styles = {
   },
   container: {
     backgroundColor: '#FFF9DB',
-    border: '2px solid #FFE58A',
-    borderRadius: '28px',
+    borderRadius: '24px',
     padding: '40px',
-    boxShadow: '0 8px 24px rgba(255, 229, 138, 0.25)',
+    boxShadow: '0 8px 24px rgba(255, 229, 138, 0.2)',
     display: 'flex',
     flexDirection: 'column',
     gap: '32px',
+    border: '1px solid rgba(245, 158, 11, 0.15)',
   },
   header: {
     display: 'flex',
@@ -186,15 +198,15 @@ const styles = {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '8px',
-    backgroundColor: '#FFFFFF',
-    color: '#25242A',
-    border: '2px solid #25242A',
+    backgroundColor: '#25242A',
+    color: '#FFFFFF',
+    border: 'none',
     padding: '10px 20px',
     borderRadius: '9999px',
-    fontSize: '14px',
+    fontSize: '13px',
     fontWeight: '700',
     cursor: 'pointer',
-    boxShadow: '0 4px 0 #25242A',
+    boxShadow: '0 4px 12px rgba(37, 36, 42, 0.12)',
   },
   analyzeBtnDisabled: {
     opacity: 0.5,
@@ -204,57 +216,64 @@ const styles = {
   spinner: {
     width: '12px',
     height: '12px',
-    border: '2px solid rgba(37, 36, 42, 0.2)',
-    borderTopColor: '#25242A',
+    border: '2px solid rgba(255, 255, 255, 0.3)',
+    borderTopColor: '#FFFFFF',
     borderRadius: '50%',
     animation: 'spinSlow 0.8s linear infinite',
   },
   mainGrid: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1.6fr',
-    gap: '32px',
+    gridTemplateColumns: '1.1fr 1.5fr',
+    gap: '28px',
     alignItems: 'stretch',
   },
   progressCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: '20px',
+    borderRadius: '18px',
     padding: '28px',
     display: 'flex',
     flexDirection: 'column',
     justifyContent: 'center',
-    gap: '8px',
-    border: '1.5px solid rgba(37, 36, 42, 0.08)',
+    gap: '10px',
+    border: '1px solid rgba(37, 36, 42, 0.08)',
     boxShadow: '0 4px 16px rgba(37, 36, 42, 0.04)',
+  },
+  progressHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  progressLabel: {
+    fontSize: '14px',
+    fontWeight: '700',
+    color: '#25242A',
   },
   numeralRow: {
     display: 'flex',
     alignItems: 'baseline',
+    gap: '12px',
+    flexWrap: 'wrap',
   },
   hugePercent: {
     fontFamily: "'Syne', sans-serif",
-    fontSize: '64px',
+    fontSize: '56px',
     fontWeight: '800',
     color: '#25242A',
     letterSpacing: '-0.04em',
     lineHeight: 1,
   },
-  progressLabel: {
-    fontSize: '16px',
+  percentBadge: {
+    fontSize: '12px',
     fontWeight: '700',
-    color: '#25242A',
-  },
-  progressMeta: {
-    fontSize: '13px',
-    color: '#7A7782',
-    fontWeight: '500',
+    color: '#166534',
   },
   progressBarTrack: {
     width: '100%',
-    height: '10px',
-    backgroundColor: 'rgba(37, 36, 42, 0.08)',
+    height: '8px',
+    backgroundColor: 'rgba(37, 36, 42, 0.06)',
     borderRadius: '9999px',
     overflow: 'hidden',
-    marginTop: '12px',
+    marginTop: '6px',
   },
   progressBarFill: {
     height: '100%',
@@ -265,20 +284,25 @@ const styles = {
   },
   timelineCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: '20px',
+    borderRadius: '18px',
     padding: '24px 28px',
     display: 'flex',
     flexDirection: 'column',
     gap: '16px',
-    border: '1.5px solid rgba(37, 36, 42, 0.08)',
+    border: '1px solid rgba(37, 36, 42, 0.08)',
     boxShadow: '0 4px 16px rgba(37, 36, 42, 0.04)',
+  },
+  timelineHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   timelineHeading: {
     fontFamily: "'Plus Jakarta Sans', sans-serif",
     fontSize: '11px',
     fontWeight: '800',
     letterSpacing: '0.08em',
-    color: '#7A7782',
+    color: '#706D73',
   },
   pathway: {
     display: 'flex',
@@ -300,7 +324,7 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: '13px',
-    boxShadow: '0 2px 6px rgba(0, 0, 0, 0.06)',
+    boxShadow: '0 2px 6px rgba(0, 0, 0, 0.04)',
     flexShrink: 0,
   },
   nodeInfo: {
@@ -314,13 +338,13 @@ const styles = {
   },
   nodeRisk: {
     fontSize: '11px',
-    fontWeight: '700',
+    marginTop: '2px',
   },
   pathLine: {
     flex: 1,
     height: '2px',
-    backgroundColor: 'rgba(37, 36, 42, 0.12)',
-    minWidth: '20px',
+    backgroundColor: 'rgba(37, 36, 42, 0.1)',
+    minWidth: '16px',
   },
   statsStrip: {
     display: 'flex',
@@ -333,13 +357,10 @@ const styles = {
     alignItems: 'center',
     gap: '8px',
     backgroundColor: '#FFFFFF',
-    border: '1.5px solid rgba(37, 36, 42, 0.08)',
+    border: '1px solid rgba(37, 36, 42, 0.08)',
     padding: '8px 16px',
     borderRadius: '9999px',
     fontSize: '13px',
-  },
-  statEmoji: {
-    fontSize: '14px',
   },
   statText: {
     color: '#4A4852',

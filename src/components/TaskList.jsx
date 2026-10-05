@@ -30,21 +30,23 @@ export default function TaskList({
           <div style={styles.titleGroup}>
             <div style={styles.badgeRow}>
               <span style={styles.sectionNum}>02</span>
-              <span style={styles.badge}>📌 RISK CHECK</span>
+              <span style={styles.badge}>ANALYTICAL OVERVIEW</span>
             </div>
-            <h2 style={styles.title}>The Risk Landscape</h2>
+            <h2 style={styles.title}>
+              THE <span className="hl hl-peach">RISK</span> LANDSCAPE
+            </h2>
             <p style={styles.subtitle}>
-              Physical-style sticky notes showing real ML delay risk estimates
+              Continuous machine learning delay-risk estimates mapped across active initiatives
             </p>
           </div>
 
           {/* Filter Pills */}
           <div style={styles.filterNav}>
             {[
-              { id: 'all', label: 'All Notes', emoji: '📝' },
+              { id: 'all', label: 'All Tasks', emoji: '📝' },
               { id: 'pending', label: 'Pending', emoji: '⏳' },
-              { id: 'high-risk', label: 'Uh oh (High Risk)', emoji: '🚨' },
-              { id: 'completed', label: 'Done', emoji: '✨' },
+              { id: 'high-risk', label: 'High Risk Alarms', emoji: '🚨' },
+              { id: 'completed', label: 'Completed', emoji: '✨' },
             ].map((f) => (
               <button
                 key={f.id}
@@ -62,7 +64,7 @@ export default function TaskList({
           </div>
         </div>
 
-        {/* Grid Wall of Sticky Notes */}
+        {/* Clean Modern Cards Grid */}
         <div style={styles.notesGrid}>
           {filteredTasks.map((task, index) => (
             <TaskCard
@@ -80,16 +82,16 @@ export default function TaskList({
 
           {filteredTasks.length === 0 && (
             <div style={styles.emptyCard}>
-              <span style={styles.emptyEmoji}>🎈</span>
+              <span style={styles.emptyEmoji}>🎉</span>
               <h4 style={styles.emptyTitle}>
                 {activeFilter === 'high-risk'
-                  ? 'All clear! No tasks panicking.'
+                  ? 'No high-risk delay bottlenecks detected.'
                   : activeFilter === 'pending'
-                  ? 'All caught up! Nice job.'
-                  : 'No sticky notes here yet.'}
+                  ? 'All tasks cleared for this sprint!'
+                  : 'No task cards matching this filter.'}
               </h4>
               <p style={styles.emptyDesc}>
-                Use the voice or command assistant below to create a new task.
+                Speak or type a command below to add your next initiative.
               </p>
             </div>
           )}
@@ -105,13 +107,13 @@ const styles = {
   },
   container: {
     backgroundColor: '#F3EEFF',
-    border: '2px solid #C9B6FF',
-    borderRadius: '28px',
+    borderRadius: '24px',
     padding: '40px',
-    boxShadow: '0 8px 24px rgba(201, 182, 255, 0.25)',
+    boxShadow: '0 8px 24px rgba(201, 182, 255, 0.2)',
     display: 'flex',
     flexDirection: 'column',
     gap: '32px',
+    border: '1px solid rgba(201, 182, 255, 0.4)',
   },
   header: {
     display: 'flex',
@@ -166,8 +168,8 @@ const styles = {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '6px',
-    backgroundColor: 'rgba(255, 255, 255, 0.7)',
-    border: '1.5px solid rgba(37, 36, 42, 0.08)',
+    backgroundColor: '#FFFFFF',
+    border: '1px solid rgba(37, 36, 42, 0.1)',
     color: '#4A4852',
     padding: '8px 16px',
     borderRadius: '9999px',
@@ -179,25 +181,24 @@ const styles = {
     backgroundColor: '#25242A',
     borderColor: '#25242A',
     color: '#FFFFFF',
-    boxShadow: '0 4px 12px rgba(37, 36, 42, 0.15)',
+    boxShadow: '0 4px 12px rgba(37, 36, 42, 0.12)',
   },
   notesGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))',
-    gap: '28px',
-    padding: '16px 4px',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+    gap: '24px',
   },
   emptyCard: {
     gridColumn: '1 / -1',
     backgroundColor: '#FFFFFF',
-    borderRadius: '20px',
+    borderRadius: '18px',
     padding: '48px 24px',
     textAlign: 'center',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     gap: '8px',
-    border: '2px dashed rgba(37, 36, 42, 0.15)',
+    border: '1px dashed rgba(37, 36, 42, 0.15)',
   },
   emptyEmoji: {
     fontSize: '36px',

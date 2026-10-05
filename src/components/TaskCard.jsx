@@ -34,99 +34,87 @@ export default function TaskCard({
   const getTheme = () => {
     if (task.completed) {
       return {
-        bg: '#F5F4F7',
-        border: '#DCD9E3',
-        tagBg: '#E4E2EB',
-        tagText: '#706D73',
-        riskBg: '#E4E2EB',
+        accent: '#9B98A3',
+        tagClass: 'hl',
+        tagBg: 'rgba(37, 36, 42, 0.08)',
+        textColor: '#706D73',
+        circleBorder: '#9B98A3',
         riskText: '#706D73',
-        emoji: '✓',
-        moodText: 'Done!',
+        noteTag: 'completed ✓',
       };
     }
     switch (riskCategory) {
       case 'HIGH':
         return {
-          bg: '#FFEFEA',
-          border: '#FF8F82',
-          tagBg: '#FF8F82',
-          tagText: '#FFFFFF',
-          riskBg: '#FFE0DC',
-          riskText: '#C92A1D',
-          emoji: '🚨',
-          moodText: 'Uh oh...',
+          accent: '#FF8F82',
+          tagClass: 'hl hl-coral',
+          tagBg: 'rgba(255, 143, 130, 0.2)',
+          textColor: '#D9483B',
+          circleBorder: '#D9483B',
+          riskText: '#D9483B',
+          noteTag: 'high delay risk ↗',
         };
       case 'MEDIUM':
         return {
-          bg: '#FFF9DB',
-          border: '#F59E0B',
-          tagBg: '#FFE58A',
-          tagText: '#92400E',
-          riskBg: '#FEF3C7',
+          accent: '#FFE58A',
+          tagClass: 'hl hl-butter',
+          tagBg: 'rgba(255, 229, 138, 0.25)',
+          textColor: '#B45309',
+          circleBorder: '#B45309',
           riskText: '#B45309',
-          emoji: '⚡',
-          moodText: 'Could be okay',
+          noteTag: 'medium priority ⚡',
         };
       case 'LOW':
       default:
         return {
-          bg: '#EBF8F1',
-          border: '#3EA370',
-          tagBg: '#BFE8D0',
-          tagText: '#166534',
-          riskBg: '#D1FAE5',
-          riskText: '#065F46',
-          emoji: '🌱',
-          moodText: 'Looking good',
+          accent: '#BFE8D0',
+          tagClass: 'hl hl-mint',
+          tagBg: 'rgba(191, 232, 208, 0.25)',
+          textColor: '#166534',
+          circleBorder: '#166534',
+          riskText: '#166534',
+          noteTag: 'on schedule 🌱',
         };
     }
   };
 
   const theme = getTheme();
-  const tiltClass = index % 3 === 0 ? 'note-tilt-left' : index % 3 === 1 ? 'note-tilt-right' : 'note-tilt-slight';
 
   return (
     <article
       style={{
         ...styles.card,
-        backgroundColor: theme.bg,
-        border: `2px solid ${theme.border}`,
-        opacity: task.completed ? 0.65 : 1,
+        borderTop: `4px solid ${theme.accent}`,
+        opacity: task.completed ? 0.6 : 1,
       }}
-      className={tiltClass}
+      className="digital-card"
       onClick={() => {
         if (!isEditing && onOpenExplanation && prediction) {
           onOpenExplanation(task, prediction);
         }
       }}
-      title="Click sticky note to view smart explanation"
+      title="Click card to view prediction intelligence explanation"
     >
-      {/* Decorative Tape on top */}
-      <div className="tape-top" />
-
-      {/* Top Meta Bar */}
+      {/* Top Meta Row */}
       <div style={styles.topRow}>
         <div style={styles.leftTags}>
-          <span style={styles.moodLabel}>{theme.moodText}</span>
+          <span style={styles.categoryLabel}>{task.category ? task.category.toUpperCase() : 'GENERAL'}</span>
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onCyclePriority(task.id);
             }}
-            style={{
-              ...styles.priorityBadge,
-              backgroundColor: theme.tagBg,
-              color: theme.tagText,
-            }}
+            className={theme.tagClass}
+            style={styles.priorityBtn}
             title="Click to cycle priority"
           >
-            {task.priority ? task.priority.toUpperCase() : 'MEDIUM'}
+            {task.priority ? `${task.priority.toUpperCase()} PRIORITY` : 'MEDIUM PRIORITY'}
           </button>
         </div>
 
         <div style={styles.actionButtons}>
-          {/* Custom playful checkbox */}
+          {/* Custom modern checkbox */}
           <button
             type="button"
             onClick={(e) => {
@@ -135,11 +123,11 @@ export default function TaskCard({
             }}
             style={{
               ...styles.checkbox,
-              backgroundColor: task.completed ? '#3EA370' : '#FFFFFF',
-              borderColor: task.completed ? '#3EA370' : '#25242A',
+              backgroundColor: task.completed ? '#25242A' : '#FFFFFF',
+              borderColor: task.completed ? '#25242A' : 'rgba(37, 36, 42, 0.3)',
             }}
             title={task.completed ? 'Mark uncompleted' : 'Mark completed'}
-            aria-label="Toggle task completed"
+            aria-label="Toggle task completion"
           >
             {task.completed && (
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
@@ -148,7 +136,7 @@ export default function TaskCard({
             )}
           </button>
 
-          {/* Delete icon */}
+          {/* Delete button */}
           <button
             type="button"
             onClick={(e) => {
@@ -156,7 +144,7 @@ export default function TaskCard({
               onDelete(task.id);
             }}
             style={styles.deleteBtn}
-            title="Delete sticky note"
+            title="Delete task"
             aria-label="Delete task"
           >
             ✕
@@ -216,19 +204,39 @@ export default function TaskCard({
         )}
       </div>
 
-      {/* Due Date & Category Note */}
+      {/* Middle Information */}
       <div style={styles.middleMeta}>
-        <span style={styles.categoryPill}>🏷️ {task.category || 'General'}</span>
         <span style={styles.dueDate}>📅 Due {task.dueDate || 'Soon'}</span>
+        <span className="note-tag" style={{ color: theme.textColor }}>
+          {theme.noteTag}
+        </span>
       </div>
 
-      {/* Bottom Risk Callout */}
+      {/* Bottom Footer: Circled Risk Numeral & Explanation Hint */}
       <div style={styles.cardFooter}>
-        <div style={{ ...styles.riskCallout, backgroundColor: theme.riskBg, color: theme.riskText }}>
-          <span style={styles.riskEmoji}>{theme.emoji}</span>
-          <span style={styles.riskPercent}>{task.completed ? 'Completed' : `${riskPercent}% risk`}</span>
+        <div style={styles.riskWrap}>
+          {task.completed ? (
+            <span style={styles.completedBadge}>Completed</span>
+          ) : (
+            <div style={styles.riskRow}>
+              <span
+                className="annotated-circle"
+                style={{
+                  color: theme.textColor,
+                  fontSize: '14px',
+                  fontWeight: '800',
+                }}
+              >
+                {riskPercent}%
+              </span>
+              <span style={{ ...styles.riskLabel, color: theme.textColor }}>
+                {riskCategory} RISK
+              </span>
+            </div>
+          )}
         </div>
-        <span style={styles.clickHint}>tap for insights →</span>
+
+        <span style={styles.explainHint}>view details →</span>
       </div>
     </article>
   );
@@ -236,40 +244,39 @@ export default function TaskCard({
 
 const styles = {
   card: {
-    borderRadius: '18px',
-    padding: '24px',
+    backgroundColor: '#FFFFFF',
+    borderRadius: '16px',
+    padding: '22px 24px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '14px',
-    position: 'relative',
+    gap: '12px',
+    boxShadow: '0 4px 16px rgba(37, 36, 42, 0.04)',
+    border: '1px solid rgba(37, 36, 42, 0.08)',
     cursor: 'pointer',
-    boxShadow: '0 8px 24px rgba(37, 36, 42, 0.06)',
-    userSelect: 'none',
+    position: 'relative',
   },
   topRow: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: '10px',
   },
   leftTags: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
   },
-  moodLabel: {
-    fontFamily: "'Caveat', cursive",
-    fontSize: '20px',
-    fontWeight: '700',
-    color: '#4A4852',
+  categoryLabel: {
+    fontSize: '11px',
+    fontWeight: '800',
+    color: '#706D73',
+    letterSpacing: '0.06em',
   },
-  priorityBadge: {
+  priorityBtn: {
     border: 'none',
     fontSize: '10px',
     fontWeight: '800',
-    letterSpacing: '0.06em',
-    padding: '3px 8px',
-    borderRadius: '9999px',
+    letterSpacing: '0.04em',
+    color: '#25242A',
     cursor: 'pointer',
   },
   actionButtons: {
@@ -278,10 +285,10 @@ const styles = {
     gap: '6px',
   },
   checkbox: {
-    width: '22px',
-    height: '22px',
-    borderRadius: '6px',
-    border: '2px solid',
+    width: '20px',
+    height: '20px',
+    borderRadius: '5px',
+    border: '1.5px solid',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -294,8 +301,8 @@ const styles = {
     border: 'none',
     color: '#706D73',
     cursor: 'pointer',
-    fontSize: '14px',
-    padding: '4px',
+    fontSize: '13px',
+    padding: '2px',
   },
   titleArea: {
     flex: 1,
@@ -307,8 +314,8 @@ const styles = {
   },
   title: {
     fontFamily: "'Syne', sans-serif",
-    fontSize: '22px',
-    fontWeight: '800',
+    fontSize: '20px',
+    fontWeight: '700',
     color: '#25242A',
     letterSpacing: '-0.02em',
     margin: 0,
@@ -319,8 +326,8 @@ const styles = {
     border: 'none',
     color: '#706D73',
     cursor: 'pointer',
-    fontSize: '13px',
-    opacity: 0.6,
+    fontSize: '12px',
+    opacity: 0.5,
   },
   editRow: {
     display: 'flex',
@@ -329,9 +336,9 @@ const styles = {
   },
   editInput: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    border: '2px solid #25242A',
-    borderRadius: '8px',
+    backgroundColor: '#FFF8EF',
+    border: '1.5px solid #25242A',
+    borderRadius: '6px',
     color: '#25242A',
     fontFamily: "'Syne', sans-serif",
     fontSize: '18px',
@@ -344,8 +351,8 @@ const styles = {
     color: '#FFFFFF',
     border: 'none',
     borderRadius: '6px',
-    width: '26px',
-    height: '26px',
+    width: '24px',
+    height: '24px',
     cursor: 'pointer',
   },
   cancelBtn: {
@@ -353,8 +360,8 @@ const styles = {
     color: '#25242A',
     border: 'none',
     borderRadius: '6px',
-    width: '26px',
-    height: '26px',
+    width: '24px',
+    height: '24px',
     cursor: 'pointer',
   },
   middleMeta: {
@@ -363,12 +370,7 @@ const styles = {
     justifyContent: 'space-between',
     fontSize: '12px',
     color: '#706D73',
-    fontWeight: '600',
-  },
-  categoryPill: {
-    backgroundColor: 'rgba(255, 255, 255, 0.6)',
-    padding: '2px 8px',
-    borderRadius: '6px',
+    fontWeight: '500',
   },
   dueDate: {
     fontSize: '12px',
@@ -377,28 +379,32 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: '10px',
-    borderTop: '1.5px dashed rgba(37, 36, 42, 0.12)',
+    paddingTop: '8px',
+    borderTop: '1px solid rgba(37, 36, 42, 0.06)',
   },
-  riskCallout: {
-    display: 'inline-flex',
+  riskWrap: {
+    display: 'flex',
     alignItems: 'center',
-    gap: '6px',
-    padding: '5px 12px',
-    borderRadius: '9999px',
-    fontSize: '13px',
+  },
+  riskRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  riskLabel: {
+    fontFamily: "'Plus Jakarta Sans', sans-serif",
+    fontSize: '11px',
     fontWeight: '800',
+    letterSpacing: '0.04em',
   },
-  riskEmoji: {
-    fontSize: '14px',
+  completedBadge: {
+    fontSize: '12px',
+    fontWeight: '700',
+    color: '#3EA370',
   },
-  riskPercent: {
-    letterSpacing: '-0.01em',
-  },
-  clickHint: {
-    fontFamily: "'Caveat', cursive",
-    fontSize: '16px',
+  explainHint: {
+    fontSize: '12px',
     color: '#706D73',
-    fontWeight: '600',
+    fontWeight: '500',
   },
 };
