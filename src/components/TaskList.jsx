@@ -10,7 +10,14 @@ export default function TaskList({
   onDelete,
   onUpdateTitle,
   onCyclePriority,
+  onReschedule,
+  onReviseEffort,
   onOpenExplanation,
+  onMoveUp,
+  onMoveDown,
+  activeTimerState,
+  onStartTimer,
+  onPauseTimer,
 }) {
   const sectionRef = useRef(null);
   const [isVisible, setIsVisible] = useState(false);
@@ -85,20 +92,36 @@ export default function TaskList({
 
         {/* Clean Modern Cards Grid */}
         <div style={styles.notesGrid}>
-          {filteredTasks.map((task, index) => (
-            <TaskCard
-              key={task.id}
-              index={index}
-              task={task}
-              prediction={predictionsMap[task.id]}
-              onToggleComplete={onToggleComplete}
-              onDelete={onDelete}
-              onUpdateTitle={onUpdateTitle}
-              onCyclePriority={onCyclePriority}
-              onOpenExplanation={onOpenExplanation}
-              parentVisible={isVisible}
-            />
-          ))}
+          {filteredTasks.map((task, index) => {
+            // Find global index in original tasks array for reordering
+            const globalIndex = tasks.findIndex((t) => t.id === task.id);
+            const canMoveUp = globalIndex > 0;
+            const canMoveDown = globalIndex >= 0 && globalIndex < tasks.length - 1;
+
+            return (
+              <TaskCard
+                key={task.id}
+                index={index}
+                task={task}
+                prediction={predictionsMap[task.id]}
+                onToggleComplete={onToggleComplete}
+                onDelete={onDelete}
+                onUpdateTitle={onUpdateTitle}
+                onCyclePriority={onCyclePriority}
+                onReschedule={onReschedule}
+                onReviseEffort={onReviseEffort}
+                onOpenExplanation={onOpenExplanation}
+                parentVisible={isVisible}
+                onMoveUp={onMoveUp ? () => onMoveUp(globalIndex) : null}
+                onMoveDown={onMoveDown ? () => onMoveDown(globalIndex) : null}
+                canMoveUp={canMoveUp}
+                canMoveDown={canMoveDown}
+                activeTimerState={activeTimerState}
+                onStartTimer={onStartTimer}
+                onPauseTimer={onPauseTimer}
+              />
+            );
+          })}
 
           {filteredTasks.length === 0 && (
             <div style={styles.emptyCard}>

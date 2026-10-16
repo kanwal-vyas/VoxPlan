@@ -15,6 +15,9 @@ from backend.ml.model import (
     ModelStatusResponse,
     PredictionResult,
     TaskInput,
+    TelemetryBatchRequest,
+    TelemetryBatchResponse,
+    TelemetryEventInput,
     TrainRequest,
     TrainResponse,
 )
@@ -142,6 +145,62 @@ def predict_all_tasks(payload: BatchPredictRequest):
         )
 
 
+# In-memory store for backend telemetry synchronization
+_telemetry_store: Dict[str, Dict[str, Dict[str, Any]]] = {}
+
+
+@app.post("/api/telemetry/events", response_model=TelemetryBatchResponse, tags=["Telemetry"])
+def ingest_telemetry_events(payload: TelemetryBatchRequest):
+    """
+    Ingests a validated batch of behavioral telemetry events.
+    Enforces profile boundary isolation and handles duplicate event IDs idempotently.
+    """
+    accepted = 0
+    ignored_duplicates = 0
+
+    for event in payload.events:
+        profile_events = _telemetry_store.setdefault(event.profile_id, {})
+        if event.event_id in profile_events:
+            ignored_duplicates += 1
+        else:
+            profile_events[event.event_id] = event.model_dump()
+            accepted += 1
+
+    return TelemetryBatchResponse(
+        accepted_count=accepted,
+        ignored_duplicates=ignored_duplicates,
+        status="ok"
+    )
+
+
+@app.get("/api/telemetry/events", tags=["Telemetry"])
+def get_telemetry_events(profile_id: str, limit: int = 200):
+    """
+    Retrieves stored behavioral events for a specific profile_id.
+    """
+    if not profile_id or not profile_id.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="profile_id parameter is required.")
+
+    profile_events = _telemetry_store.get(profile_id, {})
+    events_list = sorted(profile_events.values(), key=lambda e: e.get("timestamp", ""))
+    return {"profile_id": profile_id, "count": len(events_list), "events": events_list[:limit]}
+
+
+@app.delete("/api/telemetry/events", tags=["Telemetry"])
+def clear_telemetry_events(profile_id: str):
+    """
+    Permanently clears behavioral telemetry events for a specific profile_id.
+    """
+    if not profile_id or not profile_id.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="profile_id parameter is required.")
+
+    if profile_id in _telemetry_store:
+        del _telemetry_store[profile_id]
+
+    return {"status": "cleared", "profile_id": profile_id}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("backend.main:app", host="127.0.0.1", port=8000, reload=True)
+

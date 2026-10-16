@@ -1,3 +1,5 @@
+import React, { useState, useEffect } from 'react';
+
 function formatDueDate(dueDateStr) {
   if (!dueDateStr) return 'No deadline set';
   const parts = dueDateStr.split('-');
@@ -22,6 +24,20 @@ function formatDueDate(dueDateStr) {
   return `Due ${dueDateStr}`;
 }
 
+function formatDuration(seconds) {
+  if (typeof seconds !== 'number' || seconds <= 0) return '0s';
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  if (hrs > 0) {
+    return `${hrs}h ${mins}m`;
+  }
+  if (mins > 0) {
+    return `${mins}m ${secs}s`;
+  }
+  return `${secs}s`;
+}
+
 export default function TaskCard({
   index,
   task,
@@ -30,12 +46,54 @@ export default function TaskCard({
   onDelete,
   onUpdateTitle,
   onCyclePriority,
+  onReschedule,
+  onReviseEffort,
   onOpenExplanation,
   parentVisible,
+  onMoveUp,
+  onMoveDown,
+  canMoveUp,
+  canMoveDown,
+  activeTimerState,
+  onStartTimer,
+  onPauseTimer,
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(task.title);
   const [displayRisk, setDisplayRisk] = useState(null);
+
+  // Reschedule & Effort edit states
+  const [isRescheduling, setIsRescheduling] = useState(false);
+  const [rescheduleDate, setRescheduleDate] = useState(task.dueDate || '');
+  const [isEditingEffort, setIsEditingEffort] = useState(false);
+  const [effortInput, setEffortInput] = useState(task.estimatedEffort ?? '');
+
+  // Completion duration dialog state
+  const [showDurationPrompt, setShowDurationPrompt] = useState(false);
+  const [selfReportedMins, setSelfReportedMins] = useState('');
+
+  const isTimerForThisTask = Boolean(activeTimerState && activeTimerState.taskId === task.id);
+  const isTimerRunning = Boolean(isTimerForThisTask && activeTimerState?.isRunning);
+  const isTimerPaused = Boolean(isTimerForThisTask && !activeTimerState?.isRunning && (activeTimerState?.accumulatedSeconds || 0) > 0);
+
+  const calcCurrentSeconds = useCallback(() => {
+    if (!isTimerForThisTask || !activeTimerState) return 0;
+    let total = activeTimerState.accumulatedSeconds || 0;
+    if (activeTimerState.isRunning && activeTimerState.startedAt) {
+      total += Math.max(0, (Date.now() - activeTimerState.startedAt) / 1000);
+    }
+    return Math.round(total);
+  }, [isTimerForThisTask, activeTimerState]);
+
+  const [liveSeconds, setLiveSeconds] = useState(calcCurrentSeconds);
+
+  useEffect(() => {
+    if (!isTimerRunning) return;
+    const interval = setInterval(() => {
+      setLiveSeconds(calcCurrentSeconds());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isTimerRunning, calcCurrentSeconds]);
 
   const prob = prediction ? prediction.probability : null;
   const targetPercent = prob !== null ? prob * 100 : null;
@@ -61,7 +119,7 @@ export default function TaskCard({
     }
   }, [parentVisible, targetPercent, index]);
 
-  const handleSave = () => {
+  const handleSaveTitle = () => {
     const trimmed = editTitle.trim();
     if (trimmed && trimmed !== task.title) {
       onUpdateTitle(task.id, trimmed);
@@ -69,10 +127,54 @@ export default function TaskCard({
     setIsEditing(false);
   };
 
-  const handleCancel = (e) => {
-    if (e) e.stopPropagation();
-    setEditTitle(task.title);
-    setIsEditing(false);
+  const handleSaveReschedule = () => {
+    if (onReschedule && rescheduleDate !== task.dueDate) {
+      onReschedule(task.id, rescheduleDate || null);
+    }
+    setIsRescheduling(false);
+  };
+
+  const handleSaveEffort = () => {
+    const num = parseFloat(effortInput);
+    if (onReviseEffort && !isNaN(num) && num >= 0 && num !== task.estimatedEffort) {
+      onReviseEffort(task.id, num);
+    }
+    setIsEditingEffort(false);
+  };
+
+  const handleCheckboxClick = (e) => {
+    e.stopPropagation();
+    if (task.completed) {
+      // Reopening task directly
+      onToggleComplete(task.id);
+      return;
+    }
+
+    // Completing uncompleted task
+    if (isTimerForThisTask && liveSeconds > 0) {
+      // Direct completion with tracked stopwatch time
+      onToggleComplete(task.id, {
+        durationSource: 'tracked',
+        trackedDurationSeconds: liveSeconds,
+      });
+    } else {
+      // Prompt for optional self-reported estimate (or skip as unknown)
+      setShowDurationPrompt(true);
+    }
+  };
+
+  const confirmCompletionWithDuration = (source) => {
+    setShowDurationPrompt(false);
+    if (source === 'self_reported') {
+      const mins = parseFloat(selfReportedMins);
+      const seconds = !isNaN(mins) && mins > 0 ? mins * 60 : null;
+      onToggleComplete(task.id, {
+        durationSource: seconds ? 'self_reported' : 'unknown',
+        selfReportedDurationSeconds: seconds,
+      });
+    } else {
+      onToggleComplete(task.id, { durationSource: 'unknown' });
+    }
   };
 
   const getTheme = () => {
@@ -169,13 +271,40 @@ export default function TaskCard({
         </div>
 
         <div style={styles.actionButtons}>
+          {/* Manual Reordering Controls */}
+          {canMoveUp && onMoveUp && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveUp(index);
+              }}
+              style={styles.reorderBtn}
+              title="Move task up"
+              aria-label="Move task up"
+            >
+              ▲
+            </button>
+          )}
+          {canMoveDown && onMoveDown && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveDown(index);
+              }}
+              style={styles.reorderBtn}
+              title="Move task down"
+              aria-label="Move task down"
+            >
+              ▼
+            </button>
+          )}
+
           {/* Custom modern checkbox */}
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleComplete(task.id);
-            }}
+            onClick={handleCheckboxClick}
             style={{
               ...styles.checkbox,
               backgroundColor: task.completed ? '#25242A' : '#FFFFFF',
@@ -216,17 +345,28 @@ export default function TaskCard({
               value={editTitle}
               onChange={(e) => setEditTitle(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSave();
-                if (e.key === 'Escape') handleCancel(e);
+                if (e.key === 'Enter') handleSaveTitle();
+                if (e.key === 'Escape') {
+                  setEditTitle(task.title);
+                  setIsEditing(false);
+                }
               }}
-              onBlur={handleSave}
+              onBlur={handleSaveTitle}
               autoFocus
               style={styles.editInput}
             />
-            <button type="button" onClick={handleSave} style={styles.saveBtn}>
+            <button type="button" onClick={handleSaveTitle} style={styles.saveBtn}>
               ✓
             </button>
-            <button type="button" onClick={handleCancel} style={styles.cancelBtn}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditTitle(task.title);
+                setIsEditing(false);
+              }}
+              style={styles.cancelBtn}
+            >
               ✕
             </button>
           </div>
@@ -259,17 +399,161 @@ export default function TaskCard({
         )}
       </div>
 
-      {/* Middle Information */}
+      {/* Optional Completion Duration Prompt Modal / Banner */}
+      {showDurationPrompt && (
+        <div style={styles.durationPromptBanner} onClick={(e) => e.stopPropagation()}>
+          <div style={styles.durationPromptText}>
+            <strong>Task complete!</strong> Log working time?
+          </div>
+          <div style={styles.durationInputRow}>
+            <input
+              type="number"
+              min="1"
+              max="1440"
+              value={selfReportedMins}
+              onChange={(e) => setSelfReportedMins(e.target.value)}
+              placeholder="Mins (e.g. 45)"
+              style={styles.durationInput}
+              autoFocus
+            />
+            <button
+              type="button"
+              onClick={() => confirmCompletionWithDuration('self_reported')}
+              style={styles.saveDurationBtn}
+              title="Save approximate working minutes"
+            >
+              Save mins
+            </button>
+            <button
+              type="button"
+              onClick={() => confirmCompletionWithDuration('unknown')}
+              style={styles.skipDurationBtn}
+              title="Leave duration as unmeasured"
+            >
+              Skip (Unknown)
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowDurationPrompt(false)}
+              style={styles.cancelDurationBtn}
+              title="Cancel"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Middle Information: Due Date, Effort, & Timer Controls */}
       <div style={styles.middleMeta}>
         <div style={styles.dateEffortGroup}>
-          <span style={styles.dueDate}>📅 {formatDueDate(task.dueDate)}</span>
-          {task.estimatedEffort != null && (
-            <span style={styles.effortBadge}>⏱️ {task.estimatedEffort}h</span>
+          {/* Due date display or editor */}
+          {isRescheduling ? (
+            <div style={styles.inlineEditGroup} onClick={(e) => e.stopPropagation()}>
+              <input
+                type="date"
+                value={rescheduleDate}
+                onChange={(e) => setRescheduleDate(e.target.value)}
+                style={styles.datePickerInput}
+              />
+              <button type="button" onClick={handleSaveReschedule} style={styles.smallSaveBtn}>✓</button>
+              <button type="button" onClick={() => setIsRescheduling(false)} style={styles.smallCancelBtn}>✕</button>
+            </div>
+          ) : (
+            <span
+              style={styles.dueDate}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!task.completed) setIsRescheduling(true);
+              }}
+              title="Click to reschedule due date"
+            >
+              📅 {formatDueDate(task.dueDate)}
+            </span>
           )}
+
+          {/* Effort estimate display or editor */}
+          {isEditingEffort ? (
+            <div style={styles.inlineEditGroup} onClick={(e) => e.stopPropagation()}>
+              <input
+                type="number"
+                step="0.5"
+                min="0"
+                value={effortInput}
+                onChange={(e) => setEffortInput(e.target.value)}
+                placeholder="Hours"
+                style={styles.effortNumberInput}
+              />
+              <button type="button" onClick={handleSaveEffort} style={styles.smallSaveBtn}>✓</button>
+              <button type="button" onClick={() => setIsEditingEffort(false)} style={styles.smallCancelBtn}>✕</button>
+            </div>
+          ) : task.estimatedEffort != null ? (
+            <span
+              style={styles.effortBadge}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!task.completed) setIsEditingEffort(true);
+              }}
+              title="Click to edit estimated effort hours"
+            >
+              ⏱️ {task.estimatedEffort}h
+            </span>
+          ) : !task.completed ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsEditingEffort(true);
+              }}
+              style={styles.addEffortBtn}
+              title="Set estimated effort"
+            >
+              + effort
+            </button>
+          ) : null}
         </div>
-        <span className="note-tag" style={{ color: theme.textColor }}>
-          {theme.noteTag}
-        </span>
+
+        {/* Stopwatch Timer Control Button */}
+        {!task.completed && (
+          <div style={styles.timerControlWrap} onClick={(e) => e.stopPropagation()}>
+            {isTimerRunning ? (
+              <button
+                type="button"
+                onClick={() => onPauseTimer && onPauseTimer(task.id)}
+                style={styles.timerActiveBtn}
+                title="Pause active stopwatch"
+              >
+                <span style={styles.pulsingDot} />
+                <span>⏸ {formatDuration(liveSeconds)}</span>
+              </button>
+            ) : isTimerPaused ? (
+              <button
+                type="button"
+                onClick={() => onStartTimer && onStartTimer(task.id)}
+                style={styles.timerPausedBtn}
+                title="Resume working timer"
+              >
+                <span>▶ {formatDuration(liveSeconds)}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onStartTimer && onStartTimer(task.id)}
+                style={styles.timerIdleBtn}
+                title="Start working stopwatch for this task"
+              >
+                <span>▶ Timer</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Completed Task Duration Label */}
+        {task.completed && (task.trackedDurationSeconds || task.selfReportedDurationSeconds) && (
+          <span style={styles.completedDurationBadge}>
+            ⏱️ {formatDuration(task.trackedDurationSeconds || task.selfReportedDurationSeconds)}
+          </span>
+        )}
       </div>
 
       {/* Bottom Footer: Circled Risk Numeral with count-up */}
@@ -349,6 +633,19 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
+  },
+  reorderBtn: {
+    background: 'rgba(37, 36, 42, 0.05)',
+    border: 'none',
+    borderRadius: '4px',
+    color: '#706D73',
+    fontSize: '9px',
+    width: '22px',
+    height: '22px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   checkbox: {
     width: '26px',
@@ -437,6 +734,62 @@ const styles = {
     height: '24px',
     cursor: 'pointer',
   },
+  durationPromptBanner: {
+    backgroundColor: '#FFF9DB',
+    border: '1px solid #FFE58A',
+    borderRadius: '10px',
+    padding: '10px 14px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    fontSize: '12px',
+  },
+  durationPromptText: {
+    color: '#78350F',
+    fontWeight: '600',
+  },
+  durationInputRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    flexWrap: 'wrap',
+  },
+  durationInput: {
+    width: '100px',
+    padding: '4px 8px',
+    borderRadius: '6px',
+    border: '1px solid rgba(37, 36, 42, 0.2)',
+    fontSize: '12px',
+    outline: 'none',
+  },
+  saveDurationBtn: {
+    backgroundColor: '#25242A',
+    color: '#FFFFFF',
+    border: 'none',
+    borderRadius: '6px',
+    padding: '4px 10px',
+    fontSize: '11px',
+    fontWeight: '700',
+    cursor: 'pointer',
+  },
+  skipDurationBtn: {
+    backgroundColor: 'rgba(37, 36, 42, 0.08)',
+    color: '#4A4852',
+    border: 'none',
+    borderRadius: '6px',
+    padding: '4px 10px',
+    fontSize: '11px',
+    fontWeight: '600',
+    cursor: 'pointer',
+  },
+  cancelDurationBtn: {
+    background: 'transparent',
+    border: 'none',
+    color: '#706D73',
+    cursor: 'pointer',
+    fontSize: '12px',
+    padding: '0 4px',
+  },
   middleMeta: {
     display: 'flex',
     alignItems: 'center',
@@ -444,12 +797,54 @@ const styles = {
     fontSize: '12px',
     color: '#706D73',
     fontWeight: '500',
+    flexWrap: 'wrap',
+    gap: '8px',
   },
   dateEffortGroup: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
     flexWrap: 'wrap',
+  },
+  dueDate: {
+    fontSize: '12px',
+    cursor: 'pointer',
+  },
+  inlineEditGroup: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+  },
+  datePickerInput: {
+    fontSize: '11px',
+    padding: '2px 4px',
+    borderRadius: '4px',
+    border: '1px solid rgba(37, 36, 42, 0.2)',
+  },
+  effortNumberInput: {
+    width: '54px',
+    fontSize: '11px',
+    padding: '2px 4px',
+    borderRadius: '4px',
+    border: '1px solid rgba(37, 36, 42, 0.2)',
+  },
+  smallSaveBtn: {
+    backgroundColor: '#25242A',
+    color: '#FFFFFF',
+    border: 'none',
+    borderRadius: '4px',
+    fontSize: '10px',
+    padding: '2px 5px',
+    cursor: 'pointer',
+  },
+  smallCancelBtn: {
+    backgroundColor: 'rgba(37, 36, 42, 0.1)',
+    color: '#25242A',
+    border: 'none',
+    borderRadius: '4px',
+    fontSize: '10px',
+    padding: '2px 5px',
+    cursor: 'pointer',
   },
   effortBadge: {
     fontFamily: "'JetBrains Mono', monospace",
@@ -459,9 +854,69 @@ const styles = {
     backgroundColor: 'rgba(37, 36, 42, 0.05)',
     padding: '2px 6px',
     borderRadius: '4px',
+    cursor: 'pointer',
   },
-  dueDate: {
-    fontSize: '12px',
+  addEffortBtn: {
+    border: '1px dashed rgba(37, 36, 42, 0.2)',
+    background: 'transparent',
+    color: '#706D73',
+    borderRadius: '4px',
+    fontSize: '10px',
+    padding: '2px 6px',
+    cursor: 'pointer',
+  },
+  timerControlWrap: {
+    display: 'flex',
+    alignItems: 'center',
+  },
+  timerActiveBtn: {
+    backgroundColor: '#FFEFEA',
+    border: '1px solid #FF8F82',
+    color: '#D9483B',
+    borderRadius: '9999px',
+    padding: '3px 10px',
+    fontSize: '11px',
+    fontWeight: '700',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '5px',
+    cursor: 'pointer',
+  },
+  pulsingDot: {
+    width: '6px',
+    height: '6px',
+    backgroundColor: '#D9483B',
+    borderRadius: '50%',
+    display: 'inline-block',
+  },
+  timerPausedBtn: {
+    backgroundColor: '#FFF9DB',
+    border: '1px solid #FFE58A',
+    color: '#B45309',
+    borderRadius: '9999px',
+    padding: '3px 10px',
+    fontSize: '11px',
+    fontWeight: '700',
+    cursor: 'pointer',
+  },
+  timerIdleBtn: {
+    backgroundColor: 'rgba(37, 36, 42, 0.05)',
+    border: '1px solid rgba(37, 36, 42, 0.1)',
+    color: '#4A4852',
+    borderRadius: '9999px',
+    padding: '3px 9px',
+    fontSize: '11px',
+    fontWeight: '600',
+    cursor: 'pointer',
+  },
+  completedDurationBadge: {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '11px',
+    fontWeight: '600',
+    color: '#27754E',
+    backgroundColor: '#EBF8F1',
+    padding: '2px 6px',
+    borderRadius: '4px',
   },
   pendingRow: {
     display: 'flex',

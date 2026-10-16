@@ -143,3 +143,61 @@ def test_api_batch_prediction():
     assert len(data["predictions"]) == 3
     assert data["predictions"][2]["probability"] == 0.0  # completed task
     assert 0.0 <= data["average_delay_probability"] <= 1.0
+
+
+def test_api_telemetry_batch_ingest_and_retrieval():
+    """Verify /api/telemetry/events accepts validated event batches, enforces profile isolation, and ignores duplicates."""
+    profile_id = "prof_test_py_user"
+    batch_payload = {
+        "events": [
+            {
+                "event_id": "evt_py_1",
+                "profile_id": profile_id,
+                "task_id": "task_1",
+                "event_type": "task_created",
+                "timestamp": "2026-10-16T12:00:00.000Z",
+                "schema_version": 1,
+                "payload": {"title": "Test Task 1", "priority": "high"}
+            },
+            {
+                "event_id": "evt_py_2",
+                "profile_id": profile_id,
+                "task_id": "task_1",
+                "event_type": "task_started",
+                "timestamp": "2026-10-16T12:05:00.000Z",
+                "schema_version": 1,
+                "payload": {"session_id": "sess_py_1"}
+            }
+        ]
+    }
+
+    # Ingest batch
+    res = client.post("/api/telemetry/events", json=batch_payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["accepted_count"] == 2
+    assert data["ignored_duplicates"] == 0
+
+    # Ingest duplicate batch
+    res_dup = client.post("/api/telemetry/events", json=batch_payload)
+    assert res_dup.status_code == 200
+    data_dup = res_dup.json()
+    assert data_dup["accepted_count"] == 0
+    assert data_dup["ignored_duplicates"] == 2
+
+    # Query events
+    res_get = client.get(f"/api/telemetry/events?profile_id={profile_id}")
+    assert res_get.status_code == 200
+    get_data = res_get.json()
+    assert get_data["count"] == 2
+    assert len(get_data["events"]) == 2
+
+    # Clear events
+    res_del = client.delete(f"/api/telemetry/events?profile_id={profile_id}")
+    assert res_del.status_code == 200
+    assert res_del.json()["status"] == "cleared"
+
+    # Query after clear
+    res_post_clear = client.get(f"/api/telemetry/events?profile_id={profile_id}")
+    assert res_post_clear.json()["count"] == 0
+

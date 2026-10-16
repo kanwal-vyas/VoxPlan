@@ -7,7 +7,7 @@ VoxPlan is being evolved from a student/sprint task tracker into an independent,
 
 ---
 
-## Current Architecture & System State (Phase 1)
+## Current Architecture & System State (Phase 2)
 
 ```
 BROWSER WEB SPEECH API / TEXT INPUT
@@ -16,18 +16,28 @@ BROWSER WEB SPEECH API / TEXT INPUT
                  ↓
 VOXPLAN COMMAND ENGINE (Deterministic NL Parser)
                  ↓
-REACT / VITE DASHBOARD (Client State & LocalStorage)
-     │                     │
+REACT / VITE DASHBOARD (Client State & Local-First Architecture)
+     │
      ├─ Dynamic Task Roadmap (Real User Tasks & Dates)
-     ├─ Dynamic Risk Visualizations
-     ├─ Browser Voice Dictation & Text Fallback
-     └─ Offline-Resilient Local State
-                 ↕ (HTTP REST, Optional Backend)
-FASTAPI ML BACKEND (scikit-learn Pipeline)
-     ├─ /api/model/status (Baseline Training State & Real Holdout Metrics)
+     ├─ Dynamic Risk Visualizations (Genuine Model Probabilities)
+     ├─ Interactive Stopwatch Timers (Start / Pause / Resume)
+     ├─ Behavioral History & Habit Insights (Section 04)
+     ├─ Offline-Resilient Local State (Tasks & Active Timers)
+     │
+     ↕ (IndexedDB: voxplan_db)
+LOCAL EVENT STORE & TELEMETRY ENGINE
+     ├─ Stable Profile Isolation (prof_<uuid>)
+     ├─ 11 Versioned Event Types (Schema v1)
+     ├─ Honest Duration Accounting (Tracked vs Self-Reported vs Unknown)
+     └─ Evidence-Based Behavioral Stats (Sparse-Data Guard < 3 tasks)
+     │
+     ↕ (HTTP REST, Optional Backend)
+FASTAPI ML BACKEND (scikit-learn Pipeline & Batch Endpoints)
+     ├─ /api/model/status (Baseline Training State & Holdout Metrics)
      ├─ /api/train (Fits RandomForest on Baseline Dataset)
      ├─ /api/predict/all (Batch Delay-Risk Probabilities)
-     └─ /api/feature-importance (Gini Feature Importances)
+     ├─ /api/feature-importance (Gini Feature Importances)
+     └─ /api/telemetry/events (Validated Batch Ingestion & History Query)
 ```
 
 ---
@@ -36,7 +46,7 @@ FASTAPI ML BACKEND (scikit-learn Pipeline)
 
 ### 1. Synthetic vs. User-Provided Data
 - **Synthetic Historical Dataset (`backend/ml/data_generator.py`)**: Used solely as a cold-start baseline to fit the initial Random Forest classifier (`backend/ml/train.py`). It models correlations between task effort, remaining calendar days, workload pressure, priority, and completion delays.
-- **User-Provided Tasks**: All tasks displayed in the task manager, the roadmap, and the sprint health overview are genuine user tasks entered manually or via voice commands, persisted in browser `localStorage`.
+- **User-Provided Tasks**: All tasks displayed in the task manager, the roadmap, and the sprint health overview are genuine user tasks entered manually or via voice commands, persisted in browser `localStorage` and `IndexedDB`.
 - **Illustrative UI Previews**: The Hero section contains explicitly labeled design previews for illustration.
 
 ### 2. Genuinely Measured Metrics vs. Unavailable States
@@ -45,14 +55,55 @@ FASTAPI ML BACKEND (scikit-learn Pipeline)
 - **Individual Task Explanations**: Contributing risk factors in the Task Explanation Modal are rule-based heuristic signals derived from deadline pressure, effort density, and task priority.
 
 ### 3. Backend Dependency & Offline Resilience
-- **Without Backend**: Full task management (creation, editing, completion, priority cycling, arbitrary calendar dates, deletion, filtering, and local persistence) and voice dictation work entirely offline in the browser. Task risk cards display an honest "Awaiting analysis" indicator.
-- **With Backend**: Connecting the FastAPI backend enables live delay-risk inference via `predict_proba()`, real-time sprint risk aggregation, and model training.
+- **Without Backend**: Full task management (creation, editing, completion, priority cycling, arbitrary calendar dates, deletion, filtering, local persistence, stopwatch duration tracking, and behavioral habit analytics) works entirely offline in the browser. Task risk cards display an honest "Awaiting analysis" indicator.
+- **With Backend**: Connecting the FastAPI backend enables live delay-risk inference via `predict_proba()`, real-time sprint risk aggregation, model training, and optional backend telemetry ingestion.
 
-### 4. Planned Personalization (Roadmap)
+### 4. Personalization Roadmap
 - **Phase 1 (Completed)**: Unified arbitrary date parsing, task schema normalization, complete de-mocking of metrics and demo fallbacks, dynamic task-risk visualizations, and browser Web Speech integration.
-- **Phase 2 (Next)**: Local SQLite database, behavioral event telemetry (capturing task completion times, reschedule counts, estimation accuracy), and real habit tracking.
-- **Phase 3**: Personalized hybrid model adapting baseline predictions to actual user velocity and working habits.
+- **Phase 2 (Completed)**: Local-first IndexedDB persistence, behavioral telemetry event schema (11 event types), stopwatch working duration vs. self-reported vs. unknown duration, inline reschedule/effort/reorder instrumentation, sparse-data honest behavioral statistics (< 3 completions), Behavioral History & Habit Insights UI panel with JSON export and history deletion, and automated test suite.
+- **Phase 3 (Next)**: Personalized hybrid model adapting baseline predictions to actual user velocity, completion latency, and estimation accuracy.
 - **Phase 4**: Adaptive scheduling assistant and optimal task calendar allocation.
+- **Phase 5**: Conversational planning dialog & debriefing.
+
+---
+
+## Personal Behavioral Telemetry & Durable Persistence (Phase 2)
+
+VoxPlan records how the user actually works to form the empirical foundation for Phase 3's personalized ML models.
+
+### 1. Persistence Architecture: Local-First IndexedDB
+- **Constraint**: VoxPlan's hosted backend runs on Render free-tier with ephemeral disks that reset every 15 minutes of inactivity. Storing user telemetry exclusively in a remote SQLite file would result in silent data loss and potential cross-user collision.
+- **Solution**: The primary source of truth for behavioral history is the browser's **IndexedDB** (`voxplan_db`), keyed by an anonymous client profile identifier (`prof_<uuid>`).
+- **Durability**: Telemetry survives browser refreshes, tab closures, offline sessions, and application restarts.
+- **Zero Lock-in & No Cloud Auth**: Operates with complete privacy without requiring account registration, cloud auth, or external paid databases.
+
+### 2. Versioned Behavioral Event Schema (`schema_version: 1`)
+Every user action is recorded as an immutable, validated event with UUID v4 identifier, stable profile ID, stable task ID, and ISO-8601 timestamp:
+- `task_created`: Initial task definition, priority, deadline, estimated effort.
+- `task_started`: Explicit stopwatch timer start timestamp and session ID.
+- `task_paused`: Stopwatch timer pause timestamp and elapsed session seconds.
+- `task_completed`: Task completion with explicit duration source (`tracked`, `self_reported`, or `unknown`).
+- `task_reopened`: Reopening of a completed task, safely updating completion metrics.
+- `task_rescheduled`: Due date change capturing previous and new deadlines.
+- `task_priority_changed`: Priority elevation or reduction with previous and new levels.
+- `task_effort_revised`: Effort adjustment with previous and new hours.
+- `task_reordered`: Manual drag or up/down task reordering capturing full order sequence.
+- `recommendation_accepted` / `recommendation_rejected`: User response to algorithmic suggestions.
+
+### 3. Honest Working Duration Accounting
+- **Tracked Stopwatch Duration**: Live stopwatch on task cards accumulates active focused working seconds across multiple sessions and persists across page reloads. Paused time is strictly excluded.
+- **Self-Reported Duration**: When completing a task without having run the stopwatch, users can optionally enter an approximate duration. This is explicitly labeled as `self_reported`.
+- **Unknown Duration**: Tasks completed without tracked or reported duration store `duration_source: 'unknown'` rather than fabricating 0 minutes.
+- **Wall-Clock Separation**: Elapsed calendar time is never conflated with active working duration.
+
+### 4. Transparent Behavioral Statistics & Sparse-Data Honesty
+- Computes completed task count, duration-measured count, median observed duration per task, categorical duration breakdowns, estimation accuracy ratios, and weekday velocity distributions.
+- **Sparse-Data Rule**: Requires at least **3 completed task observations** before presenting behavioral trends. When observations are fewer than 3, the UI returns an honest "insufficient data" state rather than premature conclusions.
+
+### 5. User Agency & Data Control
+- Users can inspect their complete behavioral profile in Section 04 of the dashboard.
+- **Export**: One-click download of all telemetry events as standard JSON.
+- **Clear History**: Double-confirmed permanent deletion of profile telemetry from IndexedDB without affecting active tasks.
 
 ---
 
@@ -89,6 +140,9 @@ FastAPI exposes interactive OpenAPI documentation at **`http://127.0.0.1:8000/do
 | `GET` | `/api/feature-importance` | Gini feature importances calculated from fitted trees |
 | `POST` | `/api/predict` | Single-task delay risk probability and contributing factors |
 | `POST` | `/api/predict/all` | Batch delay-risk predictions & sprint aggregate statistics |
+| `POST` | `/api/telemetry/events` | Ingests batch of behavioral telemetry events with deduplication |
+| `GET` | `/api/telemetry/events` | Retrieves stored telemetry events scoped by profile ID |
+| `DELETE` | `/api/telemetry/events` | Deletes stored telemetry events scoped by profile ID |
 
 ---
 
@@ -116,13 +170,21 @@ npm install
 npm run dev
 ```
 
-### 3. Run Backend Test Suite
+### 3. Run Automated Tests
 ```bash
+# Run Node.js telemetry test suite (14 unit tests)
+npm test
+
+# Run Python ML backend & date test suite (27 pytest tests)
 python -m pytest backend/tests/ -v
 ```
 
-### 4. Build Frontend for Production
+### 4. Build Frontend for Production & Lint
 ```bash
+# Fast linter check
+npm run lint
+
+# Compile production bundle
 npm run build
 ```
 
@@ -133,18 +195,18 @@ npm run build
 ```
 VoxPlan/
 ├── backend/
-│   ├── main.py                  # FastAPI application & REST endpoints
+│   ├── main.py                  # FastAPI application, REST endpoints & telemetry routes
 │   ├── requirements.txt         # Python dependencies
 │   ├── ml/
 │   │   ├── data_generator.py    # Synthetic historical dataset generator (baseline)
 │   │   ├── features.py          # Unified calendar date parsing & feature pipeline
 │   │   ├── train.py             # RandomForest training & test-split evaluation
 │   │   ├── predict.py           # Delay risk inference & rule-based factor signals
-│   │   └── model.py             # Pydantic schemas (TaskInput, TaskPrediction, etc.)
+│   │   └── model.py             # Pydantic schemas (TaskInput, TelemetryEventInput, etc.)
 │   ├── models/                  # Saved model artifacts (.joblib, metadata.json)
 │   └── tests/
 │       ├── test_date_handling.py # 18 tests for calendar date & timezone logic
-│       └── test_ml_backend.py   # FastAPI routes & ML pipeline test suite
+│       └── test_ml_backend.py   # 9 tests for FastAPI routes & telemetry ingestion
 │
 ├── src/
 │   ├── api/
@@ -152,15 +214,24 @@ VoxPlan/
 │   ├── components/
 │   │   ├── Header.jsx           # Top bar & live backend connectivity status
 │   │   ├── Hero.jsx             # Editorial typography & illustrative preview cards
-│   │   ├── CommandBar.jsx       # Browser Web Speech API & NL command parser
+│   │   ├── CommandBar.jsx       # Browser Web Speech API & NL command parser (Section 05)
 │   │   ├── ProjectOverview.jsx  # Dynamic task risk pathway & live sprint health
 │   │   ├── MLModelPanel.jsx     # Honest metrics, holdout confusion matrix, Gini bars
 │   │   ├── TaskList.jsx         # Task management controls & filterable list
-│   │   ├── TaskCard.jsx         # Task item with dynamic date & genuine ML risk pill
-│   │   └── TaskExplanationModal.jsx # Risk factor explanation modal
-│   ├── App.jsx                  # State orchestrator, localStorage migration & Web Speech
+│   │   ├── TaskCard.jsx         # Stopwatch timer, inline reschedule/effort/reorder, ML pill
+│   │   ├── TaskExplanationModal.jsx # Risk factor explanation modal
+│   │   └── BehavioralHistoryPanel.jsx # Behavioral habits, focus metrics & privacy (Section 04)
+│   ├── telemetry/
+│   │   ├── eventSchema.js       # Typed event schemas, UUID generator & validation
+│   │   ├── indexedDbStore.js    # Local-first IndexedDB store (voxplan_db) & fallback
+│   │   ├── behavioralStats.js   # Evidence-based stats calculation & sparse-data guard
+│   │   └── telemetryManager.js  # Profile ID manager, timer persistence & event logger
+│   ├── App.jsx                  # State orchestrator, telemetry integration & Web Speech
 │   ├── App.css                  # Highlighters, animations & typography styles
 │   └── main.jsx
+│
+├── tests/
+│   └── telemetry.test.js        # 14 unit tests for schema, IndexedDB, stats & timers
 │
 ├── voxplan_architecture_audit.md # Full architecture audit and transformation plan
 ├── PROJECT_PLAN.md              # Living implementation roadmap & phase tracking

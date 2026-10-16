@@ -6,11 +6,13 @@ import Hero from './components/Hero';
 import CommandBar from './components/CommandBar';
 import ProjectOverview from './components/ProjectOverview';
 import MLModelPanel from './components/MLModelPanel';
+import BehavioralHistoryPanel from './components/BehavioralHistoryPanel';
 import TaskList from './components/TaskList';
 import TaskExplanationModal from './components/TaskExplanationModal';
 import LoadingScreen from './components/LoadingScreen';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { initCinematicScrollStory } from './animations/scrollStory';
+import { telemetry } from './telemetry/telemetryManager';
 import {
   checkBackendHealth,
   getModelStatus,
@@ -164,6 +166,12 @@ export default function App() {
   const [activeFilter, setActiveFilter] = useState('all');
   const [feedback, setFeedback] = useState(null);
   const [isListening, setIsListening] = useState(false);
+  const [activeTimerState, setActiveTimerState] = useState(() => telemetry.getActiveTimer());
+
+  // Initialize persistent telemetry storage on mount
+  useEffect(() => {
+    telemetry.init();
+  }, []);
 
   // ML State (truthfully initialized to empty/untrained state, without fabricated metrics)
   const [isBackendOnline, setIsBackendOnline] = useState(false);
@@ -272,11 +280,20 @@ export default function App() {
 
   // Initial load: verify backend once on mount and gentle polling every 30s
   useEffect(() => {
-    refreshMLState();
+    let active = true;
+    const init = async () => {
+      if (active) await refreshMLState();
+    };
+    init();
     const interval = setInterval(() => {
-      checkBackendHealth().then((h) => setIsBackendOnline(h.online));
+      checkBackendHealth().then((h) => {
+        if (active) setIsBackendOnline(h.online);
+      });
     }, 30000);
-    return () => clearInterval(interval);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
   }, [refreshMLState]);
 
   // Whenever task list changes, refresh predictions automatically if model is trained
@@ -406,15 +423,87 @@ export default function App() {
     }
   };
 
-  // Task Operations
-  const toggleTaskCompletion = (taskId) => {
+  // Timer Controls
+  const handleStartTimer = async (taskId) => {
+    const newState = await telemetry.startTimer(taskId);
+    setActiveTimerState(newState);
+  };
+
+  const handlePauseTimer = async (taskId) => {
+    const updatedState = await telemetry.pauseTimer(taskId);
+    setActiveTimerState(updatedState);
+  };
+
+  // Task Operations with Telemetry Logging
+  const toggleTaskCompletion = async (taskId, durationInfo = {}) => {
+    const target = tasks.find((t) => t.id === taskId);
+    if (!target) return;
+
+    if (target.completed) {
+      // Reopen task
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, completed: false, completedAt: null } : t))
+      );
+      await telemetry.recordTaskReopened(taskId);
+      setFeedback({
+        type: 'info',
+        message: `Reopened task: "${target.title}"`,
+      });
+      return;
+    }
+
+    // Completing uncompleted task
+    let finalTrackedSec = null;
+    if (activeTimerState && activeTimerState.taskId === taskId) {
+      finalTrackedSec = await telemetry.stopTimer(taskId);
+      setActiveTimerState(null);
+    }
+
+    const trackedSec = durationInfo.durationSource === 'tracked'
+      ? (durationInfo.trackedDurationSeconds ?? finalTrackedSec ?? 0)
+      : (finalTrackedSec || 0);
+
+    const effectiveDurationInfo = {
+      durationSource: durationInfo.durationSource || (trackedSec > 0 ? 'tracked' : 'unknown'),
+      trackedDurationSeconds: trackedSec > 0 ? trackedSec : null,
+      selfReportedDurationSeconds: durationInfo.selfReportedDurationSeconds || null,
+    };
+
     setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, completed: !t.completed } : t))
+      prev.map((t) =>
+        t.id === taskId
+          ? {
+              ...t,
+              completed: true,
+              completedAt: new Date().toISOString(),
+              durationSource: effectiveDurationInfo.durationSource,
+              trackedDurationSeconds: effectiveDurationInfo.trackedDurationSeconds,
+              selfReportedDurationSeconds: effectiveDurationInfo.selfReportedDurationSeconds,
+            }
+          : t
+      )
     );
+
+    await telemetry.recordTaskCompleted(taskId, effectiveDurationInfo);
+
+    setFeedback({
+      type: 'success',
+      message: `Completed task: "${target.title}"${
+        effectiveDurationInfo.durationSource === 'tracked'
+          ? ` (${Math.round(effectiveDurationInfo.trackedDurationSeconds / 60)}m timed)`
+          : effectiveDurationInfo.durationSource === 'self_reported'
+          ? ` (${Math.round(effectiveDurationInfo.selfReportedDurationSeconds / 60)}m reported)`
+          : ''
+      }`,
+    });
   };
 
   const deleteTask = (taskId) => {
     const taskToDelete = tasks.find((t) => t.id === taskId);
+    if (activeTimerState && activeTimerState.taskId === taskId) {
+      telemetry.stopTimer(taskId);
+      setActiveTimerState(null);
+    }
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
     if (taskToDelete) {
       setFeedback({
@@ -430,11 +519,52 @@ export default function App() {
     );
   };
 
-  const cyclePriority = (taskId) => {
+  const cyclePriority = async (taskId) => {
+    const target = tasks.find((t) => t.id === taskId);
+    if (!target) return;
     const nextMap = { high: 'medium', medium: 'low', low: 'high' };
+    const nextPriority = nextMap[target.priority] || 'medium';
     setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, priority: nextMap[t.priority] || 'medium' } : t))
+      prev.map((t) => (t.id === taskId ? { ...t, priority: nextPriority } : t))
     );
+    await telemetry.recordTaskPriorityChanged(taskId, target.priority, nextPriority);
+  };
+
+  const handleReschedule = async (taskId, newDueDate) => {
+    const target = tasks.find((t) => t.id === taskId);
+    if (!target) return;
+    const prevDue = target.dueDate;
+    setTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? { ...t, dueDate: newDueDate } : t))
+    );
+    await telemetry.recordTaskRescheduled(taskId, prevDue, newDueDate, 'user_update');
+    setFeedback({
+      type: 'info',
+      message: `Rescheduled "${target.title}" to ${newDueDate || 'no deadline'}`,
+    });
+  };
+
+  const handleReviseEffort = async (taskId, newEffort) => {
+    const target = tasks.find((t) => t.id === taskId);
+    if (!target) return;
+    const prevEffort = target.estimatedEffort;
+    setTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? { ...t, estimatedEffort: newEffort } : t))
+    );
+    await telemetry.recordTaskEffortRevised(taskId, prevEffort, newEffort);
+    setFeedback({
+      type: 'info',
+      message: `Updated effort estimate for "${target.title}" to ${newEffort}h`,
+    });
+  };
+
+  const handleMoveTask = async (fromIndex, toIndex) => {
+    if (fromIndex < 0 || fromIndex >= tasks.length || toIndex < 0 || toIndex >= tasks.length) return;
+    const copy = [...tasks];
+    const [moved] = copy.splice(fromIndex, 1);
+    copy.splice(toIndex, 0, moved);
+    setTasks(copy);
+    await telemetry.recordTaskReordered(moved.id, fromIndex, toIndex, copy.map((t) => t.id));
   };
 
   const findTaskByName = (taskList, query) => {
@@ -475,6 +605,7 @@ export default function App() {
     if (/^(?:show|filter|find|list|view)\s+(?:me\s+)?(?:the\s+)?(?:highest\s+risk|high\s+risk|delayed|at\s*risk)\s*(?:tasks?)?$/i.test(text) ||
         /^(?:which\s+tasks?\s+are\s+(?:most\s+likely\s+to\s+be\s+delayed|at\s+(?:the\s+)?highest\s+risk))$/i.test(text)) {
       setActiveFilter('high-risk');
+      telemetry.recordRecommendationAction('high_risk_filter', 'filter_cmd', true);
       setFeedback({
         type: 'success',
         message: 'Filtered view to highest delay-risk tasks.',
@@ -698,6 +829,7 @@ export default function App() {
       };
 
       setTasks((prev) => [newTask, ...prev]);
+      telemetry.recordTaskCreated(newTask);
       setFeedback({
         type: 'success',
         message: `Created task: "${rawTitle}"${dueDate ? ` (Due: ${dueDate})` : ''}`,
@@ -882,6 +1014,13 @@ export default function App() {
           onDelete={deleteTask}
           onUpdateTitle={updateTaskTitle}
           onCyclePriority={cyclePriority}
+          onReschedule={handleReschedule}
+          onReviseEffort={handleReviseEffort}
+          onMoveUp={(index) => handleMoveTask(index, index - 1)}
+          onMoveDown={(index) => handleMoveTask(index, index + 1)}
+          activeTimerState={activeTimerState}
+          onStartTimer={handleStartTimer}
+          onPauseTimer={handlePauseTimer}
           onOpenExplanation={(task, pred) => setSelectedTaskExplanation({ task, pred })}
         />
 
@@ -903,10 +1042,18 @@ export default function App() {
 
         {/* Giant Editorial Typography Ribbon 4 */}
         <div className="editorial-ribbon-wrap" aria-hidden="true">
+          <span className="editorial-ribbon-word">REFLECT</span>
+        </div>
+
+        {/* Section 04: Behavioral Telemetry & Habit Insights */}
+        <BehavioralHistoryPanel tasks={tasks} />
+
+        {/* Giant Editorial Typography Ribbon 5 */}
+        <div className="editorial-ribbon-wrap" aria-hidden="true">
           <span className="editorial-ribbon-word">ACT</span>
         </div>
 
-        {/* Section 04: Command Center (Soft Peach Notebook Assistant) */}
+        {/* Section 05: Command Center (Soft Peach Notebook Assistant) */}
         <CommandBar
           onExecuteCommand={executeCommand}
           feedback={feedback}

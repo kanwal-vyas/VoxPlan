@@ -102,3 +102,24 @@ class ModelStatusResponse(BaseModel):
     n_val_samples: Optional[int] = None
     trained_at: Optional[str] = None
     message: Optional[str] = None
+
+
+class TelemetryEventInput(BaseModel):
+    event_id: str
+    profile_id: str
+    task_id: Optional[str] = None
+    event_type: str
+    timestamp: str
+    schema_version: int = 1
+    payload: Dict[str, Any] = Field(default_factory=dict)
+
+
+class TelemetryBatchRequest(BaseModel):
+    events: List[TelemetryEventInput]
+
+
+class TelemetryBatchResponse(BaseModel):
+    accepted_count: int
+    ignored_duplicates: int
+    status: str = "ok"
+

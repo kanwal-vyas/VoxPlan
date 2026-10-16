@@ -18,7 +18,7 @@
   "n_train_samples": 240,
   "n_val_samples": 60,
   "total_samples": 300,
-  "trained_at": "2026-10-16T09:14:08.603514",
+  "trained_at": "2026-10-16T09:41:30.512484",
   "feature_importances": [
     {
       "feature": "deadline_pressure",
