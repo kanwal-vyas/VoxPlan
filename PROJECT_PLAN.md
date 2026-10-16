@@ -13,7 +13,8 @@ This document tracks the phased evolution of VoxPlan from a static task tracker 
 | **Phase 3, Stage 1** | Telemetry Repair & Personal Duration Estimation | **COMPLETED** | Shared task lifecycle engine (`taskLifecycle.js`), active stopwatch finalization, command-bar completion/reopening convergence, idempotent telemetry, local-first Personal Duration Estimator (`personalModel.js`) with weighted median and empirical Bayesian shrinkage ($K = 3.0$), dual duration badges on task cards, cold-start and uncertainty tiers. |
 | **Phase 3, Stage 2** | Personal Model Dashboard & Evaluation | **COMPLETED** | Personal Model Dashboard (`PersonalModelDashboard.jsx`), sample weight transparency, Bayesian shrinkage formula explainer, leak-free chronological walk-forward holdout evaluation (`evaluatePersonalDurationModel`), MAE/MdAPE baseline comparison, and honest cold-start states. |
 | **Phase 3, Stage 3** | Hybrid Completion-Risk Personalization | **COMPLETED** | Guarded hybrid completion-risk estimator (`personalRiskModel.js`), hardened evaluation guard (min 3 train, min 5 held-out, 8 total tasks), leakage protection, bounded adjustments ($\pm 15\%$), confidence shrinkage ($W / (W+5.0)$), transparent explainability modal, and 53 automated unit tests. |
-| **Phase 4** | Adaptive Scheduling & Workload Optimization | Next Up | Workload density balancing, time-of-day affinity scheduling, dependency graph resolution, proactive bottleneck notifications. |
+| **Phase 4, Stage 1** | Adaptive Scheduling Foundations | **COMPLETED** | Standalone deterministic local-first scheduling engine (`src/scheduler/adaptiveScheduler.js`), dependency DAG analysis with cycle detection, personalized duration integration with cold-start fallbacks, daily working-hour capacity bin-packing, weekend rollover, proposal review modal (`AdaptiveScheduleModal.jsx`), safe approval flow, non-destructive diffs, and 19 unit tests (72 tests total). |
+| **Phase 4, Stage 2** | Workload Balancing & Sprint Optimization | Next Up | Interactive drag-and-drop slot reallocation, multi-sprint horizon planning, fine-grained calendar capacity overrides, and bottleneck notifications. |
 | **Phase 5** | Voice & Conversational Planning Experience | Planned | Rich multi-turn planning dialog, schedule rescheduling commands, review debriefing via natural language. |
 
 ---
@@ -480,11 +481,103 @@ A comprehensive audit of locally recorded telemetry schemas was performed to ide
 
 ---
 
-### Known Limitations & Phase 4 Plan
-
+### Known Limitations & Prior State
 1. **Classification vs. Heuristic Adjustment**: The baseline Random Forest remains a generic supervised model trained on synthetic data. The personal risk layer does not re-train the decision forest on personal tasks; it applies mathematically bounded Bayesian shrinkage to adjust baseline probabilities.
-2. **Next Stage (Phase 4: Adaptive Scheduling & Workload Optimization)**:
-   - Use personalized duration distributions ($D_{pred} \pm \sigma$) and guarded completion risk to balance workload across sprint calendars.
-   - Proactively detect overcommitted days and recommend optimal, low-friction task resequencing based on personal velocity.
+
+---
+
+## Phase 4, Stage 1 Execution Record: Adaptive Scheduling Foundations
+
+### Objective
+Design and implement a deterministic, local-first adaptive scheduling engine for VoxPlan that transforms static task lists into an evidence-based calendar proposal, respecting user-configured working hours, hard deadlines, supported task dependencies, personalized duration estimates, and guarded completion-risk heuristics without ever silently mutating user data or claiming impossible feasibility.
+
+### Architecture & Engine Implementation
+
+#### 1. Input Auditing & Fallback Matrix
+Every input parameter to the scheduling engine is rigorously audited:
+
+| Input Parameter | Source | Type / Unit | Limitation / Failure Case | Fallback Strategy |
+|---|---|---|---|---|
+| `task.dueDate` | User input | ISO `YYYY-MM-DD` | Missing or invalid date string | Allowed: scheduled in current open slot after urgent/due tasks; marked with `placementStatus: 'on_time'` and explanation. |
+| `task.estimatedEffort` | User input | Hours (float) | Missing, non-numeric, $\le 0$ | Neutral fallback to `DEFAULT_TASK_FALLBACK_HOURS = 1.0h`; warning flag attached to placement. |
+| `personalDurationModel` | `personalModel.js` | Local model object | Untrained ($W < 3.0$), cold start, or missing category | Transparent fallback to user's original `estimatedEffort`; source tagged as `'cold_start_original'`. |
+| `task.dependencies` | User input | Array of `taskId` strings | Circular dependencies or missing parent IDs | Completed parents ignored; missing parents logged; circular cycles detected via DFS 3-color coloring and broken safely. |
+| `task.priority` | User input | `'high'`, `'medium'`, `'low'` | Unknown/malformed priority string | Defaults to `'medium'` weight ($200$ pts). |
+| `guardedPredictionsMap` | `personalRiskModel.js` | Map of probability objects | Untrained backend / no prediction | Secondary heuristic only: neutral $0$ pts adjustment, zero degradation of core constraint solving. |
+| `dailyCapacityHours` | User setting | Hours (default $6.0$h) | $\le 0$ or extreme value | Clamped/defaulted to $6.0$h; oversized single tasks allocate full day with capacity-exceeded warning. |
+| `workingDays` | User setting | Array of ints ($0-6$) | Weekend or non-working day | Default weekdays $[1, 2, 3, 4, 5]$; weekend slots are skipped and tasks roll over into next working day. |
+| `horizonDays` | User setting | Days (default $14$) | Horizon capacity exhausted | Infeasible tasks marked `placementStatus: 'unscheduled'`, `proposedDate: null`, and explicit explanation provided. |
+
+#### 2. Prioritization & Ordering Rules
+Tasks are prioritized deterministically using a transparent scoring function (`calculateTaskPriorityScore`):
+1. **Topological Dependency Depth**: Tasks at depth 0 (no prerequisites) are prioritized so that downstream dependent tasks can be scheduled without violation.
+2. **Overdue Urgency**: Tasks with deadlines already in the past receive maximum urgency boost ($+5000$ pts).
+3. **Earliest Deadline First (EDF)**: Shorter calendar windows to deadline receive higher priority ($+1000 \times (1 - \text{daysRemaining}/30)$).
+4. **Task Priority**: `high` ($+300$ pts) $>$ `medium` ($+200$ pts) $>$ `low` ($+100$ pts).
+5. **Guarded Delay Risk Heuristic**: Tasks with $P_{\text{delay}} \ge 0.65$ receive $+60$ pts boost to pull them forward in the sprint, mitigating late-sprint risk.
+6. **Deterministic Tie-Breaker**: Pure string comparison on `taskId` guarantees 100% identical ordering across identical inputs.
+
+#### 3. Capacity Bin-Packing & Calendar Allocation
+- Pure function `generateAdaptiveSchedule(tasks, options)`:
+  - Zero mutations to input tasks or options.
+  - Builds calendar day slots skipping non-working days.
+  - Sequential bin-packing fills each day up to `dailyCapacityHours`.
+  - When a task exceeds remaining day hours, it rolls over to the next working day.
+  - If a task exceeds the entire daily capacity, it takes an entire day slot as dedicated focus and records a `capacity_exceeded` conflict warning.
+  - If the planning horizon is exhausted, unscheduled tasks are flagged with `placementStatus: 'unscheduled'` without silently discarding them.
+  - Computes global feasibility status: `'feasible'`, `'infeasible_deadlines'`, `'capacity_exceeded'`, or `'dependency_cycle'`.
+
+#### 4. Safe Proposal & User Control Workflow
+- **File**: `src/components/AdaptiveScheduleModal.jsx` (NEW)
+  - Interactive pastel-themed proposal modal with brut-pastel shadows.
+  - Header displays Feasibility Status Badge and Learned Pace active badge.
+  - Interactive configuration bar: adjustable daily working hours ($1-16$h), planning horizon ($7, 14, 21, 30$ days), and toggle between Learned Personal Duration vs. Original Cold-Start effort.
+  - Metrics overview ribbon: Tasks scheduled ($X/Y$), proposed date shifts ($N$), deadline warnings ($M$), and capacity utilization ($U\%$).
+  - Placements table: shows title, priority, category, original due date, proposed due date (highlighted if shifted), effective hours with duration source tag, placement status, and detailed conflict/placement rationale.
+  - Dual action controls:
+    - **Apply Schedule**: Performs non-destructive batch update of `tasks` state; records individual `task_rescheduled` telemetry events with `reason: 'adaptive_scheduler'`; records `recommendation_accepted` event; displays success feedback.
+    - **Discard Proposal**: Leaves current tasks completely untouched; closes modal.
+- **File**: `src/components/ProjectOverview.jsx`
+  - Added "✦ Adaptive Schedule" button in sprint progression header alongside "Run predictions".
+- **File**: `src/App.jsx`
+  - Integrated `isScheduleModalOpen` state and `handleApplySchedule`.
+  - Added natural language command triggers: `"plan sprint"`, `"adaptive schedule"`, `"schedule sprint"`, `"open scheduler"`.
+
+#### 5. Automated Test Suite
+- **File**: `tests/adaptive_scheduler.test.js` (NEW)
+  - 19 automated tests across 7 suites:
+    1. Deterministic output & immutability guarantee.
+    2. Personalized duration model integration vs. cold-start fallback.
+    3. Missing / zero effort fallback handling.
+    4. Dependency ordering and topological chain constraint respect.
+    5. Circular dependency detection and safe cycle breaking without crashing.
+    6. Non-working day skipping (weekend rollover) and oversized task focus allocation.
+    7. Deadline conflict reporting (days delayed), overdue task recovery, and horizon capacity exhaustion.
+    8. ISO date utilities (`formatDateISO`, `parseDateISO`, `addDaysISO`, `isWorkingDay`).
+    9. Core engine primitives (`buildCalendarSlots`, `analyzeTaskDependencies`, `calculateTaskPriorityScore`, and default constants).
+
+---
+
+### Verification Results
+
+1. **Frontend Test Suite**: `npm test`
+   - **72 tests passing across 15 suites** (0 failures, 116ms duration).
+2. **Frontend Linter**: `npm run lint` (`oxlint`)
+   - **0 errors, 0 warnings** across 28 files.
+3. **Production Build**: `npm run build` (`vite build`)
+   - Successfully generated production bundle in 223ms (`dist/assets/index-BGAb9vnp.js`, 450.03 kB / 133.17 kB gzip).
+4. **Backend Pytest Suite**: `python -m pytest backend/tests/ -v`
+   - **27 tests passing** (18 date handling tests, 9 ML & API tests).
+
+---
+
+### Known Limitations & Phase 4, Stage 2 Plan
+
+1. **Continuous Time & Intraday Slots**: The engine operates at day-level granularity (hours per day) rather than specific clock-time blocks (e.g. 10:00 AM - 12:00 PM).
+2. **Splitting Large Tasks**: Single tasks exceeding daily capacity are currently scheduled as dedicated single-day focus blocks rather than split into sub-tasks.
+3. **Next Stage (Phase 4, Stage 2: Workload Balancing & Sprint Optimization)**:
+   - Interactive calendar heatmaps showing daily capacity utilization.
+   - User drag-and-drop manual adjustments to proposed schedule slots before applying.
+   - Fine-grained working calendar overrides (holidays, personal days off).
 
 

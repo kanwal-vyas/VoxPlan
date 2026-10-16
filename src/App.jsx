@@ -10,6 +10,7 @@ import BehavioralHistoryPanel from './components/BehavioralHistoryPanel';
 import PersonalModelDashboard from './components/PersonalModelDashboard';
 import TaskList from './components/TaskList';
 import TaskExplanationModal from './components/TaskExplanationModal';
+import AdaptiveScheduleModal from './components/AdaptiveScheduleModal';
 import LoadingScreen from './components/LoadingScreen';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { telemetry } from './telemetry/telemetryManager';
@@ -227,6 +228,7 @@ export default function App() {
   const [trainingStep, setTrainingStep] = useState('');
   const [isPredicting, setIsPredicting] = useState(false);
   const [selectedTaskExplanation, setSelectedTaskExplanation] = useState(null);
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
 
   const mlPanelRef = useRef(null);
   const gsapCleanupRef = useRef(null);
@@ -599,6 +601,42 @@ export default function App() {
     });
   };
 
+  const handleApplySchedule = async (proposal) => {
+    if (!proposal || !proposal.placements) return;
+    const changedPlacements = proposal.placements.filter((p) => p.isDateChanged && p.proposedDate);
+    if (changedPlacements.length === 0) {
+      setFeedback({
+        type: 'info',
+        message: 'No date changes to apply from proposal.',
+      });
+      return;
+    }
+
+    const changedMap = new Map(changedPlacements.map((p) => [p.taskId, p.proposedDate]));
+    setTasks((prev) =>
+      prev.map((t) => {
+        if (changedMap.has(t.id)) {
+          return { ...t, dueDate: changedMap.get(t.id) };
+        }
+        return t;
+      })
+    );
+
+    for (const p of changedPlacements) {
+      await telemetry.recordTaskRescheduled(p.taskId, p.originalDueDate, p.proposedDate, 'adaptive_scheduler');
+    }
+
+    await telemetry.recordRecommendationAction('adaptive_schedule', proposal.summary?.scheduleId || 'proposal', true, {
+      changesCount: changedPlacements.length,
+      feasibility: proposal.summary?.feasibility,
+    });
+
+    setFeedback({
+      type: 'success',
+      message: `Applied adaptive schedule: ${changedPlacements.length} task deadline${changedPlacements.length === 1 ? '' : 's'} updated.`,
+    });
+  };
+
   const handleReviseEffort = async (taskId, newEffort) => {
     const target = tasks.find((t) => t.id === taskId);
     if (!target) return;
@@ -653,6 +691,16 @@ export default function App() {
     // 2. ML Command: Predict delay risk / Run predictions
     if (/^(?:predict|run\s+predictions?|analyze\s+(?:project\s+)?risk|compute\s+risk|check\s+delays?)$/i.test(text)) {
       handleRunPredictions();
+      return;
+    }
+
+    // 2b. Scheduler Command: Open Adaptive Sprint Scheduler
+    if (/^(?:plan\s+sprint|adaptive\s+schedule|schedule\s+sprint|open\s+scheduler|suggest\s+schedule)$/i.test(text)) {
+      setIsScheduleModalOpen(true);
+      setFeedback({
+        type: 'info',
+        message: 'Opening Adaptive Sprint Scheduler proposal...',
+      });
       return;
     }
 
@@ -1038,6 +1086,7 @@ export default function App() {
           progressPercent={progressPercent}
           riskStats={effectiveRiskStats}
           onRunPredictions={handleRunPredictions}
+          onOpenScheduleModal={() => setIsScheduleModalOpen(true)}
           isPredicting={isPredicting}
           modelStatus={modelStatus}
         />
@@ -1131,6 +1180,16 @@ export default function App() {
           onClose={() => setSelectedTaskExplanation(null)}
         />
       )}
+
+      {/* Adaptive Sprint Proposal Modal */}
+      <AdaptiveScheduleModal
+        isOpen={isScheduleModalOpen}
+        tasks={tasks}
+        personalDurationModel={personalDurationModel}
+        guardedPredictionsMap={guardedPredictionsMap}
+        onClose={() => setIsScheduleModalOpen(false)}
+        onApplySchedule={handleApplySchedule}
+      />
     </div>
   );
 }

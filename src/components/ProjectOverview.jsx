@@ -8,6 +8,7 @@ export default function ProjectOverview({
   progressPercent,
   riskStats,
   onRunPredictions,
+  onOpenScheduleModal,
   isPredicting,
   modelStatus,
 }) {
@@ -67,27 +68,41 @@ export default function ProjectOverview({
             </h2>
           </div>
 
-          <button
-            type="button"
-            onClick={onRunPredictions}
-            disabled={isPredicting || !isTrained}
-            style={{
-              ...styles.analyzeBtn,
-              ...((!isTrained || isPredicting) ? styles.analyzeBtnDisabled : {}),
-            }}
-          >
-            {isPredicting ? (
-              <>
-                <span style={styles.spinner} />
-                <span>Evaluating risk...</span>
-              </>
-            ) : (
-              <>
-                <span>Run predictions</span>
-                <span>→</span>
-              </>
+          <div style={styles.actionGroup}>
+            {onOpenScheduleModal && (
+              <button
+                type="button"
+                onClick={onOpenScheduleModal}
+                style={styles.scheduleBtn}
+                title="Open Adaptive Sprint Scheduler"
+              >
+                <span>✦</span>
+                <span>Adaptive Schedule</span>
+              </button>
             )}
-          </button>
+
+            <button
+              type="button"
+              onClick={onRunPredictions}
+              disabled={isPredicting || !isTrained}
+              style={{
+                ...styles.analyzeBtn,
+                ...((!isTrained || isPredicting) ? styles.analyzeBtnDisabled : {}),
+              }}
+            >
+              {isPredicting ? (
+                <>
+                  <span style={styles.spinner} />
+                  <span>Evaluating risk...</span>
+                </>
+              ) : (
+                <>
+                  <span>Run predictions</span>
+                  <span>→</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Big Progress & Timeline Layout */}
@@ -268,6 +283,28 @@ const styles = {
     color: '#25242A',
     letterSpacing: '-0.02em',
     margin: 0,
+  },
+  actionGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    flexWrap: 'wrap',
+  },
+  scheduleBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    backgroundColor: '#FFF8EF',
+    color: '#25242A',
+    border: '1.5px solid #25242A',
+    boxShadow: '2px 2px 0px #25242A',
+    padding: '9px 18px',
+    borderRadius: '9999px',
+    fontSize: '13px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'transform 0.1s ease',
   },
   analyzeBtn: {
     display: 'inline-flex',

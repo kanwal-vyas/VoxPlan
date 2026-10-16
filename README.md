@@ -7,7 +7,7 @@ VoxPlan is being evolved from a student/sprint task tracker into an independent,
 
 ---
 
-## Current Architecture & System State (Phase 3, Stage 3)
+## Current Architecture & System State (Phase 4, Stage 1)
 
 ```
 BROWSER WEB SPEECH API / TEXT INPUT
@@ -29,6 +29,7 @@ REACT / VITE DASHBOARD (Client State & Local-First Architecture)
      ├─ Interactive Stopwatch Timers (Start / Pause / Resume)
      ├─ Behavioral History & Habit Insights (Section 04)
      ├─ Personal Estimation Model & Evaluation Dashboard (Section 05)
+     ├─ Adaptive Sprint Proposal Modal (AdaptiveScheduleModal.jsx)
      ├─ Task Explanation Modal with Personalization Transparency Card
      ├─ Offline-Resilient Local State (Tasks & Active Timers)
      │
@@ -44,6 +45,11 @@ LOCAL EVENT STORE & PERSONAL AI ENGINES
      │   ├─ Audited signals: Postponements (+5%/+10%), Bias Stress (+6%/-4%), Reopening (+5%)
      │   ├─ Strict bounds: clamped to ±15% with Bayesian shrinkage W / (W + 5.0)
      │   └─ Leakage protection: zero target leakage, strict timestamp <= asOfTime
+     ├─ Deterministic Adaptive Scheduler (src/scheduler/adaptiveScheduler.js)
+     │   ├─ Topological dependency DAG resolution & cycle detection
+     │   ├─ Earliest Deadline First (EDF) + priority + delay-risk heuristics
+     │   ├─ Daily working-hour capacity bin-packing & weekend rollover
+     │   └─ Safe proposal flow: non-destructive review before applying
      └─ Evidence-Based Behavioral Stats (Sparse-Data Guard < 3 tasks)
      │
      ↕ (HTTP REST, Optional Backend)
@@ -71,7 +77,7 @@ FASTAPI ML BACKEND (scikit-learn Pipeline & Batch Endpoints)
 - **Individual Task Explanations**: Contributing risk factors in the Task Explanation Modal disclose synthetic baseline probability vs. personal adjustments, applied signals, and fallback reasons.
 
 ### 3. Backend Dependency & Offline Resilience
-- **Without Backend**: Full task management (creation, editing, completion, priority cycling, arbitrary calendar dates, deletion, filtering, local persistence, stopwatch duration tracking, and behavioral habit analytics) works entirely offline in the browser. Task risk cards display an honest "Awaiting analysis" indicator.
+- **Without Backend**: Full task management (creation, editing, completion, priority cycling, arbitrary calendar dates, deletion, filtering, local persistence, stopwatch duration tracking, behavioral habit analytics, and deterministic adaptive scheduling) works entirely offline in the browser. Task risk cards display an honest "Awaiting analysis" indicator.
 - **With Backend**: Connecting the FastAPI backend enables live delay-risk inference via `predict_proba()`, real-time sprint risk aggregation, model training, and optional backend telemetry ingestion.
 
 ### 4. Personalization Roadmap
@@ -80,7 +86,8 @@ FASTAPI ML BACKEND (scikit-learn Pipeline & Batch Endpoints)
 - **Phase 3, Stage 1 (Completed)**: Telemetry repair (command-bar lifecycle convergence, active timer finalization, idempotency) & transparent, local-first Personal Duration Estimator (`personalModel.js`) using weighted median and empirical Bayesian shrinkage toward 1.0. Dual duration badges on task cards.
 - **Phase 3, Stage 2 (Completed)**: Personal Model Dashboard (`PersonalModelDashboard.jsx`), sample weight transparency, Bayesian shrinkage formula explainer, leak-free chronological walk-forward holdout evaluation (`evaluatePersonalDurationModel`), MAE/MdAPE baseline comparison, and honest cold-start states.
 - **Phase 3, Stage 3 (Completed)**: Guarded personal completion-risk estimation (`personalRiskModel.js`), hardened evaluation guard ($N \ge 8$), bounded personal probability shifts ($\pm 15\%$), Bayesian confidence shrinkage, and explainability modal transparency card.
-- **Phase 4 (Next)**: Adaptive scheduling assistant, bottleneck detection, and optimal calendar allocation.
+- **Phase 4, Stage 1 (Completed)**: Deterministic Adaptive Scheduling Engine (`src/scheduler/adaptiveScheduler.js`), topological DAG analysis with cycle detection, personalized duration model integration with cold-start fallbacks, daily working-hour capacity bin-packing, weekend rollover, proposal review modal (`AdaptiveScheduleModal.jsx`), safe approval flow, non-destructive diffs, and 19 unit tests (72 tests total).
+- **Phase 4, Stage 2 (Next)**: Workload balancing & sprint optimization: interactive slot re-allocation, calendar capacity overrides, and bottleneck notifications.
 - **Phase 5**: Conversational planning dialog & debriefing.
 
 ---
@@ -301,14 +308,17 @@ VoxPlan/
 │   ├── components/
 │   │   ├── Header.jsx           # Top bar & live backend connectivity status
 │   │   ├── Hero.jsx             # Editorial typography & illustrative preview cards
-│   │   ├── CommandBar.jsx       # Browser Web Speech API & NL command parser (Section 05)
-│   │   ├── ProjectOverview.jsx  # Dynamic task risk pathway & live sprint health
+│   │   ├── CommandBar.jsx       # Browser Web Speech API & NL command parser (Section 06)
+│   │   ├── ProjectOverview.jsx  # Dynamic task risk pathway, live sprint health & scheduler trigger
 │   │   ├── MLModelPanel.jsx     # Honest metrics, holdout confusion matrix, Gini bars
 │   │   ├── TaskList.jsx         # Task management controls & filterable list
 │   │   ├── TaskCard.jsx         # Stopwatch timer, inline reschedule/effort/reorder, ML pill
 │   │   ├── TaskExplanationModal.jsx # Risk factor & personalization transparency modal
+│   │   ├── AdaptiveScheduleModal.jsx # Adaptive sprint schedule proposal review & configuration
 │   │   ├── BehavioralHistoryPanel.jsx # Behavioral habits, focus metrics & privacy (Section 04)
 │   │   └── PersonalModelDashboard.jsx # Personal duration & risk model dashboard (Section 05)
+│   ├── scheduler/
+│   │   └── adaptiveScheduler.js # Deterministic local-first scheduling engine & DAG resolver
 │   ├── telemetry/
 │   │   ├── eventSchema.js       # Typed event schemas, UUID generator & validation
 │   │   ├── indexedDbStore.js    # Local-first IndexedDB store (voxplan_db) & fallback
@@ -318,14 +328,34 @@ VoxPlan/
 │   │   ├── personalRiskModel.js # Guarded hybrid completion-risk personalization
 │   │   └── telemetryManager.js  # Profile ID manager, timer persistence & event logger
 │   ├── App.jsx                  # State orchestrator, telemetry integration & Web Speech
-│   ├── App.css                  # Highlighters, animations & typography styles
-│   └── main.jsx
+│   │   ├── App.css              # Highlighters, animations & typography styles
+│   │   └── main.jsx
 │
 ├── tests/
-│   ├── telemetry.test.js        # 14 unit tests for schema, IndexedDB, stats & timers
-│   └── personal_model.test.js   # 39 unit tests for duration model, evaluation guards & risk
+│   ├── telemetry.test.js          # 14 unit tests for schema, IndexedDB, stats & timers
+│   ├── personal_model.test.js     # 39 unit tests for duration model, evaluation guards & risk
+│   └── adaptive_scheduler.test.js # 19 unit tests for scheduling engine, DAG, limits & safety
 │
 ├── voxplan_architecture_audit.md # Full architecture audit and transformation plan
 ├── PROJECT_PLAN.md              # Living implementation roadmap & phase tracking
 └── README.md
 ```
+
+---
+
+## Adaptive Scheduling Foundations (Phase 4, Stage 1)
+
+VoxPlan features a deterministic, local-first adaptive scheduling engine designed to turn static task lists into executable calendar proposals without ever silently rearranging the user's plan.
+
+### 1. Key Principles & Governance
+- **Proposal-Based Flow**: The engine generates a transparent proposal object. Existing tasks and due dates remain completely untouched until the user explicitly clicks **"Apply Schedule"**.
+- **Deterministic Output**: Given identical inputs (tasks, settings, personal history), the engine always outputs identical placements, utilizing deterministic tie-breaking based on stable IDs.
+- **Evidence-Based Durations**: When the local Personal Duration Model has observed sufficient evidence ($W \ge 3.0$), the scheduler automatically allocates time based on the user's personalized pace ($r_{\text{adjusted}} \times \text{estimate}$). In cold-start or sparse data scenarios, it seamlessly falls back to the user's original estimate.
+- **Zero Paid AI / Local Execution**: Runs entirely in the client without external optimization APIs, cloud services, or paid token dependencies.
+
+### 2. Constraint Solving & Prioritization Rules
+1. **Topological Dependency Ordering**: Tasks with prerequisites are scheduled after their prerequisites, verified via DFS 3-color cycle detection. Circular dependencies are safely isolated without crashing.
+2. **Earliest Deadline First (EDF) & Overdue Recovery**: Overdue tasks and near-term deadlines receive elevated prioritization scores to protect commitments.
+3. **Daily Working-Hour Capacity**: Consecutive calendar slots are populated up to user-configured hours (default `6.0h/day`). Tasks that exceed remaining day hours cleanly roll over into the next working weekday.
+4. **Guarded Delay-Risk Urgency**: Tasks identified by the hybrid model as having high completion risk ($P_{\text{delay}} \ge 0.65$) receive a secondary heuristic boost to position them earlier in the sprint.
+5. **No Hidden Failures**: If the planning horizon cannot accommodate a task or a deadline is missed, the scheduler reports explicit conflict reasons (`deadline_missed`, `capacity_exceeded`, `unscheduled`) rather than concealing feasibility limits.
