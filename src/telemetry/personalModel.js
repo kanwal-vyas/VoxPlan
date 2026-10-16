@@ -141,7 +141,7 @@ export function extractEligibleObservations(events = [], currentTasks = []) {
     (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
   );
 
-  const taskLifecycle = new Map(); // taskId -> { isCompleted: boolean, completionPayload: object }
+  const taskLifecycle = new Map(); // taskId -> { isCompleted: boolean, completionPayload: object, completedAt: string }
 
   for (const ev of sortedEvents) {
     const taskId = ev.task_id;
@@ -151,6 +151,7 @@ export function extractEligibleObservations(events = [], currentTasks = []) {
       taskLifecycle.set(taskId, {
         isCompleted: true,
         completionPayload: ev.payload || {},
+        completedAt: ev.timestamp || ev.payload?.completed_at || new Date().toISOString(),
       });
     } else if (ev.event_type === 'task_reopened') {
       // Reopening marks task as uncompleted
@@ -158,6 +159,7 @@ export function extractEligibleObservations(events = [], currentTasks = []) {
         taskLifecycle.set(taskId, {
           isCompleted: false,
           completionPayload: null,
+          completedAt: null,
         });
       }
     }
@@ -234,8 +236,12 @@ export function extractEligibleObservations(events = [], currentTasks = []) {
       weight,
       source,
       category: meta.category || 'General',
+      completedAt: lifecycle.completedAt || new Date().toISOString(),
     });
   }
+
+  // Sort eligible observations in strict chronological order of completion
+  observations.sort((a, b) => new Date(a.completedAt).getTime() - new Date(b.completedAt).getTime());
 
   return observations;
 }
@@ -426,9 +432,213 @@ export function estimateTaskDuration(model, taskOrEffort) {
 }
 
 /**
+ * Minimum distinct completed tasks with estimates and durations needed to report holdout evaluation metrics.
+ */
+export const MIN_EVALUATION_TASKS = 5;
+export const MIN_WALKFORWARD_TRAIN_TASKS = 3;
+
+/**
  * Convenience helper to compute a duration prediction from raw events and tasks.
  */
 export function getPersonalDurationEstimate(events, currentTasks, targetTaskOrEffort) {
   const model = buildPersonalDurationModel(events, currentTasks);
   return estimateTaskDuration(model, targetTaskOrEffort);
+}
+
+/**
+ * Evaluates the personal duration estimator against the user's original effort estimates
+ * using a leak-free chronological walk-forward (rolling-origin) validation.
+ *
+ * Requirements:
+ * 1. Uses only genuine eligible completed tasks (joined by task_id, positive estimate, positive duration).
+ * 2. Evaluates tasks in strict chronological order of completion.
+ * 3. Each prediction uses model parameters fit strictly on tasks completed BEFORE that task.
+ * 4. Zero target leakage: test task's observed duration and post-completion fields are NEVER in the training set.
+ * 5. Compares personal model MAE/MdAPE against the user's original effort estimate baseline.
+ * 6. Returns an explicit 'insufficient_data' state if fewer than MIN_EVALUATION_TASKS exist.
+ *
+ * @param {object[]} events Raw behavioral events
+ * @param {object[]} [currentTasks=[]] Current task objects
+ * @param {object} [options={}]
+ * @param {number} [options.minTrainTasks=3] Minimum training tasks before walk-forward starts
+ * @param {number} [options.minTotalTasks=5] Minimum total tasks required for evaluation
+ * @returns {{
+ *   status: 'insufficient_data'|'evaluated',
+ *   totalEligibleTasks: number,
+ *   minRequiredTasks: number,
+ *   trainTaskCount: number,
+ *   testTaskCount: number,
+ *   metrics: {
+ *     mae_model: number,
+ *     mae_baseline: number,
+ *     mdape_model: number,
+ *     mdape_baseline: number,
+ *     mae_improvement_hours: number,
+ *     improvement_percent: number|null,
+ *     better_predictions_count: number,
+ *     worse_predictions_count: number,
+ *     equal_predictions_count: number,
+ *     total_test_count: number,
+ *   }|null,
+ *   testDetails: Array<{
+ *     taskId: string,
+ *     completedAt: string,
+ *     estimatedHours: number,
+ *     observedHours: number,
+ *     predictedHours: number,
+ *     biasRatioUsed: number,
+ *     trainSetSize: number,
+ *     trainEffectiveWeight: number,
+ *     modelAbsError: number,
+ *     baselineAbsError: number,
+ *     improvementHours: number,
+ *   }>,
+ *   explanation: string,
+ * }}
+ */
+export function evaluatePersonalDurationModel(events = [], currentTasks = [], options = {}) {
+  const minTrain = options.minTrainTasks ?? MIN_WALKFORWARD_TRAIN_TASKS;
+  const minTotal = options.minTotalTasks ?? MIN_EVALUATION_TASKS;
+
+  const eligibleObservations = extractEligibleObservations(events, currentTasks);
+  const totalEligible = eligibleObservations.length;
+
+  if (totalEligible < minTotal) {
+    return {
+      status: 'insufficient_data',
+      totalEligibleTasks: totalEligible,
+      minRequiredTasks: minTotal,
+      trainTaskCount: 0,
+      testTaskCount: 0,
+      metrics: null,
+      testDetails: [],
+      explanation: `Walk-forward holdout evaluation requires at least ${minTotal} completed tasks with effort estimates and durations (currently ${totalEligible} available). Evaluation activates automatically as you complete more tasks.`,
+    };
+  }
+
+  // Eligible observations are already sorted chronologically by completedAt
+  const testDetails = [];
+  const modelAbsErrors = [];
+  const baselineAbsErrors = [];
+  const modelRelErrors = [];
+  const baselineRelErrors = [];
+
+  let betterCount = 0;
+  let worseCount = 0;
+  let equalCount = 0;
+
+  for (let i = minTrain; i < totalEligible; i++) {
+    const testObs = eligibleObservations[i];
+    const trainObservations = eligibleObservations.slice(0, i);
+
+    // Compute training parameters strictly from trainObservations
+    const trainWeight = trainObservations.reduce((acc, o) => acc + o.weight, 0);
+    const ratioItems = trainObservations.map((o) => ({
+      value: o.clampedRatio,
+      weight: o.weight,
+    }));
+    const rawWeightedMedian = calculateWeightedMedian(ratioItems) ?? NEUTRAL_BIAS_RATIO;
+    const shrunkRatio =
+      (trainWeight / (trainWeight + SHRINKAGE_PRIOR_WEIGHT)) * rawWeightedMedian +
+      (SHRINKAGE_PRIOR_WEIGHT / (trainWeight + SHRINKAGE_PRIOR_WEIGHT)) * NEUTRAL_BIAS_RATIO;
+
+    const roundedRatio = Math.round(shrunkRatio * 100) / 100;
+    const rawPredicted = testObs.estimatedHours * roundedRatio;
+    const predictedHours = Math.max(0.1, Math.round(rawPredicted * 10) / 10);
+    const baselineHours = testObs.estimatedHours;
+    const actualHours = testObs.observedHours;
+
+    const modelError = Math.abs(predictedHours - actualHours);
+    const baselineError = Math.abs(baselineHours - actualHours);
+
+    // Relative percentage error: |pred - actual| / actual
+    const modelRel = actualHours > 0 ? (modelError / actualHours) * 100 : 0;
+    const baselineRel = actualHours > 0 ? (baselineError / actualHours) * 100 : 0;
+
+    modelAbsErrors.push(modelError);
+    baselineAbsErrors.push(baselineError);
+    modelRelErrors.push(modelRel);
+    baselineRelErrors.push(baselineRel);
+
+    if (Math.abs(modelError - baselineError) < 0.05) {
+      equalCount++;
+    } else if (modelError < baselineError) {
+      betterCount++;
+    } else {
+      worseCount++;
+    }
+
+    testDetails.push({
+      taskId: testObs.taskId,
+      completedAt: testObs.completedAt,
+      estimatedHours: testObs.estimatedHours,
+      observedHours: Math.round(actualHours * 10) / 10,
+      predictedHours,
+      biasRatioUsed: roundedRatio,
+      trainSetSize: i,
+      trainEffectiveWeight: Math.round(trainWeight * 10) / 10,
+      modelAbsError: Math.round(modelError * 10) / 10,
+      baselineAbsError: Math.round(baselineError * 10) / 10,
+      improvementHours: Math.round((baselineError - modelError) * 10) / 10,
+    });
+  }
+
+  const testCount = testDetails.length;
+  if (testCount === 0) {
+    return {
+      status: 'insufficient_data',
+      totalEligibleTasks: totalEligible,
+      minRequiredTasks: minTotal,
+      trainTaskCount: 0,
+      testTaskCount: 0,
+      metrics: null,
+      testDetails: [],
+      explanation: 'Insufficient observations for holdout test split.',
+    };
+  }
+
+  // Mean Absolute Error
+  const sumModelAE = modelAbsErrors.reduce((a, b) => a + b, 0);
+  const sumBaselineAE = baselineAbsErrors.reduce((a, b) => a + b, 0);
+  const maeModel = Math.round((sumModelAE / testCount) * 100) / 100;
+  const maeBaseline = Math.round((sumBaselineAE / testCount) * 100) / 100;
+
+  // Median Absolute Percentage Error (MdAPE)
+  const sortedModelRel = [...modelRelErrors].sort((a, b) => a - b);
+  const sortedBaselineRel = [...baselineRelErrors].sort((a, b) => a - b);
+  const mid = Math.floor(testCount / 2);
+  const mdapeModel =
+    testCount % 2 !== 0
+      ? Math.round(sortedModelRel[mid] * 10) / 10
+      : Math.round(((sortedModelRel[mid - 1] + sortedModelRel[mid]) / 2) * 10) / 10;
+  const mdapeBaseline =
+    testCount % 2 !== 0
+      ? Math.round(sortedBaselineRel[mid] * 10) / 10
+      : Math.round(((sortedBaselineRel[mid - 1] + sortedBaselineRel[mid]) / 2) * 10) / 10;
+
+  const maeDelta = Math.round((maeBaseline - maeModel) * 100) / 100;
+  const improvementPercent =
+    maeBaseline > 0 ? Math.round(((maeBaseline - maeModel) / maeBaseline) * 1000) / 10 : 0.0;
+
+  return {
+    status: 'evaluated',
+    totalEligibleTasks: totalEligible,
+    minRequiredTasks: minTotal,
+    trainTaskCount: minTrain,
+    testTaskCount: testCount,
+    metrics: {
+      mae_model: maeModel,
+      mae_baseline: maeBaseline,
+      mdape_model: mdapeModel,
+      mdape_baseline: mdapeBaseline,
+      mae_improvement_hours: maeDelta,
+      improvement_percent: improvementPercent,
+      better_predictions_count: betterCount,
+      worse_predictions_count: worseCount,
+      equal_predictions_count: equalCount,
+      total_test_count: testCount,
+    },
+    testDetails,
+    explanation: `Evaluated across ${testCount} holdout task${testCount > 1 ? 's' : ''} using chronological walk-forward splits. Personalized estimator achieved ${maeModel}h MAE vs ${maeBaseline}h baseline (${improvementPercent >= 0 ? '+' : ''}${improvementPercent}% error reduction).`,
+  };
 }

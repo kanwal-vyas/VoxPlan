@@ -7,6 +7,7 @@ import CommandBar from './components/CommandBar';
 import ProjectOverview from './components/ProjectOverview';
 import MLModelPanel from './components/MLModelPanel';
 import BehavioralHistoryPanel from './components/BehavioralHistoryPanel';
+import PersonalModelDashboard from './components/PersonalModelDashboard';
 import TaskList from './components/TaskList';
 import TaskExplanationModal from './components/TaskExplanationModal';
 import LoadingScreen from './components/LoadingScreen';
@@ -1066,10 +1067,21 @@ export default function App() {
 
         {/* Giant Editorial Typography Ribbon 5 */}
         <div className="editorial-ribbon-wrap" aria-hidden="true">
+          <span className="editorial-ribbon-word">CALIBRATE</span>
+        </div>
+
+        {/* Section 05: Personal Duration Model & Evaluation */}
+        <PersonalModelDashboard
+          events={telemetryEvents}
+          tasks={tasks}
+        />
+
+        {/* Giant Editorial Typography Ribbon 6 */}
+        <div className="editorial-ribbon-wrap" aria-hidden="true">
           <span className="editorial-ribbon-word">ACT</span>
         </div>
 
-        {/* Section 05: Command Center (Soft Peach Notebook Assistant) */}
+        {/* Section 06: Command Center (Soft Peach Notebook Assistant) */}
         <CommandBar
           onExecuteCommand={executeCommand}
           feedback={feedback}

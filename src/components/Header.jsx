@@ -51,7 +51,21 @@ export default function Header({ isBackendOnline, modelMetadata, onScrollToSecti
             onClick={() => onScrollToSection('intelligence')}
             style={styles.navLink}
           >
-            Insights
+            Baseline
+          </button>
+          <button
+            type="button"
+            onClick={() => onScrollToSection('behavior')}
+            style={styles.navLink}
+          >
+            Habits
+          </button>
+          <button
+            type="button"
+            onClick={() => onScrollToSection('personal-model')}
+            style={styles.navLink}
+          >
+            Personal Model
           </button>
           <button
             type="button"

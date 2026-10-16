@@ -70,7 +70,8 @@ FASTAPI ML BACKEND (scikit-learn Pipeline & Batch Endpoints)
 - **Phase 1 (Completed)**: Unified arbitrary date parsing, task schema normalization, complete de-mocking of metrics and demo fallbacks, dynamic task-risk visualizations, and browser Web Speech integration.
 - **Phase 2 (Completed)**: Local-first IndexedDB persistence, behavioral telemetry event schema (11 event types), stopwatch working duration vs. self-reported vs. unknown duration, inline reschedule/effort/reorder instrumentation, sparse-data honest behavioral statistics (< 3 completions), Behavioral History & Habit Insights UI panel with JSON export and history deletion, and automated test suite.
 - **Phase 3, Stage 1 (Completed)**: Telemetry repair (command-bar lifecycle convergence, active timer finalization, idempotency) & transparent, local-first Personal Duration Estimator (`personalModel.js`) using weighted median and empirical Bayesian shrinkage toward 1.0. Dual duration badges on task cards.
-- **Phase 3, Stage 2 (Next)**: Personal Model Panel UI & hybrid completion-risk prediction (adapting synthetic baseline with empirical personal velocity).
+- **Phase 3, Stage 2 (Completed)**: Personal Model Dashboard (`PersonalModelDashboard.jsx`), sample weight transparency, Bayesian shrinkage formula explainer, leak-free chronological walk-forward holdout evaluation (`evaluatePersonalDurationModel`), MAE/MdAPE baseline comparison, and honest cold-start states.
+- **Phase 3, Stage 3 (Next)**: Transparent hybrid completion-risk model blending synthetic baseline risk with observed personal estimation bias and velocity variance.
 - **Phase 4**: Adaptive scheduling assistant and optimal task calendar allocation.
 - **Phase 5**: Conversational planning dialog & debriefing.
 
@@ -166,7 +167,22 @@ The estimator transparently signals sample maturity and avoids presenting heuris
 ### 5. UI Integration & Task Cards
 - **Dual Duration Pill**: Task cards display the original estimate alongside the adjusted prediction when supported by genuine data (e.g., `⏱️ 2h → ~2.6h (4)`).
 - **Explanatory Tooltip**: Hovering discloses the exact sample count, effective weight, bias ratio, empirical range, and plain-English explanation.
-- **Baseline Distinction**: The completion-risk classifier remains a synthetic Random Forest baseline; duration estimation is explicitly labeled as the sole personalized component in Stage 1.
+- **Baseline Distinction**: The completion-risk classifier remains a synthetic Random Forest baseline; duration estimation is explicitly labeled as the sole personalized component.
+
+### 6. Personal Model Dashboard & Walk-Forward Holdout Evaluation (Phase 3, Stage 2)
+Section 05 of the dashboard (**HOW VOXPLAN LEARNS YOUR PACE**) provides full transparency into the personal estimator and its held-out generalization performance:
+- **Sample Weight Transparency**: Displays effective sample weight $W = 1.0 \times N_{tracked} + 0.5 \times N_{reported}$, clearly distinguishing raw observation counts from effective weighted sample size.
+- **Maturity Status Tiers**: Color-coded badges indicating current model phase (`cold_start`, `sparse`, `developing`, `supported`).
+- **Personal Bias Ratio & Live Simulator**: Shows current $r_{adjusted}$ multiplier alongside raw median $r_{med}$ and an interactive tool demonstrating how arbitrary estimates (e.g. 2.0h) are adjusted.
+- **Bayesian Shrinkage Architecture**: Formula display detailing how neutral prior weight $K = 3.0$ anchors early estimates and smoothly yields to empirical observations.
+- **Leak-Free Walk-Forward Evaluation (`evaluatePersonalDurationModel`)**:
+  - Evaluates tasks in strict chronological completion order with zero lookahead bias.
+  - Each prediction fits model parameters strictly on prior completed tasks ($k \ge 3$).
+  - Never evaluates on training observations.
+  - Requires at least 5 completed tasks (`MIN_EVALUATION_TASKS = 5`) to report generalization metrics.
+  - When $\ge 5$ tasks exist, reports Model MAE, Baseline MAE, Error Reduction hours and %, Model MdAPE vs. Baseline MdAPE, and a complete audit table of test predictions.
+  - When $< 5$ tasks exist, displays an honest progress indicator and methodology disclosure.
+- **Methodological Honesty Disclosures**: Explicitly explains that the model is an interpretable bias-correction method (not deep learning), separates duration bias from generic delay risk, and assures 100% on-device privacy.
 
 ---
 

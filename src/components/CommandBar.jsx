@@ -46,7 +46,7 @@ export default function CommandBar({
         <div style={styles.header}>
           <div style={styles.titleGroup}>
             <div style={styles.badgeRow}>
-              <span style={styles.sectionNum}>05</span>
+              <span style={styles.sectionNum}>06</span>
               <span style={styles.badge}>VOICE & NATURAL LANGUAGE</span>
             </div>
             <h2 style={styles.title}>

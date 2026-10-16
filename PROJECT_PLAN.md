@@ -11,7 +11,8 @@ This document tracks the phased evolution of VoxPlan from a static task tracker 
 | **Phase 1** | Foundation, Date Unification & De-mocking | **COMPLETED** | Consistent task schema, arbitrary calendar date handling, removal of demo metric fallbacks, dynamic task-risk visualizations, honest browser Web Speech API, backwards-compatible localStorage migration. |
 | **Phase 2** | Local Persistence & Behavioral Telemetry | **COMPLETED** | Local-first IndexedDB event store, versioned behavioral schema (11 event types), explicit stopwatch working duration vs self-reported vs unknown duration, inline reschedule/effort/reorder instrumentation, sparse-data honest behavioral statistics (< 3 completions), Behavioral History & Habit Insights UI panel with JSON export and history deletion, backend batch endpoints, and automated test suite. |
 | **Phase 3, Stage 1** | Telemetry Repair & Personal Duration Estimation | **COMPLETED** | Shared task lifecycle engine (`taskLifecycle.js`), active stopwatch finalization, command-bar completion/reopening convergence, idempotent telemetry, local-first Personal Duration Estimator (`personalModel.js`) with weighted median and empirical Bayesian shrinkage ($K = 3.0$), dual duration badges on task cards, cold-start and uncertainty tiers. |
-| **Phase 3, Stage 2** | Personal Risk Modeling & UI Insights | Next Up | Personal Model Panel UI with empirical parameter transparency, hybrid delay-risk adaptation blending synthetic baseline with observed personal velocity. |
+| **Phase 3, Stage 2** | Personal Model Dashboard & Evaluation | **COMPLETED** | Personal Model Dashboard (`PersonalModelDashboard.jsx`), sample weight transparency, Bayesian shrinkage formula explainer, leak-free chronological walk-forward holdout evaluation (`evaluatePersonalDurationModel`), MAE/MdAPE baseline comparison, and honest cold-start states. |
+| **Phase 3, Stage 3** | Hybrid Completion-Risk Personalization | Next Up | Transparent hybrid model blending synthetic baseline risk with observed personal estimation bias and velocity variance without overfitting small samples. |
 | **Phase 4** | Adaptive Scheduling & Workload Optimization | Planned | Workload density balancing, time-of-day affinity scheduling, dependency graph resolution, proactive bottleneck notifications. |
 | **Phase 5** | Voice & Conversational Planning Experience | Planned | Rich multi-turn planning dialog, schedule rescheduling commands, review debriefing via natural language. |
 
@@ -299,11 +300,86 @@ Fix command-bar completion and reopening telemetry, ensure active stopwatch time
 
 ---
 
-### Known Limitations & Phase 3, Stage 2 Plan
+---
 
-1. **Duration vs Risk Model Scope**: Duration estimation is now personalized via client-side Bayesian shrinkage. The Random Forest completion-risk model remains an empirical baseline trained on synthetic data and is **not** yet personalized.
-2. **Stage 2 Deliverable**:
-   - Create a dedicated **Personal Model Panel UI** exposing observed velocity ratios, empirical parameter distributions, and sample maturity metrics.
-   - Design a hybrid completion-risk architecture that blends baseline risk with personal velocity and completion latency without introducing unstable small-sample retrained models.
+## Phase 3, Stage 2 Execution Record: Personal Model Dashboard & Evaluation
+
+### Objective
+Build a transparent dashboard for VoxPlan's local personal duration estimator and establish a defensible, leak-free holdout evaluation methodology that honestly measures whether personalized duration predictions improve on the user's original effort estimates.
+
+### Completed Work by Component
+
+#### 1. Chronological Walk-Forward Holdout Evaluation Engine
+- **File**: `src/telemetry/personalModel.js`
+  - Enhanced `extractEligibleObservations` to track `completedAt` timestamps and sort eligible observations chronologically.
+  - Implemented `evaluatePersonalDurationModel(events, currentTasks, options)`:
+    - **Walk-Forward Rolling-Origin Design**: Evaluates tasks in strict chronological completion order. For each test step $k \ge 3$, the model is fitted strictly on tasks completed prior to task $k$.
+    - **Zero Target Leakage**: The test task's observed duration, completion time, and post-completion metadata are never in the training set.
+    - **Observation Isolation**: Groups all events per task; duplicate events or multiple completion cycles for a single task do not inflate evaluation splits.
+    - **Minimum Sample Guard**: Requires at least 5 completed tasks with effort estimates and durations (`MIN_EVALUATION_TASKS = 5`). When $< 5$ tasks exist, returns an explicit `insufficient_data` state with progress tracking and an explanation of the walk-forward methodology.
+    - **Evaluation Metrics**:
+      - Model MAE vs. User Original Effort Baseline MAE: Mean Absolute Error in hours.
+      - Error Reduction: Absolute delta in hours and percentage improvement.
+      - Model MdAPE vs. Baseline MdAPE: Median Absolute Percentage Error ($\text{Median}(|\hat{D}_i - D_i| / D_i) \times 100\%$).
+      - Win / Loss / Tie Counts: Number of test tasks predicted closer to actual duration than the original estimate.
+      - Test Details: Audit log of each walk-forward test prediction with training set size, effective weight, applied ratio, and error metrics.
+
+#### 2. Personal Model Dashboard Component
+- **File**: `src/components/PersonalModelDashboard.jsx` (NEW)
+  - Created Section 05: **PERSONAL ESTIMATION MODEL & EVALUATION** ("HOW VOXPLAN LEARNS YOUR PACE") with editorial typography ribbon `CALIBRATE`.
+  - **Core Pastel Metric Cards**:
+    - **Maturity Status**: Displays tier (`cold_start`, `sparse`, `developing`, `supported`) with explanatory captions and color-coded status pills.
+    - **Effective Sample Weight**: Discloses $W = 1.0 \times N_{tracked} + 0.5 \times N_{reported}$, explicitly distinguishing raw observation counts from effective weighted sample size.
+    - **Personal Bias Ratio**: Discloses adjusted multiplier $r_{adjusted}$ alongside raw weighted median $r_{med}$ and shrinkage prior weight ($K=3.0$).
+    - **Interactive Simulation**: Live slider/input showing how a user estimate (e.g. 2.0h) transforms into an adjusted duration estimate with empirical spread.
+  - **Bayesian Shrinkage Architecture**: Visual equation box explaining the shrinkage math:
+    $$\text{Adjusted Ratio} = \frac{W \cdot r_{med} + 3.0 \cdot 1.0}{W + 3.0}$$
+    and why neutral prior anchoring protects against wild swings from noisy early tasks.
+  - **Walk-Forward Holdout Evaluation Panel**:
+    - **Awaiting Data State (< 5 tasks)**: Shows animated progress bar ($X / 5$ tasks), clear explanation of out-of-sample holdout validation, and methodological honesty callout explaining why training-set accuracy is rejected.
+    - **Evaluated State ($\ge 5$ tasks)**: Displays Model MAE, Baseline MAE, Error Reduction hours and %, MdAPE comparison, win rate badge, and audit table of test tasks.
+  - **Methodological Honesty Disclosures**:
+    - Interpretable Bias Correction vs. Black-Box Regressor.
+    - Baseline Delay-Risk Distinction (Random Forest in Section 03 remains an empirical synthetic baseline).
+    - Durable Local Privacy (100% in-browser IndexedDB, instant reset on history clear).
+
+#### 3. Navigation & App Integration
+- **File**: `src/components/Header.jsx`: Added Habits (`behavior`) and Personal Model (`personal-model`) nav links.
+- **File**: `src/components/CommandBar.jsx`: Re-indexed section number to 06.
+- **File**: `src/App.jsx`: Embedded `<PersonalModelDashboard events={telemetryEvents} tasks={tasks} />` with ribbon `CALIBRATE`.
+
+#### 4. Automated Testing
+- **File**: `tests/personal_model.test.js`
+  - Added Suite 3: **Personal Model Evaluation & Dashboard Derivations** with 8 tests:
+    - Cold-start evaluation returns `insufficient_data` ($N=0$).
+    - Sparse data evaluation returns `insufficient_data` with progress count ($N < 5$).
+    - Effective weight calculation separates measured ($1.0$) vs. reported ($0.5$) vs. unmeasured ($0.0$).
+    - Walk-forward chronological holdout evaluation with 5+ tasks verifies training set sizes ($3 \to 4 \to 5$) and leak-free predictions.
+    - Prevention of task-level overlap: duplicate completion events do not inflate evaluation splits.
+    - Safe handling of missing or zero estimates during evaluation.
+    - History deletion immediately resets model to cold-start and evaluation to `insufficient_data`.
+    - Status tier progression (`cold_start` $\to$ `sparse` $\to$ `developing` $\to$ `supported`).
+
+---
+
+### Verification Results
+
+1. **Frontend Test Suite**: `npm test`
+   - **43 tests passing across 7 suites** (0 failures, 124ms duration).
+2. **Backend Pytest Suite**: `python -m pytest backend/tests/ -v`
+   - **27 tests passing** (18 date handling tests, 9 ML & API tests).
+3. **Frontend Linter**: `npm run lint` (`oxlint`)
+   - **0 errors, 0 warnings** across 24 files.
+4. **Production Build**: `npm run build` (`vite build`)
+   - Successfully generated production bundle in 266ms (`dist/assets/index-Cjky9M-L.js`, 488 kB / 151 kB gzip).
+
+---
+
+### Known Limitations & Phase 3, Stage 3 Plan
+
+1. **Scope Boundary**: Task duration estimation is now fully personal, Bayesian-shrunk, transparently displayed, and chronologically evaluated on held-out tasks. The delay-risk classification model in Section 03 remains an empirical Random Forest baseline trained on synthetic data.
+2. **Holdout Sample Requirement**: Generalization evaluation requires $\ge 5$ completed tasks with estimates and durations. The UI explicitly presents this threshold rather than fabricating synthetic evaluation metrics on small samples.
+3. **Phase 3, Stage 3 Deliverable**:
+   - Design a hybrid completion-risk architecture that blends baseline risk probabilities with personal velocity variance, estimation bias, and postponement history without overfitting small samples.
 
 

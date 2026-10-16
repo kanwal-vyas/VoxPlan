@@ -12,6 +12,9 @@ import {
   buildPersonalDurationModel,
   estimateTaskDuration,
   getPersonalDurationEstimate,
+  evaluatePersonalDurationModel,
+  MIN_EVALUATION_TASKS,
+  MIN_WALKFORWARD_TRAIN_TASKS,
 } from '../src/telemetry/personalModel.js';
 
 import {
@@ -530,5 +533,250 @@ describe('2. Task Lifecycle Transitions & Command-Bar Integration', () => {
     const result = reopenTaskLifecycle({ task: openTask });
     assert.equal(result.success, false);
     assert.equal(result.reason, 'already_open');
+  });
+});
+
+describe('3. Personal Model Evaluation & Dashboard Derivations', () => {
+  it('evaluatePersonalDurationModel returns insufficient_data for 0 observations (cold-start)', () => {
+    const evalResult = evaluatePersonalDurationModel([], []);
+    assert.equal(evalResult.status, 'insufficient_data');
+    assert.equal(evalResult.totalEligibleTasks, 0);
+    assert.equal(evalResult.minRequiredTasks, MIN_EVALUATION_TASKS);
+    assert.equal(evalResult.metrics, null);
+    assert.deepEqual(evalResult.testDetails, []);
+    assert.match(evalResult.explanation, /requires at least 5 completed tasks/i);
+  });
+
+  it('evaluatePersonalDurationModel returns insufficient_data when observations are sparse (< 5 tasks)', () => {
+    // 3 completed tasks
+    const events = [];
+    const tasks = [];
+    for (let i = 1; i <= 3; i++) {
+      tasks.push({ id: `t-sparse-${i}`, estimatedEffort: 2.0, completed: true });
+      events.push({
+        event_id: `evt-s-${i}`,
+        task_id: `t-sparse-${i}`,
+        event_type: 'task_completed',
+        timestamp: `2026-10-10T1${i}:00:00Z`,
+        payload: { duration_source: 'tracked', tracked_duration_seconds: 2.5 * 3600 },
+      });
+    }
+
+    const evalResult = evaluatePersonalDurationModel(events, tasks);
+    assert.equal(evalResult.status, 'insufficient_data');
+    assert.equal(evalResult.totalEligibleTasks, 3);
+    assert.equal(evalResult.minRequiredTasks, MIN_EVALUATION_TASKS);
+    assert.equal(evalResult.metrics, null);
+    assert.match(evalResult.explanation, /currently 3 available/i);
+  });
+
+  it('buildPersonalDurationModel accurately separates measured and self-reported observations and calculates effective sample weight', () => {
+    // 3 tracked (3 * 1.0 = 3.0w) and 2 self-reported (2 * 0.5 = 1.0w) -> total 4.0w
+    const events = [
+      {
+        event_id: 'e-1', task_id: 'task-w-1', event_type: 'task_completed',
+        timestamp: '2026-10-01T10:00:00Z',
+        payload: { duration_source: 'tracked', tracked_duration_seconds: 3600 },
+      },
+      {
+        event_id: 'e-2', task_id: 'task-w-2', event_type: 'task_completed',
+        timestamp: '2026-10-02T10:00:00Z',
+        payload: { duration_source: 'tracked', tracked_duration_seconds: 3600 },
+      },
+      {
+        event_id: 'e-3', task_id: 'task-w-3', event_type: 'task_completed',
+        timestamp: '2026-10-03T10:00:00Z',
+        payload: { duration_source: 'tracked', tracked_duration_seconds: 3600 },
+      },
+      {
+        event_id: 'e-4', task_id: 'task-w-4', event_type: 'task_completed',
+        timestamp: '2026-10-04T10:00:00Z',
+        payload: { duration_source: 'self_reported', self_reported_duration_seconds: 3600 },
+      },
+      {
+        event_id: 'e-5', task_id: 'task-w-5', event_type: 'task_completed',
+        timestamp: '2026-10-05T10:00:00Z',
+        payload: { duration_source: 'self_reported', self_reported_duration_seconds: 3600 },
+      },
+      {
+        event_id: 'e-6', task_id: 'task-w-6', event_type: 'task_completed',
+        timestamp: '2026-10-06T10:00:00Z',
+        payload: { duration_source: 'unknown', tracked_duration_seconds: 0 },
+      },
+    ];
+
+    const tasks = [
+      { id: 'task-w-1', estimatedEffort: 1.0, completed: true },
+      { id: 'task-w-2', estimatedEffort: 1.0, completed: true },
+      { id: 'task-w-3', estimatedEffort: 1.0, completed: true },
+      { id: 'task-w-4', estimatedEffort: 1.0, completed: true },
+      { id: 'task-w-5', estimatedEffort: 1.0, completed: true },
+      { id: 'task-w-6', estimatedEffort: 1.0, completed: true },
+    ];
+
+    const model = buildPersonalDurationModel(events, tasks);
+    assert.equal(model.eligibleCount, 5); // 3 tracked + 2 self-reported (unknown excluded)
+    assert.equal(model.trackedCount, 3);
+    assert.equal(model.selfReportedCount, 2);
+    assert.equal(model.effectiveWeight, 4.0); // 3*1.0 + 2*0.5
+    assert.equal(model.status, 'developing'); // >= 3.0 weight is developing
+  });
+
+  it('evaluatePersonalDurationModel performs leak-free walk-forward chronological evaluation with 5+ tasks', () => {
+    // 6 tasks completed in chronological order:
+    // User consistently underestimates: estimates 2.0h, tasks actually take 3.0h (1.5x)
+    const events = [];
+    const tasks = [];
+    for (let i = 1; i <= 6; i++) {
+      tasks.push({
+        id: `t-eval-${i}`,
+        estimatedEffort: 2.0,
+        completed: true,
+      });
+      events.push({
+        event_id: `evt-eval-${i}`,
+        task_id: `t-eval-${i}`,
+        event_type: 'task_completed',
+        timestamp: `2026-10-0${i}T12:00:00Z`,
+        payload: {
+          duration_source: 'tracked',
+          tracked_duration_seconds: 3.0 * 3600, // 3 hours
+        },
+      });
+    }
+
+    const evalResult = evaluatePersonalDurationModel(events, tasks);
+    assert.equal(evalResult.status, 'evaluated');
+    assert.equal(evalResult.totalEligibleTasks, 6);
+    assert.equal(evalResult.trainTaskCount, MIN_WALKFORWARD_TRAIN_TASKS); // 3
+    assert.equal(evalResult.testTaskCount, 3); // tasks 4, 5, 6 are tested
+    assert.equal(evalResult.testDetails.length, 3);
+
+    // Verify walk-forward property:
+    // First test task (i=3, task 4) trained on exactly 3 prior tasks
+    assert.equal(evalResult.testDetails[0].taskId, 't-eval-4');
+    assert.equal(evalResult.testDetails[0].trainSetSize, 3);
+    assert.equal(evalResult.testDetails[0].trainEffectiveWeight, 3.0);
+
+    // Second test task (i=4, task 5) trained on exactly 4 prior tasks
+    assert.equal(evalResult.testDetails[1].taskId, 't-eval-5');
+    assert.equal(evalResult.testDetails[1].trainSetSize, 4);
+    assert.equal(evalResult.testDetails[1].trainEffectiveWeight, 4.0);
+
+    // Third test task (i=5, task 6) trained on exactly 5 prior tasks
+    assert.equal(evalResult.testDetails[2].taskId, 't-eval-6');
+    assert.equal(evalResult.testDetails[2].trainSetSize, 5);
+    assert.equal(evalResult.testDetails[2].trainEffectiveWeight, 5.0);
+
+    // Baseline error: |2.0 - 3.0| = 1.0h
+    assert.equal(evalResult.metrics.mae_baseline, 1.0);
+
+    // Model prediction: adjusted ratio is > 1.2x, so predicted is ~2.5h - 2.7h
+    // Model error is < 1.0h baseline error
+    assert.ok(evalResult.metrics.mae_model < evalResult.metrics.mae_baseline);
+    assert.ok(evalResult.metrics.mae_improvement_hours > 0);
+    assert.ok(evalResult.metrics.improvement_percent > 0);
+
+    // All 3 test tasks should be improved
+    assert.equal(evalResult.metrics.better_predictions_count, 3);
+    assert.equal(evalResult.metrics.worse_predictions_count, 0);
+  });
+
+  it('Prevention of task-level overlap: duplicate events for the same task do not create multiple evaluation rows', () => {
+    const events = [];
+    const tasks = [];
+    for (let i = 1; i <= 5; i++) {
+      tasks.push({ id: `t-dedup-${i}`, estimatedEffort: 2.0, completed: true });
+      events.push({
+        event_id: `evt-d-${i}-a`,
+        task_id: `t-dedup-${i}`,
+        event_type: 'task_completed',
+        timestamp: `2026-10-0${i}T12:00:00Z`,
+        payload: { duration_source: 'tracked', tracked_duration_seconds: 2.0 * 3600 },
+      });
+      // Duplicate event with identical task_id
+      events.push({
+        event_id: `evt-d-${i}-b`,
+        task_id: `t-dedup-${i}`,
+        event_type: 'task_completed',
+        timestamp: `2026-10-0${i}T12:05:00Z`,
+        payload: { duration_source: 'tracked', tracked_duration_seconds: 2.0 * 3600 },
+      });
+    }
+
+    const evalResult = evaluatePersonalDurationModel(events, tasks);
+    assert.equal(evalResult.totalEligibleTasks, 5); // exactly 5 distinct tasks, not 10
+  });
+
+  it('evaluatePersonalDurationModel handles missing or zero estimates safely', () => {
+    // 5 tasks, but one has null estimate
+    const events = [];
+    const tasks = [];
+    for (let i = 1; i <= 5; i++) {
+      tasks.push({
+        id: `t-null-${i}`,
+        estimatedEffort: i === 3 ? null : 2.0,
+        completed: true,
+      });
+      events.push({
+        event_id: `evt-null-${i}`,
+        task_id: `t-null-${i}`,
+        event_type: 'task_completed',
+        timestamp: `2026-10-0${i}T12:00:00Z`,
+        payload: { duration_source: 'tracked', tracked_duration_seconds: 2.0 * 3600 },
+      });
+    }
+
+    // Only 4 valid observations -> should return insufficient_data (< 5 required)
+    const evalResult = evaluatePersonalDurationModel(events, tasks);
+    assert.equal(evalResult.status, 'insufficient_data');
+    assert.equal(evalResult.totalEligibleTasks, 4);
+  });
+
+  it('History deletion resets model to cold-start and evaluation to insufficient_data', () => {
+    // Simulating empty events after history clear
+    const modelAfterClear = buildPersonalDurationModel([], []);
+    assert.equal(modelAfterClear.status, 'cold_start');
+    assert.equal(modelAfterClear.effectiveWeight, 0);
+    assert.equal(modelAfterClear.eligibleCount, 0);
+
+    const evalAfterClear = evaluatePersonalDurationModel([], []);
+    assert.equal(evalAfterClear.status, 'insufficient_data');
+    assert.equal(evalAfterClear.totalEligibleTasks, 0);
+    assert.equal(evalAfterClear.metrics, null);
+  });
+
+  it('PersonalModelDashboard status tiers advance accurately from cold_start to supported', () => {
+    // 0 weight -> cold_start
+    assert.equal(buildPersonalDurationModel([], []).status, 'cold_start');
+
+    // 2.0 weight (2 tracked) -> sparse (< 3.0)
+    const sparseEvents = [
+      { event_id: 'e-s1', task_id: 't-1', event_type: 'task_completed', timestamp: '2026-10-01T10:00:00Z', payload: { duration_source: 'tracked', tracked_duration_seconds: 3600 } },
+      { event_id: 'e-s2', task_id: 't-2', event_type: 'task_completed', timestamp: '2026-10-02T10:00:00Z', payload: { duration_source: 'tracked', tracked_duration_seconds: 3600 } },
+    ];
+    const sparseTasks = [
+      { id: 't-1', estimatedEffort: 1.0, completed: true },
+      { id: 't-2', estimatedEffort: 1.0, completed: true },
+    ];
+    assert.equal(buildPersonalDurationModel(sparseEvents, sparseTasks).status, 'sparse');
+
+    // 4.0 weight -> developing (>= 3.0 and < 8.0)
+    const devEvents = [...sparseEvents];
+    const devTasks = [...sparseTasks];
+    for (let i = 3; i <= 4; i++) {
+      devTasks.push({ id: `t-${i}`, estimatedEffort: 1.0, completed: true });
+      devEvents.push({ event_id: `e-s${i}`, task_id: `t-${i}`, event_type: 'task_completed', timestamp: `2026-10-0${i}T10:00:00Z`, payload: { duration_source: 'tracked', tracked_duration_seconds: 3600 } });
+    }
+    assert.equal(buildPersonalDurationModel(devEvents, devTasks).status, 'developing');
+
+    // 8.0 weight -> supported (>= 8.0)
+    const suppEvents = [...devEvents];
+    const suppTasks = [...devTasks];
+    for (let i = 5; i <= 8; i++) {
+      suppTasks.push({ id: `t-${i}`, estimatedEffort: 1.0, completed: true });
+      suppEvents.push({ event_id: `e-s${i}`, task_id: `t-${i}`, event_type: 'task_completed', timestamp: `2026-10-0${i}T10:00:00Z`, payload: { duration_source: 'tracked', tracked_duration_seconds: 3600 } });
+    }
+    assert.equal(buildPersonalDurationModel(suppEvents, suppTasks).status, 'supported');
   });
 });
