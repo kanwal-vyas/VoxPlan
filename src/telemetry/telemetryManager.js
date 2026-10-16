@@ -49,11 +49,31 @@ class TelemetryManager {
     if (this.isInitialized) return;
     try {
       this.eventsCache = await getEventsByProfile(this.profileId);
+      this._rebuildProposalDeduplication();
       this.isInitialized = true;
       this.notifySubscribers();
     } catch (err) {
       console.warn('Error loading telemetry events during init:', err);
       this.isInitialized = true;
+    }
+  }
+
+  /**
+   * Rebuilds the proposal action deduplication index from loaded events to ensure durability across reloads.
+   */
+  _rebuildProposalDeduplication() {
+    this.recordedProposalActions.clear();
+    for (const ev of this.eventsCache) {
+      if (!ev || !ev.payload) continue;
+      const scheduleId = ev.payload.schedule_id;
+      if (!scheduleId) continue;
+      if (ev.event_type === 'schedule_proposal_generated') {
+        this.recordedProposalActions.add(`gen_${scheduleId}`);
+      } else if (ev.event_type === 'schedule_proposal_accepted') {
+        this.recordedProposalActions.add(`acc_${scheduleId}`);
+      } else if (ev.event_type === 'schedule_proposal_discarded') {
+        this.recordedProposalActions.add(`disc_${scheduleId}`);
+      }
     }
   }
 
@@ -205,6 +225,16 @@ class TelemetryManager {
     const scheduleId = proposal.summary.scheduleId;
     const dedupeKey = `gen_${scheduleId}`;
     if (this.recordedProposalActions.has(dedupeKey)) return null;
+
+    // Check existing events in cache to ensure deduplication survives reloads
+    const alreadyLogged = this.eventsCache.some(
+      (e) => e.event_type === 'schedule_proposal_generated' && e.payload?.schedule_id === scheduleId
+    );
+    if (alreadyLogged) {
+      this.recordedProposalActions.add(dedupeKey);
+      return null;
+    }
+
     this.recordedProposalActions.add(dedupeKey);
 
     const summary = proposal.summary;
@@ -226,6 +256,18 @@ class TelemetryManager {
     const scheduleId = proposal.summary.scheduleId;
     const dedupeKey = `acc_${scheduleId}`;
     if (this.recordedProposalActions.has(dedupeKey)) return null;
+
+    // A proposal cannot be accepted if it was already accepted or discarded
+    const alreadyDecided = this.eventsCache.some(
+      (e) =>
+        (e.event_type === 'schedule_proposal_accepted' || e.event_type === 'schedule_proposal_discarded') &&
+        e.payload?.schedule_id === scheduleId
+    );
+    if (alreadyDecided) {
+      this.recordedProposalActions.add(dedupeKey);
+      return null;
+    }
+
     this.recordedProposalActions.add(dedupeKey);
 
     const summary = proposal.summary;
@@ -247,6 +289,18 @@ class TelemetryManager {
     const scheduleId = proposal.summary.scheduleId;
     const dedupeKey = `disc_${scheduleId}`;
     if (this.recordedProposalActions.has(dedupeKey)) return null;
+
+    // A proposal cannot be discarded if it was already accepted or discarded
+    const alreadyDecided = this.eventsCache.some(
+      (e) =>
+        (e.event_type === 'schedule_proposal_accepted' || e.event_type === 'schedule_proposal_discarded') &&
+        e.payload?.schedule_id === scheduleId
+    );
+    if (alreadyDecided) {
+      this.recordedProposalActions.add(dedupeKey);
+      return null;
+    }
+
     this.recordedProposalActions.add(dedupeKey);
 
     const summary = proposal.summary;

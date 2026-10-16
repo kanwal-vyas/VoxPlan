@@ -13,6 +13,7 @@ import TaskExplanationModal from './components/TaskExplanationModal';
 import AdaptiveScheduleModal from './components/AdaptiveScheduleModal';
 import LoadingScreen from './components/LoadingScreen';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { initCinematicScrollStory } from './animations/scrollStory';
 import { telemetry } from './telemetry/telemetryManager';
 import { completeTaskLifecycle, reopenTaskLifecycle } from './telemetry/taskLifecycle';
 import { buildPersonalDurationModel, computeBatchGuardedRisk } from './telemetry/personalModel';

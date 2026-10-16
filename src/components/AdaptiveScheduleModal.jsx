@@ -38,12 +38,14 @@ export default function AdaptiveScheduleModal({
 
   const [cachedSnapshotHash, setCachedSnapshotHash] = useState(currentTasksHash);
   const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  const [sessionCount, setSessionCount] = useState(1);
 
-  // Synchronize snapshot hash whenever modal opens
+  // Synchronize snapshot hash and session count whenever modal opens
   if (isOpen !== prevIsOpen) {
     setPrevIsOpen(isOpen);
     if (isOpen) {
       setCachedSnapshotHash(currentTasksHash);
+      setSessionCount((c) => c + 1);
     }
   }
 
@@ -54,7 +56,9 @@ export default function AdaptiveScheduleModal({
   const proposal = useMemo(() => {
     if (!isOpen) return null;
     const modelToUse = usePersonalModel ? personalDurationModel : null;
+    const scheduleId = `sched_${todayStr}_s${sessionCount}_${dailyCapacityHours}h_${horizonDays}d_${usePersonalModel ? 'pers' : 'raw'}`;
     return generateAdaptiveSchedule(tasks, {
+      scheduleId,
       dailyCapacityHours: Number(dailyCapacityHours) || 6.0,
       horizonDays: Number(horizonDays) || 14,
       personalDurationModel: modelToUse,
@@ -67,6 +71,7 @@ export default function AdaptiveScheduleModal({
     personalDurationModel,
     guardedPredictionsMap,
     isOpen,
+    sessionCount,
     dailyCapacityHours,
     horizonDays,
     usePersonalModel,
@@ -152,6 +157,7 @@ export default function AdaptiveScheduleModal({
 
   const handleRegenerate = () => {
     setCachedSnapshotHash(currentTasksHash);
+    setSessionCount((c) => c + 1);
   };
 
   if (!isOpen || !proposal) return null;
@@ -834,6 +840,42 @@ export default function AdaptiveScheduleModal({
                 )}
               </div>
             </div>
+
+            {/* Attribution Diagnostics & Exclusions Breakdown */}
+            {feedbackReport.diagnostics && feedbackReport.diagnostics.totalExcludedObservations > 0 && (
+              <div style={styles.diagnosticsBox}>
+                <div style={{ fontWeight: '800', fontSize: '11px', color: '#52525B', marginBottom: '4px' }}>
+                  🔍 Attribution Diagnostics ({feedbackReport.diagnostics.totalExcludedObservations} observation(s) excluded from scheduler timeliness):
+                </div>
+                <div style={styles.diagnosticsPillsRow}>
+                  {feedbackReport.diagnostics.exclusionsByReason.overridden_prior_to_completion > 0 && (
+                    <span style={styles.diagnosticPill} title="User manually altered task deadline prior to completion">
+                      Overridden before finish: {feedbackReport.diagnostics.exclusionsByReason.overridden_prior_to_completion}
+                    </span>
+                  )}
+                  {feedbackReport.diagnostics.exclusionsByReason.reopened_incomplete_lifecycle > 0 && (
+                    <span style={styles.diagnosticPill} title="Task was reopened after completion and is incomplete">
+                      Reopened / Incomplete: {feedbackReport.diagnostics.exclusionsByReason.reopened_incomplete_lifecycle}
+                    </span>
+                  )}
+                  {feedbackReport.diagnostics.exclusionsByReason.task_currently_open > 0 && (
+                    <span style={styles.diagnosticPill} title="Task is active in backlog">
+                      Currently open: {feedbackReport.diagnostics.exclusionsByReason.task_currently_open}
+                    </span>
+                  )}
+                  {feedbackReport.diagnostics.exclusionsByReason.missing_applicable_deadline > 0 && (
+                    <span style={styles.diagnosticPill} title="No applicable deadline to measure timeliness">
+                      Missing deadline: {feedbackReport.diagnostics.exclusionsByReason.missing_applicable_deadline}
+                    </span>
+                  )}
+                  {feedbackReport.diagnostics.exclusionsByReason.conflicting_proposal_decision > 0 && (
+                    <span style={styles.diagnosticPill} title="Proposal had conflicting accept and discard records">
+                      Conflicting decision: {feedbackReport.diagnostics.exclusionsByReason.conflicting_proposal_decision}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Cautious Learning Boundary Box */}
             <div style={styles.cautiousBoundaryBox}>
@@ -1636,5 +1678,26 @@ const styles = {
     fontSize: '10px',
     color: '#52525B',
     lineHeight: 1.35,
+  },
+  diagnosticsBox: {
+    backgroundColor: '#F9FAFB',
+    border: '1.5px solid #E5E7EB',
+    borderRadius: '8px',
+    padding: '10px 14px',
+  },
+  diagnosticsPillsRow: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '6px',
+    marginTop: '4px',
+  },
+  diagnosticPill: {
+    fontSize: '10px',
+    fontWeight: '700',
+    backgroundColor: '#FFFFFF',
+    border: '1px solid #D1D5DB',
+    color: '#4B5563',
+    padding: '2px 8px',
+    borderRadius: '4px',
   },
 };

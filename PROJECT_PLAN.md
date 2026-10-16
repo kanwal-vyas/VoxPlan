@@ -17,6 +17,7 @@ This document tracks the phased evolution of VoxPlan from a static task tracker 
 | **Phase 4, Stage 3** | Schedule Quality Evaluation & Benchmarking | **COMPLETED** | Documented deterministic schedule quality evaluation module (`src/scheduler/scheduleEvaluator.js`) across 7 dimensions (coverage, deadline feasibility, dependency correctness, capacity compliance, workload balance CV, horizon coverage, stability churn), multi-strategy benchmarking comparing Adaptive against Earliest Deadline First (EDF) and Priority-First under identical hard constraints, 12 reproducible scenario fixtures (`src/scheduler/scheduleBenchmarks.js`), perturbation churn analysis, modal benchmark UI tab, and 93 automated tests across 19 suites. |
 | **Phase 4, Stage 4** | Evidence-Driven Scheduler Optimization | **COMPLETED** | Rigorous baseline benchmark audit; replaced artificial depth penalty with bounded downstream unblocking bonus (`+ min(45, unblockCount * 15)`); eliminated unnecessary perturbation churn on satisfied dependencies (40% -> 0%, overall 24% -> 16%); multi-tier deterministic tie-breaking (score -> dueDate -> Shortest Processing Time -> taskId); evaluator metric honesty reporting `schedulableOnTimeRate` and `schedulerDaysDelayed`; enriched placement explainability; and 99 automated tests passing across 20 suites. |
 | **Phase 4, Stage 5** | Local Schedule Feedback & Outcome Tracking | **COMPLETED** | Versioned privacy-preserving telemetry schema (`SCHEMA_VERSION = 2`) recording proposal generation, acceptance, and discard actions; single-action deduplication; subsequent manual override detection (postponed vs advanced shifts); unaltered completion outcome matching; pure feedback analytics module (`scheduleFeedback.js`); modal feedback tab with explicit denominators and insufficient-data guards (< 3 observations); strict cautious learning boundary; and 110 automated tests across 27 suites. |
+| **Phase 4, Stage 6** | Schedule Feedback Integrity & Attribution Audit | **COMPLETED** | Stable session-scoped proposal identities; durable deduplication surviving page reloads without backend dependency (hydrating index from cached IndexedDB events on `telemetry.init()`); multi-proposal interval-based outcome attribution (`[acceptedAt, supersededAt)`); task lifecycle hardening (excluding reopened incomplete tasks & active backlog tasks); isolation of conflicting proposal decisions; standardized unique task denominators; privacy-preserving observability diagnostics; and 115 automated tests across 30 suites. |
 | **Phase 5** | Voice & Conversational Planning Experience | Next Up | Rich multi-turn planning dialog, schedule rescheduling commands, review debriefing via natural language. |
 
 ---
@@ -1173,8 +1174,76 @@ Total test count across repository: **110 automated tests passing across 27 suit
 
 ---
 
-### 9. Remaining Evidence Gaps & Prerequisite for Future Learning (Phase 5)
+## Phase 4, Stage 6 Execution Record: Schedule Feedback Integrity & Attribution Audit
 
+### 1. Objective
+Harden the attribution integrity, reload durability, task lifecycle consistency, and denominator precision of local schedule-feedback telemetry before any automatic learning is considered. Ensure zero privacy leakage, no external backend dependencies, and transparent diagnostic observability.
+
+### 2. Attribution Rules & Multi-Proposal Interval Scoping
+1. **Interval-Based Scoping (`[acceptedAt, supersededAt)`)**:
+   - When a task appears across multiple accepted proposals over time, events cannot be attributed merely by joining `task_id` and timestamp.
+   - VoxPlan establishes explicit chronological placement intervals: each proposal governs the task strictly from the proposal's `acceptedAt` timestamp until superseded by a subsequent accepted proposal (`supersededAt`).
+   - A manual reschedule (`task_rescheduled`) or completion (`task_completed`) is attributed strictly to the proposal governing that active interval window.
+2. **Lifecycle Integrity & Reopened Tasks**:
+   - If a task is completed, but subsequently reopened via `task_reopened`, or if its active state in `tasks` backlog has `completed: false`, it is classified as `reopened_incomplete_lifecycle` and excluded from scheduler-attributed completion metrics.
+3. **Manual Overrides Prior to Completion**:
+   - Tasks whose due dates were manually shifted by the user prior to completion are flagged as `overridden_prior_to_completion` and excluded from algorithmic on-time completion rates, preventing human adjustments from distorting scheduler quality evaluation.
+4. **Conflicting Decision Isolation**:
+   - If an event stream contains contradictory decisions for the same proposal (both accepted and discarded), the proposal is flagged as `conflicting_proposal_decision`, isolated in diagnostics, and excluded from accepted metrics.
+
+### 3. Persistence & Reload Deduplication Guarantees
+1. **Durable In-Memory Index Hydration**:
+   - `TelemetryManager` now executes `_rebuildProposalDeduplication()` during `init()`.
+   - When cached events are loaded from browser IndexedDB (`voxplan_db`), existing proposal actions (`gen_<id>`, `acc_<id>`, `disc_<id>`) are populated into `recordedProposalActions`.
+   - Even after hard page reloads, duplicate generation, acceptance, or discard calls for identical proposal IDs return `null` and do not inflate event history.
+2. **Session-Scoped Proposal Identities**:
+   - `AdaptiveScheduleModal` maintains a stable `sessionCount` state incremented on modal open and manual regeneration:
+     `sched_${todayStr}_s${sessionCount}_${dailyCapacityHours}h_${horizonDays}d_${usePersonalModel ? 'pers' : 'raw'}`
+   - Slider adjustments within a review session update the existing proposal deterministically without generating orphaned proposal IDs.
+
+### 4. Metric Corrections & Denominator Precision
+1. **Proposal Acceptance Rate**:
+   $$\text{Acceptance Rate} = \frac{\text{acceptedCount}}{\text{decidedCount}} = \frac{\text{validAccepted.length}}{\text{validAccepted.length} + \text{validDiscarded.length}}$$
+   - Pending proposals currently open in review are strictly excluded from the denominator.
+2. **Task Override Rate**:
+   $$\text{Task Override Rate} = \frac{\text{uniqueOverriddenTasksCount}}{\text{totalUniquePlacedTasksCount}}$$
+   - Evaluates the count of unique placed tasks rather than double-counting tasks present in multiple accepted proposals.
+3. **Unaltered On-Time Completion Rate**:
+   $$\text{On-Time Completion Rate} = \frac{\text{completedOnTimeCount}}{\text{eligibleCompletedCount}}$$
+   - Denominator contains only unaltered tasks completed within their active proposal placement window.
+
+### 5. Local-First Privacy & Deletion Guarantees
+1. **Zero Remote Data Transmission**: All proposal events and derived feedback metrics remain strictly on-device in browser IndexedDB. No feedback data is transmitted across the network.
+2. **Immediate Complete Deletion**: Calling `clearHistory()` clears IndexedDB stores, flushes in-memory event caches, clears deduplication action sets, and immediately resets all feedback metrics to an empty cold-start state.
+3. **Content Minimization**: Telemetry payloads store only stable opaque IDs (`schedule_id`, `task_id`) and ISO dates. No task titles or personal text are persisted.
+
+### 6. Attribution Diagnostics Observability
+Exposed non-sensitive, aggregated diagnostic pill badges in the feedback modal:
+- `overridden_prior_to_completion`: User rescheduled before finish.
+- `reopened_incomplete_lifecycle`: Task reopened after finish and left pending.
+- `task_currently_open`: Historical completion contradicted by active backlog state.
+- `missing_applicable_deadline`: Task lacked a valid target date.
+- `conflicting_proposal_decision`: Contradictory decisions detected on a proposal.
+
+### 7. Automated Test Suite (115 tests passing across 30 suites)
+- `tests/schedule_feedback.test.js`:
+  - Multi-proposal interval scoping and active window attribution.
+  - Reload deduplication survival and repeated action blocking.
+  - Conflicting proposal decision isolation.
+  - Lifecycle edge cases: reopened tasks and active backlog exclusion.
+  - Privacy-preserving diagnostics structure verification.
+- Total test count across repository: **115 automated tests passing across 30 suites**.
+
+### 8. Verification Results
+1. **Frontend Test Suite**: `npm test` -> **115 tests passing across 30 suites** (0 failures, 162ms).
+2. **Frontend Linter**: `npm run lint` (`oxlint`) -> **0 errors, 0 warnings** across 33 files.
+3. **Production Build**: `npm run build` (`vite build`) -> Built successfully in 230ms.
+4. **Backend Pytest Suite**: `python -m pytest backend/tests/ -v` -> **27 tests passing**.
+5. **Browser UI Verification**: Focused browser-level verification performed on `http://localhost:5174/` via browser subagent. Verified Proposal review, Feedback & Outcomes tab, insufficient data state (< 3 observations), KPI cards, and Discard flow with zero console errors.
+
+---
+
+### 9. Remaining Evidence Gaps & Prerequisite for Future Learning (Phase 5)
 1. **Sufficient Longitudinal Sample**: Learning user scheduling preferences requires observing at least 20+ independent scheduling decisions across diverse sprint workloads. Sparse feedback cannot distinguish task-specific friction from systemic algorithmic bias.
 2. **Multi-Turn Conversational Rescheduling**: Users currently override dates manually via inline date pickers. Phase 5 will add natural language rescheduling dialog in the Command Center (e.g., "Postpone low-priority tasks by 2 days due to an unexpected client escalation").
 3. **Next Stage (Phase 5: Voice & Conversational Planning Experience)**:

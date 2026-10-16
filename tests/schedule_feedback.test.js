@@ -458,3 +458,271 @@ describe('7. Cautious Learning Boundary Enforcement', () => {
     assert.ok(report.conceptDistinctions.completionRateNote.includes('NOT manually rescheduled'));
   });
 });
+
+describe('8. Multi-Proposal Attribution & Interval Scoping (Stage 6)', () => {
+  it('attributes events strictly to the proposal governing the active window when a task appears in multiple proposals', () => {
+    // Proposal 1: accepted at 2026-10-10, sets task_X to 2026-10-14
+    // Proposal 2: accepted at 2026-10-12, sets task_X to 2026-10-18
+    const events = [
+      createEvent({
+        profileId: 'prof_test',
+        taskId: null,
+        eventType: 'schedule_proposal_accepted',
+        timestamp: '2026-10-10T10:00:00.000Z',
+        payload: {
+          schedule_id: 'sched_P1',
+          applied_placements: [
+            { task_id: 'task_X', original_due_date: '2026-10-20', proposed_date: '2026-10-14' },
+          ],
+        },
+      }),
+      // Manual reschedule on 2026-10-11 (between P1 and P2) -> belongs strictly to P1
+      createEvent({
+        profileId: 'prof_test',
+        taskId: 'task_X',
+        eventType: 'task_rescheduled',
+        timestamp: '2026-10-11T12:00:00.000Z',
+        payload: {
+          previous_due_date: '2026-10-14',
+          new_due_date: '2026-10-15',
+          reason: 'user_override',
+        },
+      }),
+      createEvent({
+        profileId: 'prof_test',
+        taskId: null,
+        eventType: 'schedule_proposal_accepted',
+        timestamp: '2026-10-12T10:00:00.000Z',
+        payload: {
+          schedule_id: 'sched_P2',
+          applied_placements: [
+            { task_id: 'task_X', original_due_date: '2026-10-15', proposed_date: '2026-10-18' },
+          ],
+        },
+      }),
+      // Manual reschedule on 2026-10-13 (after P2) -> belongs strictly to P2
+      createEvent({
+        profileId: 'prof_test',
+        taskId: 'task_X',
+        eventType: 'task_rescheduled',
+        timestamp: '2026-10-13T14:00:00.000Z',
+        payload: {
+          previous_due_date: '2026-10-18',
+          new_due_date: '2026-10-19',
+          reason: 'user_override',
+        },
+      }),
+    ];
+
+    const report = computeScheduleFeedback(events, []);
+
+    // Both proposals were accepted and had placements
+    assert.equal(report.summary.acceptedCount, 2);
+    assert.equal(report.summary.proposalOverrideRate, 1.0); // Both proposals suffered an override in their respective intervals
+    
+    // Unique placed tasks = 1 (task_X), overridden tasks = 1 -> taskOverrideRate = 1.0
+    assert.equal(report.summary.totalUniquePlacedTasksCount, 1);
+    assert.equal(report.summary.uniqueOverriddenTasksCount, 1);
+    assert.equal(report.summary.taskOverrideRate, 1.0);
+
+    // Verify detailed override attribution
+    const overridesP1 = report.overrides.details.filter((o) => o.scheduleId === 'sched_P1');
+    const overridesP2 = report.overrides.details.filter((o) => o.scheduleId === 'sched_P2');
+
+    assert.equal(overridesP1.length, 1);
+    assert.equal(overridesP1[0].shiftDays, 1); // 2026-10-14 -> 2026-10-15 (+1 day)
+    assert.equal(overridesP1[0].overriddenAt, '2026-10-11T12:00:00.000Z');
+
+    assert.equal(overridesP2.length, 1);
+    assert.equal(overridesP2[0].shiftDays, 1); // 2026-10-18 -> 2026-10-19 (+1 day)
+    assert.equal(overridesP2[0].overriddenAt, '2026-10-13T14:00:00.000Z');
+  });
+});
+
+describe('9. Reload Deduplication & Conflicting Decisions Resilience (Stage 6)', () => {
+  beforeEach(async () => {
+    await telemetry.clearHistory();
+  });
+
+  it('durable deduplication survives in-memory cache recreation and blocks repeated actions', async () => {
+    const proposal = {
+      summary: {
+        scheduleId: 'sched_reload_durability_test',
+        strategy: 'adaptive',
+        dailyCapacityHours: 6.0,
+        horizonDays: 14,
+        totalEligibleTasks: 1,
+        scheduledCount: 1,
+        dateChangesCount: 1,
+        feasibilityStatus: 'feasible',
+      },
+      proposedPlacements: [
+        { taskId: 'task_dur_1', originalDueDate: '2026-10-22', proposedDate: '2026-10-20' },
+      ],
+    };
+
+    // 1. Generate and accept proposal
+    const genEv = await telemetry.recordScheduleProposalGenerated(proposal);
+    assert.ok(genEv);
+    const accEv = await telemetry.recordScheduleProposalAccepted(proposal, proposal.proposedPlacements);
+    assert.ok(accEv);
+
+    // 2. Simulate page reload: wipe in-memory state and re-init from IndexedDB
+    telemetry.recordedProposalActions.clear();
+    telemetry.isInitialized = false;
+    await telemetry.init();
+
+    // 3. Re-attempting duplicate generation or acceptance must return null
+    const dupGen = await telemetry.recordScheduleProposalGenerated(proposal);
+    assert.equal(dupGen, null);
+
+    const dupAcc = await telemetry.recordScheduleProposalAccepted(proposal, proposal.proposedPlacements);
+    assert.equal(dupAcc, null);
+
+    // 4. Conflicting decision (discarding an already accepted proposal) must return null
+    const conflictDisc = await telemetry.recordScheduleProposalDiscarded(proposal, 'user_cancelled');
+    assert.equal(conflictDisc, null);
+
+    // Event cache must contain exactly the original 2 events
+    assert.equal(telemetry.getEvents().length, 2);
+  });
+
+  it('isolates conflicting proposal decisions (accepted AND discarded) from corrupting feedback metrics', () => {
+    const events = [
+      createEvent({
+        profileId: 'prof_test',
+        taskId: null,
+        eventType: 'schedule_proposal_generated',
+        timestamp: '2026-10-16T08:00:00.000Z',
+        payload: { schedule_id: 'sched_corrupt' },
+      }),
+      createEvent({
+        profileId: 'prof_test',
+        taskId: null,
+        eventType: 'schedule_proposal_accepted',
+        timestamp: '2026-10-16T08:01:00.000Z',
+        payload: {
+          schedule_id: 'sched_corrupt',
+          applied_placements: [
+            { task_id: 'task_bad', original_due_date: '2026-10-20', proposed_date: '2026-10-18' },
+          ],
+        },
+      }),
+      // Malformed/tampered event stream where same proposal has discard event
+      createEvent({
+        profileId: 'prof_test',
+        taskId: null,
+        eventType: 'schedule_proposal_discarded',
+        timestamp: '2026-10-16T08:02:00.000Z',
+        payload: { schedule_id: 'sched_corrupt', reason: 'conflicting_entry' },
+      }),
+      // Legitimate clean proposal
+      createEvent({
+        profileId: 'prof_test',
+        taskId: null,
+        eventType: 'schedule_proposal_generated',
+        timestamp: '2026-10-16T09:00:00.000Z',
+        payload: { schedule_id: 'sched_clean' },
+      }),
+      createEvent({
+        profileId: 'prof_test',
+        taskId: null,
+        eventType: 'schedule_proposal_accepted',
+        timestamp: '2026-10-16T09:01:00.000Z',
+        payload: {
+          schedule_id: 'sched_clean',
+          applied_placements: [
+            { task_id: 'task_clean', original_due_date: '2026-10-20', proposed_date: '2026-10-19' },
+          ],
+        },
+      }),
+    ];
+
+    const report = computeScheduleFeedback(events, []);
+
+    // Conflicting proposal sched_corrupt is isolated
+    assert.equal(report.diagnostics.conflictingProposalDecisions.length, 1);
+    assert.equal(report.diagnostics.conflictingProposalDecisions[0], 'sched_corrupt');
+
+    // Only clean proposal is counted in acceptedCount
+    assert.equal(report.summary.acceptedCount, 1);
+    assert.equal(report.summary.decidedCount, 1);
+    assert.equal(report.summary.totalPlacedTasksCount, 1);
+    assert.equal(report.summary.acceptanceRate, 1.0);
+  });
+});
+
+describe('10. Lifecycle Edge Cases & Diagnostics Observability (Stage 6)', () => {
+  it('excludes reopened tasks and tasks currently incomplete from completed metrics', () => {
+    // Current task state in VoxPlan has task_reopened as open (completed: false)
+    const currentTasks = [
+      { id: 'task_reopened', title: 'Task Reopened', completed: false, due_date: '2026-10-20' },
+      { id: 'task_completed_normal', title: 'Task Normal', completed: true, due_date: '2026-10-20' },
+    ];
+
+    const events = [
+      createEvent({
+        profileId: 'prof_test',
+        taskId: null,
+        eventType: 'schedule_proposal_accepted',
+        timestamp: '2026-10-16T09:00:00.000Z',
+        payload: {
+          schedule_id: 'sched_life_test',
+          applied_placements: [
+            { task_id: 'task_reopened', original_due_date: '2026-10-25', proposed_date: '2026-10-20' },
+            { task_id: 'task_completed_normal', original_due_date: '2026-10-25', proposed_date: '2026-10-20' },
+          ],
+        },
+      }),
+      // Both tasks logged completion
+      createEvent({
+        profileId: 'prof_test',
+        taskId: 'task_reopened',
+        eventType: 'task_completed',
+        timestamp: '2026-10-18T10:00:00.000Z',
+        payload: { duration_source: 'tracked' },
+      }),
+      // task_reopened was subsequently reopened!
+      createEvent({
+        profileId: 'prof_test',
+        taskId: 'task_reopened',
+        eventType: 'task_reopened',
+        timestamp: '2026-10-18T12:00:00.000Z',
+        payload: { reason: 'user_reopened' },
+      }),
+      createEvent({
+        profileId: 'prof_test',
+        taskId: 'task_completed_normal',
+        eventType: 'task_completed',
+        timestamp: '2026-10-19T11:00:00.000Z',
+        payload: { duration_source: 'tracked' },
+      }),
+    ];
+
+    const report = computeScheduleFeedback(events, currentTasks);
+
+    // Only task_completed_normal is counted
+    assert.equal(report.summary.eligibleCompletedCount, 1);
+    assert.equal(report.summary.completedOnTimeCount, 1);
+    assert.equal(report.summary.onTimeCompletionRate, 1.0);
+
+    // Diagnostics captures the reopened incomplete task
+    assert.ok(report.diagnostics.reopenedIncompleteCount >= 1);
+    const excludedReopened = report.completionOutcomes.excludedObservations.find(
+      (o) => o.taskId === 'task_reopened'
+    );
+    assert.ok(excludedReopened);
+    assert.equal(excludedReopened.reason, 'reopened_incomplete_lifecycle');
+  });
+
+  it('exposes privacy-preserving diagnostics with zero leakage of task titles or personal content', () => {
+    const report = computeScheduleFeedback([], []);
+    assert.ok(report.diagnostics);
+    assert.equal(typeof report.diagnostics.excludedAmbiguousCount, 'number');
+    assert.equal(typeof report.diagnostics.reopenedIncompleteCount, 'number');
+    assert.equal(typeof report.diagnostics.conflictingDecisionsCount, 'number');
+    assert.equal(typeof report.diagnostics.overriddenPriorToCompletionCount, 'number');
+    assert.equal(typeof report.diagnostics.missingProposalIdentityCount, 'number');
+  });
+});
+

@@ -1,20 +1,38 @@
 /**
- * VoxPlan Schedule Feedback & Outcome Tracking.
+ * VoxPlan Schedule Feedback Integrity & Attribution Engine (Phase 4, Stage 6).
  * 
  * Computes transparent, local-first feedback metrics from durable telemetry events
  * to evaluate the real-world usefulness of schedule proposals.
  * 
- * Strict boundary:
- * - This module performs measurement and descriptive analysis only.
- * - It NEVER automatically modifies scheduler weights, retraining pipelines, or rules.
- * - Maintains explicit separation between:
- *     1. Proposal Acceptance Rate (willingness to adopt)
- *     2. Manual Override Rate (adjustments after adoption)
- *     3. Task Completion Timeliness (execution against accepted dates)
+ * Attribution & Integrity Rules:
+ * 1. Proposal Identity: Every proposal decision is keyed by a unique schedule_id.
+ *    Duplicate generation, acceptance, or discard events are deduplicated.
+ * 2. Interval-Based Multi-Proposal Attribution:
+ *    When a task appears across multiple accepted proposals, each placement is assigned
+ *    a distinct active time window [T_accepted, T_superseded). Events are strictly
+ *    matched to the proposal actively governing the task at that exact timestamp.
+ * 3. Subsequent Manual Override Linking:
+ *    A task_rescheduled event is linked as an override only if it occurs within the active
+ *    placement window, has reason !== 'adaptive_scheduler', and new_due_date !== proposed_date.
+ * 4. Completion Timeliness & Lifecycle Safeguards:
+ *    - Reopened tasks with no subsequent completion are marked incomplete and excluded.
+ *    - Tasks currently open in the task backlog are excluded from completed outcomes.
+ *    - Tasks manually rescheduled before completion are categorized as 'overridden_prior_to_completion'
+ *      and excluded from scheduler-attributed completion rates to avoid crediting/penalizing the algorithm
+ *      for user manual interventions.
+ *    - Repeated completions within a single proposal window evaluate only the final valid completion.
+ * 5. Denominator Integrity:
+ *    - Acceptance Rate: uniqueAccepted / (uniqueAccepted + uniqueDiscarded). Pending proposals excluded.
+ *    - Task Override Rate: uniqueOverriddenTasks / uniquePlacedTasks (tasks not double-counted across proposals).
+ *    - Proposal Override Rate: acceptedProposalsWithOverrides / uniqueAcceptedProposals.
+ *    - On-Time Completion Rate: completedOnTime / eligibleCompletedUnaltered.
+ *    - Never fills missing data with zero. Enforces strict insufficient-data tiers (< 3 observations).
+ * 6. Governance Boundary:
+ *    - Descriptive and measurement only. Never modifies scheduler weights or rules.
  */
 
 /**
- * Parses an ISO date string (YYYY-MM-DD or full ISO) to local midnight Date or timestamp.
+ * Parses an ISO date string (YYYY-MM-DD or full ISO) to local midnight Date.
  * Returns null if invalid.
  */
 function parseDateToMidnight(dateStr) {
@@ -40,47 +58,131 @@ function dayDiff(dateStrA, dateStrB) {
 }
 
 /**
- * Computes schedule feedback metrics from chronological telemetry events and current tasks.
+ * Computes schedule feedback metrics with robust multi-proposal attribution,
+ * lifecycle integrity, and defensive deduplication.
  * 
  * @param {Array<Object>} events - All telemetry events for the current profile.
- * @param {Array<Object>} [tasks=[]] - Current active/completed tasks (for cross-checking deadlines).
- * @returns {Object} Structured feedback evaluation report.
+ * @param {Array<Object>} [tasks=[]] - Current active/completed tasks (for cross-checking open state).
+ * @returns {Object} Structured feedback evaluation report with diagnostics.
  */
 export function computeScheduleFeedback(events = [], tasks = []) {
   // Sort events chronologically to guarantee correct sequence analysis
   const sortedEvents = [...events].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-  const generatedProposals = [];
-  const acceptedProposals = [];
-  const discardedProposals = [];
+  // Diagnostic tracking
+  const diagnostics = {
+    duplicateEventsFiltered: 0,
+    conflictingProposalsCount: 0,
+    malformedEventsCount: 0,
+    exclusionsByReason: {
+      overridden_prior_to_completion: 0,
+      reopened_incomplete_lifecycle: 0,
+      missing_applicable_deadline: 0,
+      invalid_deadline_format: 0,
+      task_currently_open: 0,
+      missing_proposal_identity: 0,
+      conflicting_proposal_decision: 0,
+      missing_task_id_in_placement: 0,
+    },
+    exclusionDetails: [],
+  };
 
-  // Group proposal events
-  for (const ev of sortedEvents) {
-    if (ev.event_type === 'schedule_proposal_generated') {
-      generatedProposals.push(ev);
-    } else if (ev.event_type === 'schedule_proposal_accepted') {
-      acceptedProposals.push(ev);
-    } else if (ev.event_type === 'schedule_proposal_discarded') {
-      discardedProposals.push(ev);
+  function addExclusion(record) {
+    diagnostics.exclusionDetails.push(record);
+    if (diagnostics.exclusionsByReason[record.reason] !== undefined) {
+      diagnostics.exclusionsByReason[record.reason]++;
     }
   }
 
-  const generatedCount = generatedProposals.length;
-  const acceptedCount = acceptedProposals.length;
-  const discardedCount = discardedProposals.length;
-  const decidedCount = acceptedCount + discardedCount;
+  // 1. Deduplicate & categorize proposal lifecycle events
+  const generatedMap = new Map(); // scheduleId -> event
+  const acceptedMap = new Map();  // scheduleId -> event
+  const discardedMap = new Map(); // scheduleId -> event
 
-  // Acceptance rate calculation with explicit denominator
+  for (const ev of sortedEvents) {
+    if (
+      ev.event_type !== 'schedule_proposal_generated' &&
+      ev.event_type !== 'schedule_proposal_accepted' &&
+      ev.event_type !== 'schedule_proposal_discarded'
+    ) {
+      continue;
+    }
+
+    const scheduleId = ev.payload?.schedule_id;
+    if (!scheduleId || typeof scheduleId !== 'string' || !scheduleId.trim()) {
+      diagnostics.malformedEventsCount++;
+      addExclusion({
+        eventId: ev.event_id,
+        eventType: ev.event_type,
+        reason: 'missing_proposal_identity',
+        timestamp: ev.timestamp,
+      });
+      continue;
+    }
+
+    if (ev.event_type === 'schedule_proposal_generated') {
+      if (!generatedMap.has(scheduleId)) {
+        generatedMap.set(scheduleId, ev);
+      } else {
+        diagnostics.duplicateEventsFiltered++;
+      }
+    } else if (ev.event_type === 'schedule_proposal_accepted') {
+      if (!acceptedMap.has(scheduleId)) {
+        acceptedMap.set(scheduleId, ev);
+      } else {
+        diagnostics.duplicateEventsFiltered++;
+      }
+    } else if (ev.event_type === 'schedule_proposal_discarded') {
+      if (!discardedMap.has(scheduleId)) {
+        discardedMap.set(scheduleId, ev);
+      } else {
+        diagnostics.duplicateEventsFiltered++;
+      }
+    }
+  }
+
+  // Identify and isolate conflicting proposal decisions (accepted AND discarded)
+  const validAccepted = [];
+  const validDiscarded = [];
+  const conflictingScheduleIds = new Set();
+
+  for (const [scheduleId, ev] of acceptedMap.entries()) {
+    if (discardedMap.has(scheduleId)) {
+      conflictingScheduleIds.add(scheduleId);
+      diagnostics.conflictingProposalsCount++;
+      addExclusion({
+        scheduleId,
+        reason: 'conflicting_proposal_decision',
+        timestamp: ev.timestamp,
+      });
+    } else {
+      validAccepted.push(ev);
+    }
+  }
+
+  for (const [scheduleId, ev] of discardedMap.entries()) {
+    if (!conflictingScheduleIds.has(scheduleId)) {
+      validDiscarded.push(ev);
+    }
+  }
+
+  const generatedCount = generatedMap.size;
+  const acceptedCount = validAccepted.length;
+  const discardedCount = validDiscarded.length;
+  const decidedCount = acceptedCount + discardedCount;
+  const pendingCount = Math.max(0, generatedCount - decidedCount);
+
+  // Acceptance rate with explicit decided denominator
   const acceptanceRate = decidedCount > 0 ? acceptedCount / decidedCount : null;
 
-  // Track applied task placements across all accepted proposals
-  // Key: taskId, Value: { scheduleId, acceptedAt, proposedDate, originalDueDate }
-  // We keep the most recent accepted proposal for each task
-  const activePlacements = new Map();
-  // Also track all historical accepted proposals with their placements
+  // 2. Build Chronological Task Placement Intervals
+  // For each task, track an array of placement intervals:
+  // [{ scheduleId, acceptedAt, windowEnd, taskId, proposedDate, originalDueDate }]
+  const taskPlacementIntervals = new Map(); // taskId -> Array<Interval>
   const acceptedProposalDetails = [];
+  const allUniquePlacedTaskIds = new Set();
 
-  for (const accEv of acceptedProposals) {
+  for (const accEv of validAccepted) {
     const p = accEv.payload || {};
     const scheduleId = p.schedule_id;
     const acceptedAt = new Date(accEv.timestamp);
@@ -89,150 +191,242 @@ export function computeScheduleFeedback(events = [], tasks = []) {
     acceptedProposalDetails.push({
       scheduleId,
       acceptedAt: accEv.timestamp,
-      tasksChangedCount: p.tasks_changed_count || 0,
-      totalTasksCount: p.total_tasks_count || 0,
+      tasksChangedCount: p.tasks_changed_count || placements.length,
+      totalTasksCount: p.total_tasks_count || placements.length,
       placements,
     });
 
     for (const pl of placements) {
-      if (pl.task_id) {
-        activePlacements.set(pl.task_id, {
+      const taskId = pl.task_id || pl.taskId;
+      const proposedDate = pl.proposed_date || pl.proposedDate;
+      const originalDueDate = pl.original_due_date || pl.originalDueDate || null;
+
+      if (!taskId) {
+        addExclusion({
           scheduleId,
-          acceptedAt,
-          proposedDate: pl.proposed_date,
-          originalDueDate: pl.original_due_date || null,
+          reason: 'missing_task_id_in_placement',
+          timestamp: accEv.timestamp,
         });
+        continue;
       }
+
+      allUniquePlacedTaskIds.add(taskId);
+
+      if (!taskPlacementIntervals.has(taskId)) {
+        taskPlacementIntervals.set(taskId, []);
+      }
+
+      const intervals = taskPlacementIntervals.get(taskId);
+      // If there was a previous accepted proposal placing this task, close its active window
+      if (intervals.length > 0) {
+        intervals[intervals.length - 1].windowEnd = acceptedAt;
+      }
+
+      intervals.push({
+        scheduleId,
+        acceptedAt,
+        windowEnd: null, // Open until superseded by next accepted proposal
+        taskId,
+        proposedDate,
+        originalDueDate,
+      });
     }
   }
 
-  // Track overrides and completion outcomes for accepted placements
-  // An override is a task_rescheduled event occurring after proposal acceptance,
-  // where the new_due_date differs from the proposed_date and reason is not 'adaptive_scheduler'.
+  // 3. Process Task Events against Specific Active Placement Windows
+  // Each task event belongs strictly to the interval where acceptedAt < eventTime < windowEnd
   const taskOverrides = [];
   const completedPlacements = [];
-  const excludedAmbiguousOutcomes = [];
 
-  // Map to track if a task was overridden after its accepted proposal
-  const taskOverrideState = new Map(); // taskId -> { overridden: boolean, overrideEvent, shiftDays }
-
+  // Group task lifecycle events for rapid interval querying
+  const eventsByTask = new Map();
   for (const ev of sortedEvents) {
-    const taskId = ev.task_id;
-    if (!taskId || !activePlacements.has(taskId)) continue;
+    if (!ev.task_id) continue;
+    if (!eventsByTask.has(ev.task_id)) {
+      eventsByTask.set(ev.task_id, []);
+    }
+    eventsByTask.get(ev.task_id).push(ev);
+  }
 
-    const placement = activePlacements.get(taskId);
-    const eventTime = new Date(ev.timestamp);
+  // Analyze each placement interval independently
+  for (const [taskId, intervals] of taskPlacementIntervals.entries()) {
+    const taskEvents = eventsByTask.get(taskId) || [];
 
-    // Event must happen after proposal acceptance
-    if (eventTime <= placement.acceptedAt) continue;
+    for (const interval of intervals) {
+      const { scheduleId, acceptedAt, windowEnd, proposedDate } = interval;
 
-    if (ev.event_type === 'task_rescheduled') {
-      const p = ev.payload || {};
-      const newDueDate = p.new_due_date;
-      const reason = p.reason;
+      // Filter events occurring strictly in this interval
+      const intervalEvents = taskEvents.filter((ev) => {
+        const t = new Date(ev.timestamp);
+        if (t <= acceptedAt) return false;
+        if (windowEnd !== null && t >= windowEnd) return false;
+        return true;
+      });
 
-      // Ignore scheduler applying its own placement
-      if (reason === 'adaptive_scheduler') continue;
+      // Track overrides within this specific interval
+      let isOverriddenInInterval = false;
+      let latestOverrideTime = null;
 
-      if (newDueDate && newDueDate !== placement.proposedDate) {
-        const shiftDays = dayDiff(placement.proposedDate, newDueDate);
-        const overrideRecord = {
+      for (const ev of intervalEvents) {
+        if (ev.event_type === 'task_rescheduled') {
+          const p = ev.payload || {};
+          const newDueDate = p.new_due_date || p.newDueDate;
+          const reason = p.reason;
+
+          // Ignore scheduler's automated application
+          if (reason === 'adaptive_scheduler') continue;
+
+          if (newDueDate && newDueDate !== proposedDate) {
+            const shiftDays = dayDiff(proposedDate, newDueDate);
+            const overrideRecord = {
+              taskId,
+              scheduleId,
+              proposedDate,
+              overriddenDate: newDueDate,
+              shiftDays,
+              shiftDirection: shiftDays > 0 ? 'postponed' : shiftDays < 0 ? 'advanced' : 'same_day',
+              timestamp: ev.timestamp,
+              overriddenAt: ev.timestamp,
+            };
+            taskOverrides.push(overrideRecord);
+            isOverriddenInInterval = true;
+            latestOverrideTime = new Date(ev.timestamp);
+          }
+        }
+      }
+
+      // Track completion outcomes within this specific interval
+      const completionEvents = intervalEvents.filter((ev) => ev.event_type === 'task_completed');
+      const reopenEvents = intervalEvents.filter((ev) => ev.event_type === 'task_reopened');
+
+      if (completionEvents.length > 0) {
+        // Take the latest completion event in this window
+        const latestCompletion = completionEvents[completionEvents.length - 1];
+        const latestCompletionTime = new Date(latestCompletion.timestamp);
+
+        // Check if task was reopened after this completion within the interval
+        const hasSubsequentReopen = reopenEvents.some(
+          (re) => new Date(re.timestamp) > latestCompletionTime
+        );
+
+        if (hasSubsequentReopen) {
+          // Reopened task with incomplete lifecycle in this interval
+          addExclusion({
+            taskId,
+            scheduleId,
+            reason: 'reopened_incomplete_lifecycle',
+            completedAt: latestCompletion.timestamp,
+          });
+          continue;
+        }
+
+        // Cross-check with active backlog state (if tasks array is provided)
+        const activeTaskMeta = tasks.find((t) => t.id === taskId);
+        if (activeTaskMeta && activeTaskMeta.completed === false) {
+          addExclusion({
+            taskId,
+            scheduleId,
+            reason: 'task_currently_open',
+            completedAt: latestCompletion.timestamp,
+          });
+          continue;
+        }
+
+        // Validate applicable deadline
+        const applicableDeadline = proposedDate || (activeTaskMeta && (activeTaskMeta.dueDate || activeTaskMeta.due_date));
+        if (!applicableDeadline) {
+          addExclusion({
+            taskId,
+            scheduleId,
+            reason: 'missing_applicable_deadline',
+            completedAt: latestCompletion.timestamp,
+          });
+          continue;
+        }
+
+        const deadlineDate = parseDateToMidnight(applicableDeadline);
+        if (!deadlineDate) {
+          addExclusion({
+            taskId,
+            scheduleId,
+            reason: 'invalid_deadline_format',
+            completedAt: latestCompletion.timestamp,
+          });
+          continue;
+        }
+
+        // Was task overridden prior to completion?
+        const wasOverriddenPrior = isOverriddenInInterval && latestOverrideTime && latestOverrideTime < latestCompletionTime;
+
+        // End of due date (23:59:59.999 local time)
+        const deadlineEndOfDay = new Date(deadlineDate.getTime() + 86400000 - 1);
+        const isOnTime = latestCompletionTime.getTime() <= deadlineEndOfDay.getTime();
+
+        const outcome = {
           taskId,
-          scheduleId: placement.scheduleId,
-          proposedDate: placement.proposedDate,
-          overriddenDate: newDueDate,
-          shiftDays,
-          shiftDirection: shiftDays > 0 ? 'postponed' : shiftDays < 0 ? 'advanced' : 'same_day',
-          timestamp: ev.timestamp,
+          scheduleId,
+          proposedDate,
+          completedAt: latestCompletion.timestamp,
+          isOnTime,
+          wasOverriddenBeforeCompletion: Boolean(wasOverriddenPrior),
         };
-        taskOverrides.push(overrideRecord);
-        taskOverrideState.set(taskId, { overridden: true, overrideRecord });
-      }
-    } else if (ev.event_type === 'task_completed') {
-      // Task was completed. Check if it was preceded by an override
-      const overrideInfo = taskOverrideState.get(taskId);
-      const isOverridden = !!(overrideInfo && overrideInfo.overridden);
 
-      // Find applicable task metadata from active/completed tasks list
-      const taskMeta = tasks.find(t => t.id === taskId);
-      const applicableDeadline = placement.proposedDate || (taskMeta && taskMeta.due_date);
-
-      if (!applicableDeadline) {
-        // Missing clear deadline to evaluate timeliness
-        excludedAmbiguousOutcomes.push({
-          taskId,
-          reason: 'missing_applicable_deadline',
-          completedAt: ev.timestamp,
-        });
-        continue;
-      }
-
-      // Check if completed on or before the proposed date
-      // A task due on YYYY-MM-DD is on time if completed before or on the end of that day (23:59:59.999)
-      const deadlineDate = parseDateToMidnight(applicableDeadline);
-      if (!deadlineDate) {
-        excludedAmbiguousOutcomes.push({
-          taskId,
-          reason: 'invalid_deadline_format',
-          completedAt: ev.timestamp,
-        });
-        continue;
-      }
-
-      // End of due date in local time
-      const deadlineEndOfDay = new Date(deadlineDate.getTime() + 86400000 - 1);
-      const isOnTime = eventTime.getTime() <= deadlineEndOfDay.getTime();
-
-      const outcome = {
-        taskId,
-        scheduleId: placement.scheduleId,
-        proposedDate: placement.proposedDate,
-        completedAt: ev.timestamp,
-        isOnTime,
-        wasOverriddenBeforeCompletion: isOverridden,
-      };
-
-      if (isOverridden) {
-        // If the task was rescheduled manually before completion,
-        // its completion cannot be attributed solely to the scheduler proposal.
-        excludedAmbiguousOutcomes.push({
-          ...outcome,
-          reason: 'overridden_prior_to_completion',
-        });
-      } else {
-        // Pure, reliable outcome attributed directly to accepted schedule
-        completedPlacements.push(outcome);
+        if (wasOverriddenPrior) {
+          // Exclude from algorithm on-time rate to prevent attributing manual user shifts to the scheduler
+          addExclusion({
+            ...outcome,
+            reason: 'overridden_prior_to_completion',
+          });
+        } else {
+          // Pure, reliable outcome attributed directly to this accepted proposal
+          completedPlacements.push(outcome);
+        }
       }
     }
   }
 
+  // 4. Compute Aggregate Metrics with Strict Denominators
   // Unique accepted proposals that experienced at least one manual override
-  const overriddenScheduleIds = new Set(taskOverrides.map(o => o.scheduleId));
+  const overriddenScheduleIds = new Set(taskOverrides.map((o) => o.scheduleId));
   const acceptedProposalsWithOverridesCount = overriddenScheduleIds.size;
   const proposalOverrideRate = acceptedCount > 0
     ? acceptedProposalsWithOverridesCount / acceptedCount
     : null;
 
-  // Task-level override statistics
-  const totalPlacedTasksCount = activePlacements.size;
-  const uniqueOverriddenTasksCount = new Set(taskOverrides.map(o => o.taskId)).size;
-  const taskOverrideRate = totalPlacedTasksCount > 0
-    ? uniqueOverriddenTasksCount / totalPlacedTasksCount
+  // Task-level override statistics (unique tasks, not duplicate placements)
+  const totalUniquePlacedTasksCount = allUniquePlacedTaskIds.size;
+  const uniqueOverriddenTasksCount = new Set(taskOverrides.map((o) => o.taskId)).size;
+  const taskOverrideRate = totalUniquePlacedTasksCount > 0
+    ? uniqueOverriddenTasksCount / totalUniquePlacedTasksCount
     : null;
 
   // Completion timeliness on unaltered scheduled tasks
   const eligibleCompletedCount = completedPlacements.length;
-  const completedOnTimeCount = completedPlacements.filter(o => o.isOnTime).length;
+  const completedOnTimeCount = completedPlacements.filter((o) => o.isOnTime).length;
   const onTimeCompletionRate = eligibleCompletedCount > 0
     ? completedOnTimeCount / eligibleCompletedCount
     : null;
 
   // Directional shifts in manual overrides
-  const postponedOverridesCount = taskOverrides.filter(o => o.shiftDirection === 'postponed').length;
-  const advancedOverridesCount = taskOverrides.filter(o => o.shiftDirection === 'advanced').length;
+  const postponedOverridesCount = taskOverrides.filter((o) => o.shiftDirection === 'postponed').length;
+  const advancedOverridesCount = taskOverrides.filter((o) => o.shiftDirection === 'advanced').length;
+  const sameDayOverridesCount = taskOverrides.filter((o) => o.shiftDirection === 'same_day').length;
 
   // Data sufficiency check (minimum 3 decided proposals or 3 completed scheduled tasks)
   const isSufficientData = decidedCount >= 3 && (acceptedCount === 0 || eligibleCompletedCount >= 3 || uniqueOverriddenTasksCount >= 3);
+
+  const finalDiagnostics = {
+    ...diagnostics,
+    totalExcludedObservations: diagnostics.exclusionDetails.length,
+    excludedAmbiguousCount: diagnostics.exclusionDetails.length,
+    reopenedIncompleteCount:
+      (diagnostics.exclusionsByReason.reopened_incomplete_lifecycle || 0) +
+      (diagnostics.exclusionsByReason.task_currently_open || 0),
+    conflictingDecisionsCount: conflictingScheduleIds.size,
+    conflictingProposalDecisions: Array.from(conflictingScheduleIds),
+    overriddenPriorToCompletionCount: diagnostics.exclusionsByReason.overridden_prior_to_completion || 0,
+    missingProposalIdentityCount: diagnostics.malformedEventsCount || 0,
+  };
 
   return {
     summary: {
@@ -240,23 +434,27 @@ export function computeScheduleFeedback(events = [], tasks = []) {
       acceptedCount,
       discardedCount,
       decidedCount,
+      pendingCount,
       acceptanceRate,
       proposalOverrideRate,
       taskOverrideRate,
-      totalPlacedTasksCount,
+      totalPlacedTasksCount: totalUniquePlacedTasksCount,
+      totalUniquePlacedTasksCount,
       uniqueOverriddenTasksCount,
       eligibleCompletedCount,
       completedOnTimeCount,
       onTimeCompletionRate,
-      excludedAmbiguousCount: excludedAmbiguousOutcomes.length,
+      excludedAmbiguousCount: diagnostics.exclusionDetails.length,
       postponedOverridesCount,
       advancedOverridesCount,
+      sameDayOverridesCount,
       isSufficientData,
     },
     proposals: {
-      generated: generatedProposals,
+      generated: Array.from(generatedMap.values()),
       accepted: acceptedProposalDetails,
-      discarded: discardedProposals,
+      discarded: validDiscarded,
+      conflictingCount: diagnostics.conflictingProposalsCount,
     },
     overrides: {
       totalOverrideEvents: taskOverrides.length,
@@ -265,12 +463,14 @@ export function computeScheduleFeedback(events = [], tasks = []) {
       shiftSummary: {
         postponed: postponedOverridesCount,
         advanced: advancedOverridesCount,
+        sameDay: sameDayOverridesCount,
       },
     },
     completionOutcomes: {
       reliableObservations: completedPlacements,
-      excludedObservations: excludedAmbiguousOutcomes,
+      excludedObservations: diagnostics.exclusionDetails,
     },
+    diagnostics: finalDiagnostics,
     cautiousLearningBoundary: {
       status: 'active_measurement_only',
       automaticTuningEnabled: false,
