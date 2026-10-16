@@ -214,8 +214,25 @@ export function analyzeTaskDependencies(tasks = []) {
     }
   }
 
-  // 4. Compute topological depth for non-blocked tasks
+  // 4. Compute topological depth and downstream unblock counts for non-blocked tasks
   const taskDepths = new Map();
+  const unblockCounts = new Map();
+
+  // Initialize unblockCounts to 0 for all tasks
+  for (const t of tasks) {
+    if (t && t.id) unblockCounts.set(t.id, 0);
+  }
+
+  // Count direct downstream dependents for each non-blocked task
+  for (const t of tasks) {
+    if (!t || !t.id || blockedTasks.has(t.id)) continue;
+    const deps = validDependencies.get(t.id) || [];
+    for (const depId of deps) {
+      if (!blockedTasks.has(depId)) {
+        unblockCounts.set(depId, (unblockCounts.get(depId) || 0) + 1);
+      }
+    }
+  }
 
   function getDepth(taskId, visited = new Set()) {
     if (taskDepths.has(taskId)) return taskDepths.get(taskId);
@@ -250,6 +267,7 @@ export function analyzeTaskDependencies(tasks = []) {
     blockedTasks,
     missingDependencies,
     taskDepths,
+    unblockCounts,
   };
 }
 
@@ -312,16 +330,21 @@ export function buildCalendarSlots(
  * 2. Earliest Deadline First (EDF) (+0 to +1500 pts): Shorter calendar windows to deadline take precedence.
  * 3. No Deadline Penalty (-500 pts): Tasks without deadlines yield to hard commitments.
  * 4. Priority Tier: High (+300 pts) > Medium (+200 pts) > Low (+100 pts) (100 pt tier spacing).
- * 5. Secondary Guarded Risk Urgency (+60 pts for High risk, +25 pts for Med risk):
+ * 5. Downstream Unblocking Bonus (+0 to +45 pts):
+ *    Tasks that unblock other downstream non-blocked tasks on the critical path receive a bounded
+ *    bonus (+15 pts per direct dependent, clamped at +45 pts).
+ *    Note: Kahn's DAG algorithm guarantees prerequisites are scheduled before dependents.
+ *    Rewarding unblocking potential accelerates critical paths without penalizing ready dependents.
+ * 6. Secondary Guarded Risk Urgency (+60 pts for High risk, +25 pts for Med risk):
  *    Subtle heuristic nudge; smaller than the 100 pt priority tier gap, ensuring it cannot
  *    override priority tiers or hard deadlines.
- * 6. Hard Topological Guarantee: Selection operates on Kahn's ready-queue; no score can
+ * 7. Hard Topological Guarantee: Selection operates on Kahn's ready-queue; no score can
  *    ever bypass dependency constraints.
  */
 export function calculateTaskPriorityScore(
   task,
   asOfDateStr,
-  dependencyDepths,
+  unblockInfo,
   predictionsMap = {},
   strategy = 'adaptive'
 ) {
@@ -356,9 +379,19 @@ export function calculateTaskPriorityScore(
   // Strategy: Adaptive (Default Multi-Objective)
   let score = 0;
 
-  // 1. Dependency depth: tie-breaker favoring prerequisites that unblock others
-  const depth = dependencyDepths instanceof Map ? (dependencyDepths.get(task.id) || 0) : 0;
-  score -= depth * 100;
+  // 1. Critical path & unblocking bonus (favoring tasks that unlock downstream work)
+  // Bounded bonus: +15 pts per downstream dependent, clamped to max +45 pts.
+  // Note: Kahn's DAG algorithm already guarantees prerequisites schedule before dependents.
+  // We award a positive unblocking bonus to critical path tasks without penalizing ready dependents.
+  let unblockCount = 0;
+  if (unblockInfo instanceof Map) {
+    unblockCount = unblockInfo.get(task.id) || 0;
+  } else if (typeof unblockInfo === 'number') {
+    unblockCount = unblockInfo;
+  } else if (task && task.unblockCount) {
+    unblockCount = task.unblockCount;
+  }
+  score += Math.min(45, unblockCount * 15);
 
   // 2. Deadline Urgency (EDF)
   if (task.dueDate) {
@@ -469,7 +502,7 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
     cycles,
     blockedTasks,
     missingDependencies,
-    taskDepths,
+    unblockCounts,
   } = dependencyInfo;
 
   if (cycles.length > 0) {
@@ -518,7 +551,7 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
     const priorityScore = calculateTaskPriorityScore(
       t,
       startDateStr,
-      taskDepths,
+      unblockCounts,
       predictionsMap,
       strategy
     );
@@ -633,13 +666,35 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
   const remainingSchedulable = new Set(schedulableCandidates.map((t) => t.id));
 
   while (readyQueue.length > 0) {
-    // Deterministic selection: highest priorityScore descending, stable tie-breaker taskId ascending
+    // Deterministic multi-tier selection among ready tasks:
+    // 1. Priority score descending (composite urgency, priority tier, unblocking bonus, risk nudge)
+    // 2. Exact calendar due date ascending (earlier calendar commitment takes precedence; tasks with deadlines before tasks without)
+    // 3. Shortest Processing Time (SPT) ascending (smaller duration first to maximize task throughput and capacity efficiency)
+    // 4. Stable taskId ascending (strict deterministic reproducibility)
     readyQueue.sort((a, b) => {
       const scoreA = taskMeta.get(a.id)?.priorityScore ?? 0;
       const scoreB = taskMeta.get(b.id)?.priorityScore ?? 0;
       if (scoreB !== scoreA) {
         return scoreB - scoreA;
       }
+
+      // Tie-breaker 2: Calendar due date ascending
+      const dueA = a.dueDate ? formatDateISO(a.dueDate) : null;
+      const dueB = b.dueDate ? formatDateISO(b.dueDate) : null;
+      if (dueA && dueB && dueA !== dueB) {
+        return dueA.localeCompare(dueB);
+      }
+      if (dueA && !dueB) return -1;
+      if (!dueA && dueB) return 1;
+
+      // Tie-breaker 3: Shortest Processing Time (SPT)
+      const hoursA = taskMeta.get(a.id)?.effectiveHours ?? 0;
+      const hoursB = taskMeta.get(b.id)?.effectiveHours ?? 0;
+      if (Math.abs(hoursA - hoursB) > 0.001) {
+        return hoursA - hoursB;
+      }
+
+      // Tie-breaker 4: Stable alphabetical task ID
       return String(a.id).localeCompare(String(b.id));
     });
 
@@ -687,7 +742,21 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
       const proposedDate = placedSlot.date;
       const originalDueDate = currentTask.dueDate ? formatDateISO(currentTask.dueDate) : null;
       let status = 'on_time';
-      let placementReason = `Scheduled on ${placedSlot.dayName} ${placedSlot.date} (${requiredHours.toFixed(1)}h via ${meta.durationSource})`;
+      const durationLabel = `${requiredHours.toFixed(1)}h via ${meta.durationSource}${meta.appliedRatio !== 1.0 ? ` at ${(meta.appliedRatio).toFixed(2)}x` : ''}`;
+      const unblockCount = unblockCounts ? (unblockCounts.get(currentTask.id) || 0) : 0;
+      const explanationParts = [`Scheduled on ${placedSlot.dayName} ${placedSlot.date} (${durationLabel})`];
+
+      if (directPrereqs.length > 0) {
+        explanationParts.push(`Prerequisite constraint satisfied`);
+      }
+
+      if (unblockCount > 0) {
+        explanationParts.push(`Unblocks ${unblockCount} downstream task${unblockCount > 1 ? 's' : ''}`);
+      }
+
+      if (String(currentTask.priority || '').toLowerCase() === 'high') {
+        explanationParts.push(`High-priority commitment`);
+      }
 
       if (originalDueDate) {
         const dueParsed = parseDateISO(originalDueDate);
@@ -699,17 +768,20 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
             status = 'overdue_at_start';
             const overdueDays = Math.round((startParsed.getTime() - dueParsed.getTime()) / (1000 * 3600 * 24));
             taskConflicts.push(`Deadline was already overdue by ${overdueDays} day(s) at start of schedule.`);
-            placementReason += ` [Overdue recovery placement]`;
+            explanationParts.push(`Prioritized for immediate overdue recovery (${overdueDays}d overdue prior to start)`);
           } else if (propParsed.getTime() > dueParsed.getTime()) {
             status = 'deadline_missed';
             const delayDays = Math.round((propParsed.getTime() - dueParsed.getTime()) / (1000 * 3600 * 24));
-            taskConflicts.push(`Proposed date (${proposedDate}) is ${delayDays} day(s) after deadline (${originalDueDate}) due to capacity constraints.`);
-            placementReason += ` [Pushed ${delayDays}d past deadline by workload volume]`;
+            taskConflicts.push(`Proposed date (${proposedDate}) is ${delayDays} day(s) after deadline (${originalDueDate}) due to daily capacity limits.`);
+            explanationParts.push(`Pushed ${delayDays}d past deadline due to daily capacity volume (${dailyCapacityHours}h/day)`);
           }
         }
       } else {
-        placementReason += ` (no hard deadline specified)`;
+        explanationParts.push(`Flexible commitment scheduled in available capacity`);
       }
+
+      const explanation = explanationParts.join(' • ');
+      const placementReason = explanation;
 
       const isDateChanged = originalDueDate !== proposedDate;
 
@@ -728,7 +800,7 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
         status,
         placementStatus: status,
         placementReason,
-        explanation: placementReason,
+        explanation,
         conflicts: taskConflicts,
       });
 
@@ -863,6 +935,7 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
 
   const summary = {
     strategy,
+    startDate: startDateStr,
     totalEligibleTasks,
     totalTasksEvaluated: totalEligibleTasks,
     scheduledCount,

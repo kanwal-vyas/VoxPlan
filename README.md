@@ -47,10 +47,13 @@ LOCAL EVENT STORE & PERSONAL AI ENGINES
      │   └─ Leakage protection: zero target leakage, strict timestamp <= asOfTime
      ├─ Hardened Adaptive Scheduler (src/scheduler/adaptiveScheduler.js)
      │   ├─ Kahn's topological ready-queue (strict DAG precedence over priority scores)
+     │   ├─ Downstream unblocking bonus (+15 pts/dep, max +45 pts) replacing depth penalties
+     │   ├─ Multi-tier deterministic tie-breaking (score -> dueDate -> Shortest Processing Time -> taskId)
      │   ├─ 3-color DFS cycle isolation, self-dependency, and downstream blocked propagation
      │   ├─ Oversized task manual resolution (status: oversized_exceeds_capacity)
      │   ├─ Cumulative daily capacity enforcement & accurate capacity utilization metric
      │   ├─ Timezone-safe inclusive calendar deadlines & weekend rollover
+     │   ├─ Rich placement explainability (prerequisite constraints, unblocking, overdue recovery)
      │   └─ Safe proposal flow: stale-proposal guard, non-destructive filtering, deduplicated telemetry
      └─ Evidence-Based Behavioral Stats (Sparse-Data Guard < 3 tasks)
      │
@@ -91,8 +94,8 @@ FASTAPI ML BACKEND (scikit-learn Pipeline & Batch Endpoints)
 - **Phase 4, Stage 1 (Completed)**: Deterministic Adaptive Scheduling Engine (`src/scheduler/adaptiveScheduler.js`), topological DAG analysis with cycle detection, personalized duration model integration with cold-start fallbacks, daily working-hour capacity bin-packing, weekend rollover, proposal review modal (`AdaptiveScheduleModal.jsx`), safe approval flow, non-destructive diffs, and 19 unit tests (72 tests total).
 - **Phase 4, Stage 2 (Completed)**: Scheduling correctness & reliability audit: Kahn's topological ready-queue (guaranteed DAG order over priority scores), explicit 3-color DFS cycle isolation, blocked dependent propagation, oversized task manual resolution (`status: 'oversized_exceeds_capacity'`), cumulative daily capacity constraint enforcement, accurate capacity utilization denominator, timezone-safe deadline policies, stale-proposal detection with one-click regeneration, non-destructive diff filtering, deduplicated telemetry, and 81 automated tests across 16 suites.
 - **Phase 4, Stage 3 (Completed)**: Schedule quality evaluation & benchmarking: independent 7-dimension evaluation metrics (coverage, deadline feasibility, dependency correctness, capacity compliance, workload balance CV, horizon coverage, perturbation churn), multi-strategy benchmarking comparing Adaptive against Earliest Deadline First (EDF) and Priority-First under identical hard constraints, 12 reproducible scenario fixtures (`scheduleBenchmarks.js`), stability churn analysis, interactive modal benchmark tab, and 93 automated tests across 19 suites.
-- **Phase 4, Stage 4 (Next)**: Workload balancing & sprint optimization: interactive slot re-allocation, calendar capacity overrides, and bottleneck notifications.
-- **Phase 5**: Conversational planning dialog & debriefing.
+- **Phase 4, Stage 4 (Completed)**: Evidence-driven scheduler optimization: replaced topological depth penalty with bounded downstream unblocking bonus (`+ min(45, unblockCount * 15)`), eliminating critical-path bottlenecks without penalizing ready dependents (reduced churn on satisfied dependencies from 40% to 0%, overall average churn from 24% to 16%); multi-tier deterministic tie-breaking (score $\to$ due date $\to$ Shortest Processing Time $\to$ task ID); evaluator metric honesty reporting `schedulableOnTimeRate` and `schedulerDaysDelayed` to separate impossible deadlines and pre-existing delays; enriched placement explainability; 99 automated tests passing across 20 suites.
+- **Phase 5 (Next)**: Conversational planning experience & debriefing.
 
 ---
 

@@ -256,3 +256,141 @@ describe('3. Multi-Strategy Comparative Benchmarking (Adaptive vs EDF vs Priorit
     }
   });
 });
+
+describe('4. Evidence-Driven Scheduler Optimization Regressions & Invariants (Stage 4)', () => {
+  it('downstream unblocking bonus prioritizes critical path tasks with dependents over equal-urgency tasks', () => {
+    // Both t1 and t2 have identical priority (medium), identical due dates, and identical effort (3.0h)
+    // But t1 has a downstream dependent t3 waiting for it.
+    const tasks = [
+      { id: 't-independent', title: 'Independent Task', priority: 'medium', estimatedEffort: 3.0, dueDate: '2026-10-21' },
+      { id: 't-unblocker', title: 'Bottleneck Task', priority: 'medium', estimatedEffort: 3.0, dueDate: '2026-10-21' },
+      { id: 't-downstream', title: 'Dependent Task', priority: 'medium', estimatedEffort: 3.0, dependencies: ['t-unblocker'], dueDate: '2026-10-23' },
+    ];
+
+    const schedule = generateAdaptiveSchedule(tasks, {
+      startDate: '2026-10-19',
+      dailyCapacityHours: 3.0, // Only 1 task fits per day
+      horizonDays: 14,
+    });
+
+    const placements = schedule.proposedPlacements;
+    const unblockerPlacement = placements.find((p) => p.taskId === 't-unblocker');
+    const independentPlacement = placements.find((p) => p.taskId === 't-independent');
+
+    // Unblocker should be scheduled on Day 0 (2026-10-19) to clear the critical path
+    assert.equal(unblockerPlacement.proposedDate, '2026-10-19');
+    assert.equal(independentPlacement.proposedDate, '2026-10-20');
+    assert.ok(unblockerPlacement.explanation.includes('Unblocks 1 downstream task'));
+  });
+
+  it('ready dependent task is not penalized by depth, preventing churn on satisfied dependency', () => {
+    // Reproduces the exact Stage 3 stability benchmark mutation 'add_valid_dependency':
+    // st-3 depends on st-2. st-2 completes on Day 0 (2026-10-19).
+    // In Stage 3, depth penalty (-100) caused st-3 to be delayed to Day 2 and st-4 pulled to Day 1 (40% churn).
+    // In Stage 4, unblocking replaces depth penalty; st-3 is placed on Day 1 on time, achieving 0% churn!
+    const baseTasks = [
+      { id: 'st-1', title: 'Database Migration', priority: 'high', estimatedEffort: 3.0, dueDate: '2026-10-20' },
+      { id: 'st-2', title: 'API Authentication', priority: 'high', estimatedEffort: 3.0, dueDate: '2026-10-21' },
+      { id: 'st-3', title: 'Frontend Dashboard', priority: 'medium', estimatedEffort: 4.0, dueDate: '2026-10-22' },
+      { id: 'st-4', title: 'Unit Test Coverage', priority: 'medium', estimatedEffort: 4.0, dueDate: '2026-10-23' },
+      { id: 'st-5', title: 'Documentation Polish', priority: 'low', estimatedEffort: 2.0, dueDate: '2026-10-26' },
+    ];
+
+    const mutatedTasks = baseTasks.map((t) => (t.id === 'st-3' ? { ...t, dependencies: ['st-2'] } : t));
+
+    const scheduleBase = generateAdaptiveSchedule(baseTasks, {
+      startDate: '2026-10-19',
+      dailyCapacityHours: 6.0,
+      horizonDays: 14,
+      strategy: 'adaptive',
+    });
+
+    const scheduleMutated = generateAdaptiveSchedule(mutatedTasks, {
+      startDate: '2026-10-19',
+      dailyCapacityHours: 6.0,
+      horizonDays: 14,
+      strategy: 'adaptive',
+    });
+
+    const stability = evaluateScheduleStability(scheduleBase, scheduleMutated);
+
+    // Churn must be 0% because st-2 is already scheduled on Day 0 and st-3 on Day 1
+    assert.equal(stability.shiftedCount, 0, 'Zero tasks should shift when adding an already satisfied dependency');
+    assert.equal(stability.churnRate, 0.0);
+  });
+
+  it('multi-tier deterministic tie-breaking sorts by score -> dueDate -> Shortest Processing Time -> taskId', () => {
+    // Two tasks with identical priority (score) and identical due date, but different durations
+    const tasks = [
+      { id: 'task-long', title: 'Long Task', priority: 'medium', estimatedEffort: 4.0, dueDate: '2026-10-22' },
+      { id: 'task-short', title: 'Short Task', priority: 'medium', estimatedEffort: 2.0, dueDate: '2026-10-22' },
+    ];
+
+    const schedule = generateAdaptiveSchedule(tasks, {
+      startDate: '2026-10-19',
+      dailyCapacityHours: 4.0, // Long task alone fills the day; short task leaves room
+      horizonDays: 14,
+    });
+
+    // Shortest Processing Time (SPT) tie-breaker prioritizes task-short first
+    assert.equal(schedule.proposedPlacements[0].taskId, 'task-short');
+    assert.equal(schedule.proposedPlacements[0].proposedDate, '2026-10-19');
+    assert.equal(schedule.proposedPlacements[1].taskId, 'task-long');
+    assert.equal(schedule.proposedPlacements[1].proposedDate, '2026-10-20');
+  });
+
+  it('evaluator reports schedulableOnTimeRate and distinguishes impossible deadlines from scheduling failures', () => {
+    // 1 valid task due tomorrow + 2 cyclic tasks with deadlines
+    const tasks = [
+      { id: 'valid-1', title: 'Valid Task', priority: 'high', estimatedEffort: 2.0, dueDate: '2026-10-20' },
+      { id: 'cyc-1', title: 'Cycle 1', priority: 'high', estimatedEffort: 2.0, dependencies: ['cyc-2'], dueDate: '2026-10-20' },
+      { id: 'cyc-2', title: 'Cycle 2', priority: 'high', estimatedEffort: 2.0, dependencies: ['cyc-1'], dueDate: '2026-10-20' },
+    ];
+
+    const schedule = generateAdaptiveSchedule(tasks, { startDate: '2026-10-19', dailyCapacityHours: 6.0 });
+    const report = evaluateSchedule(schedule, tasks);
+
+    assert.equal(report.deadlineFeasibility.tasksWithDeadline, 3);
+    assert.equal(report.deadlineFeasibility.impossibleDeadlinesCount, 2);
+    assert.equal(report.deadlineFeasibility.schedulableDeadlinesCount, 1);
+    assert.equal(report.deadlineFeasibility.onTimeCount, 1);
+    // Raw onTimeRate is 1/3 = 0.333
+    assert.equal(report.deadlineFeasibility.onTimeRate, 0.333);
+    // Schedulable onTimeRate is 1/1 = 1.000 (100% of schedulable tasks on time!)
+    assert.equal(report.deadlineFeasibility.schedulableOnTimeRate, 1.0);
+  });
+
+  it('evaluator calculates schedulerDelayDays without penalizing for pre-existing overdue delay', () => {
+    const tasks = [
+      // Due 4 days before schedule start (2026-10-15 vs start 2026-10-19)
+      { id: 'overdue-task', title: 'Overdue Task', priority: 'high', estimatedEffort: 3.0, dueDate: '2026-10-15' },
+    ];
+
+    const schedule = generateAdaptiveSchedule(tasks, { startDate: '2026-10-19', dailyCapacityHours: 6.0 });
+    const report = evaluateSchedule(schedule, tasks);
+
+    assert.equal(report.deadlineFeasibility.wasOverdueCount, 1);
+    assert.equal(report.deadlineFeasibility.onTimeCount, 0);
+    assert.equal(report.deadlineFeasibility.lateCount, 1);
+    // Raw delay counts historical 4 days
+    assert.equal(report.deadlineFeasibility.totalDaysDelayed, 4);
+    // Scheduler placed it immediately on Day 0 (2026-10-19), so scheduler-introduced delay is 0 days!
+    assert.equal(report.deadlineFeasibility.totalSchedulerDaysDelayed, 0);
+    assert.equal(report.deadlineFeasibility.averageSchedulerDaysDelayed, 0);
+  });
+
+  it('placement explanations clearly document specific scheduling drivers and constraints', () => {
+    const tasks = [
+      { id: 'exp-1', title: 'Critical Base', priority: 'high', estimatedEffort: 3.0, dueDate: '2026-10-20' },
+      { id: 'exp-2', title: 'Dependent Child', priority: 'medium', estimatedEffort: 3.0, dependencies: ['exp-1'], dueDate: '2026-10-22' },
+    ];
+
+    const schedule = generateAdaptiveSchedule(tasks, { startDate: '2026-10-19', dailyCapacityHours: 3.0 });
+    const p1 = schedule.proposedPlacements.find((p) => p.taskId === 'exp-1');
+    const p2 = schedule.proposedPlacements.find((p) => p.taskId === 'exp-2');
+
+    assert.ok(p1.explanation.includes('High-priority commitment'));
+    assert.ok(p1.explanation.includes('Unblocks 1 downstream task'));
+    assert.ok(p2.explanation.includes('Prerequisite constraint satisfied'));
+  });
+});

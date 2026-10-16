@@ -640,22 +640,30 @@ function renderStrategyMetrics(evalReport) {
   const wb = evalReport.workloadBalance || {};
   const tc = evalReport.taskCoverage || {};
 
-  const onTimeDisplay = df.onTimeRate !== null
-    ? `${(df.onTimeRate * 100).toFixed(0)}% (${df.onTimeCount}/${df.tasksWithDeadline})`
-    : 'N/A (No Deadlines)';
+  const onTimeDisplay = df.schedulableOnTimeRate !== null && df.schedulableOnTimeRate !== undefined
+    ? `${(df.schedulableOnTimeRate * 100).toFixed(0)}% (${df.onTimeCount}/${df.schedulableDeadlinesCount}${df.impossibleDeadlinesCount > 0 ? ` + ${df.impossibleDeadlinesCount} blocked` : ''})`
+    : df.onTimeRate !== null
+      ? `${(df.onTimeRate * 100).toFixed(0)}% (${df.onTimeCount}/${df.tasksWithDeadline})`
+      : 'N/A (No Deadlines)';
+
+  const delayDisplay = df.averageSchedulerDaysDelayed !== undefined && df.wasOverdueCount > 0
+    ? `${df.averageSchedulerDaysDelayed}d sched (${df.averageDaysDelayed}d raw)`
+    : df.averageDaysDelayed > 0
+      ? `${df.averageDaysDelayed}d`
+      : '0d (None)';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '11px' }}>
       <div style={styles.metricRow}>
         <span style={styles.metricRowLabel}>Deadline On-Time:</span>
-        <span style={{ fontWeight: '700', color: df.onTimeRate === 1.0 ? '#1B5E3C' : '#9E2A2B' }}>
+        <span style={{ fontWeight: '700', color: (df.schedulableOnTimeRate === 1.0 || df.onTimeRate === 1.0) ? '#1B5E3C' : '#9E2A2B' }}>
           {onTimeDisplay}
         </span>
       </div>
       <div style={styles.metricRow}>
         <span style={styles.metricRowLabel}>Avg Delay:</span>
         <span style={{ fontWeight: '700' }}>
-          {df.averageDaysDelayed > 0 ? `${df.averageDaysDelayed}d` : '0d (None)'}
+          {delayDisplay}
         </span>
       </div>
       <div style={styles.metricRow}>

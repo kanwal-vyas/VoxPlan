@@ -161,6 +161,7 @@ export function evaluateSchedule(schedule, inputTasks = [], options = {}) {
   let wasOverdueCount = 0;
   let impossibleDeadlinesCount = 0;
   let totalDaysDelayed = 0;
+  let totalSchedulerDaysDelayed = 0;
   let maxDaysDelayed = 0;
 
   const startDateStr = schedule.summary?.startDate || formatDateISO(new Date());
@@ -189,19 +190,35 @@ export function evaluateSchedule(schedule, inputTasks = [], options = {}) {
       const daysLate = Math.max(0, getCalendarDaysDiff(dueDateISO, p.proposedDate) || 0);
       totalDaysDelayed += daysLate;
       maxDaysDelayed = Math.max(maxDaysDelayed, daysLate);
+
+      // Distinguish scheduler-induced delay from pre-existing delay:
+      // If task was already overdue before schedule start, scheduler delay is measured from startDateStr
+      const schedulerDaysLate = isOverdueAtStart
+        ? Math.max(0, getCalendarDaysDiff(startDateStr, p.proposedDate) || 0)
+        : daysLate;
+      totalSchedulerDaysDelayed += schedulerDaysLate;
     }
   }
 
+  const schedulableDeadlinesCount = Math.max(0, deadlineCount - impossibleDeadlinesCount);
+  const schedulableOnTimeRate = schedulableDeadlinesCount > 0
+    ? Math.round((onTimeCount / schedulableDeadlinesCount) * 1000) / 1000
+    : null;
+
   const deadlineFeasibility = {
     tasksWithDeadline: deadlineCount,
+    schedulableDeadlinesCount,
     onTimeCount,
     onTimeRate: deadlineCount > 0 ? Math.round((onTimeCount / deadlineCount) * 1000) / 1000 : null,
+    schedulableOnTimeRate,
     lateCount,
     lateRate: deadlineCount > 0 ? Math.round((lateCount / deadlineCount) * 1000) / 1000 : null,
     wasOverdueCount,
     impossibleDeadlinesCount,
     totalDaysDelayed,
     averageDaysDelayed: lateCount > 0 ? Math.round((totalDaysDelayed / lateCount) * 10) / 10 : 0,
+    totalSchedulerDaysDelayed,
+    averageSchedulerDaysDelayed: lateCount > 0 ? Math.round((totalSchedulerDaysDelayed / lateCount) * 10) / 10 : 0,
     maxDaysDelayed,
   };
 
@@ -325,6 +342,16 @@ export function evaluateSchedule(schedule, inputTasks = [], options = {}) {
       : 1.0;
   }
 
+  let unscheduledWorkloadHours = 0;
+  for (const t of eligibleTasks) {
+    const p = placementMap.get(t.id);
+    if (!p || p.proposedDate === null) {
+      const eff = p?.effectiveHours ?? (t.estimatedEffort || t.estimated_effort || 1.0);
+      unscheduledWorkloadHours += eff;
+    }
+  }
+  unscheduledWorkloadHours = Math.round(unscheduledWorkloadHours * 10) / 10;
+
   const workloadBalance = {
     activeDaysCount: activeDayHours.length,
     meanDailyHours,
@@ -333,6 +360,9 @@ export function evaluateSchedule(schedule, inputTasks = [], options = {}) {
     peakToAverageRatio,
     maxDailyHours,
     minDailyHours,
+    scheduledWorkloadHours: totalWorkloadHours,
+    unscheduledWorkloadHours,
+    hasUnscheduledWorkload: unscheduledWorkloadHours > 0,
   };
 
   // 6. Planning Horizon Compliance
