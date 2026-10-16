@@ -84,7 +84,7 @@ export default function TaskExplanationModal({ task, prediction, onClose }) {
               <span style={{ ...styles.riskStatus, color: theme.textColor }}>
                 {risk} DELAY RISK ESTIMATE
               </span>
-              <span style={styles.riskSub}>Derived from Random Forest feature weight calculations</span>
+              <span style={styles.riskSub}>Derived from feature values & rule-based risk signals</span>
             </div>
           </div>
         </div>
@@ -111,9 +111,9 @@ export default function TaskExplanationModal({ task, prediction, onClose }) {
 
         {/* Methodology Note */}
         <div style={styles.noteBox}>
-          <span style={styles.noteHeading}>💡 Model Methodology</span>
+          <span style={styles.noteHeading}>💡 Risk Factor Signals</span>
           <p style={styles.noteText}>
-            These indicators reflect statistical relationships learned from past sprint execution records (deadline urgency, workload density, and task effort).
+            These factors evaluate deadline proximity, workload effort density, and priority against baseline delivery risk thresholds.
           </p>
         </div>
 

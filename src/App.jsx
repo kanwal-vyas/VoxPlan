@@ -21,117 +21,140 @@ import {
 
 const STORAGE_KEY = 'voxplan_tasks';
 
-const INITIAL_TASKS = [
-  {
-    id: 'task-1',
-    title: 'Revise Cryptography',
-    priority: 'high',
-    dueDate: 'October 5',
-    completed: false,
-    category: 'Security',
-    estimatedEffort: 10.0,
-    dependencies: ['task-2'],
-    task_age: 4.0,
-  },
-  {
-    id: 'task-2',
-    title: 'Practice Subnetting',
-    priority: 'medium',
-    dueDate: 'October 5',
-    completed: false,
-    category: 'Networking',
-    estimatedEffort: 6.0,
-    dependencies: [],
-    task_age: 3.0,
-  },
-  {
-    id: 'task-3',
-    title: 'Study OSI Model',
-    priority: 'low',
-    dueDate: 'October 6',
-    completed: false,
-    category: 'Architecture',
-    estimatedEffort: 3.5,
-    dependencies: [],
-    task_age: 1.0,
-  },
-];
+/**
+ * Returns clean, un-fabricated default tasks with real calendar dates for new users.
+ */
+const getDefaultTasks = () => {
+  const now = new Date();
+  const formatISO = (d) => d.toISOString().split('T')[0];
 
-const INITIAL_PREDICTIONS = {
-  'task-1': {
-    task_id: 'task-1',
-    risk: 'HIGH',
-    probability: 0.964,
-    explanation: [
-      'Immediate deadline pressure (due October 5)',
-      'High estimated effort (10.0 hours)',
-      'Dependency bottlenecks (1 blocking predecessor)',
-      'High priority classification',
-    ],
-  },
-  'task-2': {
-    task_id: 'task-2',
-    risk: 'MEDIUM',
-    probability: 0.542,
-    explanation: [
-      'Moderate effort allocation (6.0 hours)',
-      'Due date proximity within current sprint',
-      'Balanced workload complexity',
-    ],
-  },
-  'task-3': {
-    task_id: 'task-3',
-    risk: 'LOW',
-    probability: 0.187,
-    explanation: [
-      'Low estimated effort (3.5 hours)',
-      'No blocking dependencies',
-      'Extended delivery timeline',
-    ],
-  },
+  const today = new Date(now);
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  const nextWeek = new Date(now);
+  nextWeek.setDate(now.getDate() + 5);
+
+  return [
+    {
+      id: 'task-welcome-1',
+      title: 'Review weekly project plan & deliverables',
+      description: 'Audit active milestones and ensure dependencies are identified.',
+      priority: 'high',
+      dueDate: formatISO(today),
+      completed: false,
+      category: 'Planning',
+      estimatedEffort: 2.0,
+      dependencies: [],
+      createdAt: new Date(now.getTime() - 86400000 * 2).toISOString(),
+    },
+    {
+      id: 'task-welcome-2',
+      title: 'Draft architecture audit documentation',
+      description: 'Document current data flows, pipeline constraints, and integration boundaries.',
+      priority: 'medium',
+      dueDate: formatISO(tomorrow),
+      completed: false,
+      category: 'Engineering',
+      estimatedEffort: 4.0,
+      dependencies: ['task-welcome-1'],
+      createdAt: new Date(now.getTime() - 86400000).toISOString(),
+    },
+    {
+      id: 'task-welcome-3',
+      title: 'Refactor client date formatting utilities',
+      description: 'Unify ISO-8601 calendar date parsing across interface cards.',
+      priority: 'low',
+      dueDate: formatISO(nextWeek),
+      completed: false,
+      category: 'Maintenance',
+      estimatedEffort: 1.5,
+      dependencies: [],
+      createdAt: now.toISOString(),
+    },
+  ];
 };
 
-const INITIAL_MODEL_STATUS = {
-  is_trained: true,
-  accuracy: 0.877,
-  precision: 0.937,
-  recall: 0.912,
-  f1_score: 0.924,
-  confusion_matrix: [[112, 8], [11, 109]],
-  total_samples: 1200,
-  trained_at: new Date().toISOString(),
-};
+/**
+ * Normalizes any task object, migrating legacy localStorage formats safely without losing data.
+ */
+const normalizeTask = (t) => {
+  if (!t || typeof t !== 'object') return null;
+  const id = typeof t.id === 'string' && t.id.trim() ? t.id : `task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const title = typeof t.title === 'string' && t.title.trim() ? t.title.trim() : 'Untitled Task';
+  const description = typeof t.description === 'string' ? t.description : '';
+  const priority = ['high', 'medium', 'low'].includes(String(t.priority).toLowerCase())
+    ? String(t.priority).toLowerCase()
+    : 'medium';
+  const completed = Boolean(t.completed);
+  const category = typeof t.category === 'string' && t.category.trim() ? t.category.trim() : 'General';
+  const rawEffort = t.estimatedEffort ?? t.estimated_effort;
+  const estimatedEffort = typeof rawEffort === 'number' && !isNaN(rawEffort) ? rawEffort : null;
+  const dependencies = Array.isArray(t.dependencies) ? t.dependencies.filter((d) => typeof d === 'string') : [];
 
-const INITIAL_FEATURE_IMPORTANCES = [
-  { feature: 'days_remaining', label: 'Deadline pressure', importance: 0.216, percentage: 21.6 },
-  { feature: 'effort_to_time_ratio', label: 'Effort-to-time ratio', importance: 0.178, percentage: 17.8 },
-  { feature: 'task_age', label: 'Days remaining', importance: 0.170, percentage: 17.0 },
-  { feature: 'estimated_effort', label: 'Workload pressure', importance: 0.081, percentage: 8.1 },
-  { feature: 'priority_num', label: 'Priority weight', importance: 0.075, percentage: 7.5 },
-  { feature: 'dependency_count', label: 'Dependency count', importance: 0.062, percentage: 6.2 },
-];
+  // Migrate due date cleanly to YYYY-MM-DD
+  let dueDate = null;
+  const rawDue = t.dueDate || t.due_date;
+  if (rawDue) {
+    const rawStr = String(rawDue).trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(rawStr)) {
+      dueDate = rawStr.slice(0, 10);
+    } else {
+      // Legacy "October 5" format migration
+      const legacyMatch = rawStr.match(/oct(?:ober)?\s*(\d{1,2})/i);
+      if (legacyMatch) {
+        const day = legacyMatch[1].padStart(2, '0');
+        const year = new Date().getFullYear();
+        dueDate = `${year}-10-${day}`;
+      } else {
+        const parsed = new Date(rawStr);
+        if (!isNaN(parsed.getTime())) {
+          dueDate = parsed.toISOString().split('T')[0];
+        } else {
+          dueDate = rawStr;
+        }
+      }
+    }
+  }
+
+  // Preserve or initialize creation timestamp
+  let createdAt = t.createdAt || t.created_at;
+  if (!createdAt || isNaN(new Date(createdAt).getTime())) {
+    createdAt = new Date().toISOString();
+  }
+
+  return {
+    id,
+    title,
+    description,
+    priority,
+    dueDate,
+    completed,
+    category,
+    estimatedEffort,
+    dependencies,
+    createdAt,
+  };
+};
 
 const loadSavedTasks = () => {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return INITIAL_TASKS;
+    if (!saved) return getDefaultTasks();
 
     const parsed = JSON.parse(saved);
-    if (Array.isArray(parsed) && parsed.length >= 0) {
-      const isValid = parsed.every(
-        (t) =>
-          t &&
-          typeof t === 'object' &&
-          typeof t.id === 'string' &&
-          typeof t.title === 'string' &&
-          typeof t.completed === 'boolean'
-      );
-      if (isValid) return parsed;
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      const normalized = parsed.map(normalizeTask).filter(Boolean);
+      if (normalized.length > 0) return normalized;
     }
   } catch (error) {
     console.warn('Error reading tasks from localStorage, fallback to defaults:', error);
   }
-  return INITIAL_TASKS;
+  return getDefaultTasks();
+};
+
+const UNTRAINED_MODEL_STATUS = {
+  is_trained: false,
+  message: 'Model is not trained yet. Connect the backend and click "Train Model" to fit on historical baseline data.',
 };
 
 export default function App() {
@@ -142,12 +165,12 @@ export default function App() {
   const [feedback, setFeedback] = useState(null);
   const [isListening, setIsListening] = useState(false);
 
-  // ML State
+  // ML State (truthfully initialized to empty/untrained state, without fabricated metrics)
   const [isBackendOnline, setIsBackendOnline] = useState(false);
-  const [modelStatus, setModelStatus] = useState(INITIAL_MODEL_STATUS);
-  const [featureImportances, setFeatureImportances] = useState(INITIAL_FEATURE_IMPORTANCES);
-  const [predictionsMap, setPredictionsMap] = useState(INITIAL_PREDICTIONS);
-  const [riskStats, setRiskStats] = useState({ highCount: 1, mediumCount: 1, lowCount: 1, avgProb: 0.564 });
+  const [modelStatus, setModelStatus] = useState(UNTRAINED_MODEL_STATUS);
+  const [featureImportances, setFeatureImportances] = useState([]);
+  const [predictionsMap, setPredictionsMap] = useState({});
+  const [riskStats, setRiskStats] = useState({ highCount: 0, mediumCount: 0, lowCount: 0, avgProb: 0 });
   const [isTraining, setIsTraining] = useState(false);
   const [trainingStep, setTrainingStep] = useState('');
   const [isPredicting, setIsPredicting] = useState(false);
@@ -155,6 +178,7 @@ export default function App() {
 
   const mlPanelRef = useRef(null);
   const gsapCleanupRef = useRef(null);
+  const speechRecognitionRef = useRef(null);
 
   // Initial viewport setup: ensure page ALWAYS starts at top on every reload/refresh
   useEffect(() => {
@@ -203,7 +227,9 @@ export default function App() {
   }, [feedback]);
 
   const tasksRef = useRef(tasks);
-  tasksRef.current = tasks;
+  useEffect(() => {
+    tasksRef.current = tasks;
+  }, [tasks]);
 
   // Fetch ML status and predictions from backend
   const refreshMLState = useCallback(async (customTasks) => {
@@ -573,7 +599,7 @@ export default function App() {
       return;
     }
 
-    // 11. Task Command: Create / Add task
+    // 11. Task Command: Create / Add task with dynamic date & effort parsing
     const isCreateIntent = /^(?:create|add|new|make|schedule)\b/i.test(text);
     if (isCreateIntent) {
       let priority = 'medium';
@@ -585,6 +611,55 @@ export default function App() {
         priority = 'medium';
       }
 
+      // Extract effort if explicitly mentioned (e.g. "for 3 hours", "4h effort", "2.5 hrs")
+      let estimatedEffort = null;
+      const effortMatch = text.match(/\b(?:for|effort(?:\s+of)?|estimate(?:\s+of)?)\s+(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b/i);
+      if (effortMatch) {
+        estimatedEffort = parseFloat(effortMatch[1]);
+      }
+
+      // Extract real due date if mentioned
+      let dueDate = null;
+      const now = new Date();
+      const formatISO = (d) => d.toISOString().split('T')[0];
+
+      if (/\b(?:due\s+today|today)\b/i.test(text)) {
+        dueDate = formatISO(now);
+      } else if (/\b(?:due\s+tomorrow|tomorrow)\b/i.test(text)) {
+        const d = new Date(now);
+        d.setDate(now.getDate() + 1);
+        dueDate = formatISO(d);
+      } else {
+        const inDaysMatch = text.match(/\bdue\s+in\s+(\d+)\s+days?\b/i);
+        if (inDaysMatch) {
+          const d = new Date(now);
+          d.setDate(now.getDate() + parseInt(inDaysMatch[1], 10));
+          dueDate = formatISO(d);
+        } else if (/\bdue\s+next\s+week\b/i.test(text)) {
+          const d = new Date(now);
+          d.setDate(now.getDate() + 7);
+          dueDate = formatISO(d);
+        } else {
+          const isoDateMatch = text.match(/\bdue\s+(?:on\s+)?(\d{4}-\d{2}-\d{2})\b/i);
+          if (isoDateMatch) {
+            dueDate = isoDateMatch[1];
+          } else {
+            const humanDateMatch = text.match(/\bdue\s+(?:on\s+)?([a-zA-Z]+\s+\d{1,2}(?:st|nd|rd|th)?(?:\s*,\s*\d{4})?)\b/i);
+            if (humanDateMatch) {
+              const cleanDateStr = humanDateMatch[1].replace(/(?:st|nd|rd|th)/gi, '');
+              const parsed = new Date(cleanDateStr);
+              if (!isNaN(parsed.getTime())) {
+                if (!cleanDateStr.match(/\d{4}/)) {
+                  parsed.setFullYear(now.getFullYear());
+                }
+                dueDate = formatISO(parsed);
+              }
+            }
+          }
+        }
+      }
+
+      // Clean raw title
       let rawTitle = text
         .replace(/^(?:create|add|new|make|schedule)\s+/i, '')
         .replace(/^(?:a|an)\s+/i, '')
@@ -593,6 +668,10 @@ export default function App() {
         .replace(/^task\s+/i, '')
         .replace(/^(?:called|named)\s+/i, '')
         .replace(/\b(?:called|named)\s+/gi, '')
+        .replace(/\b(?:for|effort(?:\s+of)?|estimate(?:\s+of)?)\s+\d+(?:\.\d+)?\s*(?:hours?|hrs?|h)\b/gi, '')
+        .replace(/\b(?:due\s+today|due\s+tomorrow|due\s+in\s+\d+\s+days?|due\s+next\s+week)\b/gi, '')
+        .replace(/\bdue\s+(?:on\s+)?\d{4}-\d{2}-\d{2}\b/gi, '')
+        .replace(/\bdue\s+(?:on\s+)?[a-zA-Z]+\s+\d{1,2}(?:st|nd|rd|th)?(?:\s*,\s*\d{4})?\b/gi, '')
         .trim();
 
       rawTitle = rawTitle.replace(/\s+(?:with\s+)?(?:high|medium|low)\s+priority$/i, '').trim();
@@ -600,7 +679,7 @@ export default function App() {
       if (!rawTitle) {
         setFeedback({
           type: 'error',
-          message: 'Please specify a task name. Try: "add task [name]"',
+          message: 'Please specify a task name. Try: "add task [name] due tomorrow"',
         });
         return;
       }
@@ -608,19 +687,20 @@ export default function App() {
       const newTask = {
         id: `task-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         title: rawTitle,
+        description: '',
         priority,
-        dueDate: 'October 7',
+        dueDate, // Real parsed date or null (unspecified)
         completed: false,
-        category: 'Productivity',
-        estimatedEffort: priority === 'high' ? 8.0 : (priority === 'medium' ? 5.0 : 3.0),
+        category: 'General',
+        estimatedEffort, // Real parsed effort or null (honest)
         dependencies: [],
-        task_age: 1.0,
+        createdAt: new Date().toISOString(),
       };
 
       setTasks((prev) => [newTask, ...prev]);
       setFeedback({
         type: 'success',
-        message: `Created task: ${rawTitle}`,
+        message: `Created task: "${rawTitle}"${dueDate ? ` (Due: ${dueDate})` : ''}`,
       });
       return;
     }
@@ -628,25 +708,83 @@ export default function App() {
     // 12. Fallback
     setFeedback({
       type: 'error',
-      message: 'Command not recognized. Try: "add task [name]", "train the model", "predict delay risk", or "show high risk tasks"',
+      message: 'Command not recognized. Try: "add task [name] due tomorrow", "train the model", or "show high risk tasks"',
     });
   };
 
+  // Real Web Speech API browser voice dictation
   const toggleListening = () => {
-    setIsListening((prev) => !prev);
-    if (!isListening) {
-      setTimeout(() => {
-        const sampleVoiceCommands = [
-          'predict delay risk',
-          'show high risk tasks',
-          'train the model',
-          'create a high priority task called Cloud Infrastructure Audit',
-          'complete Revise Cryptography',
-        ];
-        const randomCmd = sampleVoiceCommands[Math.floor(Math.random() * sampleVoiceCommands.length)];
+    const SpeechRecognition =
+      typeof window !== 'undefined' &&
+      (window.SpeechRecognition || window.webkitSpeechRecognition);
+
+    if (!SpeechRecognition) {
+      setFeedback({
+        type: 'info',
+        message: 'Speech recognition is not supported in this browser. Please type your command into the command bar.',
+      });
+      return;
+    }
+
+    if (isListening) {
+      if (speechRecognitionRef.current) {
+        try {
+          speechRecognitionRef.current.stop();
+        } catch {}
+      }
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event) => {
         setIsListening(false);
-        executeCommand(randomCmd);
-      }, 2200);
+        const transcript = event.results?.[0]?.[0]?.transcript;
+        if (transcript && transcript.trim()) {
+          setFeedback({
+            type: 'info',
+            message: `Heard: "${transcript}"`,
+          });
+          executeCommand(transcript);
+        }
+      };
+
+      recognition.onerror = (event) => {
+        setIsListening(false);
+        if (event.error === 'not-allowed') {
+          setFeedback({
+            type: 'error',
+            message: 'Microphone permission was denied. Please allow mic access or type your command.',
+          });
+        } else if (event.error !== 'no-speech') {
+          setFeedback({
+            type: 'error',
+            message: `Voice recognition error: ${event.error}`,
+          });
+        }
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      speechRecognitionRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      setIsListening(false);
+      setFeedback({
+        type: 'error',
+        message: `Could not start voice recognition: ${err.message}`,
+      });
     }
   };
 
@@ -718,6 +856,8 @@ export default function App() {
 
         {/* Section 01: Sprint Pulse (Butter Yellow Panel) */}
         <ProjectOverview
+          tasks={tasks}
+          predictionsMap={predictionsMap}
           totalCount={totalCount}
           completedCount={completedCount}
           progressPercent={progressPercent}

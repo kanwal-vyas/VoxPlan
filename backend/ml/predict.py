@@ -22,23 +22,37 @@ def get_risk_category(prob: float) -> str:
     return 'HIGH'
 
 
-def generate_task_explanation(derived_features: Dict[str, float], prob: float) -> List[str]:
+def generate_task_explanation(derived_features: Dict[str, Any], prob: float) -> List[str]:
     """
     Generates transparent, human-understandable contributing factors for a task's delay risk.
+    Accurately handles overdue tasks, tasks due today, and tasks without due dates or effort estimates.
     """
     reasons = []
 
-    days_rem = derived_features.get('days_remaining', 3.0)
-    if days_rem <= 1:
-        reasons.append(f"Immediate deadline pressure (only {int(days_rem)} day remaining)")
-    elif days_rem <= 2:
-        reasons.append(f"Tight turnaround window ({int(days_rem)} days remaining)")
+    days_rem = derived_features.get('days_remaining')
+    if days_rem is not None:
+        if days_rem < 0:
+            overdue_days = int(abs(days_rem))
+            reasons.append(f"Past due date! (Overdue by {overdue_days} day{'s' if overdue_days != 1 else ''})")
+        elif days_rem == 0:
+            reasons.append("Due today! (Immediate priority)")
+        elif days_rem == 1:
+            reasons.append("Due tomorrow (tight turnaround)")
+        elif days_rem == 2:
+            reasons.append("2 days remaining until deadline")
+    else:
+        reasons.append("No deadline specified (flexible timeline)")
 
-    effort = derived_features.get('estimated_effort', 4.0)
-    if effort >= 8.0:
-        reasons.append(f"High estimated effort ({effort:.1f} hours of work)")
-    elif effort >= 5.0:
-        reasons.append(f"Moderate work scope ({effort:.1f} hours)")
+    effort = derived_features.get('estimated_effort')
+    if effort is not None:
+        if effort >= 8.0:
+            reasons.append(f"High estimated effort ({effort:.1f} hours of work)")
+        elif effort >= 5.0:
+            reasons.append(f"Moderate work scope ({effort:.1f} hours)")
+        elif effort <= 2.0:
+            reasons.append(f"Short task scope ({effort:.1f} hours)")
+    else:
+        reasons.append("No effort estimate provided")
 
     deps = derived_features.get('dependency_count', 0.0)
     if deps >= 2:
@@ -60,12 +74,12 @@ def generate_task_explanation(derived_features: Dict[str, float], prob: float) -
 
     # If low risk, mention positive stabilizing factors
     if prob < LOW_THRESHOLD:
-        if days_rem >= 3:
+        if days_rem is not None and days_rem >= 3:
             reasons.append(f"Healthy deadline buffer ({int(days_rem)} days remaining)")
         if deps == 0:
             reasons.append("Zero blocking dependencies")
-        if effort <= 4.0:
-            reasons.append(f"Manageable task scope ({effort:.1f} hours)")
+        if effort is not None and effort <= 3.0:
+            reasons.append("Manageable task scope")
 
     if not reasons:
         reasons.append("Standard sprint scheduling parameters")

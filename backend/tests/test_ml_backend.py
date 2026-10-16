@@ -35,20 +35,22 @@ def test_data_generator():
 
 def test_feature_derivation():
     """Verify derived feature dictionary extracts all required feature names."""
+    from datetime import date
     sample_task = {
         'id': 'test-1',
         'title': 'Test Subnetting',
         'priority': 'high',
-        'dueDate': 'October 5',
+        'dueDate': '2026-10-20',
         'estimatedEffort': 8.0,
         'dependencies': ['task-0']
     }
-    features = derive_features_from_task_dict(sample_task)
+    features = derive_features_from_task_dict(sample_task, reference_date=date(2026, 10, 19))
     for name in FEATURE_NAMES:
         assert name in features
-        assert isinstance(features[name], (int, float))
+        assert features[name] is not None
     assert features['priority_score'] == 3.0
     assert features['days_remaining'] == 1.0
+
 
 
 def test_training_pipeline_and_metrics():

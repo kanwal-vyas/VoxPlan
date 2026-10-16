@@ -12,13 +12,18 @@ class HealthResponse(BaseModel):
 
 
 class TaskInput(BaseModel):
-    id: Optional[str] = "task-default"
+    id: Optional[str] = None
     title: str
+    description: Optional[str] = ""
     priority: Optional[str] = "medium"
-    dueDate: Optional[str] = "October 7"
+    dueDate: Optional[str] = None
+    due_date: Optional[str] = None
+    createdAt: Optional[str] = None
+    created_at: Optional[str] = None
     completed: Optional[bool] = False
     category: Optional[str] = "General"
     estimatedEffort: Optional[float] = None
+    estimated_effort: Optional[float] = None
     dependencies: Optional[List[str]] = None
     days_remaining: Optional[float] = None
 
@@ -36,7 +41,8 @@ class PredictionResult(BaseModel):
     percentage: float
     explanation: List[str]
     is_completed: Optional[bool] = False
-    derived_features: Optional[Dict[str, float]] = None
+    derived_features: Optional[Dict[str, Any]] = None
+
 
 
 class BatchPredictionResponse(BaseModel):

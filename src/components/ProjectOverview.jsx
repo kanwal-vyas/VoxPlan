@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 export default function ProjectOverview({
+  tasks = [],
+  predictionsMap = {},
   totalCount,
   completedCount,
   progressPercent,
@@ -10,7 +12,6 @@ export default function ProjectOverview({
   modelStatus,
 }) {
   const isTrained = modelStatus && modelStatus.is_trained;
-  const pendingCount = totalCount - completedCount;
   const sectionRef = useRef(null);
   const [isVisible, setIsVisible] = useState(false);
   const [displayProgress, setDisplayProgress] = useState(0);
@@ -46,6 +47,10 @@ export default function ProjectOverview({
       return () => clearInterval(interval);
     }
   }, [isVisible, progressPercent]);
+
+  // Derived active tasks for the risk pathway (real data only)
+  const pendingTasks = (tasks || []).filter((t) => !t.completed);
+  const displayTasks = pendingTasks.slice(0, 3);
 
   return (
     <section id="pulse" ref={sectionRef} style={styles.section} aria-label="Sprint Pulse">
@@ -115,74 +120,77 @@ export default function ProjectOverview({
           <div style={styles.timelineCard} className="digital-card">
             <div style={styles.timelineHeader}>
               <span style={styles.timelineHeading}>TASK RISK PATHWAY</span>
-              <span className="note-tag">annotated sequence →</span>
+              <span className="note-tag">
+                {isTrained ? 'model-evaluated sequence →' : 'active initiatives →'}
+              </span>
             </div>
             
             <div style={styles.pathway} className="pulse-pathway-track">
-              <div
-                className="pulse-node-item"
-                style={{
-                  ...styles.pathNode,
-                }}
-              >
-                <div style={{ ...styles.nodeDot, backgroundColor: '#FFEFEA', border: '2px solid #FF8F82' }}>
-                  <span>🚨</span>
-                </div>
-                <div style={styles.nodeInfo}>
-                  <span style={styles.nodeTitle}>Revise Cryptography</span>
-                  <span style={{ ...styles.nodeRisk, color: '#D9483B' }}>
-                    <span className="hl hl-coral" style={{ fontSize: '10px', padding: '1px 5px' }}>96% High Risk</span>
+              {displayTasks.map((task, idx) => {
+                const pred = predictionsMap[task.id];
+                let nodeDotStyle = { backgroundColor: '#F3EEFF', border: '2px solid #C9B6FF' };
+                let emoji = '⏳';
+                let riskColor = '#5B44BA';
+                let tagClass = 'hl hl-lilac';
+                let riskText = 'Awaiting ML scan';
+
+                if (pred) {
+                  if (pred.risk === 'HIGH') {
+                    nodeDotStyle = { backgroundColor: '#FFEFEA', border: '2px solid #FF8F82' };
+                    emoji = '🚨';
+                    riskColor = '#D9483B';
+                    tagClass = 'hl hl-coral';
+                    riskText = `${Math.round(pred.probability * 100)}% High Risk`;
+                  } else if (pred.risk === 'MEDIUM') {
+                    nodeDotStyle = { backgroundColor: '#FFF9DB', border: '2px solid #F59E0B' };
+                    emoji = '⚡';
+                    riskColor = '#B45309';
+                    tagClass = 'hl hl-butter';
+                    riskText = `${Math.round(pred.probability * 100)}% Med Risk`;
+                  } else {
+                    nodeDotStyle = { backgroundColor: '#EBF8F1', border: '2px solid #3EA370' };
+                    emoji = '✓';
+                    riskColor = '#166534';
+                    tagClass = 'hl hl-mint';
+                    riskText = `${Math.round(pred.probability * 100)}% Low Risk`;
+                  }
+                } else if (task.dueDate) {
+                  riskText = `Due ${task.dueDate}`;
+                }
+
+                return (
+                  <React.Fragment key={task.id}>
+                    <div className="pulse-node-item" style={styles.pathNode}>
+                      <div style={{ ...styles.nodeDot, ...nodeDotStyle }}>
+                        <span>{emoji}</span>
+                      </div>
+                      <div style={styles.nodeInfo}>
+                        <span style={styles.nodeTitle} title={task.title}>{task.title}</span>
+                        <span style={{ ...styles.nodeRisk, color: riskColor }}>
+                          <span className={tagClass} style={{ fontSize: '10px', padding: '1px 5px' }}>
+                            {riskText}
+                          </span>
+                        </span>
+                      </div>
+                    </div>
+
+                    {idx < displayTasks.length - 1 && (
+                      <div className="pulse-path-line" style={styles.pathLine} />
+                    )}
+                  </React.Fragment>
+                );
+              })}
+
+              {displayTasks.length === 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '16px 0', color: '#7A7782' }}>
+                  <span style={{ fontSize: '20px' }}>✨</span>
+                  <span style={{ fontSize: '13px', fontWeight: '600' }}>
+                    {totalCount === 0
+                      ? 'No tasks yet. Create an initiative to visualize sprint risk.'
+                      : 'All tasks completed for this sprint!'}
                   </span>
                 </div>
-              </div>
-
-              <div
-                className="pulse-path-line"
-                style={{
-                  ...styles.pathLine,
-                }}
-              />
-
-              <div
-                className="pulse-node-item"
-                style={{
-                  ...styles.pathNode,
-                }}
-              >
-                <div style={{ ...styles.nodeDot, backgroundColor: '#FFF9DB', border: '2px solid #F59E0B' }}>
-                  <span>⚡</span>
-                </div>
-                <div style={styles.nodeInfo}>
-                  <span style={styles.nodeTitle}>Practice Subnetting</span>
-                  <span style={{ ...styles.nodeRisk, color: '#B45309' }}>
-                    <span className="hl hl-butter" style={{ fontSize: '10px', padding: '1px 5px' }}>54% Med Risk</span>
-                  </span>
-                </div>
-              </div>
-
-              <div
-                className="pulse-path-line"
-                style={{
-                  ...styles.pathLine,
-                }}
-              />
-
-              <div
-                className="pulse-node-item"
-                style={{
-                  ...styles.pathNode,
-                }}
-              >
-                <div style={{ ...styles.nodeDot, backgroundColor: '#EBF8F1', border: '2px solid #3EA370' }}>
-                  <span>✓</span>
-                </div>
-                <div style={styles.nodeInfo}>
-                  <span style={styles.nodeTitle}>Study OSI Model</span>
-                  <span style={{ ...styles.nodeRisk, color: '#166534' }}>
-                    <span className="hl hl-mint" style={{ fontSize: '10px', padding: '1px 5px' }}>19% Low Risk</span>
-                  </span>
-                </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
@@ -194,12 +202,12 @@ export default function ProjectOverview({
           </div>
           <div style={{ ...styles.statPill, backgroundColor: '#FFFFFF' }}>
             <span style={{ ...styles.statText, color: '#C92A1D' }}>
-              <strong>{isTrained ? riskStats.highCount : 1}</strong> Critical Delay Risk
+              <strong>{isTrained ? (riskStats?.highCount || 0) : '—'}</strong> Critical Delay Risk
             </span>
           </div>
           <div style={{ ...styles.statPill, backgroundColor: '#FFFFFF' }}>
             <span style={{ ...styles.statText, color: '#166534' }}>
-              Average Risk: <strong>{isTrained ? `${(riskStats.avgProb * 100).toFixed(0)}%` : '56%'}</strong>
+              Average Risk: <strong>{isTrained && riskStats && riskStats.avgProb > 0 ? `${(riskStats.avgProb * 100).toFixed(0)}%` : '—'}</strong>
             </span>
           </div>
         </div>

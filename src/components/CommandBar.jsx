@@ -55,7 +55,7 @@ export default function CommandBar({
               <span className="command-title-word">WHAT YOU NEED</span>
             </h2>
             <p style={styles.subtitle}>
-              Voice interaction powered by Wispr Flow with direct natural language task execution
+              Voice input powered by browser Speech Recognition with natural language task execution
             </p>
           </div>
         </div>
@@ -80,11 +80,11 @@ export default function CommandBar({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleSubmit(e);
                 }}
-                placeholder={isListening ? 'Listening via Wispr Flow... speak naturally!' : 'What should I work on first?'}
+                placeholder={isListening ? 'Listening via microphone... speak clearly!' : 'Add a task or ask (e.g. "Add task Prepare Deck due Friday 4h")...'}
                 style={styles.input}
               />
 
-              {/* Wispr Flow Mic Button */}
+              {/* Browser Speech Dictation Mic Button */}
               <button
                 type="button"
                 onClick={onToggleListening}
@@ -93,7 +93,7 @@ export default function CommandBar({
                   backgroundColor: isListening ? '#FF8F82' : '#FFE58A',
                   color: isListening ? '#FFFFFF' : '#25242A',
                 }}
-                title={isListening ? 'Stop voice listening' : 'Speak command via Wispr Flow'}
+                title={isListening ? 'Stop voice listening' : 'Dictate command using browser speech recognition'}
                 aria-label="Toggle voice listening"
               >
                 {isListening ? (

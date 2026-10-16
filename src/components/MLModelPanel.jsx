@@ -7,23 +7,23 @@ export default function MLModelPanel({
   isTraining,
   trainingStep,
 }) {
-  const isTrained = modelStatus && modelStatus.is_trained;
-  const cm = modelStatus?.confusion_matrix || [[112, 8], [11, 109]];
+  const isTrained = Boolean(modelStatus && modelStatus.is_trained);
+  const cm = modelStatus?.confusion_matrix || null;
   const sectionRef = useRef(null);
   const [isVisible, setIsVisible] = useState(false);
 
   const [metrics, setMetrics] = useState({
-    accuracy: 0,
-    precision: 0,
-    recall: 0,
-    f1: 0,
+    accuracy: null,
+    precision: null,
+    recall: null,
+    f1: null,
   });
 
   const [cmCounts, setCmCounts] = useState({
-    tn: 0,
-    fp: 0,
-    fn: 0,
-    tp: 0,
+    tn: null,
+    fp: null,
+    fn: null,
+    tp: null,
   });
 
   useEffect(() => {
@@ -42,18 +42,21 @@ export default function MLModelPanel({
     return () => observer.disconnect();
   }, []);
 
-  // Staggered count-up when section scrolls into view
+  // Staggered count-up when section scrolls into view with real model evaluation results
   useEffect(() => {
-    if (isVisible && isTrained) {
-      const targetAcc = (modelStatus.accuracy || 0.877) * 100;
-      const targetPrec = (modelStatus.precision || 0.937) * 100;
-      const targetRec = (modelStatus.recall || 0.912) * 100;
-      const targetF1 = (modelStatus.f1_score || 0.924) * 100;
+    if (!isVisible || !isTrained || !modelStatus) {
+      return;
+    }
 
-      const targetTN = cm[0]?.[0] ?? 112;
-      const targetFP = cm[0]?.[1] ?? 8;
-      const targetFN = cm[1]?.[0] ?? 11;
-      const targetTP = cm[1]?.[1] ?? 109;
+    const targetAcc = (modelStatus.accuracy ?? 0) * 100;
+      const targetPrec = (modelStatus.precision ?? 0) * 100;
+      const targetRec = (modelStatus.recall ?? 0) * 100;
+      const targetF1 = (modelStatus.f1_score ?? 0) * 100;
+
+      const targetTN = cm?.[0]?.[0] ?? 0;
+      const targetFP = cm?.[0]?.[1] ?? 0;
+      const targetFN = cm?.[1]?.[0] ?? 0;
+      const targetTP = cm?.[1]?.[1] ?? 0;
 
       let step = 0;
       const interval = setInterval(() => {
@@ -76,7 +79,6 @@ export default function MLModelPanel({
       }, 30);
 
       return () => clearInterval(interval);
-    }
   }, [isVisible, isTrained, modelStatus, cm]);
 
   return (
@@ -93,7 +95,7 @@ export default function MLModelPanel({
               THE <span className={`hl hl-mint ${isVisible ? 'hl-sweep' : ''}`}>SMART</span> PART
             </h2>
             <p style={styles.subtitle}>
-              VoxPlan learns from project history to spot trouble before it happens
+              Supervised Random Forest baseline evaluated on synthetic historical task dataset
             </p>
           </div>
 
@@ -113,12 +115,21 @@ export default function MLModelPanel({
               </>
             ) : (
               <>
-                <span>{isTrained ? 'Retrain model' : 'Train model'}</span>
+                <span>{isTrained ? 'Retrain baseline' : 'Train baseline model'}</span>
                 <span>→</span>
               </>
             )}
           </button>
         </div>
+
+        {/* Untrained / Offline Notice */}
+        {!isTrained && !isTraining && (
+          <div style={styles.untrainedNotice}>
+            <span style={styles.untrainedNoticeText}>
+              ℹ️ Baseline model is currently offline or untrained. No predictions or evaluation metrics are fabricated. Click <strong>Train baseline model</strong> above to fit the Random Forest classifier and generate authentic evaluation metrics.
+            </span>
+          </div>
+        )}
 
         {/* Live Training Status Step */}
         {isTraining && (
@@ -140,8 +151,10 @@ export default function MLModelPanel({
             className="digital-card ml-card-accuracy"
           >
             <span style={styles.metricName}>Accuracy</span>
-            <span style={styles.metricValue}>{metrics.accuracy}%</span>
-            <span style={styles.metricCaption}>overall correct classifications</span>
+            <span style={styles.metricValue}>{metrics.accuracy !== null ? `${metrics.accuracy}%` : '—'}</span>
+            <span style={styles.metricCaption}>
+              {isTrained ? 'overall test set accuracy' : 'model not trained'}
+            </span>
           </div>
 
           {/* Card 2: Precision */}
@@ -153,8 +166,10 @@ export default function MLModelPanel({
             className="digital-card ml-card-secondary"
           >
             <span style={styles.metricName}>Precision</span>
-            <span style={styles.metricValue}>{metrics.precision}%</span>
-            <span style={styles.metricCaption}>positive delay predictive value</span>
+            <span style={styles.metricValue}>{metrics.precision !== null ? `${metrics.precision}%` : '—'}</span>
+            <span style={styles.metricCaption}>
+              {isTrained ? 'positive delay predictive value' : 'model not trained'}
+            </span>
           </div>
 
           {/* Card 3: Recall */}
@@ -166,8 +181,10 @@ export default function MLModelPanel({
             className="digital-card ml-card-secondary"
           >
             <span style={styles.metricName}>Recall</span>
-            <span style={styles.metricValue}>{metrics.recall}%</span>
-            <span style={styles.metricCaption}>true delay anomaly sensitivity</span>
+            <span style={styles.metricValue}>{metrics.recall !== null ? `${metrics.recall}%` : '—'}</span>
+            <span style={styles.metricCaption}>
+              {isTrained ? 'true delay anomaly sensitivity' : 'model not trained'}
+            </span>
           </div>
 
           {/* Card 4: F1 Score */}
@@ -179,8 +196,10 @@ export default function MLModelPanel({
             className="digital-card ml-card-secondary"
           >
             <span style={styles.metricName}>F1 Score</span>
-            <span style={styles.metricValue}>{metrics.f1}%</span>
-            <span style={styles.metricCaption}>harmonic mean evaluation metric</span>
+            <span style={styles.metricValue}>{metrics.f1 !== null ? `${metrics.f1}%` : '—'}</span>
+            <span style={styles.metricCaption}>
+              {isTrained ? 'harmonic mean evaluation metric' : 'model not trained'}
+            </span>
           </div>
         </div>
 
@@ -193,103 +212,117 @@ export default function MLModelPanel({
                 WHAT MAKES A TASK <span className={`hl hl-butter ${isVisible ? 'hl-sweep' : ''}`} style={{ padding: '0 4px' }}>PANIC?</span>
               </span>
               <span className="note-tag" style={{ color: '#D9483B' }}>
-                biggest signals ↗
+                {featureImportances.length > 0 ? 'gini importance ↗' : 'awaiting training'}
               </span>
             </div>
 
-            <div style={styles.featuresList}>
-              {featureImportances.slice(0, 5).map((feat, idx) => (
-                <div key={feat.feature} style={styles.featureItem}>
-                  <div style={styles.featureLabelRow}>
-                    <span style={styles.featureName}>
-                      <strong>0{idx + 1}</strong> {feat.label}
-                    </span>
-                    <span style={styles.featurePercent}>{feat.percentage}%</span>
+            {featureImportances.length > 0 ? (
+              <div style={styles.featuresList}>
+                {featureImportances.slice(0, 5).map((feat, idx) => (
+                  <div key={feat.feature} style={styles.featureItem}>
+                    <div style={styles.featureLabelRow}>
+                      <span style={styles.featureName}>
+                        <strong>0{idx + 1}</strong> {feat.label}
+                      </span>
+                      <span style={styles.featurePercent}>{feat.percentage}%</span>
+                    </div>
+                    <div style={styles.barTrack}>
+                      <div
+                        className="feature-bar-fill"
+                        data-target-width={`${Math.max(6, feat.percentage * 3.6)}%`}
+                        style={{
+                          ...styles.barFill,
+                          width: '0%',
+                          backgroundColor: idx === 0 ? '#FF8F82' : idx === 1 ? '#FFE58A' : idx === 2 ? '#C9B6FF' : '#BFE8D0',
+                        }}
+                      />
+                    </div>
                   </div>
-                  <div style={styles.barTrack}>
-                    <div
-                      className="feature-bar-fill"
-                      data-target-width={`${Math.max(6, feat.percentage * 3.6)}%`}
-                      style={{
-                        ...styles.barFill,
-                        width: '0%',
-                        backgroundColor: idx === 0 ? '#FF8F82' : idx === 1 ? '#FFE58A' : idx === 2 ? '#C9B6FF' : '#BFE8D0',
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div style={styles.emptyNotice}>
+                Feature importances are computed during model fitting. Train the baseline model to inspect feature signals.
+              </div>
+            )}
           </div>
 
           {/* Confusion Matrix */}
           <div style={styles.matrixPanel} className="digital-card">
             <div style={styles.panelHeader}>
               <span style={styles.panelTitle}>DID THE MODEL GET IT RIGHT?</span>
-              <span style={styles.panelNote}>240 held-out validation samples</span>
+              <span style={styles.panelNote}>
+                {isTrained ? 'Synthetic holdout validation split' : 'Awaiting model evaluation'}
+              </span>
             </div>
 
-            <div style={styles.matrixTable}>
-              <div style={styles.matrixColLabels}>
-                <span />
-                <span style={styles.colLabel}>Pred: On Time</span>
-                <span style={styles.colLabel}>Pred: Late</span>
-              </div>
+            {isTrained && cm ? (
+              <div style={styles.matrixTable}>
+                <div style={styles.matrixColLabels}>
+                  <span />
+                  <span style={styles.colLabel}>Pred: On Time</span>
+                  <span style={styles.colLabel}>Pred: Late</span>
+                </div>
 
-              {/* Row 1: Actual On-Time */}
-              <div style={styles.matrixRow}>
-                <span style={styles.rowLabel}>Actual: On Time</span>
-                <div
-                  className="cm-cell-item"
-                  style={{
-                    ...styles.cell,
-                    backgroundColor: '#EBF8F1',
-                    border: '1px solid #BFE8D0',
-                  }}
-                >
-                  <span style={styles.cellVal}>{cmCounts.tn}</span>
-                  <span style={{ ...styles.cellTag, color: '#166534' }}>Nice prediction ✓</span>
+                {/* Row 1: Actual On-Time */}
+                <div style={styles.matrixRow}>
+                  <span style={styles.rowLabel}>Actual: On Time</span>
+                  <div
+                    className="cm-cell-item"
+                    style={{
+                      ...styles.cell,
+                      backgroundColor: '#EBF8F1',
+                      border: '1px solid #BFE8D0',
+                    }}
+                  >
+                    <span style={styles.cellVal}>{cmCounts.tn ?? 0}</span>
+                    <span style={{ ...styles.cellTag, color: '#166534' }}>Nice prediction ✓</span>
+                  </div>
+                  <div
+                    className="cm-cell-item"
+                    style={{
+                      ...styles.cell,
+                      backgroundColor: '#FFF9DB',
+                      border: '1px solid #FFE58A',
+                    }}
+                  >
+                    <span style={styles.cellVal}>{cmCounts.fp ?? 0}</span>
+                    <span style={{ ...styles.cellTag, color: '#92400E' }}>False alarm ⚡</span>
+                  </div>
                 </div>
-                <div
-                  className="cm-cell-item"
-                  style={{
-                    ...styles.cell,
-                    backgroundColor: '#FFF9DB',
-                    border: '1px solid #FFE58A',
-                  }}
-                >
-                  <span style={styles.cellVal}>{cmCounts.fp}</span>
-                  <span style={{ ...styles.cellTag, color: '#92400E' }}>False alarm ⚡</span>
-                </div>
-              </div>
 
-              {/* Row 2: Actual Late */}
-              <div style={styles.matrixRow}>
-                <span style={styles.rowLabel}>Actual: Late</span>
-                <div
-                  className="cm-cell-item"
-                  style={{
-                    ...styles.cell,
-                    backgroundColor: '#FFEFEA',
-                    border: '1px solid #FFB5A7',
-                  }}
-                >
-                  <span style={styles.cellVal}>{cmCounts.fn}</span>
-                  <span style={{ ...styles.cellTag, color: '#991B1B' }}>Missed risk 🌧️</span>
-                </div>
-                <div
-                  className="cm-cell-item"
-                  style={{
-                    ...styles.cell,
-                    backgroundColor: '#EBF8F1',
-                    border: '1px solid #BFE8D0',
-                  }}
-                >
-                  <span style={styles.cellVal}>{cmCounts.tp}</span>
-                  <span style={{ ...styles.cellTag, color: '#166534' }}>Correct warning 🚨</span>
+                {/* Row 2: Actual Late */}
+                <div style={styles.matrixRow}>
+                  <span style={styles.rowLabel}>Actual: Late</span>
+                  <div
+                    className="cm-cell-item"
+                    style={{
+                      ...styles.cell,
+                      backgroundColor: '#FFEFEA',
+                      border: '1px solid #FFB5A7',
+                    }}
+                  >
+                    <span style={styles.cellVal}>{cmCounts.fn ?? 0}</span>
+                    <span style={{ ...styles.cellTag, color: '#991B1B' }}>Missed risk 🌧️</span>
+                  </div>
+                  <div
+                    className="cm-cell-item"
+                    style={{
+                      ...styles.cell,
+                      backgroundColor: '#EBF8F1',
+                      border: '1px solid #BFE8D0',
+                    }}
+                  >
+                    <span style={styles.cellVal}>{cmCounts.tp ?? 0}</span>
+                    <span style={{ ...styles.cellTag, color: '#166534' }}>Correct warning 🚨</span>
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div style={styles.emptyNotice}>
+                Confusion matrix evaluation data is calculated directly from the test split when the model is trained.
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -392,6 +425,25 @@ const styles = {
   },
   trainingStepText: {
     display: 'block',
+  },
+  untrainedNotice: {
+    backgroundColor: '#FFFFFF',
+    border: '1.5px dashed rgba(37, 36, 42, 0.16)',
+    borderRadius: '14px',
+    padding: '14px 20px',
+    fontSize: '13px',
+    color: '#4A4852',
+    lineHeight: 1.5,
+  },
+  untrainedNoticeText: {
+    display: 'block',
+  },
+  emptyNotice: {
+    padding: '28px 16px',
+    textAlign: 'center',
+    color: '#706D73',
+    fontSize: '13px',
+    lineHeight: 1.5,
   },
   metricsGrid: {
     display: 'grid',

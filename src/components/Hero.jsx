@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function Hero({ modelMetadata }) {
+export default function Hero() {
   const counts = { task1: 96.4, task2: 54.2, task3: 18.7 };
 
   return (
@@ -55,6 +55,10 @@ export default function Hero({ modelMetadata }) {
 
         {/* Right: Layered Task Cards */}
         <div style={styles.rightColumn}>
+          <div style={styles.previewHeader}>
+            <span style={styles.previewTag}>✦ ILLUSTRATIVE PREVIEW</span>
+            <span style={styles.previewSub}>Design demonstration</span>
+          </div>
           {/* Card 1: High Risk */}
           <div
             style={{
@@ -274,6 +278,24 @@ const styles = {
     flexDirection: 'column',
     gap: '16px',
     transition: 'transform 0.1s linear',
+  },
+  previewHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '0 4px',
+  },
+  previewTag: {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '11px',
+    fontWeight: '700',
+    color: '#706D73',
+    letterSpacing: '0.06em',
+  },
+  previewSub: {
+    fontSize: '11px',
+    color: '#9B98A3',
+    fontWeight: '500',
   },
   cleanCard: {
     backgroundColor: '#FFFFFF',

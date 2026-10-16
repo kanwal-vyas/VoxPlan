@@ -1,4 +1,26 @@
-import React, { useState, useEffect } from 'react';
+function formatDueDate(dueDateStr) {
+  if (!dueDateStr) return 'No deadline set';
+  const parts = dueDateStr.split('-');
+  if (parts.length === 3) {
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+    const d = new Date(year, month, day);
+    if (!isNaN(d.getTime())) {
+      const today = new Date();
+      const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const diffTime = d.getTime() - todayDate.getTime();
+      const diffDays = Math.round(diffTime / (1000 * 3600 * 24));
+      if (diffDays === 0) return 'Due today';
+      if (diffDays === 1) return 'Due tomorrow';
+      if (diffDays === -1) return 'Overdue by 1 day';
+      if (diffDays < -1) return `Overdue by ${Math.abs(diffDays)} days`;
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return `Due ${monthNames[month]} ${day}`;
+    }
+  }
+  return `Due ${dueDateStr}`;
+}
 
 export default function TaskCard({
   index,
@@ -13,15 +35,15 @@ export default function TaskCard({
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(task.title);
-  const [displayRisk, setDisplayRisk] = useState(0);
+  const [displayRisk, setDisplayRisk] = useState(null);
 
-  const prob = prediction ? prediction.probability : 0.5;
-  const targetPercent = prob * 100;
-  const riskCategory = prediction ? prediction.risk : 'MEDIUM';
+  const prob = prediction ? prediction.probability : null;
+  const targetPercent = prob !== null ? prob * 100 : null;
+  const riskCategory = prediction ? prediction.risk : null;
 
-  // Staggered count-up triggered on parent visibility
+  // Staggered count-up triggered on parent visibility when genuine prediction is available
   useEffect(() => {
-    if (parentVisible) {
+    if (parentVisible && targetPercent !== null) {
       const delay = 100 + index * 120;
       const timer = setTimeout(() => {
         let step = 0;
@@ -65,6 +87,17 @@ export default function TaskCard({
         noteTag: 'completed ✓',
       };
     }
+    if (!prediction) {
+      return {
+        accent: '#E2E0E7',
+        tagClass: 'hl',
+        tagBg: 'rgba(37, 36, 42, 0.05)',
+        textColor: '#706D73',
+        circleBorder: '#9B98A3',
+        riskText: '#706D73',
+        noteTag: 'awaiting analysis ⏳',
+      };
+    }
     switch (riskCategory) {
       case 'HIGH':
         return {
@@ -101,11 +134,10 @@ export default function TaskCard({
   };
 
   const theme = getTheme();
-  const enterDelay = `${0.1 + index * 0.12}s`;
 
   return (
     <article
-      data-risk={riskCategory}
+      data-risk={riskCategory || 'UNRATED'}
       style={{
         ...styles.card,
         borderTop: `4px solid ${theme.accent}`,
@@ -116,7 +148,7 @@ export default function TaskCard({
           onOpenExplanation(task, prediction);
         }
       }}
-      title="Click card to view prediction intelligence explanation"
+      title={prediction ? 'Click card to view prediction intelligence explanation' : 'Model prediction awaiting backend evaluation'}
     >
       {/* Top Meta Row */}
       <div style={styles.topRow}>
@@ -229,7 +261,12 @@ export default function TaskCard({
 
       {/* Middle Information */}
       <div style={styles.middleMeta}>
-        <span style={styles.dueDate}>📅 Due {task.dueDate || 'Soon'}</span>
+        <div style={styles.dateEffortGroup}>
+          <span style={styles.dueDate}>📅 {formatDueDate(task.dueDate)}</span>
+          {task.estimatedEffort != null && (
+            <span style={styles.effortBadge}>⏱️ {task.estimatedEffort}h</span>
+          )}
+        </div>
         <span className="note-tag" style={{ color: theme.textColor }}>
           {theme.noteTag}
         </span>
@@ -239,8 +276,8 @@ export default function TaskCard({
       <div style={styles.cardFooter}>
         <div style={styles.riskWrap}>
           {task.completed ? (
-            <span style={styles.completedBadge}>Completed</span>
-          ) : (
+            <span style={styles.completedBadge}>Completed ✓</span>
+          ) : prediction ? (
             <div style={styles.riskRow}>
               <span
                 className="annotated-circle"
@@ -250,16 +287,22 @@ export default function TaskCard({
                   fontWeight: '800',
                 }}
               >
-                {displayRisk}%
+                {displayRisk != null ? `${displayRisk}%` : '...'}
               </span>
               <span style={{ ...styles.riskLabel, color: theme.textColor }}>
                 {riskCategory} RISK
               </span>
             </div>
+          ) : (
+            <div style={styles.pendingRow}>
+              <span style={styles.pendingBadge}>Awaiting analysis</span>
+            </div>
           )}
         </div>
 
-        <span style={styles.explainHint}>view details →</span>
+        <span style={styles.explainHint}>
+          {prediction ? 'view details →' : 'model offline'}
+        </span>
       </div>
     </article>
   );
@@ -402,8 +445,34 @@ const styles = {
     color: '#706D73',
     fontWeight: '500',
   },
+  dateEffortGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexWrap: 'wrap',
+  },
+  effortBadge: {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '11px',
+    fontWeight: '600',
+    color: '#4A4852',
+    backgroundColor: 'rgba(37, 36, 42, 0.05)',
+    padding: '2px 6px',
+    borderRadius: '4px',
+  },
   dueDate: {
     fontSize: '12px',
+  },
+  pendingRow: {
+    display: 'flex',
+    alignItems: 'center',
+  },
+  pendingBadge: {
+    fontSize: '11px',
+    fontWeight: '700',
+    color: '#706D73',
+    letterSpacing: '0.04em',
+    textTransform: 'uppercase',
   },
   cardFooter: {
     display: 'flex',
