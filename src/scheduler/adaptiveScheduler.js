@@ -322,8 +322,38 @@ export function calculateTaskPriorityScore(
   task,
   asOfDateStr,
   dependencyDepths,
-  predictionsMap = {}
+  predictionsMap = {},
+  strategy = 'adaptive'
 ) {
+  // Strategy: Earliest Deadline First (EDF)
+  // Ranks ready tasks solely by calendar deadline urgency, ignoring priority and risk
+  if (strategy === 'edf') {
+    if (task.dueDate) {
+      const startParsed = parseDateISO(asOfDateStr);
+      const dueParsed = parseDateISO(task.dueDate);
+      if (startParsed && dueParsed) {
+        const daysDiff = Math.round((dueParsed.getTime() - startParsed.getTime()) / (1000 * 3600 * 24));
+        if (daysDiff < 0) {
+          // Overdue deadlines get highest urgency
+          return 5000 + Math.min(1000, Math.abs(daysDiff) * 100);
+        }
+        // Upcoming deadlines: fewer days remaining -> higher score
+        return Math.max(0, 30 - daysDiff) * 100;
+      }
+    }
+    return -1000; // Tasks without deadlines yield to any scheduled deadline
+  }
+
+  // Strategy: Priority-First
+  // Ranks ready tasks solely by explicit user priority tier, ignoring deadlines and risk
+  if (strategy === 'priority_first') {
+    const priority = String(task.priority || '').toLowerCase();
+    if (priority === 'high') return 3000;
+    if (priority === 'low') return 1000;
+    return 2000; // Medium
+  }
+
+  // Strategy: Adaptive (Default Multi-Objective)
   let score = 0;
 
   // 1. Dependency depth: tie-breaker favoring prerequisites that unblock others
@@ -412,6 +442,7 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
 
   const personalDurationModel = options.personalDurationModel || null;
   const predictionsMap = options.predictionsMap || {};
+  const strategy = options.strategy || 'adaptive';
 
   // Step 1: Filter eligible tasks (open, uncompleted tasks)
   const eligibleTasks = [];
@@ -488,7 +519,8 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
       t,
       startDateStr,
       taskDepths,
-      predictionsMap
+      predictionsMap,
+      strategy
     );
 
     taskMeta.set(t.id, {
@@ -830,6 +862,7 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
   }
 
   const summary = {
+    strategy,
     totalEligibleTasks,
     totalTasksEvaluated: totalEligibleTasks,
     scheduledCount,
@@ -863,6 +896,7 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
   };
 
   return {
+    strategy,
     proposedPlacements,
     placements: proposedPlacements,
     dayAllocations,

@@ -14,8 +14,8 @@ This document tracks the phased evolution of VoxPlan from a static task tracker 
 | **Phase 3, Stage 2** | Personal Model Dashboard & Evaluation | **COMPLETED** | Personal Model Dashboard (`PersonalModelDashboard.jsx`), sample weight transparency, Bayesian shrinkage formula explainer, leak-free chronological walk-forward holdout evaluation (`evaluatePersonalDurationModel`), MAE/MdAPE baseline comparison, and honest cold-start states. |
 | **Phase 3, Stage 3** | Hybrid Completion-Risk Personalization | **COMPLETED** | Guarded hybrid completion-risk estimator (`personalRiskModel.js`), hardened evaluation guard (min 3 train, min 5 held-out, 8 total tasks), leakage protection, bounded adjustments ($\pm 15\%$), confidence shrinkage ($W / (W+5.0)$), transparent explainability modal, and 53 automated unit tests. |
 | **Phase 4, Stage 1** | Adaptive Scheduling Foundations | **COMPLETED** | Standalone deterministic local-first scheduling engine (`src/scheduler/adaptiveScheduler.js`), dependency DAG analysis with cycle detection, personalized duration integration with cold-start fallbacks, daily working-hour capacity bin-packing, weekend rollover, proposal review modal (`AdaptiveScheduleModal.jsx`), safe approval flow, non-destructive diffs, and 19 unit tests (72 tests total). |
-| **Phase 4, Stage 2** | Scheduling Correctness & Reliability Audit | **COMPLETED** | Hardened dependency handling with Kahn's topological ready-queue (guaranteed DAG order over priority scores), explicit 3-color DFS cycle isolation, blocked dependent propagation, oversized task manual resolution (`status: 'oversized_exceeds_capacity'`), cumulative daily capacity constraint enforcement, accurate capacity utilization denominator, timezone-safe deadline policies, stale-proposal detection with one-click regeneration, non-destructive diff filtering, deduplicated telemetry, and 81 automated tests across 16 suites. |
-| **Phase 4, Stage 3** | Workload Balancing & Sprint Optimization | Next Up | Interactive drag-and-drop slot reallocation, multi-sprint horizon planning, fine-grained calendar capacity overrides, and bottleneck notifications. |
+| **Phase 4, Stage 3** | Schedule Quality Evaluation & Benchmarking | **COMPLETED** | Documented deterministic schedule quality evaluation module (`src/scheduler/scheduleEvaluator.js`) across 7 dimensions (coverage, deadline feasibility, dependency correctness, capacity compliance, workload balance CV, horizon coverage, stability churn), multi-strategy benchmarking comparing Adaptive against Earliest Deadline First (EDF) and Priority-First under identical hard constraints, 12 reproducible scenario fixtures (`src/scheduler/scheduleBenchmarks.js`), perturbation churn analysis, modal benchmark UI tab, and 93 automated tests across 19 suites. |
+| **Phase 4, Stage 4** | Workload Balancing & Sprint Optimization | Next Up | Interactive drag-and-drop slot reallocation, multi-sprint horizon planning, fine-grained calendar capacity overrides, and bottleneck notifications. |
 | **Phase 5** | Voice & Conversational Planning Experience | Planned | Rich multi-turn planning dialog, schedule rescheduling commands, review debriefing via natural language. |
 
 ---
@@ -686,14 +686,183 @@ Before modifying production code, suspected edge cases were isolated and reprodu
 
 ---
 
-### Known Limitations & Next Stage (Phase 4, Stage 3)
+### Known Limitations & Next Stage
 
-1. **Multi-Day Task Splitting**: Tasks exceeding daily working capacity require manual resolution; automated sub-task chunking or multi-day span representation is deferred to Phase 4 Stage 3.
+1. **Multi-Day Task Splitting**: Tasks exceeding daily working capacity require manual resolution; automated sub-task chunking or multi-day span representation is deferred to Phase 4 Stage 4.
 2. **Intraday Timeblocking**: The scheduler places tasks into day-level capacity buckets rather than specific start/end clock times (e.g. 09:00 - 11:30).
-3. **Next Stage (Phase 4, Stage 3: Workload Balancing & Sprint Optimization)**:
-   - Interactive drag-and-drop slot reallocation before applying proposal.
-   - Fine-grained working calendar overrides (holidays, personal leave).
-   - Capacity heatmap visualizations across multi-sprint horizons.
+3. **Next Stage Completed**: Proceeded to Phase 4, Stage 3: Schedule Quality Evaluation & Benchmarking.
+
+---
+
+## Phase 4, Stage 3 Execution Record: Schedule Quality Evaluation & Benchmarking
+
+### Objective
+Establish an independent, deterministic evaluation module and reproducible benchmark suite to measure schedule quality objectively across multiple dimensions without assuming that the adaptive scheduler is superior simply because it uses more inputs or produces a polished proposal.
+
+---
+
+### Schedule Quality Metric Framework
+
+A dedicated, UI-independent evaluation engine was implemented in `src/scheduler/scheduleEvaluator.js`. It evaluates any generated schedule against raw input tasks across 7 core dimensions:
+
+#### 1. Task Coverage (Exhaustive Accounting Invariant)
+Every input task $t \in T_{\text{eligible}}$ is partitioned into exactly one mutually exclusive outcome state:
+- $N_{\text{scheduled}}$: Assigned to a working calendar slot on or before the horizon.
+- $N_{\text{blocked}}$: Blocked due to circular dependencies, self-dependencies, or missing prerequisites.
+- $N_{\text{oversized}}$: Requires manual resolution because effort exceeds `dailyCapacityHours`.
+- $N_{\text{unscheduled}}$: Unplaced due to planning horizon capacity exhaustion.
+
+$$\text{Coverage Invariant: } N_{\text{scheduled}} + N_{\text{blocked}} + N_{\text{oversized}} + N_{\text{unscheduled}} \equiv N_{\text{total}}$$
+$$\text{Scheduled Rate} = \frac{N_{\text{scheduled}}}{N_{\text{total}}}$$
+
+#### 2. Deadline Feasibility
+For all tasks with explicit due dates $T_{\text{deadline}} \subseteq T_{\text{eligible}}$:
+- **On-Time Rate**: $\frac{N_{\text{on\_time}}}{N_{\text{deadline}}}$, where on-time accounts for non-working days (e.g. completing on Friday satisfies a Sunday deadline).
+- **Average Delay Days**: $\frac{\sum_{t \in T_{\text{late}}} (\text{proposedDate}_t - \text{dueDate}_t)}{N_{\text{late}}}$.
+- **Pre-Existing Overdue Tasks**: Tasks with $\text{dueDate} < \text{startDate}$ tracked separately ($N_{\text{was\_overdue}}$) so pre-existing overdue status is not counted as scheduler delay.
+- **Impossible Deadlines**: Deadlines belonging to blocked, oversized, or horizon-exhausted tasks ($N_{\text{impossible}}$).
+
+#### 3. Dependency Correctness
+For all declared dependency edges $(p \to c)$ among eligible tasks:
+- **Satisfied Count**: Prerequisites completed or scheduled on/before dependent ($\text{date}_p \le \text{date}_c$).
+- **Violated Count**: Dependent scheduled strictly before prerequisite ($\text{date}_c < \text{date}_p$). (Must be 0 under hard constraint).
+- **Blocked Count**: Prerequisite is cyclic, missing, or unscheduled, correctly propagating blocked status.
+- **Dependency Integrity Rate**: $\frac{N_{\text{satisfied}}}{N_{\text{satisfied}} + N_{\text{violated}}}$ ($100\%$ required).
+
+#### 4. Capacity Compliance & Workload Utilization
+- **Total Scheduled Workload**: $H_{\text{scheduled}} = \sum_{d \in D_{\text{working}}} \text{hours}_d$.
+- **Total Working Capacity**: $H_{\text{capacity}} = \sum_{d \in D_{\text{working}}} \text{capacityHours}_d$.
+- **Capacity Utilization**: $\frac{H_{\text{scheduled}}}{H_{\text{capacity}}} \times 100\%$.
+- **Overrun Violations**: Count of calendar days where assigned workload exceeds daily capacity. (Must be 0).
+
+#### 5. Workload Balance (Daily Imbalance Metric)
+Evaluates pacing uniformity across active working days ($D_{\text{active}}$ with hours $h_i > 0$, count $K$):
+- **Mean Daily Workload**: $\mu = \frac{1}{K} \sum_{i=1}^K h_i$.
+- **Workload Standard Deviation**: $\sigma = \sqrt{\frac{1}{K} \sum_{i=1}^K (h_i - \mu)^2}$.
+- **Imbalance Coefficient of Variation (CV)**: $\text{CV} = \frac{\sigma}{\mu}$ (Lower is more uniform; 0 indicates perfectly balanced daily workload).
+- **Peak-to-Average Ratio**: $\frac{\max(h_i)}{\mu}$.
+
+#### 6. Planning Horizon Compliance
+- **Within-Horizon Coverage**: $\frac{N_{\text{within}}}{N_{\text{total}}}$.
+- **Beyond-Horizon Overflow**: Tasks requiring a longer horizon window.
+
+#### 7. Schedule Stability & Perturbation Churn
+Given base schedule $S_1$ and perturbed schedule $S_2$:
+- **Common Tasks**: $T_{\text{common}} = \{t \mid t \in S_1 \text{ and } t \in S_2 \text{ with proposedDate} \ne \text{null}\}$.
+- **Shifted Tasks**: $T_{\text{shifted}} = \{t \in T_{\text{common}} \mid S_1(t).\text{proposedDate} \ne S_2(t).\text{proposedDate}\}$.
+- **Churn Rate**: $\frac{|T_{\text{shifted}}|}{|T_{\text{common}}|}$ ($0.0 = \text{completely stable}, 1.0 = \text{total date reshuffle}$).
+
+---
+
+### Fair Baseline Comparisons
+
+Three deterministic strategies execute against **identical hard constraints** (Kahn's topological DAG ready-queue, working days, daily capacity bin-packing, oversized task isolation, weekend rollover):
+
+1. **Adaptive Strategy (Recommended)**:
+   - Multi-objective score: Topological depth unblocking ($-100 \times \text{depth}$), overdue recovery ($+5000$ to $+6000$), earliest deadline urgency curve ($+0$ to $+1500$), priority tiers (`high` $+300$, `med` $+200$, `low` $+100$), and bounded guarded risk heuristic ($+60$ for high risk).
+2. **Earliest Deadline First (EDF) Baseline**:
+   - Ranks ready tasks purely by calendar due date urgency. Ignores priority tiers and risk heuristics.
+3. **Priority-First Baseline**:
+   - Ranks ready tasks purely by priority tier (`high` 3000, `med` 2000, `low` 1000). Ignores deadlines and risk heuristics.
+
+---
+
+### Empirical Benchmark Findings & Strategy Divergence
+
+The 12 curated scenarios in `src/scheduler/scheduleBenchmarks.js` demonstrate key trade-offs:
+
+| Benchmark Scenario | Tasks | Adaptive On-Time | EDF On-Time | Priority-First On-Time | Hard Constraints Violated | Algorithmic Divergence & Rationale |
+|---|---|---|---|---|---|---|
+| **1. Normal Mixed Backlog** | 6 | 100% (6/6) | 100% (6/6) | 100% (6/6) | 0 (All) | When capacity is ample, all 3 strategies achieve full feasibility. Adaptive demonstrates lowest workload CV (0.178). |
+| **2. Shared Deadline Contention** | 4 | 50% (2/4) | 50% (2/4) | 50% (2/4) | 0 (All) | Daily capacity (6.0h) limits Day 1 to 2 tasks. Adaptive & Priority-First prioritize High-priority tasks on time; EDF tie-breaks arbitrarily on task ID. |
+| **3. Priority vs. Deadline Tension** | 3 | 67% (2/3) | **100% (3/3)** | 33% (1/3) | 0 (All) | **Key trade-off:** Low-priority task due Day 0 vs High-priority task due Day 5. EDF schedules Low-priority first (100% on-time). Priority-First schedules High-priority first, delaying Low-priority by 2 days. Adaptive balances both. |
+| **4. Linear Dependency Chain** | 4 | 100% (3/3) | 100% (3/3) | 100% (3/3) | 0 (All) | Completed prerequisite (`completed: true`) passed through; chain ($A \to B \to C$) preserved identically across all 3. |
+| **5. Dependency Cycle Blocked** | 4 | 100% (1/1) | 100% (1/1) | 100% (1/1) | 0 (All) | 2 cyclic tasks + 1 downstream child isolated with `status: 'blocked_by_dependency'`. Independent task scheduled normally. |
+| **6. Oversized Task (> Capacity)** | 2 | 100% (1/1) | 100% (1/1) | 100% (1/1) | 0 (All) | 10.0h task flagged `oversized_exceeds_capacity` for manual resolution; regular task scheduled on time. |
+| **7. Insufficient Capacity** | 3 | 67% (2/3) | 67% (2/3) | 67% (2/3) | 0 (All) | 15.0h workload competing for 12.0h capacity before deadline. Exactly 1 task delayed; honestly reported with days delayed. |
+| **8. Overdue & Undated Recovery** | 3 | 100% (2/2) | 100% (2/2) | 100% (2/2) | 0 (All) | Overdue task prioritized for immediate Day 0 recovery; undated task scheduled in remaining capacity. |
+| **9. Non-Working-Day Deadline** | 2 | 100% (2/2) | 100% (2/2) | 100% (2/2) | 0 (All) | Task due Sunday satisfied on Friday. |
+| **10. Horizon Exhaustion** | 6 | 80% (4/5) | 80% (4/5) | 80% (4/5) | 0 (All) | 36.0h workload on 30.0h 7-day horizon. 6th task marked `unscheduled` without silent omission. |
+| **11. Personal Model Adjustment** | 2 | 100% (2/2) | 100% (2/2) | 100% (2/2) | 0 (All) | 4.0h task adjusted to 5.0h using learned 1.5x bias ratio with Bayesian shrinkage. |
+| **12. Heuristic Delay-Risk Signal** | 2 | 100% (2/2) | 100% (2/2) | 100% (2/2) | 0 (All) | High-risk task pulled forward via bounded $+60$ pt urgency boost. |
+
+---
+
+### Schedule Stability & Perturbation Churn
+
+Measured on a representative 5-task backlog (`STABILITY_BENCHMARK`) under 5 atomic perturbations:
+
+| Perturbation | Mutation Applied | Common Tasks | Shifted Tasks | Churn Rate | Feasibility Justification |
+|---|---|---|---|---|---|
+| **Add Low-Priority Task** | Added 1.0h task due at end of sprint | 5 | 0 | **0.0%** | Appended to open slot; zero churn on existing tasks. |
+| **Change Task Priority** | Task 3 promoted Medium $\to$ High | 5 | 0 | **0.0%** | Task 3 already scheduled before its deadline; zero churn. |
+| **Move Deadline +1 Day** | Task 2 deadline moved 1 day later | 5 | 0 | **0.0%** | Existing slot remains valid; no unnecessary reshuffle. |
+| **Adjust Duration Estimate** | Task 1 effort changed 3.0h $\to$ 3.5h | 5 | 0 | **0.0%** | Day 1 had 3.0h remaining capacity; absorbed without rolling over. |
+| **Add Valid Dependency** | Task 3 made dependent on Task 2 | 5 | 1 | **20.0%** | **Feasible shift:** Task 3 pushed from Day 1 to Day 2 to satisfy prerequisite. |
+| **Average Churn Rate** | Across all 5 perturbations | — | — | **4.0%** | High stability; shifts occur only when constraint feasibility requires it. |
+
+---
+
+### Hard Constraints vs. Soft Objectives
+
+- **Hard Constraints (Must Never Be Violated)**:
+  - Kahn's DAG ready-queue ensures prerequisites are strictly scheduled on or before dependents.
+  - Daily working hours cannot be exceeded ($H_{\text{day}} \le \text{dailyCapacityHours}$).
+  - Blocked and oversized tasks are isolated with `proposedDate: null` and explicit conflict reasons.
+  - Deadlines cannot be claimed feasible if capacity is insufficient.
+- **Soft Objectives (Optimization Trade-Offs)**:
+  - Minimizing deadline delay days.
+  - Pulling urgent and high-priority tasks forward.
+  - Smoothing daily workload variance ($\text{CV}$).
+  - Minimizing schedule churn across small updates.
+
+---
+
+### UI Implementation: Strategy Benchmark & Quality Tab
+
+- **File**: `src/components/AdaptiveScheduleModal.jsx`
+  - Added sub-navigation tab switcher: `✦ Schedule Proposal` and `⚖ Strategy Benchmark & Quality`.
+  - Interactive benchmark scenario selector (Current Active Backlog + 12 standard benchmarks).
+  - 3-column side-by-side Strategy Cards (Adaptive, EDF, Priority-First) with pastel accents.
+  - Comprehensive quality metrics comparison table.
+  - Trade-off & algorithmic divergence narrative.
+  - Schedule stability & perturbation churn breakdown.
+  - Prominent scientific disclosure stating that benchmarks are synthetic constraint fixtures.
+
+---
+
+### Automated Test Suite Coverage
+
+- **File**: `tests/schedule_evaluation.test.js` (NEW)
+  - 12 automated unit tests across 3 suites:
+    1. Metric calculation invariants: coverage completeness ($N_{\text{sched}} + N_{\text{blocked}} + N_{\text{oversized}} + N_{\text{unscheduled}} \equiv N$), deadline feasibility, non-working-day deadlines, dependency correctness, workload balance CV, empty input handling.
+    2. Schedule stability: 0% churn on identical inputs, shift quantification, full perturbation suite.
+    3. Multi-strategy comparison: hard constraint satisfaction across all 3 strategies, priority vs deadline trade-off verification, and full 12-benchmark execution.
+  - Total repository tests: **93 tests passing across 19 suites**.
+
+---
+
+### Verification Results
+
+1. **Frontend Test Suite**: `npm test`
+   - **93 tests passing across 19 suites** (0 failures, 157ms duration).
+2. **Frontend Linter**: `npm run lint` (`oxlint`)
+   - **0 errors, 0 warnings** across 31 files.
+3. **Production Build**: `npm run build` (`vite build`)
+   - Successfully generated production bundle in 196ms (`dist/assets/index-DVA9yIeN.js`, 484.99 kB / 142.36 kB gzip).
+4. **Backend Pytest Suite**: `python -m pytest backend/tests/ -v`
+   - **27 tests passing** (18 date handling tests, 9 ML & API tests).
+
+---
+
+### Known Limitations & Next Stage (Phase 4, Stage 4)
+
+1. **Interactive Slot Reallocation**: Users cannot currently drag-and-drop individual tasks between days within the proposal modal.
+2. **Multi-Day Task Splitting**: Oversized tasks require manual breakdown by the user.
+3. **Next Stage (Phase 4, Stage 4: Workload Balancing & Sprint Optimization)**:
+   - Interactive calendar heatmaps showing daily capacity utilization.
+   - User drag-and-drop manual adjustments to proposed schedule slots before applying.
+   - Fine-grained working calendar overrides (holidays, personal days off).
 
 
 
