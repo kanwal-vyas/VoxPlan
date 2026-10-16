@@ -432,10 +432,14 @@ export function estimateTaskDuration(model, taskOrEffort) {
 }
 
 /**
- * Minimum distinct completed tasks with estimates and durations needed to report holdout evaluation metrics.
+ * Evaluation sample guards:
+ * - MIN_WALKFORWARD_TRAIN_TASKS: Minimum prior completed tasks required to fit personal model before each prediction (3).
+ * - MIN_HELDOUT_PREDICTIONS: Minimum genuine held-out test predictions required before reporting evaluable aggregate metrics (5).
+ * - MIN_EVALUATION_TASKS: Minimum total completed tasks required for walk-forward evaluation (3 + 5 = 8).
  */
-export const MIN_EVALUATION_TASKS = 5;
 export const MIN_WALKFORWARD_TRAIN_TASKS = 3;
+export const MIN_HELDOUT_PREDICTIONS = 5;
+export const MIN_EVALUATION_TASKS = MIN_WALKFORWARD_TRAIN_TASKS + MIN_HELDOUT_PREDICTIONS; // 8
 
 /**
  * Convenience helper to compute a duration prediction from raw events and tasks.
@@ -452,18 +456,26 @@ export function getPersonalDurationEstimate(events, currentTasks, targetTaskOrEf
  * Requirements:
  * 1. Uses only genuine eligible completed tasks (joined by task_id, positive estimate, positive duration).
  * 2. Evaluates tasks in strict chronological order of completion.
- * 3. Each prediction uses model parameters fit strictly on tasks completed BEFORE that task.
+ * 3. Each prediction uses model parameters fit strictly on tasks completed BEFORE that task (>= 3 prior tasks).
  * 4. Zero target leakage: test task's observed duration and post-completion fields are NEVER in the training set.
- * 5. Compares personal model MAE/MdAPE against the user's original effort estimate baseline.
- * 6. Returns an explicit 'insufficient_data' state if fewer than MIN_EVALUATION_TASKS exist.
+ * 5. Requires at least MIN_HELDOUT_PREDICTIONS (5) genuine held-out predictions (requiring >= 8 total tasks).
+ * 6. Compares personal model MAE/MdAPE against the user's original effort estimate baseline.
+ * 7. Returns an explicit 'insufficient_evaluation_data' state if fewer than MIN_HELDOUT_PREDICTIONS exist.
  *
  * @param {object[]} events Raw behavioral events
  * @param {object[]} [currentTasks=[]] Current task objects
  * @param {object} [options={}]
  * @param {number} [options.minTrainTasks=3] Minimum training tasks before walk-forward starts
- * @param {number} [options.minTotalTasks=5] Minimum total tasks required for evaluation
+ * @param {number} [options.minHeldOutPredictions=5] Minimum held-out test predictions required
+ * @param {number} [options.minTotalTasks=8] Minimum total tasks required for evaluation
  * @returns {{
- *   status: 'insufficient_data'|'evaluated',
+ *   status: 'insufficient_evaluation_data'|'evaluated',
+ *   eligibleObservationCount: number,
+ *   minTotalObservations: number,
+ *   minTrainObservations: number,
+ *   heldOutPredictionCount: number,
+ *   minHeldOutPredictions: number,
+ *   trainObservationsPerPrediction: number[],
  *   totalEligibleTasks: number,
  *   minRequiredTasks: number,
  *   trainTaskCount: number,
@@ -498,21 +510,30 @@ export function getPersonalDurationEstimate(events, currentTasks, targetTaskOrEf
  */
 export function evaluatePersonalDurationModel(events = [], currentTasks = [], options = {}) {
   const minTrain = options.minTrainTasks ?? MIN_WALKFORWARD_TRAIN_TASKS;
-  const minTotal = options.minTotalTasks ?? MIN_EVALUATION_TASKS;
+  const minHeldOut = options.minHeldOutPredictions ?? MIN_HELDOUT_PREDICTIONS;
+  const minTotal = options.minTotalTasks ?? (minTrain + minHeldOut);
 
   const eligibleObservations = extractEligibleObservations(events, currentTasks);
   const totalEligible = eligibleObservations.length;
+  const potentialTestCount = Math.max(0, totalEligible - minTrain);
 
-  if (totalEligible < minTotal) {
+  if (potentialTestCount < minHeldOut || totalEligible < minTotal) {
     return {
-      status: 'insufficient_data',
+      status: 'insufficient_evaluation_data',
+      eligibleObservationCount: totalEligible,
+      minTotalObservations: minTotal,
+      minTrainObservations: minTrain,
+      heldOutPredictionCount: potentialTestCount,
+      minHeldOutPredictions: minHeldOut,
+      trainObservationsPerPrediction: [],
+      // Compatibility keys
       totalEligibleTasks: totalEligible,
       minRequiredTasks: minTotal,
       trainTaskCount: 0,
-      testTaskCount: 0,
+      testTaskCount: potentialTestCount,
       metrics: null,
       testDetails: [],
-      explanation: `Walk-forward holdout evaluation requires at least ${minTotal} completed tasks with effort estimates and durations (currently ${totalEligible} available). Evaluation activates automatically as you complete more tasks.`,
+      explanation: `Holdout evaluation requires at least ${minHeldOut} genuine held-out test predictions (each trained on >= ${minTrain} prior tasks). Currently ${totalEligible} completed task${totalEligible === 1 ? '' : 's'} available, yielding ${potentialTestCount} held-out prediction${potentialTestCount === 1 ? '' : 's'} (${minHeldOut} required). Full evaluation activates at ${minTotal} completed tasks.`,
     };
   }
 
@@ -622,6 +643,13 @@ export function evaluatePersonalDurationModel(events = [], currentTasks = [], op
 
   return {
     status: 'evaluated',
+    eligibleObservationCount: totalEligible,
+    minTotalObservations: minTotal,
+    minTrainObservations: minTrain,
+    heldOutPredictionCount: testCount,
+    minHeldOutPredictions: minHeldOut,
+    trainObservationsPerPrediction: testDetails.map((t) => t.trainSetSize),
+    // Compatibility keys
     totalEligibleTasks: totalEligible,
     minRequiredTasks: minTotal,
     trainTaskCount: minTrain,
@@ -639,6 +667,17 @@ export function evaluatePersonalDurationModel(events = [], currentTasks = [], op
       total_test_count: testCount,
     },
     testDetails,
-    explanation: `Evaluated across ${testCount} holdout task${testCount > 1 ? 's' : ''} using chronological walk-forward splits. Personalized estimator achieved ${maeModel}h MAE vs ${maeBaseline}h baseline (${improvementPercent >= 0 ? '+' : ''}${improvementPercent}% error reduction).`,
+    explanation: `Evaluated across ${testCount} genuine held-out task${testCount > 1 ? 's' : ''} using chronological walk-forward splits. Personalized estimator achieved ${maeModel}h MAE vs ${maeBaseline}h baseline (${improvementPercent >= 0 ? '+' : ''}${improvementPercent}% error reduction).`,
   };
 }
+
+// Re-export guarded personal risk model
+export {
+  computeGuardedTaskRisk,
+  computeBatchGuardedRisk,
+  getRiskCategory,
+  MIN_PERSONAL_RISK_WEIGHT,
+  RISK_SHRINKAGE_PRIOR,
+  MAX_RISK_ADJUSTMENT,
+} from './personalRiskModel.js';
+

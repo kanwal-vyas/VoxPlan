@@ -15,6 +15,13 @@ import {
   evaluatePersonalDurationModel,
   MIN_EVALUATION_TASKS,
   MIN_WALKFORWARD_TRAIN_TASKS,
+  MIN_HELDOUT_PREDICTIONS,
+  computeGuardedTaskRisk,
+  computeBatchGuardedRisk,
+  getRiskCategory,
+  MIN_PERSONAL_RISK_WEIGHT,
+  MAX_RISK_ADJUSTMENT,
+  RISK_SHRINKAGE_PRIOR,
 } from '../src/telemetry/personalModel.js';
 
 import {
@@ -537,25 +544,29 @@ describe('2. Task Lifecycle Transitions & Command-Bar Integration', () => {
 });
 
 describe('3. Personal Model Evaluation & Dashboard Derivations', () => {
-  it('evaluatePersonalDurationModel returns insufficient_data for 0 observations (cold-start)', () => {
+  it('evaluatePersonalDurationModel returns insufficient_evaluation_data for 0 observations (cold-start)', () => {
     const evalResult = evaluatePersonalDurationModel([], []);
-    assert.equal(evalResult.status, 'insufficient_data');
+    assert.equal(evalResult.status, 'insufficient_evaluation_data');
     assert.equal(evalResult.totalEligibleTasks, 0);
-    assert.equal(evalResult.minRequiredTasks, MIN_EVALUATION_TASKS);
+    assert.equal(evalResult.eligibleObservationCount, 0);
+    assert.equal(evalResult.minTotalObservations, MIN_EVALUATION_TASKS);
+    assert.equal(evalResult.minTrainObservations, MIN_WALKFORWARD_TRAIN_TASKS);
+    assert.equal(evalResult.minHeldOutPredictions, MIN_HELDOUT_PREDICTIONS);
+    assert.equal(evalResult.heldOutPredictionCount, 0);
     assert.equal(evalResult.metrics, null);
     assert.deepEqual(evalResult.testDetails, []);
-    assert.match(evalResult.explanation, /requires at least 5 completed tasks/i);
+    assert.match(evalResult.explanation, /8 completed tasks/i);
   });
 
-  it('evaluatePersonalDurationModel returns insufficient_data when observations are sparse (< 5 tasks)', () => {
-    // 3 completed tasks
+  it('evaluatePersonalDurationModel boundary: 5 observations produces only 2 held-out predictions (< 5 required)', () => {
+    // 5 completed tasks: k=0,1,2 used for train; test predictions are k=3, 4 -> 2 predictions
     const events = [];
     const tasks = [];
-    for (let i = 1; i <= 3; i++) {
-      tasks.push({ id: `t-sparse-${i}`, estimatedEffort: 2.0, completed: true });
+    for (let i = 1; i <= 5; i++) {
+      tasks.push({ id: `t-b5-${i}`, estimatedEffort: 2.0, completed: true });
       events.push({
-        event_id: `evt-s-${i}`,
-        task_id: `t-sparse-${i}`,
+        event_id: `evt-b5-${i}`,
+        task_id: `t-b5-${i}`,
         event_type: 'task_completed',
         timestamp: `2026-10-10T1${i}:00:00Z`,
         payload: { duration_source: 'tracked', tracked_duration_seconds: 2.5 * 3600 },
@@ -563,11 +574,97 @@ describe('3. Personal Model Evaluation & Dashboard Derivations', () => {
     }
 
     const evalResult = evaluatePersonalDurationModel(events, tasks);
-    assert.equal(evalResult.status, 'insufficient_data');
-    assert.equal(evalResult.totalEligibleTasks, 3);
-    assert.equal(evalResult.minRequiredTasks, MIN_EVALUATION_TASKS);
+    assert.equal(evalResult.status, 'insufficient_evaluation_data');
+    assert.equal(evalResult.totalEligibleTasks, 5);
+    assert.equal(evalResult.eligibleObservationCount, 5);
+    // Mathematically: 5 tasks - 3 training tasks = 2 held-out test predictions
+    assert.equal(evalResult.heldOutPredictionCount, 2);
+    assert.equal(evalResult.minHeldOutPredictions, 5);
     assert.equal(evalResult.metrics, null);
-    assert.match(evalResult.explanation, /currently 3 available/i);
+    assert.match(evalResult.explanation, /yielding 2 held-out predictions \(5 required\)/i);
+  });
+
+  it('evaluatePersonalDurationModel boundary: 7 observations produces only 4 held-out predictions (< 5 required)', () => {
+    // 7 completed tasks: k=0,1,2 used for train; test predictions are k=3,4,5,6 -> 4 predictions
+    const events = [];
+    const tasks = [];
+    for (let i = 1; i <= 7; i++) {
+      tasks.push({ id: `t-b7-${i}`, estimatedEffort: 2.0, completed: true });
+      events.push({
+        event_id: `evt-b7-${i}`,
+        task_id: `t-b7-${i}`,
+        event_type: 'task_completed',
+        timestamp: `2026-10-0${i}T12:00:00Z`,
+        payload: { duration_source: 'tracked', tracked_duration_seconds: 2.5 * 3600 },
+      });
+    }
+
+    const evalResult = evaluatePersonalDurationModel(events, tasks);
+    assert.equal(evalResult.status, 'insufficient_evaluation_data');
+    assert.equal(evalResult.totalEligibleTasks, 7);
+    assert.equal(evalResult.eligibleObservationCount, 7);
+    // Mathematically: 7 tasks - 3 training tasks = 4 held-out test predictions
+    assert.equal(evalResult.heldOutPredictionCount, 4);
+    assert.equal(evalResult.minHeldOutPredictions, 5);
+    assert.equal(evalResult.metrics, null);
+  });
+
+  it('evaluatePersonalDurationModel boundary: 8 observations satisfies evaluation guard (5 held-out predictions)', () => {
+    // 8 completed tasks in chronological order:
+    // First sample size that satisfies MIN_WALKFORWARD_TRAIN_TASKS(3) + MIN_HELDOUT_PREDICTIONS(5) = 8
+    // User estimates 2.0h, tasks actually take 3.0h (1.5x)
+    const events = [];
+    const tasks = [];
+    for (let i = 1; i <= 8; i++) {
+      tasks.push({
+        id: `t-eval-8-${i}`,
+        estimatedEffort: 2.0,
+        completed: true,
+      });
+      events.push({
+        event_id: `evt-eval-8-${i}`,
+        task_id: `t-eval-8-${i}`,
+        event_type: 'task_completed',
+        timestamp: `2026-10-0${i}T12:00:00Z`,
+        payload: {
+          duration_source: 'tracked',
+          tracked_duration_seconds: 3.0 * 3600, // 3 hours
+        },
+      });
+    }
+
+    const evalResult = evaluatePersonalDurationModel(events, tasks);
+    assert.equal(evalResult.status, 'evaluated');
+    assert.equal(evalResult.totalEligibleTasks, 8);
+    assert.equal(evalResult.eligibleObservationCount, 8);
+    assert.equal(evalResult.trainTaskCount, MIN_WALKFORWARD_TRAIN_TASKS); // 3
+    assert.equal(evalResult.testTaskCount, 5); // exactly 5 held-out predictions
+    assert.equal(evalResult.heldOutPredictionCount, 5);
+    assert.equal(evalResult.testDetails.length, 5);
+
+    // Verify walk-forward property:
+    // First test task (i=3, task 4) trained on exactly 3 prior tasks
+    assert.equal(evalResult.testDetails[0].taskId, 't-eval-8-4');
+    assert.equal(evalResult.testDetails[0].trainSetSize, 3);
+    assert.equal(evalResult.testDetails[0].trainEffectiveWeight, 3.0);
+
+    // Fifth test task (i=7, task 8) trained on exactly 7 prior tasks
+    assert.equal(evalResult.testDetails[4].taskId, 't-eval-8-8');
+    assert.equal(evalResult.testDetails[4].trainSetSize, 7);
+    assert.equal(evalResult.testDetails[4].trainEffectiveWeight, 7.0);
+
+    // Baseline error: |2.0 - 3.0| = 1.0h
+    assert.equal(evalResult.metrics.mae_baseline, 1.0);
+
+    // Model prediction: adjusted ratio is > 1.2x, so predicted is ~2.5h - 2.7h
+    // Model error is strictly less than baseline error
+    assert.ok(evalResult.metrics.mae_model < evalResult.metrics.mae_baseline);
+    assert.ok(evalResult.metrics.mae_improvement_hours > 0);
+    assert.ok(evalResult.metrics.improvement_percent > 0);
+
+    // All 5 test tasks should show improvement
+    assert.equal(evalResult.metrics.better_predictions_count, 5);
+    assert.equal(evalResult.metrics.worse_predictions_count, 0);
   });
 
   it('buildPersonalDurationModel accurately separates measured and self-reported observations and calculates effective sample weight', () => {
@@ -615,71 +712,11 @@ describe('3. Personal Model Evaluation & Dashboard Derivations', () => {
     ];
 
     const model = buildPersonalDurationModel(events, tasks);
-    assert.equal(model.eligibleCount, 5); // 3 tracked + 2 self-reported (unknown excluded)
+    assert.equal(model.eligibleCount, 5);
     assert.equal(model.trackedCount, 3);
     assert.equal(model.selfReportedCount, 2);
-    assert.equal(model.effectiveWeight, 4.0); // 3*1.0 + 2*0.5
-    assert.equal(model.status, 'developing'); // >= 3.0 weight is developing
-  });
-
-  it('evaluatePersonalDurationModel performs leak-free walk-forward chronological evaluation with 5+ tasks', () => {
-    // 6 tasks completed in chronological order:
-    // User consistently underestimates: estimates 2.0h, tasks actually take 3.0h (1.5x)
-    const events = [];
-    const tasks = [];
-    for (let i = 1; i <= 6; i++) {
-      tasks.push({
-        id: `t-eval-${i}`,
-        estimatedEffort: 2.0,
-        completed: true,
-      });
-      events.push({
-        event_id: `evt-eval-${i}`,
-        task_id: `t-eval-${i}`,
-        event_type: 'task_completed',
-        timestamp: `2026-10-0${i}T12:00:00Z`,
-        payload: {
-          duration_source: 'tracked',
-          tracked_duration_seconds: 3.0 * 3600, // 3 hours
-        },
-      });
-    }
-
-    const evalResult = evaluatePersonalDurationModel(events, tasks);
-    assert.equal(evalResult.status, 'evaluated');
-    assert.equal(evalResult.totalEligibleTasks, 6);
-    assert.equal(evalResult.trainTaskCount, MIN_WALKFORWARD_TRAIN_TASKS); // 3
-    assert.equal(evalResult.testTaskCount, 3); // tasks 4, 5, 6 are tested
-    assert.equal(evalResult.testDetails.length, 3);
-
-    // Verify walk-forward property:
-    // First test task (i=3, task 4) trained on exactly 3 prior tasks
-    assert.equal(evalResult.testDetails[0].taskId, 't-eval-4');
-    assert.equal(evalResult.testDetails[0].trainSetSize, 3);
-    assert.equal(evalResult.testDetails[0].trainEffectiveWeight, 3.0);
-
-    // Second test task (i=4, task 5) trained on exactly 4 prior tasks
-    assert.equal(evalResult.testDetails[1].taskId, 't-eval-5');
-    assert.equal(evalResult.testDetails[1].trainSetSize, 4);
-    assert.equal(evalResult.testDetails[1].trainEffectiveWeight, 4.0);
-
-    // Third test task (i=5, task 6) trained on exactly 5 prior tasks
-    assert.equal(evalResult.testDetails[2].taskId, 't-eval-6');
-    assert.equal(evalResult.testDetails[2].trainSetSize, 5);
-    assert.equal(evalResult.testDetails[2].trainEffectiveWeight, 5.0);
-
-    // Baseline error: |2.0 - 3.0| = 1.0h
-    assert.equal(evalResult.metrics.mae_baseline, 1.0);
-
-    // Model prediction: adjusted ratio is > 1.2x, so predicted is ~2.5h - 2.7h
-    // Model error is < 1.0h baseline error
-    assert.ok(evalResult.metrics.mae_model < evalResult.metrics.mae_baseline);
-    assert.ok(evalResult.metrics.mae_improvement_hours > 0);
-    assert.ok(evalResult.metrics.improvement_percent > 0);
-
-    // All 3 test tasks should be improved
-    assert.equal(evalResult.metrics.better_predictions_count, 3);
-    assert.equal(evalResult.metrics.worse_predictions_count, 0);
+    assert.equal(model.effectiveWeight, 4.0);
+    assert.equal(model.status, 'developing');
   });
 
   it('Prevention of task-level overlap: duplicate events for the same task do not create multiple evaluation rows', () => {
@@ -694,7 +731,6 @@ describe('3. Personal Model Evaluation & Dashboard Derivations', () => {
         timestamp: `2026-10-0${i}T12:00:00Z`,
         payload: { duration_source: 'tracked', tracked_duration_seconds: 2.0 * 3600 },
       });
-      // Duplicate event with identical task_id
       events.push({
         event_id: `evt-d-${i}-b`,
         task_id: `t-dedup-${i}`,
@@ -705,11 +741,10 @@ describe('3. Personal Model Evaluation & Dashboard Derivations', () => {
     }
 
     const evalResult = evaluatePersonalDurationModel(events, tasks);
-    assert.equal(evalResult.totalEligibleTasks, 5); // exactly 5 distinct tasks, not 10
+    assert.equal(evalResult.totalEligibleTasks, 5);
   });
 
   it('evaluatePersonalDurationModel handles missing or zero estimates safely', () => {
-    // 5 tasks, but one has null estimate
     const events = [];
     const tasks = [];
     for (let i = 1; i <= 5; i++) {
@@ -727,30 +762,26 @@ describe('3. Personal Model Evaluation & Dashboard Derivations', () => {
       });
     }
 
-    // Only 4 valid observations -> should return insufficient_data (< 5 required)
     const evalResult = evaluatePersonalDurationModel(events, tasks);
-    assert.equal(evalResult.status, 'insufficient_data');
+    assert.equal(evalResult.status, 'insufficient_evaluation_data');
     assert.equal(evalResult.totalEligibleTasks, 4);
   });
 
-  it('History deletion resets model to cold-start and evaluation to insufficient_data', () => {
-    // Simulating empty events after history clear
+  it('History deletion resets model to cold-start and evaluation to insufficient_evaluation_data', () => {
     const modelAfterClear = buildPersonalDurationModel([], []);
     assert.equal(modelAfterClear.status, 'cold_start');
     assert.equal(modelAfterClear.effectiveWeight, 0);
     assert.equal(modelAfterClear.eligibleCount, 0);
 
     const evalAfterClear = evaluatePersonalDurationModel([], []);
-    assert.equal(evalAfterClear.status, 'insufficient_data');
+    assert.equal(evalAfterClear.status, 'insufficient_evaluation_data');
     assert.equal(evalAfterClear.totalEligibleTasks, 0);
     assert.equal(evalAfterClear.metrics, null);
   });
 
   it('PersonalModelDashboard status tiers advance accurately from cold_start to supported', () => {
-    // 0 weight -> cold_start
     assert.equal(buildPersonalDurationModel([], []).status, 'cold_start');
 
-    // 2.0 weight (2 tracked) -> sparse (< 3.0)
     const sparseEvents = [
       { event_id: 'e-s1', task_id: 't-1', event_type: 'task_completed', timestamp: '2026-10-01T10:00:00Z', payload: { duration_source: 'tracked', tracked_duration_seconds: 3600 } },
       { event_id: 'e-s2', task_id: 't-2', event_type: 'task_completed', timestamp: '2026-10-02T10:00:00Z', payload: { duration_source: 'tracked', tracked_duration_seconds: 3600 } },
@@ -761,7 +792,6 @@ describe('3. Personal Model Evaluation & Dashboard Derivations', () => {
     ];
     assert.equal(buildPersonalDurationModel(sparseEvents, sparseTasks).status, 'sparse');
 
-    // 4.0 weight -> developing (>= 3.0 and < 8.0)
     const devEvents = [...sparseEvents];
     const devTasks = [...sparseTasks];
     for (let i = 3; i <= 4; i++) {
@@ -770,7 +800,6 @@ describe('3. Personal Model Evaluation & Dashboard Derivations', () => {
     }
     assert.equal(buildPersonalDurationModel(devEvents, devTasks).status, 'developing');
 
-    // 8.0 weight -> supported (>= 8.0)
     const suppEvents = [...devEvents];
     const suppTasks = [...devTasks];
     for (let i = 5; i <= 8; i++) {
@@ -778,5 +807,299 @@ describe('3. Personal Model Evaluation & Dashboard Derivations', () => {
       suppEvents.push({ event_id: `e-s${i}`, task_id: `t-${i}`, event_type: 'task_completed', timestamp: `2026-10-0${i}T10:00:00Z`, payload: { duration_source: 'tracked', tracked_duration_seconds: 3600 } });
     }
     assert.equal(buildPersonalDurationModel(suppEvents, suppTasks).status, 'supported');
+  });
+});
+
+describe('4. Guarded Personal Completion-Risk Personalization & Safety Guards', () => {
+  const dummyBaselinePred = {
+    task_id: 'target-task-1',
+    risk: 'MEDIUM',
+    probability: 0.50,
+    delay_probability: 0.50,
+    recommendation: 'Baseline recommendation',
+    top_risk_factors: ['Moderate effort required'],
+  };
+
+  const targetTask = {
+    id: 'target-task-1',
+    title: 'Deploy Production Worker',
+    dueDate: '2026-10-30',
+    estimatedEffort: 3.0,
+    priority: 'high',
+    completed: false,
+    category: 'DevOps',
+  };
+
+  it('1. Cold start: When personal history has effective weight W < 3.0, returns baseline risk unmodified', () => {
+    // 2 tracked completions -> W = 2.0 (< 3.0 required)
+    const sparseEvents = [
+      { event_id: 'e-1', task_id: 'prior-1', event_type: 'task_completed', timestamp: '2026-10-01T10:00:00Z', payload: { duration_source: 'tracked', tracked_duration_seconds: 3600 } },
+      { event_id: 'e-2', task_id: 'prior-2', event_type: 'task_completed', timestamp: '2026-10-02T10:00:00Z', payload: { duration_source: 'tracked', tracked_duration_seconds: 3600 } },
+    ];
+    const priorTasks = [
+      { id: 'prior-1', estimatedEffort: 1.0, completed: true },
+      { id: 'prior-2', estimatedEffort: 1.0, completed: true },
+    ];
+
+    const durationModel = buildPersonalDurationModel(sparseEvents, priorTasks);
+    assert.ok(durationModel.effectiveWeight < MIN_PERSONAL_RISK_WEIGHT); // 2.0 < 3.0
+
+    const guardedRisk = computeGuardedTaskRisk(targetTask, dummyBaselinePred, sparseEvents, durationModel);
+
+    assert.equal(guardedRisk.is_personalized, false);
+    assert.equal(guardedRisk.delay_probability, 0.50);
+    assert.equal(guardedRisk.baseline_delay_probability, 0.50);
+    assert.equal(guardedRisk.personal_adjustment, 0.0);
+    assert.equal(guardedRisk.risk, 'MEDIUM');
+    assert.match(guardedRisk.fallback_reason, /Requires at least 3.0 measured tasks/i);
+  });
+
+  it('2. Postponement friction signal: Pre-prediction postponements add bounded, shrunk risk', () => {
+    // 3 tracked completions -> W = 3.0 (meets threshold)
+    const events = [
+      { event_id: 'e-1', task_id: 'p-1', event_type: 'task_completed', timestamp: '2026-10-01T10:00:00Z', payload: { duration_source: 'tracked', tracked_duration_seconds: 3600 } },
+      { event_id: 'e-2', task_id: 'p-2', event_type: 'task_completed', timestamp: '2026-10-02T10:00:00Z', payload: { duration_source: 'tracked', tracked_duration_seconds: 3600 } },
+      { event_id: 'e-3', task_id: 'p-3', event_type: 'task_completed', timestamp: '2026-10-03T10:00:00Z', payload: { duration_source: 'tracked', tracked_duration_seconds: 3600 } },
+      // Target task was postponed twice:
+      { event_id: 'e-resched-1', task_id: 'target-task-1', event_type: 'task_rescheduled', timestamp: '2026-10-10T10:00:00Z', payload: { previous_due_date: '2026-10-25', new_due_date: '2026-10-28' } },
+      { event_id: 'e-resched-2', task_id: 'target-task-1', event_type: 'task_rescheduled', timestamp: '2026-10-12T10:00:00Z', payload: { previous_due_date: '2026-10-28', new_due_date: '2026-10-30' } },
+    ];
+    const priorTasks = [
+      { id: 'p-1', estimatedEffort: 1.0, completed: true },
+      { id: 'p-2', estimatedEffort: 1.0, completed: true },
+      { id: 'p-3', estimatedEffort: 1.0, completed: true },
+    ];
+
+    const durationModel = buildPersonalDurationModel(events, priorTasks);
+    assert.equal(durationModel.effectiveWeight, 3.0);
+    assert.equal(RISK_SHRINKAGE_PRIOR, 5.0);
+
+    const guardedRisk = computeGuardedTaskRisk(targetTask, dummyBaselinePred, events, durationModel);
+
+    assert.equal(guardedRisk.is_personalized, true);
+    // 2 postponements -> raw delta = +0.10 (+10%)
+    // Confidence shrinkage: W / (W + 5.0) = 3.0 / 8.0 = 0.375
+    // Applied adjustment = round(0.10 * 0.375, 4) = +0.0375 (+3.8%)
+    assert.ok(guardedRisk.personal_adjustment > 0);
+    assert.equal(guardedRisk.personal_adjustment, 0.0375);
+    // Final prob: 0.50 + 0.0375 = 0.5375
+    assert.equal(guardedRisk.delay_probability, 0.5375);
+    assert.ok(guardedRisk.signals_applied.some((s) => s.includes('2 postponements')));
+  });
+
+  it('3. Bounded adjustment guard: Extreme signals are clamped to MAX_RISK_ADJUSTMENT (±15%)', () => {
+    // 10 tracked completions -> W = 10.0
+    // Shrinkage multiplier: 10 / (10 + 5) = 0.667
+    const events = [];
+    const priorTasks = [];
+    for (let i = 1; i <= 10; i++) {
+      priorTasks.push({ id: `heavy-${i}`, estimatedEffort: 1.0, completed: true });
+      events.push({
+        event_id: `heavy-e-${i}`,
+        task_id: `heavy-${i}`,
+        event_type: 'task_completed',
+        timestamp: `2026-10-0${i < 10 ? '0' + i : i}T10:00:00Z`,
+        payload: { duration_source: 'tracked', tracked_duration_seconds: 3.0 * 3600 }, // 3.0x underestimation
+      });
+    }
+
+    // Target task has 8 postponements and 3 reopenings (huge raw friction > +0.50)
+    for (let p = 1; p <= 8; p++) {
+      events.push({
+        event_id: `huge-p-${p}`,
+        task_id: 'extreme-task',
+        event_type: 'task_rescheduled',
+        timestamp: `2026-10-15T1${p}:00:00Z`,
+        payload: { previous_due_date: '2026-10-20', new_due_date: '2026-10-22' },
+      });
+    }
+    events.push({
+      event_id: 'huge-reopen',
+      task_id: 'extreme-task',
+      event_type: 'task_reopened',
+      timestamp: '2026-10-15T19:00:00Z',
+      payload: { reopened_at: '2026-10-15T19:00:00Z' },
+    });
+
+    const extremeTask = {
+      id: 'extreme-task',
+      title: 'Monster Task',
+      estimatedEffort: 12.0,
+      dueDate: '2026-10-25',
+      completed: false,
+    };
+
+    const durationModel = buildPersonalDurationModel(events, priorTasks);
+    const guardedRisk = computeGuardedTaskRisk(extremeTask, dummyBaselinePred, events, durationModel);
+
+    // Personal adjustment must be strictly <= MAX_RISK_ADJUSTMENT (+0.15)
+    assert.ok(guardedRisk.personal_adjustment <= MAX_RISK_ADJUSTMENT);
+    assert.ok(guardedRisk.personal_adjustment > 0);
+    // Probability must be strictly bounded in [0.05, 0.95]
+    assert.ok(guardedRisk.delay_probability <= 0.95);
+    assert.ok(guardedRisk.delay_probability >= 0.05);
+  });
+
+  it('4. Temporal leakage prevention: Events timestamped after prediction time are strictly ignored', () => {
+    // 4 tracked tasks completed by 2026-10-05 -> W = 4.0
+    const events = [];
+    const priorTasks = [];
+    for (let i = 1; i <= 4; i++) {
+      priorTasks.push({ id: `tl-${i}`, estimatedEffort: 1.0, completed: true });
+      events.push({
+        event_id: `tl-e-${i}`,
+        task_id: `tl-${i}`,
+        event_type: 'task_completed',
+        timestamp: `2026-10-0${i}T10:00:00Z`,
+        payload: { duration_source: 'tracked', tracked_duration_seconds: 3600 },
+      });
+    }
+
+    // Prediction point: 2026-10-10T00:00:00Z
+    const asOfTime = '2026-10-10T00:00:00Z';
+
+    // A postponement occurs AFTER prediction time (2026-10-15):
+    events.push({
+      event_id: 'future-postpone-1',
+      task_id: 'leakage-task',
+      event_type: 'task_rescheduled',
+      timestamp: '2026-10-15T12:00:00Z',
+      payload: { previous_due_date: '2026-10-16', new_due_date: '2026-10-20' },
+    });
+
+    const testTask = {
+      id: 'leakage-task',
+      title: 'Temporal Leakage Test',
+      estimatedEffort: 2.0,
+      dueDate: '2026-10-16',
+      completed: false,
+    };
+
+    const durationModel = buildPersonalDurationModel(events, priorTasks);
+    // Evaluate with prediction time constraint
+    const guardedRisk = computeGuardedTaskRisk(testTask, dummyBaselinePred, events, durationModel, asOfTime);
+
+    // The future postponement must NOT be counted!
+    assert.ok(!guardedRisk.signals_applied.some((s) => s.includes('postponement')));
+  });
+
+  it('5. Target leakage safety: Target task actual outcome and duration are never used as prediction features', () => {
+    // Even if targetTask object inadvertently contains completed: true and trackedDurationSeconds: 10000,
+    // the estimator must not use them to manipulate risk
+    const targetWithLeakedFields = {
+      ...targetTask,
+      completed: true,
+      completedAt: '2026-10-12T12:00:00Z',
+      trackedDurationSeconds: 7200,
+      durationSource: 'tracked',
+    };
+
+    const emptyModel = buildPersonalDurationModel([], []);
+    const guardedRisk = computeGuardedTaskRisk(targetWithLeakedFields, dummyBaselinePred, [], emptyModel);
+
+    // Cold start is maintained despite completed fields on target
+    assert.equal(guardedRisk.is_personalized, false);
+    assert.equal(guardedRisk.delay_probability, 0.50);
+  });
+
+  it('6. Duplicate event deduplication: Re-ingested postponement events do not multiply risk', () => {
+    const singlePostpone = {
+      event_id: 'dup-postpone-1',
+      task_id: 'dup-task-1',
+      event_type: 'task_rescheduled',
+      timestamp: '2026-10-10T10:00:00Z',
+      payload: { previous_due_date: '2026-10-12', new_due_date: '2026-10-15' },
+    };
+
+    const events = [];
+    const priorTasks = [];
+    for (let i = 1; i <= 3; i++) {
+      priorTasks.push({ id: `dup-prior-${i}`, estimatedEffort: 1.0, completed: true });
+      events.push({
+        event_id: `dup-prior-e-${i}`,
+        task_id: `dup-prior-${i}`,
+        event_type: 'task_completed',
+        timestamp: `2026-10-0${i}T10:00:00Z`,
+        payload: { duration_source: 'tracked', tracked_duration_seconds: 3600 },
+      });
+    }
+
+    // Ingest the exact same postponement event 3 times
+    events.push(singlePostpone, singlePostpone, singlePostpone);
+
+    const dupTask = { id: 'dup-task-1', title: 'Dedup Task', estimatedEffort: 2.0 };
+    const durationModel = buildPersonalDurationModel(events, priorTasks);
+    const guardedRisk = computeGuardedTaskRisk(dupTask, dummyBaselinePred, events, durationModel);
+
+    // Must count exactly 1 postponement, not 3
+    assert.ok(guardedRisk.signals_applied.some((s) => s.includes('1 postponement')));
+  });
+
+  it('7. History clearing immediately resets personal completion-risk to baseline', () => {
+    // Step A: Active personal model with 4 tasks
+    const events = [];
+    const priorTasks = [];
+    for (let i = 1; i <= 4; i++) {
+      priorTasks.push({ id: `wipe-${i}`, estimatedEffort: 1.0, completed: true });
+      events.push({
+        event_id: `wipe-e-${i}`,
+        task_id: `wipe-${i}`,
+        event_type: 'task_completed',
+        timestamp: `2026-10-0${i}T10:00:00Z`,
+        payload: { duration_source: 'tracked', tracked_duration_seconds: 3600 },
+      });
+    }
+    events.push({
+      event_id: 'wipe-resched',
+      task_id: targetTask.id,
+      event_type: 'task_rescheduled',
+      timestamp: '2026-10-10T10:00:00Z',
+      payload: { previous_due_date: '2026-10-20', new_due_date: '2026-10-25' },
+    });
+
+    const activeModel = buildPersonalDurationModel(events, priorTasks);
+    const activeRisk = computeGuardedTaskRisk(targetTask, dummyBaselinePred, events, activeModel);
+    assert.equal(activeRisk.is_personalized, true);
+    assert.ok(activeRisk.personal_adjustment > 0);
+
+    // Step B: Simulate clearing history (telemetry.clearHistory())
+    const clearedEvents = [];
+    const clearedModel = buildPersonalDurationModel([], []);
+    const clearedRisk = computeGuardedTaskRisk(targetTask, dummyBaselinePred, clearedEvents, clearedModel);
+
+    assert.equal(clearedRisk.is_personalized, false);
+    assert.equal(clearedRisk.personal_adjustment, 0.0);
+    assert.equal(clearedRisk.delay_probability, 0.50);
+    assert.match(clearedRisk.fallback_reason, /Requires at least 3.0 measured tasks/i);
+  });
+
+  it('8. computeBatchGuardedRisk handles null, missing, and untrained tasks gracefully', () => {
+    const tasks = [
+      { id: 'batch-1', title: 'Task 1', estimatedEffort: 2.0 },
+      { id: 'batch-2', title: 'Task 2', estimatedEffort: 4.0 },
+    ];
+    const predictionsMap = {
+      'batch-1': { ...dummyBaselinePred, task_id: 'batch-1', probability: 0.30, delay_probability: 0.30 },
+      // 'batch-2' has no ML baseline prediction yet
+    };
+
+    const emptyModel = buildPersonalDurationModel([], []);
+    const batchResult = computeBatchGuardedRisk(predictionsMap, tasks, [], emptyModel);
+
+    assert.ok(batchResult['batch-1']);
+    assert.equal(batchResult['batch-1'].delay_probability, 0.30);
+    assert.equal(batchResult['batch-1'].is_personalized, false);
+
+    // 'batch-2' should return null since no baseline ML prediction exists
+    assert.equal(batchResult['batch-2'], null);
+  });
+
+  it('9. getRiskCategory categorizes probabilities accurately', () => {
+    assert.equal(getRiskCategory(0.70), 'HIGH');
+    assert.equal(getRiskCategory(0.65), 'HIGH');
+    assert.equal(getRiskCategory(0.64), 'MEDIUM');
+    assert.equal(getRiskCategory(0.35), 'MEDIUM');
+    assert.equal(getRiskCategory(0.34), 'LOW');
+    assert.equal(getRiskCategory(0.10), 'LOW');
   });
 });

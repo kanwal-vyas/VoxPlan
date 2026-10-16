@@ -96,7 +96,7 @@ export default function TaskCard({
     return () => clearInterval(interval);
   }, [isTimerRunning, calcCurrentSeconds]);
 
-  const prob = prediction ? prediction.probability : null;
+  const prob = prediction ? (prediction.delay_probability ?? prediction.probability) : null;
   const targetPercent = prob !== null ? prob * 100 : null;
   const riskCategory = prediction ? prediction.risk : null;
 
@@ -598,6 +598,14 @@ export default function TaskCard({
               <span style={{ ...styles.riskLabel, color: theme.textColor }}>
                 {riskCategory} RISK
               </span>
+              {prediction.is_personalized && prediction.personal_adjustment !== 0 && (
+                <span
+                  style={styles.personalPill}
+                  title={`Personalized: ${prediction.personal_adjustment > 0 ? '+' : ''}${Math.round(prediction.personal_adjustment * 100)}% adjustment from observed habits (Baseline: ${Math.round((prediction.baseline_delay_probability ?? prob) * 100)}%)`}
+                >
+                  {prediction.personal_adjustment > 0 ? `+${Math.round(prediction.personal_adjustment * 100)}%` : `${Math.round(prediction.personal_adjustment * 100)}%`}
+                </span>
+              )}
             </div>
           ) : (
             <div style={styles.pendingRow}>
@@ -1008,5 +1016,16 @@ const styles = {
     fontSize: '12px',
     color: '#706D73',
     fontWeight: '500',
+  },
+  personalPill: {
+    fontSize: '10px',
+    fontWeight: '800',
+    padding: '2px 6px',
+    borderRadius: '6px',
+    backgroundColor: '#F3EEFF',
+    color: '#5B44BA',
+    border: '1px solid #C9B6FF',
+    marginLeft: '4px',
+    cursor: 'help',
   },
 };

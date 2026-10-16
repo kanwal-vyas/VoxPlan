@@ -12,10 +12,9 @@ import TaskList from './components/TaskList';
 import TaskExplanationModal from './components/TaskExplanationModal';
 import LoadingScreen from './components/LoadingScreen';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { initCinematicScrollStory } from './animations/scrollStory';
 import { telemetry } from './telemetry/telemetryManager';
 import { completeTaskLifecycle, reopenTaskLifecycle } from './telemetry/taskLifecycle';
-import { buildPersonalDurationModel } from './telemetry/personalModel';
+import { buildPersonalDurationModel, computeBatchGuardedRisk } from './telemetry/personalModel';
 import {
   checkBackendHealth,
   getModelStatus,
@@ -196,6 +195,34 @@ export default function App() {
   const [featureImportances, setFeatureImportances] = useState([]);
   const [predictionsMap, setPredictionsMap] = useState({});
   const [riskStats, setRiskStats] = useState({ highCount: 0, mediumCount: 0, lowCount: 0, avgProb: 0 });
+
+  // Guarded Hybrid Completion-Risk Estimates (Personal Telemetry + ML Baseline)
+  const guardedPredictionsMap = useMemo(() => {
+    return computeBatchGuardedRisk(predictionsMap, tasks, telemetryEvents, personalDurationModel);
+  }, [predictionsMap, tasks, telemetryEvents, personalDurationModel]);
+
+  const effectiveRiskStats = useMemo(() => {
+    const values = Object.values(guardedPredictionsMap);
+    if (!values.length) return riskStats;
+    let high = 0;
+    let med = 0;
+    let low = 0;
+    let sumProb = 0;
+    values.forEach((p) => {
+      if (!p) return;
+      if (p.risk === 'HIGH') high++;
+      else if (p.risk === 'MEDIUM') med++;
+      else low++;
+      sumProb += (p.delay_probability ?? p.probability ?? 0);
+    });
+    return {
+      highCount: high,
+      mediumCount: med,
+      lowCount: low,
+      avgProb: values.length > 0 ? sumProb / values.length : 0,
+    };
+  }, [guardedPredictionsMap, riskStats]);
+
   const [isTraining, setIsTraining] = useState(false);
   const [trainingStep, setTrainingStep] = useState('');
   const [isPredicting, setIsPredicting] = useState(false);
@@ -1005,11 +1032,11 @@ export default function App() {
         {/* Section 01: Sprint Pulse (Butter Yellow Panel) */}
         <ProjectOverview
           tasks={tasks}
-          predictionsMap={predictionsMap}
+          predictionsMap={guardedPredictionsMap}
           totalCount={totalCount}
           completedCount={completedCount}
           progressPercent={progressPercent}
-          riskStats={riskStats}
+          riskStats={effectiveRiskStats}
           onRunPredictions={handleRunPredictions}
           isPredicting={isPredicting}
           modelStatus={modelStatus}
@@ -1023,7 +1050,7 @@ export default function App() {
         {/* Section 02: Risk Landscape (Lavender Sticky Notes Wall) */}
         <TaskList
           tasks={tasks}
-          predictionsMap={predictionsMap}
+          predictionsMap={guardedPredictionsMap}
           personalDurationModel={personalDurationModel}
           activeFilter={activeFilter}
           onChangeFilter={setActiveFilter}
@@ -1038,7 +1065,12 @@ export default function App() {
           activeTimerState={activeTimerState}
           onStartTimer={handleStartTimer}
           onPauseTimer={handlePauseTimer}
-          onOpenExplanation={(task, pred) => setSelectedTaskExplanation({ task, pred })}
+          onOpenExplanation={(task, pred) =>
+            setSelectedTaskExplanation({
+              task,
+              pred: guardedPredictionsMap[task.id] || pred,
+            })
+          }
         />
 
         {/* Giant Editorial Typography Ribbon 3 */}
@@ -1095,7 +1127,7 @@ export default function App() {
       {selectedTaskExplanation && (
         <TaskExplanationModal
           task={selectedTaskExplanation.task}
-          prediction={selectedTaskExplanation.pred}
+          prediction={guardedPredictionsMap[selectedTaskExplanation.task.id] || selectedTaskExplanation.pred}
           onClose={() => setSelectedTaskExplanation(null)}
         />
       )}

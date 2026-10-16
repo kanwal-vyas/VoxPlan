@@ -7,7 +7,7 @@ VoxPlan is being evolved from a student/sprint task tracker into an independent,
 
 ---
 
-## Current Architecture & System State (Phase 3, Stage 1)
+## Current Architecture & System State (Phase 3, Stage 3)
 
 ```
 BROWSER WEB SPEECH API / TEXT INPUT
@@ -25,18 +25,25 @@ SHARED TASK LIFECYCLE ENGINE (taskLifecycle.js)
 REACT / VITE DASHBOARD (Client State & Local-First Architecture)
      │
      ├─ Dynamic Task Roadmap (Real User Tasks & Dates)
-     ├─ Dynamic Risk Visualizations (Genuine Model Probabilities)
+     ├─ Guarded Hybrid Risk Visualizations (Baseline RF + Personal Shrinkage)
      ├─ Interactive Stopwatch Timers (Start / Pause / Resume)
      ├─ Behavioral History & Habit Insights (Section 04)
-     ├─ Personal Duration Estimator (Weighted Median + Empirical Bayesian Shrinkage)
+     ├─ Personal Estimation Model & Evaluation Dashboard (Section 05)
+     ├─ Task Explanation Modal with Personalization Transparency Card
      ├─ Offline-Resilient Local State (Tasks & Active Timers)
      │
      ↕ (IndexedDB: voxplan_db)
-LOCAL EVENT STORE & PERSONAL MODEL ENGINE
+LOCAL EVENT STORE & PERSONAL AI ENGINES
      ├─ Stable Profile Isolation (prof_<uuid>)
      ├─ 11 Versioned Event Types (Schema v1)
      ├─ Honest Duration Accounting (Tracked vs Self-Reported vs Unknown)
-     ├─ Local Personal Duration Estimator (personalModel.js)
+     ├─ Personal Duration Estimator (Weighted Median + Empirical Bayesian Shrinkage, K=3.0)
+     ├─ Chronological Walk-Forward Holdout Evaluation (min 3 train, min 5 held-out, N>=8)
+     ├─ Guarded Personal Completion-Risk Estimator (personalRiskModel.js)
+     │   ├─ Cold-start guard (W < 3.0 -> pure baseline)
+     │   ├─ Audited signals: Postponements (+5%/+10%), Bias Stress (+6%/-4%), Reopening (+5%)
+     │   ├─ Strict bounds: clamped to ±15% with Bayesian shrinkage W / (W + 5.0)
+     │   └─ Leakage protection: zero target leakage, strict timestamp <= asOfTime
      └─ Evidence-Based Behavioral Stats (Sparse-Data Guard < 3 tasks)
      │
      ↕ (HTTP REST, Optional Backend)
@@ -59,8 +66,9 @@ FASTAPI ML BACKEND (scikit-learn Pipeline & Batch Endpoints)
 
 ### 2. Genuinely Measured Metrics vs. Unavailable States
 - **Model Evaluation Metrics**: Accuracy, Precision, Recall, F1 score, and the 2x2 Confusion Matrix are **genuinely computed** by scikit-learn on a 20% stratified test holdout split during `/api/train`.
+- **Personal Duration Evaluation**: Genuinely evaluated via strict chronological walk-forward holdout validation (`evaluatePersonalDurationModel`). Requires at least 3 train tasks per step and 5 held-out predictions ($N \ge 8$); otherwise renders explicit `insufficient_evaluation_data` state without fabricating metrics.
 - **Honest Offline States**: If the backend is not running or the model is not yet trained, the dashboard displays an honest "awaiting analysis" / "model not trained" state (`—`). No fallback accuracy or confusion matrix numbers are fabricated.
-- **Individual Task Explanations**: Contributing risk factors in the Task Explanation Modal are rule-based heuristic signals derived from deadline pressure, effort density, and task priority.
+- **Individual Task Explanations**: Contributing risk factors in the Task Explanation Modal disclose synthetic baseline probability vs. personal adjustments, applied signals, and fallback reasons.
 
 ### 3. Backend Dependency & Offline Resilience
 - **Without Backend**: Full task management (creation, editing, completion, priority cycling, arbitrary calendar dates, deletion, filtering, local persistence, stopwatch duration tracking, and behavioral habit analytics) works entirely offline in the browser. Task risk cards display an honest "Awaiting analysis" indicator.
@@ -71,8 +79,8 @@ FASTAPI ML BACKEND (scikit-learn Pipeline & Batch Endpoints)
 - **Phase 2 (Completed)**: Local-first IndexedDB persistence, behavioral telemetry event schema (11 event types), stopwatch working duration vs. self-reported vs. unknown duration, inline reschedule/effort/reorder instrumentation, sparse-data honest behavioral statistics (< 3 completions), Behavioral History & Habit Insights UI panel with JSON export and history deletion, and automated test suite.
 - **Phase 3, Stage 1 (Completed)**: Telemetry repair (command-bar lifecycle convergence, active timer finalization, idempotency) & transparent, local-first Personal Duration Estimator (`personalModel.js`) using weighted median and empirical Bayesian shrinkage toward 1.0. Dual duration badges on task cards.
 - **Phase 3, Stage 2 (Completed)**: Personal Model Dashboard (`PersonalModelDashboard.jsx`), sample weight transparency, Bayesian shrinkage formula explainer, leak-free chronological walk-forward holdout evaluation (`evaluatePersonalDurationModel`), MAE/MdAPE baseline comparison, and honest cold-start states.
-- **Phase 3, Stage 3 (Next)**: Transparent hybrid completion-risk model blending synthetic baseline risk with observed personal estimation bias and velocity variance.
-- **Phase 4**: Adaptive scheduling assistant and optimal task calendar allocation.
+- **Phase 3, Stage 3 (Completed)**: Guarded personal completion-risk estimation (`personalRiskModel.js`), hardened evaluation guard ($N \ge 8$), bounded personal probability shifts ($\pm 15\%$), Bayesian confidence shrinkage, and explainability modal transparency card.
+- **Phase 4 (Next)**: Adaptive scheduling assistant, bottleneck detection, and optimal calendar allocation.
 - **Phase 5**: Conversational planning dialog & debriefing.
 
 ---
@@ -298,19 +306,24 @@ VoxPlan/
 │   │   ├── MLModelPanel.jsx     # Honest metrics, holdout confusion matrix, Gini bars
 │   │   ├── TaskList.jsx         # Task management controls & filterable list
 │   │   ├── TaskCard.jsx         # Stopwatch timer, inline reschedule/effort/reorder, ML pill
-│   │   ├── TaskExplanationModal.jsx # Risk factor explanation modal
-│   │   └── BehavioralHistoryPanel.jsx # Behavioral habits, focus metrics & privacy (Section 04)
+│   │   ├── TaskExplanationModal.jsx # Risk factor & personalization transparency modal
+│   │   ├── BehavioralHistoryPanel.jsx # Behavioral habits, focus metrics & privacy (Section 04)
+│   │   └── PersonalModelDashboard.jsx # Personal duration & risk model dashboard (Section 05)
 │   ├── telemetry/
 │   │   ├── eventSchema.js       # Typed event schemas, UUID generator & validation
 │   │   ├── indexedDbStore.js    # Local-first IndexedDB store (voxplan_db) & fallback
 │   │   ├── behavioralStats.js   # Evidence-based stats calculation & sparse-data guard
+│   │   ├── taskLifecycle.js     # Shared task lifecycle engine & timer finalization
+│   │   ├── personalModel.js     # Duration model (weighted median + shrinkage) & walk-forward eval
+│   │   ├── personalRiskModel.js # Guarded hybrid completion-risk personalization
 │   │   └── telemetryManager.js  # Profile ID manager, timer persistence & event logger
 │   ├── App.jsx                  # State orchestrator, telemetry integration & Web Speech
 │   ├── App.css                  # Highlighters, animations & typography styles
 │   └── main.jsx
 │
 ├── tests/
-│   └── telemetry.test.js        # 14 unit tests for schema, IndexedDB, stats & timers
+│   ├── telemetry.test.js        # 14 unit tests for schema, IndexedDB, stats & timers
+│   └── personal_model.test.js   # 39 unit tests for duration model, evaluation guards & risk
 │
 ├── voxplan_architecture_audit.md # Full architecture audit and transformation plan
 ├── PROJECT_PLAN.md              # Living implementation roadmap & phase tracking

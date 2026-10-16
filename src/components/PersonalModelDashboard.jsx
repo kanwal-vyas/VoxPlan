@@ -238,6 +238,71 @@ export default function PersonalModelDashboard({ events = [], tasks = [] }) {
           </div>
         </div>
 
+        {/* Mid Panel 2: Guarded Completion-Risk Architecture */}
+        <div style={styles.formulaPanel} className="digital-card">
+          <div style={styles.panelHeader}>
+            <div>
+              <span style={styles.panelTitle}>GUARDED COMPLETION-RISK ARCHITECTURE</span>
+              <span style={styles.panelSub}>
+                Local personal layer conservatively adjusting synthetic Random Forest baseline probabilities
+              </span>
+            </div>
+            <span
+              className="note-tag"
+              style={{
+                color: model.effectiveWeight >= 3.0 ? '#166534' : '#6B7280',
+                backgroundColor: model.effectiveWeight >= 3.0 ? '#DCFCE7' : '#F3F4F6',
+              }}
+            >
+              {model.effectiveWeight >= 3.0 ? '● Personal Risk Layer Active (W ≥ 3.0)' : '○ Baseline Only (Awaiting 3.0 Weight)'}
+            </span>
+          </div>
+
+          <div style={styles.riskSignalsGrid}>
+            <div style={styles.riskSignalCard}>
+              <div style={styles.riskSignalHead}>
+                <span style={styles.riskSignalIcon}>📅</span>
+                <span style={styles.riskSignalTitle}>Task Postponement Friction</span>
+              </div>
+              <p style={styles.riskSignalDesc}>
+                Tracks repeated <code>task_rescheduled</code> events on active tasks. Tasks postponed 1 time add +5% raw friction; 2+ postponements add +10%.
+              </p>
+            </div>
+
+            <div style={styles.riskSignalCard}>
+              <div style={styles.riskSignalHead}>
+                <span style={styles.riskSignalIcon}>⚡</span>
+                <span style={styles.riskSignalTitle}>Personal Estimation-Bias Stress</span>
+              </div>
+              <p style={styles.riskSignalDesc}>
+                Scales estimated effort by your empirical pace (<strong>{model.biasRatio.toFixed(2)}x</strong>). If personalized effort exceeds remaining working window, adds +6% stress.
+              </p>
+            </div>
+
+            <div style={styles.riskSignalCard}>
+              <div style={styles.riskSignalHead}>
+                <span style={styles.riskSignalIcon}>🔁</span>
+                <span style={styles.riskSignalTitle}>Task Reopening Churn</span>
+              </div>
+              <p style={styles.riskSignalDesc}>
+                Detects whether an active task was previously closed and reopened (<code>task_reopened</code>), signaling incomplete criteria (+5% raw friction).
+              </p>
+            </div>
+          </div>
+
+          <div style={styles.riskGuardsBox}>
+            <div style={styles.riskGuardItem}>
+              <strong>Strict Ceiling:</strong> Raw signal adjustments are clamped to <strong>±15%</strong> maximum probability shift.
+            </div>
+            <div style={styles.riskGuardItem}>
+              <strong>Sample-Confidence Shrinkage:</strong> Shrunk by <code>W / (W + 5.0)</code> ({model.effectiveWeight > 0 ? `${Math.round((model.effectiveWeight / (model.effectiveWeight + 5.0)) * 100)}%` : '0%'} confidence applied).
+            </div>
+            <div style={styles.riskGuardItem}>
+              <strong>Temporal Leakage Protection:</strong> Only events occurring strictly prior to prediction time are analyzed.
+            </div>
+          </div>
+        </div>
+
         {/* Bottom Panel: Walk-Forward Holdout Evaluation */}
         <div style={styles.evalPanel} className="digital-card">
           <div style={styles.panelHeader}>
@@ -255,16 +320,16 @@ export default function PersonalModelDashboard({ events = [], tasks = [] }) {
               }}
             >
               {evaluation.status === 'evaluated'
-                ? `Evaluated (${evaluation.testTaskCount} test tasks)`
-                : `Awaiting Data (${evaluation.totalEligibleTasks}/${MIN_EVALUATION_TASKS} tasks)`}
+                ? `Evaluated (${evaluation.heldOutPredictionCount || evaluation.testTaskCount} held-out predictions)`
+                : `Awaiting Data (${evaluation.heldOutPredictionCount || 0}/5 held-out predictions)`}
             </span>
           </div>
 
-          {evaluation.status === 'insufficient_data' ? (
+          {evaluation.status !== 'evaluated' ? (
             <div style={styles.coldStartBox}>
               <div style={styles.coldStartIcon}>⏱️</div>
               <div style={styles.coldStartContent}>
-                <h4 style={styles.coldStartTitle}>Evaluation Requires at Least 5 Completed Tasks</h4>
+                <h4 style={styles.coldStartTitle}>Evaluation Requires at Least 5 Held-Out Predictions (8 Total Tasks)</h4>
                 <p style={styles.coldStartText}>
                   {evaluation.explanation}
                 </p>
@@ -272,16 +337,16 @@ export default function PersonalModelDashboard({ events = [], tasks = [] }) {
                   <div
                     style={{
                       ...styles.progressBarFill,
-                      width: `${Math.min(100, Math.round((evaluation.totalEligibleTasks / MIN_EVALUATION_TASKS) * 100))}%`,
+                      width: `${Math.min(100, Math.round(((evaluation.heldOutPredictionCount || 0) / 5) * 100))}%`,
                     }}
                   />
                 </div>
                 <div style={styles.progressLabelRow}>
-                  <span>{evaluation.totalEligibleTasks} eligible tasks completed</span>
-                  <span>{MIN_EVALUATION_TASKS} required for holdout split</span>
+                  <span>{evaluation.heldOutPredictionCount || 0} / 5 held-out predictions generated</span>
+                  <span>{evaluation.eligibleObservationCount || evaluation.totalEligibleTasks || 0} / {MIN_EVALUATION_TASKS} completed tasks</span>
                 </div>
                 <div style={styles.honestyCallout}>
-                  <strong>Methodological Honesty:</strong> Many productivity apps report evaluation metrics computed on the same tasks used to fit the model. VoxPlan strictly evaluates on unseen future tasks using only the historical data available at that moment.
+                  <strong>Defensible Evaluation Standard:</strong> VoxPlan requires at least 3 chronologically earlier tasks to train each split, plus at least 5 genuine held-out test predictions (8 total completed tasks) before reporting evaluable aggregate metrics. This prevents misleading conclusions from small test sample sizes.
                 </div>
               </div>
             </div>
@@ -881,6 +946,54 @@ const styles = {
     borderRadius: '4px',
     fontSize: '11px',
     fontWeight: '700',
+    fontFamily: "'JetBrains Mono', monospace",
+  },
+  riskSignalsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+    gap: '16px',
+    marginBottom: '20px',
+  },
+  riskSignalCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: '8px',
+    padding: '16px',
+    border: '1px solid #E2E8F0',
+  },
+  riskSignalHead: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    marginBottom: '8px',
+  },
+  riskSignalIcon: {
+    fontSize: '18px',
+  },
+  riskSignalTitle: {
+    fontFamily: "'Outfit', sans-serif",
+    fontSize: '14px',
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  riskSignalDesc: {
+    fontSize: '12px',
+    color: '#475569',
+    lineHeight: '1.5',
+    margin: 0,
+  },
+  riskGuardsBox: {
+    backgroundColor: '#EEF2FF',
+    border: '1px solid #C7D2FE',
+    borderRadius: '8px',
+    padding: '14px 16px',
+    fontSize: '12px',
+    color: '#3730A3',
+    lineHeight: '1.6',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  riskGuardItem: {
     fontFamily: "'JetBrains Mono', monospace",
   },
   honestyGrid: {

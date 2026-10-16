@@ -12,8 +12,8 @@ This document tracks the phased evolution of VoxPlan from a static task tracker 
 | **Phase 2** | Local Persistence & Behavioral Telemetry | **COMPLETED** | Local-first IndexedDB event store, versioned behavioral schema (11 event types), explicit stopwatch working duration vs self-reported vs unknown duration, inline reschedule/effort/reorder instrumentation, sparse-data honest behavioral statistics (< 3 completions), Behavioral History & Habit Insights UI panel with JSON export and history deletion, backend batch endpoints, and automated test suite. |
 | **Phase 3, Stage 1** | Telemetry Repair & Personal Duration Estimation | **COMPLETED** | Shared task lifecycle engine (`taskLifecycle.js`), active stopwatch finalization, command-bar completion/reopening convergence, idempotent telemetry, local-first Personal Duration Estimator (`personalModel.js`) with weighted median and empirical Bayesian shrinkage ($K = 3.0$), dual duration badges on task cards, cold-start and uncertainty tiers. |
 | **Phase 3, Stage 2** | Personal Model Dashboard & Evaluation | **COMPLETED** | Personal Model Dashboard (`PersonalModelDashboard.jsx`), sample weight transparency, Bayesian shrinkage formula explainer, leak-free chronological walk-forward holdout evaluation (`evaluatePersonalDurationModel`), MAE/MdAPE baseline comparison, and honest cold-start states. |
-| **Phase 3, Stage 3** | Hybrid Completion-Risk Personalization | Next Up | Transparent hybrid model blending synthetic baseline risk with observed personal estimation bias and velocity variance without overfitting small samples. |
-| **Phase 4** | Adaptive Scheduling & Workload Optimization | Planned | Workload density balancing, time-of-day affinity scheduling, dependency graph resolution, proactive bottleneck notifications. |
+| **Phase 3, Stage 3** | Hybrid Completion-Risk Personalization | **COMPLETED** | Guarded hybrid completion-risk estimator (`personalRiskModel.js`), hardened evaluation guard (min 3 train, min 5 held-out, 8 total tasks), leakage protection, bounded adjustments ($\pm 15\%$), confidence shrinkage ($W / (W+5.0)$), transparent explainability modal, and 53 automated unit tests. |
+| **Phase 4** | Adaptive Scheduling & Workload Optimization | Next Up | Workload density balancing, time-of-day affinity scheduling, dependency graph resolution, proactive bottleneck notifications. |
 | **Phase 5** | Voice & Conversational Planning Experience | Planned | Rich multi-turn planning dialog, schedule rescheduling commands, review debriefing via natural language. |
 
 ---
@@ -375,11 +375,116 @@ Build a transparent dashboard for VoxPlan's local personal duration estimator an
 
 ---
 
-### Known Limitations & Phase 3, Stage 3 Plan
+### Limitations & Phase 3, Stage 3 Evolution
+1. **Evaluation Sample Size**: Initial Stage 2 protocol began testing at $k=3$. With 5 tasks, this yielded only 2 test predictions, which is insufficient evidence to report aggregate model performance metrics. Corrected in Stage 3 to require at least 5 genuine held-out predictions ($N \ge 8$).
+2. **Model Separation**: Synthetic baseline Random Forest retained as a generic reference model, while the client-side personal risk layer is now implemented with conservative shrinkage.
 
-1. **Scope Boundary**: Task duration estimation is now fully personal, Bayesian-shrunk, transparently displayed, and chronologically evaluated on held-out tasks. The delay-risk classification model in Section 03 remains an empirical Random Forest baseline trained on synthetic data.
-2. **Holdout Sample Requirement**: Generalization evaluation requires $\ge 5$ completed tasks with estimates and durations. The UI explicitly presents this threshold rather than fabricating synthetic evaluation metrics on small samples.
-3. **Phase 3, Stage 3 Deliverable**:
-   - Design a hybrid completion-risk architecture that blends baseline risk probabilities with personal velocity variance, estimation bias, and postponement history without overfitting small samples.
+---
+
+## Phase 3, Stage 3 Execution Record: Guarded Completion-Risk Personalization
+
+### Objective
+Implement a transparent, local-first hybrid completion-risk estimator that personalizes baseline Random Forest delay-risk estimates using genuine, audited behavioral telemetry from the user's IndexedDB store, while preventing temporal leakage, target leakage, and small-sample overreaction.
+
+### Completed Work by Component
+
+#### 1. Evaluation Guard Hardening
+- **File**: `src/telemetry/personalModel.js`
+  - Corrected `evaluatePersonalDurationModel`:
+    - Requires at least 3 chronologically earlier observations for training before any prediction ($N_{train} \ge 3$).
+    - Requires at least 5 genuine held-out test predictions before reporting aggregate performance metrics ($N_{held\_out} \ge 5$).
+    - Total observation requirement corrected from 5 to 8 completed tasks ($3 + 5 = 8$).
+    - If $N < 8$, returns explicit `insufficient_evaluation_data` state with separate metrics:
+      - `eligibleObservationCount`: Total eligible tasks with durations and estimates.
+      - `minTotalObservations`: 8.
+      - `minTrainObservations`: 3.
+      - `heldOutPredictionCount`: $N - 3$ (e.g. 2 predictions at 5 tasks, 4 at 7 tasks).
+      - `minHeldOutPredictions`: 5.
+      - `trainObservationsPerPrediction`: Minimum 3 prior tasks.
+    - Updated `PersonalModelDashboard.jsx` to render progress against both held-out predictions ($X / 5$) and eligible completed tasks ($Y / 8$), with an explicit methodology callout explaining the sample threshold.
+
+#### 2. Audit of Personal Completion-Risk Signals
+A comprehensive audit of locally recorded telemetry schemas was performed to identify valid pre-prediction signals and eliminate leakage risks:
+
+| Feature Signal | Telemetry Source & Event | Availability Time | Limitations & Noise | Leakage Safeguard | Decision |
+|---|---|---|---|---|---|
+| **Postponement Friction** | `task_rescheduled` events for `task_id` | Pre-prediction (when user changes due date) | User may reschedule for external reasons; single reschedule is weak evidence. | Strictly filter `timestamp <= asOfTime`. Exclude duplicate events. | **INCLUDED**: $+5\%$ for 1 reschedule, $+10\%$ for $\ge 2$ reschedules (before shrinkage). |
+| **Personal Estimation-Bias Stress** | Pre-prediction duration model ($r_{adjusted}$) vs. calendar gap | Pre-prediction (from prior completed tasks) | Requires $\ge 3.0$ personal history weight; coarse calendar day discretization. | Ratio fitted strictly on prior tasks. Target task actual duration is strictly excluded. | **INCLUDED**: $+6\%$ if $r_{adjusted} \ge 1.25$ and adjusted hours $> 50\%$ remaining work hours; $-4\%$ buffer if $r_{adjusted} \le 0.85$. |
+| **Reopening Lifecycle Churn** | `task_reopened` event for `task_id` | Pre-prediction | Rare event; indicates prior incomplete deliverables or changing scope. | Filter `timestamp <= asOfTime`. Only count if task is currently active. | **INCLUDED**: $+5\%$ raw friction delta. |
+| **Target Task Incompletion State** | `task.completed === false` | Pre-prediction | A task being incomplete is normal during sprint execution, not evidence of delay. | N/A | **EXCLUDED**: Zero risk delta. |
+| **Target Task Actual Duration** | `trackedDurationSeconds` on target | Post-completion only | Completely unavailable at planning time. Using it would be fatal target leakage. | Target task post-completion fields are strictly ignored by estimator. | **EXCLUDED**: Target leakage protection verified by unit test. |
+| **Synthetic User Profile Inferences** | Backend training dataset | Offline synthetic | Fabricates non-existent user habits; violates empirical grounding. | Personal risk layer uses IndexedDB events only. | **EXCLUDED**: Synthetic baseline model kept strictly separate. |
+
+#### 3. Conservative Hybrid Risk Estimator Engine
+- **File**: `src/telemetry/personalRiskModel.js` (NEW)
+  - Implemented `computeGuardedTaskRisk(task, baselinePrediction, events, personalDurationModel, asOfTime)`:
+    - **Cold-Start Guard**: If personal history effective weight $W < 3.0$, returns baseline Random Forest risk unmodified with `is_personalized: false` and explanatory fallback reason.
+    - **Raw Signal Clamping**: Raw personal signal delta is clamped to $\pm 15\%$ (`MAX_RISK_ADJUSTMENT = 0.15`).
+    - **Bayesian Confidence Shrinkage**: Multiplies raw delta by:
+      $$\text{Confidence} = \frac{W}{W + 5.0}$$
+      (At $W = 3.0$, multiplier is $3.0 / 8.0 = 0.375$, so a raw $+10\%$ postponement signal yields a cautious $+3.8\%$ applied adjustment).
+    - **Probability Bounding**: Clamps final adjusted probability to $[0.05, 0.95]$.
+    - **Uncalibrated Disclosure**: Explicitly documents that adjustments are heuristic evidence-based shifts, not calibrated probabilities.
+  - Implemented `computeBatchGuardedRisk(predictionsMap, tasks, events, personalDurationModel, asOfTime)`:
+    - Batch evaluates all tasks, preserving baseline predictions when tasks lack personal signals or when data is sparse.
+
+#### 4. UI Transparency & Model Governance
+- **File**: `src/components/TaskCard.jsx`:
+  - Updated delay-risk display to use `delay_probability ?? probability`.
+  - Added subtle, pastel-styled personal adjustment pill (`+4%`, `-3%`) with hover disclosure:
+    `"Personalized: +4% adjustment from observed habits (Baseline: 52%)"`.
+- **File**: `src/components/TaskExplanationModal.jsx`:
+  - Added dedicated **Personalization Transparency Card**:
+    - Discloses synthetic baseline probability vs. personal adjusted probability.
+    - Displays effective sample weight and list of applied personal behavioral signals.
+    - Displays explicit fallback notice when baseline is preserved due to sparse data.
+    - Explains local-first IndexedDB privacy guarantee.
+- **File**: `src/components/PersonalModelDashboard.jsx`:
+  - Updated walk-forward evaluation progress to reflect hardened guard ($X / 5$ predictions, $Y / 8$ tasks).
+  - Added **Guarded Completion-Risk Architecture** panel detailing active personal signals, Bayesian shrinkage formula, and leakage safeguards.
+- **File**: `src/App.jsx`:
+  - Derived `guardedPredictionsMap` and `effectiveRiskStats` using `useMemo`.
+  - Connected guarded predictions to `ProjectOverview`, `TaskList`, and `TaskExplanationModal`.
+  - Immediate reset: verified that clearing telemetry via `telemetry.clearHistory()` immediately resets personal risk adjustments back to baseline.
+
+#### 5. Automated Test Suite & Verification
+- **File**: `tests/personal_model.test.js`:
+  - Expanded test suite to **53 automated tests across 8 suites** (all passing).
+  - Hardened evaluation boundary tests:
+    - 0 observations: `insufficient_evaluation_data`, 0 held-out predictions.
+    - 5 observations: 2 held-out predictions ($< 5$), `insufficient_evaluation_data`.
+    - 7 observations: 4 held-out predictions ($< 5$), `insufficient_evaluation_data`.
+    - 8 observations: exactly 5 held-out predictions ($= 5$), status `evaluated`.
+  - Guarded personal risk tests:
+    - Cold-start fallback ($W < 3.0 \to$ baseline unmodified).
+    - Postponement friction bounded adjustment.
+    - Maximum adjustment bounds ($\le \pm 15\%$).
+    - Temporal leakage safety (future events after prediction time ignored).
+    - Target leakage safety (target task duration/completion fields ignored).
+    - Duplicate event deduplication idempotency.
+    - Immediate reset on history deletion.
+    - Batch prediction error handling and risk categorization.
+
+---
+
+### Verification Results
+
+1. **Frontend Test Suite**: `npm test`
+   - **53 tests passing across 8 suites** (0 failures, 117ms duration).
+2. **Frontend Linter**: `npm run lint` (`oxlint`)
+   - **0 errors, 0 warnings** across 25 files.
+3. **Production Build**: `npm run build` (`vite build`)
+   - Successfully generated production bundle in 290ms (`dist/assets/index-CopoHHtt.js`, 427.69 kB / 127.14 kB gzip).
+4. **Backend Pytest Suite**: `python -m pytest backend/tests/ -v`
+   - **27 tests passing** (18 date handling tests, 9 ML & API tests).
+
+---
+
+### Known Limitations & Phase 4 Plan
+
+1. **Classification vs. Heuristic Adjustment**: The baseline Random Forest remains a generic supervised model trained on synthetic data. The personal risk layer does not re-train the decision forest on personal tasks; it applies mathematically bounded Bayesian shrinkage to adjust baseline probabilities.
+2. **Next Stage (Phase 4: Adaptive Scheduling & Workload Optimization)**:
+   - Use personalized duration distributions ($D_{pred} \pm \sigma$) and guarded completion risk to balance workload across sprint calendars.
+   - Proactively detect overcommitted days and recommend optimal, low-friction task resequencing based on personal velocity.
 
 
