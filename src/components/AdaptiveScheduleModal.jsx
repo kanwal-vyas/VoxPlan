@@ -1,22 +1,34 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { generateAdaptiveSchedule, formatDateISO } from '../scheduler/adaptiveScheduler';
 import { compareScheduleStrategies } from '../scheduler/scheduleEvaluator';
 import { BENCHMARK_SCENARIOS, runStabilityBenchmark } from '../scheduler/scheduleBenchmarks';
+import { computeScheduleFeedback } from '../scheduler/scheduleFeedback';
 
 export default function AdaptiveScheduleModal({
   tasks = [],
+  events = [],
   personalDurationModel = null,
   guardedPredictionsMap = {},
   isOpen = false,
   onClose,
   onApplySchedule,
+  onProposalGenerated,
+  onDiscardSchedule,
 }) {
-  const [activeTab, setActiveTab] = useState('proposal'); // 'proposal' | 'benchmark'
+  const [activeTab, setActiveTab] = useState('proposal'); // 'proposal' | 'benchmark' | 'feedback'
   const [selectedScenarioKey, setSelectedScenarioKey] = useState('current');
   const [dailyCapacityHours, setDailyCapacityHours] = useState(6.0);
   const [horizonDays, setHorizonDays] = useState(14);
   const [usePersonalModel, setUsePersonalModel] = useState(true);
   const [todayStr] = useState(() => formatDateISO(new Date()));
+
+  const hasAppliedRef = useRef(false);
+  const recordedProposalIdRef = useRef(null);
+
+  // Compute local schedule feedback and outcomes from durable telemetry
+  const feedbackReport = useMemo(() => {
+    return computeScheduleFeedback(events, tasks);
+  }, [events, tasks]);
 
   const currentTasksHash = useMemo(() => {
     return JSON.stringify(
@@ -107,6 +119,41 @@ export default function AdaptiveScheduleModal({
     return runStabilityBenchmark('adaptive');
   }, [isOpen, activeTab]);
 
+  useEffect(() => {
+    if (isOpen) {
+      hasAppliedRef.current = false;
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen && proposal && proposal.summary?.scheduleId && onProposalGenerated) {
+      if (recordedProposalIdRef.current !== proposal.summary.scheduleId) {
+        recordedProposalIdRef.current = proposal.summary.scheduleId;
+        onProposalGenerated(proposal);
+      }
+    }
+  }, [isOpen, proposal, onProposalGenerated]);
+
+  const handleDiscard = (reason = 'user_discard') => {
+    if (!hasAppliedRef.current && proposal && onDiscardSchedule) {
+      onDiscardSchedule(proposal, reason);
+    }
+    onClose();
+  };
+
+  const handleApply = () => {
+    if (isStale) return;
+    hasAppliedRef.current = true;
+    if (onApplySchedule) {
+      onApplySchedule(proposal);
+    }
+    onClose();
+  };
+
+  const handleRegenerate = () => {
+    setCachedSnapshotHash(currentTasksHash);
+  };
+
   if (!isOpen || !proposal) return null;
 
   const summary = proposal.summary || {};
@@ -124,18 +171,6 @@ export default function AdaptiveScheduleModal({
   );
 
   const changesCount = validShifts.length;
-
-  const handleApply = () => {
-    if (isStale) return;
-    if (onApplySchedule) {
-      onApplySchedule(proposal);
-    }
-    onClose();
-  };
-
-  const handleRegenerate = () => {
-    setCachedSnapshotHash(currentTasksHash);
-  };
 
   const getFeasibilityBadge = () => {
     const status = summary.feasibilityStatus || summary.feasibility;
@@ -176,7 +211,7 @@ export default function AdaptiveScheduleModal({
   const badge = getFeasibilityBadge();
 
   return (
-    <div style={styles.backdrop} onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div style={styles.backdrop} onClick={() => handleDiscard('user_closed')} role="dialog" aria-modal="true" aria-labelledby="modal-title">
       <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div style={styles.header}>
@@ -197,7 +232,7 @@ export default function AdaptiveScheduleModal({
             </h2>
             <p style={styles.subtitle}>{badge.desc}</p>
           </div>
-          <button type="button" onClick={onClose} style={styles.closeBtn} aria-label="Close modal">
+          <button type="button" onClick={() => handleDiscard('user_closed')} style={styles.closeBtn} aria-label="Close modal">
             ✕
           </button>
         </div>
@@ -223,6 +258,16 @@ export default function AdaptiveScheduleModal({
             }}
           >
             ⚖ Strategy Benchmark & Quality
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('feedback')}
+            style={{
+              ...styles.navTabBtn,
+              ...(activeTab === 'feedback' ? styles.navTabBtnActive : styles.navTabBtnInactive),
+            }}
+          >
+            📈 Schedule Feedback & Outcomes
           </button>
         </div>
 
@@ -458,7 +503,7 @@ export default function AdaptiveScheduleModal({
                 🔒 <strong>Safe Proposal:</strong> VoxPlan will not alter any saved task until you click "Apply Schedule".
               </div>
               <div style={styles.btnRow}>
-                <button type="button" onClick={onClose} style={styles.discardBtn}>
+                <button type="button" onClick={() => handleDiscard('user_discard')} style={styles.discardBtn}>
                   Discard Proposal
                 </button>
                 <button
@@ -612,6 +657,206 @@ export default function AdaptiveScheduleModal({
             </div>
 
             {/* Benchmark Footer */}
+            <div style={styles.footer}>
+              <button
+                type="button"
+                onClick={() => setActiveTab('proposal')}
+                style={styles.discardBtn}
+              >
+                ← Return to Schedule Proposal
+              </button>
+              <button type="button" onClick={onClose} style={styles.discardBtn}>
+                Close Modal
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: SCHEDULE FEEDBACK & OUTCOME TRACKING */}
+        {activeTab === 'feedback' && feedbackReport && (
+          <div style={styles.feedbackContainer}>
+            {/* Sufficiency Alert */}
+            {!feedbackReport.summary.isSufficientData ? (
+              <div style={styles.feedbackSufficiencyBanner}>
+                <span style={{ fontSize: '16px' }}>ℹ️</span>
+                <div>
+                  <strong>Insufficient Feedback Data (&lt; 3 observations):</strong> VoxPlan requires at least 3 decided proposals and completed task outcomes to evaluate scheduling usefulness reliably. Preliminary early observations are shown below without extrapolation.
+                </div>
+              </div>
+            ) : (
+              <div style={styles.feedbackSufficiencyBannerPositive}>
+                <span style={{ fontSize: '16px' }}>✓</span>
+                <div>
+                  <strong>Feedback Dataset Active:</strong> {feedbackReport.summary.decidedCount} decided proposals ({feedbackReport.summary.acceptedCount} accepted, {feedbackReport.summary.discardedCount} discarded) and {feedbackReport.summary.eligibleCompletedCount} unaltered task completion observations recorded locally.
+                </div>
+              </div>
+            )}
+
+            {/* Metric KPI Cards */}
+            <div style={styles.feedbackCardsGrid}>
+              {/* Card 1: Decided Proposals */}
+              <div style={styles.feedbackCard}>
+                <div style={styles.feedbackCardHeader}>
+                  <span style={styles.feedbackCardSuper}>LIFECYCLE</span>
+                  <span style={styles.feedbackCardTitle}>Proposal Decisions</span>
+                </div>
+                <div style={styles.feedbackCardValue}>
+                  {feedbackReport.summary.decidedCount}
+                </div>
+                <div style={styles.feedbackCardSubtext}>
+                  {feedbackReport.summary.acceptedCount} accepted • {feedbackReport.summary.discardedCount} discarded ({feedbackReport.summary.generatedCount} generated total)
+                </div>
+              </div>
+
+              {/* Card 2: Acceptance Rate */}
+              <div style={styles.feedbackCard}>
+                <div style={styles.feedbackCardHeader}>
+                  <span style={styles.feedbackCardSuper}>ADOPTION</span>
+                  <span style={styles.feedbackCardTitle}>Acceptance Rate</span>
+                </div>
+                <div style={styles.feedbackCardValue}>
+                  {feedbackReport.summary.acceptanceRate !== null
+                    ? `${(feedbackReport.summary.acceptanceRate * 100).toFixed(0)}%`
+                    : 'N/A'}
+                </div>
+                <div style={styles.feedbackCardSubtext}>
+                  Denominator: {feedbackReport.summary.acceptedCount}/{feedbackReport.summary.decidedCount} decided proposals
+                </div>
+                <div style={styles.feedbackCardFootnote}>
+                  * Reflects initial agreement, not execution quality.
+                </div>
+              </div>
+
+              {/* Card 3: Subsequent Overrides */}
+              <div style={styles.feedbackCard}>
+                <div style={styles.feedbackCardHeader}>
+                  <span style={styles.feedbackCardSuper}>MANUAL ADJUSTMENTS</span>
+                  <span style={styles.feedbackCardTitle}>Override Rate</span>
+                </div>
+                <div style={styles.feedbackCardValue}>
+                  {feedbackReport.summary.proposalOverrideRate !== null
+                    ? `${(feedbackReport.summary.proposalOverrideRate * 100).toFixed(0)}%`
+                    : 'N/A'}
+                </div>
+                <div style={styles.feedbackCardSubtext}>
+                  {feedbackReport.summary.taskOverrideRate !== null
+                    ? `${(feedbackReport.summary.taskOverrideRate * 100).toFixed(0)}% tasks overridden (${feedbackReport.summary.uniqueOverriddenTasksCount}/${feedbackReport.summary.totalPlacedTasksCount})`
+                    : '0 tasks placed'}
+                </div>
+                <div style={styles.feedbackCardFootnote}>
+                  {feedbackReport.summary.postponedOverridesCount} postponed • {feedbackReport.summary.advancedOverridesCount} advanced
+                </div>
+              </div>
+
+              {/* Card 4: On-Time Timeliness */}
+              <div style={styles.feedbackCard}>
+                <div style={styles.feedbackCardHeader}>
+                  <span style={styles.feedbackCardSuper}>EXECUTION</span>
+                  <span style={styles.feedbackCardTitle}>Unaltered On-Time Rate</span>
+                </div>
+                <div style={styles.feedbackCardValue}>
+                  {feedbackReport.summary.onTimeCompletionRate !== null
+                    ? `${(feedbackReport.summary.onTimeCompletionRate * 100).toFixed(0)}%`
+                    : 'N/A'}
+                </div>
+                <div style={styles.feedbackCardSubtext}>
+                  Denominator: {feedbackReport.summary.completedOnTimeCount}/{feedbackReport.summary.eligibleCompletedCount} unaltered tasks
+                </div>
+                <div style={styles.feedbackCardFootnote}>
+                  {feedbackReport.summary.excludedAmbiguousCount} excluded (rescheduled before finish)
+                </div>
+              </div>
+            </div>
+
+            {/* Overrides & Completion Details Grid */}
+            <div style={styles.feedbackDetailsGrid}>
+              {/* Box 1: Manual Overrides Log */}
+              <div style={styles.feedbackDetailBox}>
+                <div style={styles.feedbackDetailBoxTitle}>
+                  📋 Subsequent Date Overrides ({feedbackReport.overrides.totalOverrideEvents})
+                </div>
+                {feedbackReport.overrides.details.length === 0 ? (
+                  <div style={styles.feedbackEmptyNotice}>
+                    No manual date changes recorded after accepting a schedule proposal.
+                  </div>
+                ) : (
+                  <div style={styles.feedbackScrollList}>
+                    {feedbackReport.overrides.details.slice(-5).reverse().map((o, idx) => (
+                      <div key={idx} style={styles.feedbackListItem}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+                          <span style={{ fontWeight: '700', fontSize: '11px' }}>Task #{o.taskId.slice(-6)}</span>
+                          <span style={{
+                            fontSize: '10px',
+                            fontWeight: '700',
+                            color: o.shiftDirection === 'postponed' ? '#92400E' : '#1B5E3C',
+                          }}>
+                            {o.shiftDays > 0 ? `+${o.shiftDays}d postponed` : o.shiftDays < 0 ? `${o.shiftDays}d advanced` : 'same day'}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '10px', color: '#71717A' }}>
+                          Proposed: <code>{o.proposedDate}</code> → Overridden: <code>{o.overriddenDate}</code>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Box 2: Verified Task Outcomes */}
+              <div style={styles.feedbackDetailBox}>
+                <div style={styles.feedbackDetailBoxTitle}>
+                  🎯 Completion Outcomes ({feedbackReport.completionOutcomes.reliableObservations.length} eligible)
+                </div>
+                {feedbackReport.completionOutcomes.reliableObservations.length === 0 ? (
+                  <div style={styles.feedbackEmptyNotice}>
+                    No tasks from accepted schedules have completed without subsequent manual rescheduling yet.
+                  </div>
+                ) : (
+                  <div style={styles.feedbackScrollList}>
+                    {feedbackReport.completionOutcomes.reliableObservations.slice(-5).reverse().map((c, idx) => (
+                      <div key={idx} style={styles.feedbackListItem}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+                          <span style={{ fontWeight: '700', fontSize: '11px' }}>Task #{c.taskId.slice(-6)}</span>
+                          <span style={{
+                            fontSize: '10px',
+                            fontWeight: '700',
+                            color: c.isOnTime ? '#1B5E3C' : '#9E2A2B',
+                          }}>
+                            {c.isOnTime ? '✓ On Time' : '⚠️ Past Deadline'}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '10px', color: '#71717A' }}>
+                          Proposed Deadline: <code>{c.proposedDate}</code>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Cautious Learning Boundary Box */}
+            <div style={styles.cautiousBoundaryBox}>
+              <div style={{ fontWeight: '800', fontSize: '12px', marginBottom: '4px', color: '#1B5E3C' }}>
+                🛡️ Cautious Learning Boundary & Governance Notice
+              </div>
+              <div style={{ fontSize: '11px', color: '#374151', lineHeight: 1.45, marginBottom: '8px' }}>
+                {feedbackReport.cautiousLearningBoundary.reason}
+              </div>
+              <div style={styles.conceptGrid}>
+                <div style={styles.conceptItem}>
+                  <strong>1. Acceptance Rate:</strong> {feedbackReport.conceptDistinctions.acceptanceRateNote}
+                </div>
+                <div style={styles.conceptItem}>
+                  <strong>2. Override Rate:</strong> {feedbackReport.conceptDistinctions.overrideRateNote}
+                </div>
+                <div style={styles.conceptItem}>
+                  <strong>3. On-Time Timeliness:</strong> {feedbackReport.conceptDistinctions.completionRateNote}
+                </div>
+              </div>
+            </div>
+
+            {/* Feedback Footer */}
             <div style={styles.footer}>
               <button
                 type="button"
@@ -1248,5 +1493,148 @@ const styles = {
     border: '1px solid #E4E4E7',
     borderRadius: '6px',
     padding: '8px 12px',
+  },
+  feedbackContainer: {
+    padding: '20px 28px',
+    overflowY: 'auto',
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+    backgroundColor: '#FFFDF9',
+  },
+  feedbackSufficiencyBanner: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '10px',
+    padding: '12px 16px',
+    backgroundColor: '#FEF3C7',
+    border: '1.5px solid #F59E0B',
+    borderRadius: '8px',
+    fontSize: '12px',
+    color: '#92400E',
+    lineHeight: 1.45,
+  },
+  feedbackSufficiencyBannerPositive: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '10px',
+    padding: '12px 16px',
+    backgroundColor: '#DCFCE7',
+    border: '1.5px solid #22C55E',
+    borderRadius: '8px',
+    fontSize: '12px',
+    color: '#166534',
+    lineHeight: 1.45,
+  },
+  feedbackCardsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(4, 1fr)',
+    gap: '12px',
+  },
+  feedbackCard: {
+    backgroundColor: '#FFFFFF',
+    border: '1.5px solid #25242A',
+    boxShadow: '2px 2px 0px #25242A',
+    borderRadius: '8px',
+    padding: '12px 14px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  feedbackCardHeader: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  },
+  feedbackCardSuper: {
+    fontSize: '9px',
+    fontWeight: '800',
+    color: '#71717A',
+    letterSpacing: '0.05em',
+  },
+  feedbackCardTitle: {
+    fontSize: '12px',
+    fontWeight: '800',
+    color: '#25242A',
+  },
+  feedbackCardValue: {
+    fontSize: '22px',
+    fontWeight: '900',
+    color: '#25242A',
+    margin: '4px 0 2px',
+    letterSpacing: '-0.02em',
+  },
+  feedbackCardSubtext: {
+    fontSize: '11px',
+    color: '#52525B',
+    lineHeight: 1.3,
+  },
+  feedbackCardFootnote: {
+    fontSize: '10px',
+    color: '#71717A',
+    marginTop: '4px',
+    fontStyle: 'italic',
+  },
+  feedbackDetailsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, 1fr)',
+    gap: '12px',
+  },
+  feedbackDetailBox: {
+    backgroundColor: '#FFFFFF',
+    border: '1.5px solid #25242A',
+    boxShadow: '2px 2px 0px #25242A',
+    borderRadius: '8px',
+    padding: '14px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    maxHeight: '220px',
+  },
+  feedbackDetailBoxTitle: {
+    fontWeight: '800',
+    fontSize: '12px',
+    color: '#25242A',
+    borderBottom: '1px solid #E4E4E7',
+    paddingBottom: '6px',
+  },
+  feedbackEmptyNotice: {
+    fontSize: '11px',
+    color: '#71717A',
+    fontStyle: 'italic',
+    padding: '12px 0',
+    textAlign: 'center',
+  },
+  feedbackScrollList: {
+    overflowY: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+  },
+  feedbackListItem: {
+    backgroundColor: '#FFFDF9',
+    border: '1px solid #E4E4E7',
+    borderRadius: '6px',
+    padding: '6px 10px',
+  },
+  cautiousBoundaryBox: {
+    backgroundColor: '#FFFFFF',
+    border: '1.5px solid #1B5E3C',
+    boxShadow: '2px 2px 0px #1B5E3C',
+    borderRadius: '8px',
+    padding: '12px 16px',
+  },
+  conceptGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, 1fr)',
+    gap: '10px',
+    borderTop: '1px dashed #A5D6A7',
+    paddingTop: '8px',
+  },
+  conceptItem: {
+    fontSize: '10px',
+    color: '#52525B',
+    lineHeight: 1.35,
   },
 };

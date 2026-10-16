@@ -4,15 +4,15 @@
  * real-time UI subscriptions, and active timer session state.
  */
 
-import { createEvent, generateUUID } from './eventSchema';
+import { createEvent, generateUUID, SCHEMA_VERSION } from './eventSchema.js';
 import {
   saveEvent,
   getEventsByProfile,
   clearEventsByProfile,
   saveTimerSession,
   clearTimerSessionsByProfile,
-} from './indexedDbStore';
-import { computeBehavioralStats } from './behavioralStats';
+} from './indexedDbStore.js';
+import { computeBehavioralStats } from './behavioralStats.js';
 
 const PROFILE_ID_KEY = 'voxplan_profile_id';
 const ACTIVE_TIMER_KEY = 'voxplan_active_timer';
@@ -39,6 +39,7 @@ class TelemetryManager {
     this.eventsCache = [];
     this.isInitialized = false;
     this.activeTimer = this.loadActiveTimer();
+    this.recordedProposalActions = new Set();
   }
 
   /**
@@ -197,6 +198,67 @@ class TelemetryManager {
     });
   }
 
+  // --- Schedule Feedback Events (Phase 4, Stage 5) ---
+
+  async recordScheduleProposalGenerated(proposal) {
+    if (!proposal || !proposal.summary?.scheduleId) return null;
+    const scheduleId = proposal.summary.scheduleId;
+    const dedupeKey = `gen_${scheduleId}`;
+    if (this.recordedProposalActions.has(dedupeKey)) return null;
+    this.recordedProposalActions.add(dedupeKey);
+
+    const summary = proposal.summary;
+    return this.record('schedule_proposal_generated', null, {
+      schedule_id: scheduleId,
+      scheduler_version: 1,
+      strategy: summary.strategy || 'adaptive',
+      daily_capacity_hours: summary.dailyCapacityHours || 6.0,
+      horizon_days: summary.horizonDays || 14,
+      total_eligible_tasks: summary.totalEligibleTasks || 0,
+      scheduled_count: summary.scheduledCount || 0,
+      date_changes_count: summary.dateChangesCount || 0,
+      feasibility: summary.feasibilityStatus || summary.feasibility || 'feasible',
+    });
+  }
+
+  async recordScheduleProposalAccepted(proposal, appliedPlacements = []) {
+    if (!proposal || !proposal.summary?.scheduleId) return null;
+    const scheduleId = proposal.summary.scheduleId;
+    const dedupeKey = `acc_${scheduleId}`;
+    if (this.recordedProposalActions.has(dedupeKey)) return null;
+    this.recordedProposalActions.add(dedupeKey);
+
+    const summary = proposal.summary;
+    return this.record('schedule_proposal_accepted', null, {
+      schedule_id: scheduleId,
+      scheduler_version: 1,
+      strategy: summary.strategy || 'adaptive',
+      changes_count: appliedPlacements.length,
+      applied_placements: appliedPlacements.map((p) => ({
+        task_id: p.taskId || p.task_id,
+        original_due_date: p.originalDueDate || p.original_due_date || null,
+        proposed_date: p.proposedDate || p.proposed_date,
+      })),
+    });
+  }
+
+  async recordScheduleProposalDiscarded(proposal, reason = 'user_discard') {
+    if (!proposal || !proposal.summary?.scheduleId) return null;
+    const scheduleId = proposal.summary.scheduleId;
+    const dedupeKey = `disc_${scheduleId}`;
+    if (this.recordedProposalActions.has(dedupeKey)) return null;
+    this.recordedProposalActions.add(dedupeKey);
+
+    const summary = proposal.summary;
+    return this.record('schedule_proposal_discarded', null, {
+      schedule_id: scheduleId,
+      scheduler_version: 1,
+      strategy: summary.strategy || 'adaptive',
+      reason,
+      changes_count: summary.dateChangesCount || 0,
+    });
+  }
+
   // --- Active Timer State Management ---
 
   loadActiveTimer() {
@@ -343,6 +405,7 @@ class TelemetryManager {
     await clearEventsByProfile(this.profileId);
     await clearTimerSessionsByProfile(this.profileId);
     this.persistActiveTimer(null);
+    this.recordedProposalActions.clear();
     this.eventsCache = [];
     this.notifySubscribers();
     return true;
@@ -355,7 +418,7 @@ class TelemetryManager {
     return JSON.stringify(
       {
         profile_id: this.profileId,
-        schema_version: 1,
+        schema_version: SCHEMA_VERSION,
         exported_at: new Date().toISOString(),
         total_events: this.eventsCache.length,
         events: this.eventsCache,

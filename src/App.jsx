@@ -640,11 +640,21 @@ export default function App() {
       feasibility: proposal.summary?.feasibilityStatus || proposal.summary?.feasibility,
     });
 
+    await telemetry.recordScheduleProposalAccepted(proposal, changedPlacements);
+
     setFeedback({
       type: 'success',
       message: `Applied adaptive schedule: ${changedPlacements.length} task deadline${changedPlacements.length === 1 ? '' : 's'} updated.`,
     });
   };
+
+  const handleProposalGenerated = useCallback(async (proposal) => {
+    await telemetry.recordScheduleProposalGenerated(proposal);
+  }, []);
+
+  const handleDiscardSchedule = useCallback(async (proposal, reason) => {
+    await telemetry.recordScheduleProposalDiscarded(proposal, reason);
+  }, []);
 
   const handleReviseEffort = async (taskId, newEffort) => {
     const target = tasks.find((t) => t.id === taskId);
@@ -1194,10 +1204,13 @@ export default function App() {
       <AdaptiveScheduleModal
         isOpen={isScheduleModalOpen}
         tasks={tasks}
+        events={telemetryEvents}
         personalDurationModel={personalDurationModel}
         guardedPredictionsMap={guardedPredictionsMap}
         onClose={() => setIsScheduleModalOpen(false)}
         onApplySchedule={handleApplySchedule}
+        onProposalGenerated={handleProposalGenerated}
+        onDiscardSchedule={handleDiscardSchedule}
       />
     </div>
   );

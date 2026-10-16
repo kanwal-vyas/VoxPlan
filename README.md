@@ -95,6 +95,7 @@ FASTAPI ML BACKEND (scikit-learn Pipeline & Batch Endpoints)
 - **Phase 4, Stage 2 (Completed)**: Scheduling correctness & reliability audit: Kahn's topological ready-queue (guaranteed DAG order over priority scores), explicit 3-color DFS cycle isolation, blocked dependent propagation, oversized task manual resolution (`status: 'oversized_exceeds_capacity'`), cumulative daily capacity constraint enforcement, accurate capacity utilization denominator, timezone-safe deadline policies, stale-proposal detection with one-click regeneration, non-destructive diff filtering, deduplicated telemetry, and 81 automated tests across 16 suites.
 - **Phase 4, Stage 3 (Completed)**: Schedule quality evaluation & benchmarking: independent 7-dimension evaluation metrics (coverage, deadline feasibility, dependency correctness, capacity compliance, workload balance CV, horizon coverage, perturbation churn), multi-strategy benchmarking comparing Adaptive against Earliest Deadline First (EDF) and Priority-First under identical hard constraints, 12 reproducible scenario fixtures (`scheduleBenchmarks.js`), stability churn analysis, interactive modal benchmark tab, and 93 automated tests across 19 suites.
 - **Phase 4, Stage 4 (Completed)**: Evidence-driven scheduler optimization: replaced topological depth penalty with bounded downstream unblocking bonus (`+ min(45, unblockCount * 15)`), eliminating critical-path bottlenecks without penalizing ready dependents (reduced churn on satisfied dependencies from 40% to 0%, overall average churn from 24% to 16%); multi-tier deterministic tie-breaking (score $\to$ due date $\to$ Shortest Processing Time $\to$ task ID); evaluator metric honesty reporting `schedulableOnTimeRate` and `schedulerDaysDelayed` to separate impossible deadlines and pre-existing delays; enriched placement explainability; 99 automated tests passing across 20 suites.
+- **Phase 4, Stage 5 (Completed)**: Local Schedule Feedback & Outcome Tracking: versioned privacy-preserving telemetry schema (`SCHEMA_VERSION = 2`) recording proposal generation, acceptance, and discard actions; single-action deduplication in `telemetryManager`; subsequent manual date override detection (postponed vs advanced shift tracking); unaltered completion outcome matching (excluding tasks manually moved prior to finish); pure local feedback module (`src/scheduler/scheduleFeedback.js`); focused modal feedback tab with explicit denominators and insufficient-data guards (< 3 observations); strict cautious learning boundary (no automatic weight retuning); and 110 automated tests passing across 27 suites.
 - **Phase 5 (Next)**: Conversational planning experience & debriefing.
 
 ---
@@ -366,3 +367,41 @@ VoxPlan features a deterministic, local-first adaptive scheduling engine designe
 3. **Daily Working-Hour Capacity**: Consecutive calendar slots are populated up to user-configured hours (default `6.0h/day`). Tasks that exceed remaining day hours cleanly roll over into the next working weekday.
 4. **Guarded Delay-Risk Urgency**: Tasks identified by the hybrid model as having high completion risk ($P_{\text{delay}} \ge 0.65$) receive a secondary heuristic boost to position them earlier in the sprint.
 5. **No Hidden Failures**: If the planning horizon cannot accommodate a task or a deadline is missed, the scheduler reports explicit conflict reasons (`deadline_missed`, `capacity_exceeded`, `unscheduled`) rather than concealing feasibility limits.
+
+---
+
+## Local Schedule Feedback & Outcome Tracking (Phase 4, Stage 5)
+
+Phase 4 Stage 5 establishes empirical feedback tracking to determine whether VoxPlan's schedule proposals are genuinely useful in real-world usage.
+
+### 1. Versioned Event Schema (Schema Version 2)
+The behavioral telemetry event schema (`SCHEMA_VERSION = 2`) introduces versioned, minimal scheduling events:
+- **`schedule_proposal_generated`**: Logged once when a unique schedule ID is calculated (`total_eligible_tasks`, `scheduled_count`, `date_changes_count`, `feasibility`).
+- **`schedule_proposal_accepted`**: Logged when the user clicks "Apply Schedule", capturing the exact snapshot of applied task placements (`task_id`, `original_due_date`, `proposed_date`).
+- **`schedule_proposal_discarded`**: Logged if the user closes or discards the proposal without applying it (`reason`: `user_discard` | `user_closed`).
+
+### 2. Privacy & Local Storage
+- **Zero Remote Transmission**: All feedback records remain strictly inside browser IndexedDB (`voxplan_db`). No schedule events or task details are transmitted to the backend.
+- **Content Minimization**: Only stable opaque IDs (`task_id`, `schedule_id`) and dates are stored. No task titles, descriptions, or sensitive text are embedded in proposal events.
+- **Immediate Data Deletion**: Clicking "Clear Behavioral History" in Section 04 permanently wipes all telemetry records and resets all feedback metrics to cold-start immediately.
+
+### 3. Metric Definitions & Explicit Denominators
+- **Proposal Acceptance Rate**:
+  $$\text{Acceptance Rate} = \frac{\text{acceptedCount}}{\text{acceptedCount} + \text{discardedCount}}$$
+  Explicitly reports the denominator of decided proposals. Measures initial adoption willingness, **not** schedule quality.
+- **Manual Override Rate**:
+  Measures tasks altered after proposal acceptance via `task_rescheduled` (where `reason !== 'adaptive_scheduler'`):
+  $$\text{Task Override Rate} = \frac{\text{uniqueOverriddenTasksCount}}{\text{totalPlacedTasksCount}}$$
+  Classifies shift direction: **postponed** ($+Xd$) vs **advanced** ($-Xd$).
+- **Unaltered On-Time Completion Rate**:
+  $$\text{On-Time Completion Rate} = \frac{\text{completedOnTimeCount}}{\text{eligibleCompletedCount}}$$
+  Strictly evaluates tasks that were **not** manually rescheduled prior to completion.
+
+### 4. Outcome Attribution & Limitation Integrity
+- **Manual Overrides Prior to Completion**: If a user reschedules a scheduled task prior to completing it, that task's completion is categorized under `excludedObservations`. This prevents attributing the outcome of manual user interventions to the automated scheduling algorithm.
+- **Sparse Data Guard**: If fewer than 3 decided proposals or completed observations exist, the UI renders an honest insufficient-data banner without extrapolating or fabricating metrics.
+
+### 5. Cautious Learning Boundary
+- **Measurement Only**: VoxPlan strictly does **not** automatically retrain the scheduler, tune heuristic weights, or alter priority rules from sparse user feedback.
+- **Concept Independence**: Acceptance rate, manual overrides, and execution timeliness are separated into distinct concepts. A high acceptance rate is not proof that the schedule was good; a low override rate is not proof that all tasks were completed on time.
+- **Automated Test Coverage**: 110 automated tests passing across 27 suites in `tests/schedule_feedback.test.js`, `tests/schedule_evaluation.test.js`, `tests/personal_model.test.js`, and `tests/telemetry.test.js`.

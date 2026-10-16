@@ -3,7 +3,7 @@
  * Defines versioned, strictly validated behavioral event representations.
  */
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const EVENT_TYPES = Object.freeze([
   'task_created',
@@ -17,6 +17,9 @@ export const EVENT_TYPES = Object.freeze([
   'task_reordered',
   'recommendation_accepted',
   'recommendation_rejected',
+  'schedule_proposal_generated',
+  'schedule_proposal_accepted',
+  'schedule_proposal_discarded',
 ]);
 
 /**
@@ -71,9 +74,13 @@ export function validateEvent(event) {
   }
 
   // 4. task_id: required for task lifecycle events
-  const isGlobalRecommendation =
-    event.event_type === 'recommendation_accepted' || event.event_type === 'recommendation_rejected';
-  if (!isGlobalRecommendation) {
+  const isGlobalEvent =
+    event.event_type === 'recommendation_accepted' ||
+    event.event_type === 'recommendation_rejected' ||
+    event.event_type === 'schedule_proposal_generated' ||
+    event.event_type === 'schedule_proposal_accepted' ||
+    event.event_type === 'schedule_proposal_discarded';
+  if (!isGlobalEvent) {
     if (typeof event.task_id !== 'string' || !event.task_id.trim()) {
       errors.push('task_id must be a non-empty string.');
     }
@@ -168,6 +175,24 @@ export function validateEvent(event) {
     case 'recommendation_rejected':
       if (typeof p.recommendation_type !== 'string' || !p.recommendation_type.trim()) {
         errors.push('recommendation payload must contain recommendation_type.');
+      }
+      break;
+
+    case 'schedule_proposal_generated':
+      if (typeof p.schedule_id !== 'string' || !p.schedule_id.trim()) {
+        errors.push('schedule_proposal_generated payload must contain schedule_id.');
+      }
+      break;
+
+    case 'schedule_proposal_accepted':
+      if (typeof p.schedule_id !== 'string' || !p.schedule_id.trim()) {
+        errors.push('schedule_proposal_accepted payload must contain schedule_id.');
+      }
+      break;
+
+    case 'schedule_proposal_discarded':
+      if (typeof p.schedule_id !== 'string' || !p.schedule_id.trim()) {
+        errors.push('schedule_proposal_discarded payload must contain schedule_id.');
       }
       break;
 
