@@ -14,7 +14,8 @@ This document tracks the phased evolution of VoxPlan from a static task tracker 
 | **Phase 3, Stage 2** | Personal Model Dashboard & Evaluation | **COMPLETED** | Personal Model Dashboard (`PersonalModelDashboard.jsx`), sample weight transparency, Bayesian shrinkage formula explainer, leak-free chronological walk-forward holdout evaluation (`evaluatePersonalDurationModel`), MAE/MdAPE baseline comparison, and honest cold-start states. |
 | **Phase 3, Stage 3** | Hybrid Completion-Risk Personalization | **COMPLETED** | Guarded hybrid completion-risk estimator (`personalRiskModel.js`), hardened evaluation guard (min 3 train, min 5 held-out, 8 total tasks), leakage protection, bounded adjustments ($\pm 15\%$), confidence shrinkage ($W / (W+5.0)$), transparent explainability modal, and 53 automated unit tests. |
 | **Phase 4, Stage 1** | Adaptive Scheduling Foundations | **COMPLETED** | Standalone deterministic local-first scheduling engine (`src/scheduler/adaptiveScheduler.js`), dependency DAG analysis with cycle detection, personalized duration integration with cold-start fallbacks, daily working-hour capacity bin-packing, weekend rollover, proposal review modal (`AdaptiveScheduleModal.jsx`), safe approval flow, non-destructive diffs, and 19 unit tests (72 tests total). |
-| **Phase 4, Stage 2** | Workload Balancing & Sprint Optimization | Next Up | Interactive drag-and-drop slot reallocation, multi-sprint horizon planning, fine-grained calendar capacity overrides, and bottleneck notifications. |
+| **Phase 4, Stage 2** | Scheduling Correctness & Reliability Audit | **COMPLETED** | Hardened dependency handling with Kahn's topological ready-queue (guaranteed DAG order over priority scores), explicit 3-color DFS cycle isolation, blocked dependent propagation, oversized task manual resolution (`status: 'oversized_exceeds_capacity'`), cumulative daily capacity constraint enforcement, accurate capacity utilization denominator, timezone-safe deadline policies, stale-proposal detection with one-click regeneration, non-destructive diff filtering, deduplicated telemetry, and 81 automated tests across 16 suites. |
+| **Phase 4, Stage 3** | Workload Balancing & Sprint Optimization | Next Up | Interactive drag-and-drop slot reallocation, multi-sprint horizon planning, fine-grained calendar capacity overrides, and bottleneck notifications. |
 | **Phase 5** | Voice & Conversational Planning Experience | Planned | Rich multi-turn planning dialog, schedule rescheduling commands, review debriefing via natural language. |
 
 ---
@@ -571,13 +572,128 @@ Tasks are prioritized deterministically using a transparent scoring function (`c
 
 ---
 
-### Known Limitations & Phase 4, Stage 2 Plan
+## Phase 4, Stage 2 Execution Record: Scheduling Correctness & Reliability Audit
 
-1. **Continuous Time & Intraday Slots**: The engine operates at day-level granularity (hours per day) rather than specific clock-time blocks (e.g. 10:00 AM - 12:00 PM).
-2. **Splitting Large Tasks**: Single tasks exceeding daily capacity are currently scheduled as dedicated single-day focus blocks rather than split into sub-tasks.
-3. **Next Stage (Phase 4, Stage 2: Workload Balancing & Sprint Optimization)**:
-   - Interactive calendar heatmaps showing daily capacity utilization.
-   - User drag-and-drop manual adjustments to proposed schedule slots before applying.
-   - Fine-grained working calendar overrides (holidays, personal days off).
+### Objective
+Conduct an incremental correctness and reliability audit of the adaptive scheduler, modal proposal workflow, task dependency graph analysis, working capacity constraints, deadline interpretations, prioritization mechanics, and proposal application safety without rewriting the scheduler or discarding existing pastel UI aesthetics.
+
+---
+
+### Audit Findings & Edge-Case Reproductions
+
+Before modifying production code, suspected edge cases were isolated and reproduced via a dedicated verification script (`scratch/reproduce_edge_cases.mjs`):
+
+1. **Topological Order Inversion**: When a dependent child task had a higher urgent score (due date sooner, priority `high`, or $+60$ delay-risk boost) than its prerequisites, sorting candidates globally by score scheduled the child on Day 0 and its prerequisite on Day 1, inverting the dependency order.
+2. **Dependent Placement of Unscheduled Prerequisite**: When a prerequisite was unscheduled due to horizon capacity exhaustion or circular dependencies, the dependent task was placed on Day 0 because `effectiveEarliestDay` defaulted to 0.
+3. **Silent Cycle Breaking**: Circular dependency cycles (e.g. $A \to B \to A$) were previously broken silently by setting topological depth to 0 and scheduling both tasks as if all dependencies were satisfied.
+4. **Oversized Task Daily Cramming**: Tasks with estimated effort greater than `dailyCapacityHours` (e.g. 10.0h with 6.0h daily capacity) were scheduled as a single day's placement, misrepresenting a multi-day effort as completed within a single 6-hour window without multi-day splitting support.
+5. **Capacity Utilization Denominator**: Daily utilization metrics averaged individual day percentages rather than calculating the true ratio of scheduled workload to total available horizon capacity.
+
+---
+
+### Architectural & Correctness Hardening
+
+#### 1. Dependency Handling & Kahn's Topological Ready-Queue
+- **Topological Ready-Queue**: Replaced static global sorting with Kahn's topological ready-queue scheduling. A task is only placed into the scheduling candidate queue once **all** of its unfinished prerequisites have actually been placed into calendar slots.
+- **Strict Earliest Feasible Date**: A dependent task's search for an open capacity slot begins at `max(scheduledPrerequisiteDates)`. A task is guaranteed never to be scheduled before or on an earlier day than its prerequisites.
+- **Completed Prerequisite Handling**: Passed full task state (`tasks`) to `analyzeTaskDependencies` so prerequisites marked `completed: true` are recognized as fulfilled and excluded from the blocking dependency graph.
+- **Explicit Cycle Detection & Downstream Propagation**: 
+  - Uses 3-color DFS traversal (`WHITE`, `GRAY`, `BLACK`) to identify cycles.
+  - Cycle paths are explicitly formatted (e.g. `Task A ➔ Task B ➔ Task A`) and exposed in the proposal.
+  - Tasks in cycles and **all downstream dependents** of cyclic tasks are marked `status: 'blocked_by_dependency'`, `proposedDate: null`, and assigned explicit conflict reasons explaining which cyclic or missing prerequisite is blocking them. No fake orderings are invented.
+- **Self-Dependencies & Missing Parents**: Explicitly detected and isolated; self-dependent tasks and tasks referencing non-existent parent IDs are marked `blocked_by_dependency` with clear error explanations.
+
+#### 2. Working Capacity & Oversized Tasks Feasibility
+- **Oversized Tasks Isolation**: Tasks with `effectiveHours > dailyCapacityHours` are flagged as `status: 'oversized_exceeds_capacity'` with `proposedDate: null` and an explicit note: `"Requires manual resolution: task effort (X.Xh) exceeds daily working capacity (Y.Xh) and multi-day splitting is not enabled."`
+- **Strict Daily Working Capacity**: Bin-packing requires `slot.remainingHours >= requiredHours`. A day's cumulative scheduled hours never exceeds `dailyCapacityHours`. When a day has insufficient remaining capacity, the task cleanly rolls over to the next working day slot.
+- **Accurate Capacity Utilization Metric**: Computes true scheduled workload against total available capacity across working days in the planning horizon:
+  $$\text{Capacity Utilization} = \frac{\sum \text{Scheduled Workload Hours}}{\sum \text{Working Slot Capacity Hours}} \times 100\%$$
+- **Invalid / Missing Effort**: Handled safely with fallback to `DEFAULT_TASK_FALLBACK_HOURS = 1.0h` without fabricating misleading precision.
+
+#### 3. Deadlines & Horizon Boundary Policies
+- **Inclusive Calendar Deadlines**: Due dates are treated as inclusive end-of-day targets. All date parsing operates on ISO calendar components (`YYYY-MM-DD`) without UTC offset shifting to prevent timezone-dependent off-by-one errors.
+- **Non-Working-Day Deadlines**: Deadlines falling on non-working days (e.g. Sunday) are considered on-time if the task is scheduled on the preceding working day (e.g. Friday), matching realistic domain expectations.
+- **Overdue at Start**: Tasks with deadlines prior to planning start are prioritized for immediate recovery on Day 0 and flagged with `was_overdue` status.
+- **No Deadline Tasks**: Placed flexibly into open capacity slots without false deadline warnings (`placementStatus: 'on_time'`).
+- **Horizon Exhaustion**: Tasks that cannot fit within the configured planning horizon are flagged with `status: 'unscheduled'`, `proposedDate: null`, and conflict reason `"Planning horizon capacity exhausted"`. Tasks are never silently dropped.
+
+#### 4. Prioritization Scoring & Hard Constraint Guarantee
+- **Hard Constraint Primacy**: Kahn's topological ready-queue mathematically guarantees that ordinary priority scores, deadline urgency, and risk heuristics cannot violate hard dependency prerequisites.
+- **Audited Scoring Weights**:
+  - Overdue Urgency: $+5000$ pts (ensures overdue recovery dominates normal backlog).
+  - Earliest Deadline First (EDF): Up to $+1000$ pts ($1000 \times (1 - \text{daysRemaining}/30)$).
+  - Explicit Priority: `high` ($+300$ pts), `medium` ($+200$ pts), `low` ($+100$ pts).
+  - Guarded Delay-Risk Boost: $+60$ pts for $P_{\text{delay}} \ge 0.65$ (bounded heuristic influence; cannot reorder tasks across different priority tiers or override deadlines).
+  - Deterministic Tie-Breaker: Stable alphanumeric comparison on `taskId`.
+
+#### 5. Safe Proposal Application & Stale Proposal Protection
+- **Stale Proposal Guard (`AdaptiveScheduleModal.jsx`)**:
+  - Captures a deterministic hash of the active task backlog when opened.
+  - Detects if tasks were created, updated, or reordered in the background while the proposal was open.
+  - Displays a pastel amber warning banner with a `↻ Regenerate Proposal` button and disables `Apply Schedule` until regenerated against current state.
+- **Non-Destructive Batch Application (`App.jsx`)**:
+  - Filters out any placements with `status: 'unscheduled'`, `status: 'blocked_by_dependency'`, `status: 'oversized_exceeds_capacity'`, or `proposedDate: null`. Only genuine, valid, feasible placements update `dueDate`.
+  - Preserves all other task fields (`title`, `priority`, `estimatedEffort`, `completed`, `dependencies`, `createdAt`).
+- **Deduplicated Telemetry**:
+  - Emits `recordTaskRescheduled` with `reason: 'adaptive_scheduler'` exactly once per shifted task.
+  - Emits `recordRecommendationAction` (`recommendation_accepted`) once per batch.
+  - If 0 tasks actually changed dates, no spurious rescheduling events are emitted.
+- **Proposal Review UI**:
+  - Distinct pastel status badges: `On Time` (mint), `Was Overdue` (amber), `Late` (coral), `Blocked` (muted lavender), `Manual Resolution` (soft rose), `Unscheduled` (neutral).
+  - Traceable dependency cycle callout rendering exact path loops.
+  - Explicit change counters: Planned placements vs. shifts vs. conflicts.
+
+---
+
+### Automated Test Suite Coverage
+
+- **File**: `tests/adaptive_scheduler.test.js`:
+  - Expanded from 19 tests across 7 suites to **28 tests across 8 suites** (total repo tests: **81 tests across 16 suites**, all passing):
+    1. Deterministic output, immutability, and deterministic tie-breaking.
+    2. Personal duration model integration with cold-start fallbacks and missing effort handling.
+    3. Dependency DAG handling:
+       - Multi-task linear chains.
+       - Topological ordering priority-inversion prevention (urgent child scheduled strictly after parent).
+       - Direct 2-task cycles and 3-task indirect cycles with downstream dependent propagation.
+       - Self-dependencies and missing prerequisite handling.
+       - Completed prerequisites passthrough (`t.completed === true`).
+    4. Working hours & capacity feasibility:
+       - Weekend rollover.
+       - Oversized tasks flagged for manual resolution (`oversized_exceeds_capacity`).
+       - Cumulative daily working capacity enforcement (zero day-overrun).
+    5. Deadlines, conflicts, and capacity exhaustion:
+       - Delayed deadline reporting.
+       - Overdue task recovery prioritization.
+       - Planning horizon capacity exhaustion (`unscheduled`).
+       - Accurate capacity utilization denominator calculation.
+       - Non-working day deadlines (Sunday satisfied by Friday).
+    6. Date utility functions (`formatDateISO`, `parseDateISO`, `addDaysISO`, `isWorkingDay`).
+    7. Core engine primitives and constants.
+    8. Schedule proposal safety: non-destructive filtering of invalid/blocked/oversized tasks.
+
+---
+
+### Verification Results
+
+1. **Frontend Test Suite**: `npm test`
+   - **81 tests passing across 16 suites** (0 failures, 126ms duration).
+2. **Frontend Linter**: `npm run lint` (`oxlint`)
+   - **0 errors, 0 warnings** across 28 files.
+3. **Production Build**: `npm run build` (`vite build`)
+   - Successfully generated production bundle in 215ms (`dist/assets/index-qBc7VAb_.js`, 456.68 kB / 134.89 kB gzip).
+4. **Backend Pytest Suite**: `python -m pytest backend/tests/ -v`
+   - **27 tests passing** (18 date handling tests, 9 ML & API tests).
+
+---
+
+### Known Limitations & Next Stage (Phase 4, Stage 3)
+
+1. **Multi-Day Task Splitting**: Tasks exceeding daily working capacity require manual resolution; automated sub-task chunking or multi-day span representation is deferred to Phase 4 Stage 3.
+2. **Intraday Timeblocking**: The scheduler places tasks into day-level capacity buckets rather than specific start/end clock times (e.g. 09:00 - 11:30).
+3. **Next Stage (Phase 4, Stage 3: Workload Balancing & Sprint Optimization)**:
+   - Interactive drag-and-drop slot reallocation before applying proposal.
+   - Fine-grained working calendar overrides (holidays, personal leave).
+   - Capacity heatmap visualizations across multi-sprint horizons.
+
 
 

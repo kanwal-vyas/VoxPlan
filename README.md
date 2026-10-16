@@ -45,11 +45,13 @@ LOCAL EVENT STORE & PERSONAL AI ENGINES
      │   ├─ Audited signals: Postponements (+5%/+10%), Bias Stress (+6%/-4%), Reopening (+5%)
      │   ├─ Strict bounds: clamped to ±15% with Bayesian shrinkage W / (W + 5.0)
      │   └─ Leakage protection: zero target leakage, strict timestamp <= asOfTime
-     ├─ Deterministic Adaptive Scheduler (src/scheduler/adaptiveScheduler.js)
-     │   ├─ Topological dependency DAG resolution & cycle detection
-     │   ├─ Earliest Deadline First (EDF) + priority + delay-risk heuristics
-     │   ├─ Daily working-hour capacity bin-packing & weekend rollover
-     │   └─ Safe proposal flow: non-destructive review before applying
+     ├─ Hardened Adaptive Scheduler (src/scheduler/adaptiveScheduler.js)
+     │   ├─ Kahn's topological ready-queue (strict DAG precedence over priority scores)
+     │   ├─ 3-color DFS cycle isolation, self-dependency, and downstream blocked propagation
+     │   ├─ Oversized task manual resolution (status: oversized_exceeds_capacity)
+     │   ├─ Cumulative daily capacity enforcement & accurate capacity utilization metric
+     │   ├─ Timezone-safe inclusive calendar deadlines & weekend rollover
+     │   └─ Safe proposal flow: stale-proposal guard, non-destructive filtering, deduplicated telemetry
      └─ Evidence-Based Behavioral Stats (Sparse-Data Guard < 3 tasks)
      │
      ↕ (HTTP REST, Optional Backend)
@@ -87,7 +89,8 @@ FASTAPI ML BACKEND (scikit-learn Pipeline & Batch Endpoints)
 - **Phase 3, Stage 2 (Completed)**: Personal Model Dashboard (`PersonalModelDashboard.jsx`), sample weight transparency, Bayesian shrinkage formula explainer, leak-free chronological walk-forward holdout evaluation (`evaluatePersonalDurationModel`), MAE/MdAPE baseline comparison, and honest cold-start states.
 - **Phase 3, Stage 3 (Completed)**: Guarded personal completion-risk estimation (`personalRiskModel.js`), hardened evaluation guard ($N \ge 8$), bounded personal probability shifts ($\pm 15\%$), Bayesian confidence shrinkage, and explainability modal transparency card.
 - **Phase 4, Stage 1 (Completed)**: Deterministic Adaptive Scheduling Engine (`src/scheduler/adaptiveScheduler.js`), topological DAG analysis with cycle detection, personalized duration model integration with cold-start fallbacks, daily working-hour capacity bin-packing, weekend rollover, proposal review modal (`AdaptiveScheduleModal.jsx`), safe approval flow, non-destructive diffs, and 19 unit tests (72 tests total).
-- **Phase 4, Stage 2 (Next)**: Workload balancing & sprint optimization: interactive slot re-allocation, calendar capacity overrides, and bottleneck notifications.
+- **Phase 4, Stage 2 (Completed)**: Scheduling correctness & reliability audit: Kahn's topological ready-queue (guaranteed DAG order over priority scores), explicit 3-color DFS cycle isolation, blocked dependent propagation, oversized task manual resolution (`status: 'oversized_exceeds_capacity'`), cumulative daily capacity constraint enforcement, accurate capacity utilization denominator, timezone-safe deadline policies, stale-proposal detection with one-click regeneration, non-destructive diff filtering, deduplicated telemetry, and 81 automated tests across 16 suites.
+- **Phase 4, Stage 3 (Next)**: Workload balancing & sprint optimization: interactive slot re-allocation, calendar capacity overrides, and bottleneck notifications.
 - **Phase 5**: Conversational planning dialog & debriefing.
 
 ---

@@ -602,8 +602,17 @@ export default function App() {
   };
 
   const handleApplySchedule = async (proposal) => {
-    if (!proposal || !proposal.placements) return;
-    const changedPlacements = proposal.placements.filter((p) => p.isDateChanged && p.proposedDate);
+    const placements = proposal?.proposedPlacements || proposal?.placements || [];
+    const changedPlacements = placements.filter(
+      (p) =>
+        p.status !== 'unscheduled' &&
+        p.status !== 'blocked_by_dependency' &&
+        p.status !== 'oversized_exceeds_capacity' &&
+        p.isDateChanged &&
+        p.proposedDate &&
+        p.proposedDate !== p.originalDueDate
+    );
+
     if (changedPlacements.length === 0) {
       setFeedback({
         type: 'info',
@@ -628,7 +637,7 @@ export default function App() {
 
     await telemetry.recordRecommendationAction('adaptive_schedule', proposal.summary?.scheduleId || 'proposal', true, {
       changesCount: changedPlacements.length,
-      feasibility: proposal.summary?.feasibility,
+      feasibility: proposal.summary?.feasibilityStatus || proposal.summary?.feasibility,
     });
 
     setFeedback({

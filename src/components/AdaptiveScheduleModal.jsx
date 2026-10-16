@@ -14,6 +14,26 @@ export default function AdaptiveScheduleModal({
   const [usePersonalModel, setUsePersonalModel] = useState(true);
   const [todayStr] = useState(() => formatDateISO(new Date()));
 
+  const currentTasksHash = useMemo(() => {
+    return JSON.stringify(
+      (tasks || []).map((t) => [t.id, t.dueDate, t.completed, t.estimatedEffort, t.dependencies])
+    );
+  }, [tasks]);
+
+  const [cachedSnapshotHash, setCachedSnapshotHash] = useState(currentTasksHash);
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+
+  // Synchronize snapshot hash whenever modal opens
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen);
+    if (isOpen) {
+      setCachedSnapshotHash(currentTasksHash);
+    }
+  }
+
+  // Detect if tasks were modified while the proposal modal was open
+  const isStale = Boolean(isOpen && cachedSnapshotHash && currentTasksHash !== cachedSnapshotHash);
+
   // Compute deterministic schedule proposal based on current inputs
   const proposal = useMemo(() => {
     if (!isOpen) return null;
@@ -25,22 +45,51 @@ export default function AdaptiveScheduleModal({
       guardedPredictionsMap,
       startDate: todayStr,
     });
-  }, [tasks, personalDurationModel, guardedPredictionsMap, isOpen, dailyCapacityHours, horizonDays, usePersonalModel, todayStr]);
+  }, [
+    tasks,
+    personalDurationModel,
+    guardedPredictionsMap,
+    isOpen,
+    dailyCapacityHours,
+    horizonDays,
+    usePersonalModel,
+    todayStr,
+  ]);
 
   if (!isOpen || !proposal) return null;
 
-  const { summary, placements, cycleDetected } = proposal;
-  const changesCount = summary.dateShiftsCount;
+  const summary = proposal.summary || {};
+  const placements = proposal.proposedPlacements || proposal.placements || [];
+  const cycles = summary.cycles || [];
+  const cycleDetected = summary.cycleDetected || cycles.length > 0;
+
+  // Filter valid actionable date shifts
+  const validShifts = placements.filter(
+    (p) =>
+      p.status !== 'unscheduled' &&
+      p.status !== 'blocked_by_dependency' &&
+      p.status !== 'oversized_exceeds_capacity' &&
+      p.isDateChanged &&
+      p.proposedDate !== null
+  );
+
+  const changesCount = validShifts.length;
 
   const handleApply = () => {
+    if (isStale) return;
     if (onApplySchedule) {
       onApplySchedule(proposal);
     }
     onClose();
   };
 
+  const handleRegenerate = () => {
+    setCachedSnapshotHash(currentTasksHash);
+  };
+
   const getFeasibilityBadge = () => {
-    switch (summary.feasibility) {
+    const status = summary.feasibilityStatus || summary.feasibility;
+    switch (status) {
       case 'feasible':
         return {
           label: 'Feasible Plan',
@@ -51,19 +100,19 @@ export default function AdaptiveScheduleModal({
         return {
           label: 'Deadline Conflicts',
           style: { backgroundColor: '#FFE5E0', color: '#9E2A2B', borderColor: '#FF8F82' },
-          desc: `${summary.missedDeadlinesCount} task(s) cannot meet their deadline given capacity & dependencies.`,
+          desc: `${summary.missedDeadlineCount || 0} task(s) cannot meet their deadline given capacity & dependencies.`,
         };
       case 'capacity_exceeded':
         return {
           label: 'Capacity Pressure',
           style: { backgroundColor: '#FFF3C4', color: '#92400E', borderColor: '#F59E0B' },
-          desc: `${summary.capacityExceededCount} task(s) exceed standard daily hours or horizon is strained.`,
+          desc: `${summary.oversizedCount ? `${summary.oversizedCount} oversized task(s) or ` : ''}capacity is strained.`,
         };
       case 'dependency_cycle':
         return {
-          label: 'Circular Dependency',
+          label: 'Circular / Unresolved Dependencies',
           style: { backgroundColor: '#F3EEFF', color: '#5B44BA', borderColor: '#C9B6FF' },
-          desc: 'A circular dependency was detected and broken safely without crash.',
+          desc: `${summary.blockedCount || cycles.length} task(s) are blocked by circular prerequisites or missing tasks.`,
         };
       default:
         return {
@@ -102,6 +151,19 @@ export default function AdaptiveScheduleModal({
             ✕
           </button>
         </div>
+
+        {/* Stale Proposal Alert Banner */}
+        {isStale && (
+          <div style={styles.staleBanner}>
+            <div style={styles.staleText}>
+              ⚠️ <strong>Task Data Changed:</strong> Your task backlog was modified while this proposal was open.
+              Regenerate the proposal to reflect your current tasks before applying.
+            </div>
+            <button type="button" onClick={handleRegenerate} style={styles.regenerateBtn}>
+              ↻ Regenerate Proposal
+            </button>
+          </div>
+        )}
 
         {/* Configuration Bar */}
         <div style={styles.configBar}>
@@ -162,7 +224,7 @@ export default function AdaptiveScheduleModal({
         {/* Metrics Overview Ribbon */}
         <div style={styles.metricsGrid}>
           <div style={styles.metricCard}>
-            <span style={styles.metricVal}>{summary.scheduledTasksCount} / {summary.totalTasksEvaluated}</span>
+            <span style={styles.metricVal}>{summary.scheduledCount || 0} / {summary.totalEligibleTasks || 0}</span>
             <span style={styles.metricLabel}>Tasks Scheduled</span>
           </div>
           <div style={styles.metricCard}>
@@ -172,14 +234,14 @@ export default function AdaptiveScheduleModal({
             <span style={styles.metricLabel}>Proposed Date Shifts</span>
           </div>
           <div style={styles.metricCard}>
-            <span style={{ ...styles.metricVal, color: summary.missedDeadlinesCount > 0 ? '#D9483B' : '#27754E' }}>
-              {summary.missedDeadlinesCount}
+            <span style={{ ...styles.metricVal, color: (summary.missedDeadlineCount || 0) > 0 ? '#D9483B' : '#27754E' }}>
+              {summary.missedDeadlineCount || 0}
             </span>
             <span style={styles.metricLabel}>Deadline Warnings</span>
           </div>
           <div style={styles.metricCard}>
             <span style={styles.metricVal}>
-              {summary.utilizationRatio ? `${Math.round(summary.utilizationRatio * 100)}%` : '0%'}
+              {summary.averageUtilizationPercent || 0}%
             </span>
             <span style={styles.metricLabel}>Capacity Utilization</span>
           </div>
@@ -188,8 +250,17 @@ export default function AdaptiveScheduleModal({
         {/* Cycle Alert Banner if present */}
         {cycleDetected && (
           <div style={styles.cycleAlert}>
-            ⚠️ <strong>Circular Dependency Detected:</strong> A cycle in task prerequisites was encountered.
-            The scheduler safely broke the cycle to ensure deterministic planning without infinite recursion.
+            ⚠️ <strong>Circular Dependency Detected:</strong>
+            {cycles.length > 0 ? (
+              <div style={{ marginTop: '4px', fontFamily: 'monospace', fontSize: '11px' }}>
+                {cycles.map((c, i) => (
+                  <div key={i}>• Cycle {i + 1}: {c.join(' ➔ ')}</div>
+                ))}
+              </div>
+            ) : null}
+            <div style={{ marginTop: '4px' }}>
+              Affected tasks are isolated and marked as <em>Blocked</em> rather than given a fabricated schedule.
+            </div>
           </div>
         )}
 
@@ -200,22 +271,28 @@ export default function AdaptiveScheduleModal({
             <span style={{ flex: 1.5, textAlign: 'center' }}>Original Due</span>
             <span style={{ flex: 1.5, textAlign: 'center' }}>Proposed Due</span>
             <span style={{ flex: 1.2, textAlign: 'center' }}>Effort</span>
-            <span style={{ flex: 1.2, textAlign: 'right' }}>Status</span>
+            <span style={{ flex: 1.3, textAlign: 'right' }}>Status</span>
           </div>
 
           <div style={styles.scrollList}>
             {placements.map((p) => {
-              const isShifted = p.isDateChanged;
+              const isShifted = p.isDateChanged && p.proposedDate !== null;
               let statusPillStyle = { backgroundColor: '#D4F0E2', color: '#1B5E3C' };
               let statusLabel = 'On Time';
 
-              if (p.placementStatus === 'deadline_missed') {
+              if (p.status === 'deadline_missed') {
                 statusPillStyle = { backgroundColor: '#FFE5E0', color: '#9E2A2B' };
-                statusLabel = `+${p.daysDelayed}d Late`;
-              } else if (p.placementStatus === 'overdue_at_start') {
+                statusLabel = 'Late';
+              } else if (p.status === 'overdue_at_start') {
                 statusPillStyle = { backgroundColor: '#FFF3C4', color: '#92400E' };
                 statusLabel = 'Was Overdue';
-              } else if (p.placementStatus === 'unscheduled') {
+              } else if (p.status === 'blocked_by_dependency') {
+                statusPillStyle = { backgroundColor: '#F3EEFF', color: '#5B44BA' };
+                statusLabel = 'Blocked';
+              } else if (p.status === 'oversized_exceeds_capacity') {
+                statusPillStyle = { backgroundColor: '#FEF3C7', color: '#B45309' };
+                statusLabel = 'Manual Resolution';
+              } else if (p.status === 'unscheduled') {
                 statusPillStyle = { backgroundColor: '#F1F5F9', color: '#64748B' };
                 statusLabel = 'Unscheduled';
               }
@@ -231,8 +308,13 @@ export default function AdaptiveScheduleModal({
                       )}
                     </div>
                     <span style={styles.explanationText}>
-                      {p.explanation}
+                      {p.explanation || p.placementReason}
                     </span>
+                    {p.conflicts && p.conflicts.length > 0 && (
+                      <div style={styles.conflictText}>
+                        ⚠️ {p.conflicts[0]}
+                      </div>
+                    )}
                   </div>
 
                   <div style={{ flex: 1.5, textAlign: 'center', fontSize: '12px', color: '#6B7280' }}>
@@ -245,20 +327,20 @@ export default function AdaptiveScheduleModal({
                         {p.proposedDate}
                       </span>
                     ) : (
-                      '—'
+                      <span style={{ color: '#94A3B8' }}>—</span>
                     )}
                   </div>
 
                   <div style={{ flex: 1.2, textAlign: 'center', fontSize: '12px' }}>
                     <span style={styles.effortBadge(p.durationSource)}>
-                      {p.effectiveDurationHours}h
+                      {p.effectiveHours}h
                     </span>
                     <div style={{ fontSize: '10px', color: '#888', marginTop: '2px' }}>
-                      {p.durationSource === 'personal_model' ? 'Learned' : 'Original'}
+                      {p.durationSource === 'personalized' ? 'Learned' : 'Original'}
                     </div>
                   </div>
 
-                  <div style={{ flex: 1.2, textAlign: 'right' }}>
+                  <div style={{ flex: 1.3, textAlign: 'right' }}>
                     <span style={{ ...styles.statusPill, ...statusPillStyle }}>
                       {statusLabel}
                     </span>
@@ -281,13 +363,18 @@ export default function AdaptiveScheduleModal({
             <button
               type="button"
               onClick={handleApply}
-              disabled={changesCount === 0 && summary.unscheduledTasksCount === 0}
+              disabled={isStale || changesCount === 0}
               style={{
                 ...styles.applyBtn,
-                ...((changesCount === 0 && summary.unscheduledTasksCount === 0) ? styles.applyBtnDisabled : {}),
+                ...((isStale || changesCount === 0) ? styles.applyBtnDisabled : {}),
               }}
+              title={isStale ? 'Regenerate proposal before applying' : ''}
             >
-              Apply Schedule ({changesCount} shift{changesCount === 1 ? '' : 's'})
+              {isStale
+                ? 'Proposal Stale (Regenerate)'
+                : changesCount > 0
+                ? `Apply Schedule (${changesCount} shift${changesCount === 1 ? '' : 's'})`
+                : 'No Applicable Changes'}
             </button>
           </div>
         </div>
@@ -316,7 +403,7 @@ const styles = {
     border: '2px solid #25242A',
     boxShadow: '6px 6px 0px #25242A',
     borderRadius: '16px',
-    maxWidth: '840px',
+    maxWidth: '860px',
     width: '100%',
     maxHeight: '90vh',
     display: 'flex',
@@ -330,7 +417,7 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    padding: '24px 28px 16px',
+    padding: '22px 28px 16px',
     borderBottom: '2px solid rgba(37, 36, 42, 0.08)',
     backgroundColor: '#FFFFFF',
   },
@@ -391,6 +478,31 @@ const styles = {
     color: '#71717A',
     padding: '4px 8px',
     borderRadius: '6px',
+  },
+  staleBanner: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '10px 28px',
+    backgroundColor: '#FFF9DB',
+    borderBottom: '1.5px solid #F59E0B',
+    gap: '12px',
+    fontSize: '12px',
+    color: '#92400E',
+  },
+  staleText: {
+    flex: 1,
+  },
+  regenerateBtn: {
+    backgroundColor: '#FFFFFF',
+    color: '#92400E',
+    border: '1.5px solid #F59E0B',
+    borderRadius: '6px',
+    padding: '4px 10px',
+    fontSize: '11px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
   },
   configBar: {
     display: 'flex',
@@ -493,11 +605,11 @@ const styles = {
   cycleAlert: {
     margin: '12px 28px 0',
     padding: '10px 14px',
-    backgroundColor: '#FFF3C4',
-    border: '1.5px solid #F59E0B',
+    backgroundColor: '#F3EEFF',
+    border: '1.5px solid #C9B6FF',
     borderRadius: '8px',
     fontSize: '12px',
-    color: '#92400E',
+    color: '#5B44BA',
   },
   listContainer: {
     flex: 1,
@@ -568,6 +680,12 @@ const styles = {
     color: '#71717A',
     lineHeight: 1.3,
   },
+  conflictText: {
+    fontSize: '11px',
+    color: '#D9483B',
+    fontWeight: '600',
+    marginTop: '2px',
+  },
   shiftedDateBadge: {
     backgroundColor: '#FEF3C7',
     color: '#B45309',
@@ -578,11 +696,11 @@ const styles = {
   effortBadge: (source) => ({
     fontSize: '11px',
     fontWeight: '700',
-    backgroundColor: source === 'personal_model' ? '#F3EEFF' : '#F4F4F5',
-    color: source === 'personal_model' ? '#5B44BA' : '#52525B',
+    backgroundColor: source === 'personalized' ? '#F3EEFF' : '#F4F4F5',
+    color: source === 'personalized' ? '#5B44BA' : '#52525B',
     padding: '2px 6px',
     borderRadius: '4px',
-    border: source === 'personal_model' ? '1px solid #C9B6FF' : '1px solid #E4E4E7',
+    border: source === 'personalized' ? '1px solid #C9B6FF' : '1px solid #E4E4E7',
   }),
   statusPill: {
     fontSize: '11px',

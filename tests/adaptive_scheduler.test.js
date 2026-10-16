@@ -1,7 +1,16 @@
 /**
- * Automated Unit Test Suite for VoxPlan Adaptive Scheduling Engine.
- * Tests deterministic placement, dependency constraints, personalized duration use,
- * working hours/capacity boundaries, infeasibility detection, and immutability.
+ * Automated Unit & Reliability Test Suite for VoxPlan Adaptive Scheduling Engine (Phase 4, Stage 2).
+ *
+ * Verifies:
+ * - 100% Deterministic output across runs and stable tie-breaking.
+ * - Topological dependency ordering, Kahn's algorithm, and cycle detection.
+ * - Explicit cycle and self-dependency isolation without artificial schedule fabrication.
+ * - Priority inversion protection (hard dependency invariants cannot be bypassed by urgency).
+ * - Oversized task detection and manual resolution requirements.
+ * - Strict working hour enforcement without cumulative daily capacity overruns.
+ * - Accurate capacity utilization denominator (scheduled workload / available working hours).
+ * - Non-working day deadlines (Friday completion meets Sunday deadline).
+ * - Safe proposal application filtering and immutability guarantees.
  */
 
 import { describe, it } from 'node:test';
@@ -39,6 +48,7 @@ describe('1. Deterministic Output & Immutability', () => {
     assert.equal(run1.proposedPlacements.length, 3);
     assert.equal(run1.summary.scheduledCount, 3);
     assert.equal(run1.summary.feasibilityStatus, 'feasible');
+    assert.equal(run1.summary.scheduleId, run2.summary.scheduleId);
   });
 
   it('Guarantees pure function execution without mutating input task objects or collections', () => {
@@ -143,17 +153,87 @@ describe('3. Dependency Ordering & Chain Constraints', () => {
     assert.ok(childPlacement.assignedDayIndex >= parentPlacement.assignedDayIndex);
   });
 
-  it('Detects circular dependency cycles gracefully without crashing or entering infinite loops', () => {
+  it('Detects circular dependency cycles and isolates affected tasks without inventing valid ordering', () => {
     const cycleTasks = [
       { id: 'cycle-1', title: 'Cycle 1', estimatedEffort: 2.0, dependencies: ['cycle-2'] },
       { id: 'cycle-2', title: 'Cycle 2', estimatedEffort: 2.0, dependencies: ['cycle-1'] },
+      { id: 'cycle-child', title: 'Dependent on Cycle', estimatedEffort: 2.0, dependencies: ['cycle-1'] },
     ];
 
     const result = generateAdaptiveSchedule(cycleTasks, { startDate: '2026-10-19' });
     assert.equal(result.summary.feasibilityStatus, 'dependency_cycle');
     assert.ok(result.summary.warnings.some((w) => w.includes('circular dependency')));
-    // Both tasks are still scheduled rather than silently dropped
-    assert.equal(result.proposedPlacements.length, 2);
+
+    // All 3 tasks are present in proposedPlacements (never silently dropped), but marked blocked without a fake date
+    assert.equal(result.proposedPlacements.length, 3);
+    for (const p of result.proposedPlacements) {
+      assert.equal(p.status, 'blocked_by_dependency');
+      assert.equal(p.proposedDate, null);
+      assert.equal(p.assignedDayIndex, -1);
+      assert.ok(p.conflicts.length > 0);
+    }
+  });
+
+  it('Identifies self-dependencies and marks task as blocked', () => {
+    const selfTask = [
+      { id: 'self-1', title: 'Self Task', estimatedEffort: 2.0, dependencies: ['self-1'] },
+    ];
+
+    const result = generateAdaptiveSchedule(selfTask, { startDate: '2026-10-19' });
+    assert.equal(result.proposedPlacements.length, 1);
+    const p = result.proposedPlacements[0];
+    assert.equal(p.status, 'blocked_by_dependency');
+    assert.equal(p.proposedDate, null);
+    assert.ok(p.conflicts.some((c) => c.includes('Self-dependency')));
+  });
+
+  it('Identifies missing prerequisite IDs and blocks dependent tasks', () => {
+    const missingTask = [
+      { id: 'orphan-1', title: 'Orphan Task', estimatedEffort: 2.0, dependencies: ['non-existent-task-999'] },
+    ];
+
+    const result = generateAdaptiveSchedule(missingTask, { startDate: '2026-10-19' });
+    assert.equal(result.proposedPlacements.length, 1);
+    const p = result.proposedPlacements[0];
+    assert.equal(p.status, 'blocked_by_dependency');
+    assert.equal(p.proposedDate, null);
+    assert.ok(p.conflicts.some((c) => c.includes('Missing prerequisite')));
+  });
+
+  it('Prevents priority inversion: urgent dependent task is never scheduled before its prerequisite', () => {
+    // Task B depends on Task A. Task B has an overdue deadline (highest priority urgency!).
+    // Task A has a normal deadline in the future.
+    // Hard topological constraint MUST schedule Task A before Task B!
+    const tasks = [
+      { id: 'task-a', title: 'Prereq A', estimatedEffort: 4.0, dueDate: '2026-10-25' },
+      { id: 'task-b', title: 'Urgent Dependent B', estimatedEffort: 4.0, dueDate: '2026-10-15', dependencies: ['task-a'] }, // Overdue!
+    ];
+
+    const result = generateAdaptiveSchedule(tasks, {
+      startDate: '2026-10-19',
+      dailyCapacityHours: 6.0,
+    });
+
+    const pA = result.proposedPlacements.find((p) => p.taskId === 'task-a');
+    const pB = result.proposedPlacements.find((p) => p.taskId === 'task-b');
+
+    assert.equal(pA.proposedDate, '2026-10-19'); // Monday
+    assert.equal(pB.proposedDate, '2026-10-20'); // Tuesday (cannot jump ahead of A!)
+    assert.ok(pB.assignedDayIndex > pA.assignedDayIndex);
+  });
+
+  it('Ignores already completed prerequisites and schedules dependent task normally', () => {
+    const tasks = [
+      { id: 't-done', title: 'Completed Prereq', estimatedEffort: 2.0, completed: true },
+      { id: 't-active-child', title: 'Active Child', estimatedEffort: 2.0, dependencies: ['t-done'], completed: false },
+    ];
+
+    const result = generateAdaptiveSchedule(tasks, { startDate: '2026-10-19' });
+    assert.equal(result.proposedPlacements.length, 1); // Only active task is scheduled
+    const pChild = result.proposedPlacements[0];
+    assert.equal(pChild.taskId, 't-active-child');
+    assert.equal(pChild.proposedDate, '2026-10-19');
+    assert.equal(pChild.status, 'on_time');
   });
 });
 
@@ -178,7 +258,7 @@ describe('4. Working Hours, Weekends, and Daily Capacity Allocation', () => {
     assert.equal(monPlacement.proposedDate, '2026-10-26'); // Monday (skipped Sat 24 and Sun 25!)
   });
 
-  it('Flags tasks larger than daily capacity and allocates them as priority focus', () => {
+  it('Flags tasks larger than daily capacity and marks them for manual resolution', () => {
     const tasks = [
       { id: 't-huge', title: 'Huge Refactoring', estimatedEffort: 10.0, dueDate: '2026-10-21' },
     ];
@@ -189,8 +269,36 @@ describe('4. Working Hours, Weekends, and Daily Capacity Allocation', () => {
     });
 
     const placement = result.proposedPlacements[0];
-    assert.equal(placement.proposedDate, '2026-10-19');
-    assert.ok(placement.conflicts.some((c) => c.includes('exceeding single-day focus capacity')));
+    assert.equal(placement.status, 'oversized_exceeds_capacity');
+    assert.equal(placement.proposedDate, null);
+    assert.equal(placement.assignedDayIndex, -1);
+    assert.ok(placement.conflicts.some((c) => c.includes('exceeds daily capacity limit')));
+    assert.equal(result.summary.feasibilityStatus, 'capacity_exceeded');
+  });
+
+  it('Strictly enforces daily working hours without cumulative day capacity overrun', () => {
+    // 3 tasks of 4.0h. Capacity = 6.0h.
+    // Day 1 (Oct 19): Task 1 (4h). Remaining = 2h. Task 2 cannot fit (needs 4h) -> rolls to Day 2!
+    // Day 2 (Oct 20): Task 2 (4h). Remaining = 2h. Task 3 rolls to Day 3!
+    // Day 3 (Oct 21): Task 3 (4h).
+    const tasks = [
+      { id: 't-cap-1', title: 'Task 1', estimatedEffort: 4.0 },
+      { id: 't-cap-2', title: 'Task 2', estimatedEffort: 4.0 },
+      { id: 't-cap-3', title: 'Task 3', estimatedEffort: 4.0 },
+    ];
+
+    const result = generateAdaptiveSchedule(tasks, {
+      startDate: '2026-10-19',
+      dailyCapacityHours: 6.0,
+    });
+
+    for (const day of result.dayAllocations) {
+      assert.ok(day.totalHours <= 6.0, `Day ${day.date} exceeded 6.0h capacity: ${day.totalHours}h`);
+    }
+
+    assert.equal(result.proposedPlacements[0].proposedDate, '2026-10-19');
+    assert.equal(result.proposedPlacements[1].proposedDate, '2026-10-20');
+    assert.equal(result.proposedPlacements[2].proposedDate, '2026-10-21');
   });
 });
 
@@ -258,6 +366,46 @@ describe('5. Deadlines, Conflicts, and Capacity Exhaustion', () => {
     assert.equal(unscheduled.length, 3);
     assert.equal(unscheduled[0].proposedDate, null);
     assert.ok(unscheduled[0].conflicts.some((c) => c.includes('Cannot fit within 2-day horizon')));
+  });
+
+  it('Calculates accurate capacity utilization based on scheduled workload and total available capacity', () => {
+    // 2 tasks of 3h = 6h.
+    // Horizon = 7 days (starts on Monday 2026-10-19 -> 5 working days Mon-Fri, 30h total capacity).
+    // Utilization should be 6 / 30 = 20%.
+    const tasks = [
+      { id: 't-util-1', title: 'Task 1', estimatedEffort: 3.0 },
+      { id: 't-util-2', title: 'Task 2', estimatedEffort: 3.0 },
+    ];
+
+    const result = generateAdaptiveSchedule(tasks, {
+      startDate: '2026-10-19', // Monday
+      horizonDays: 7,          // 5 working days Mon-Fri (30h capacity)
+      dailyCapacityHours: 6.0,
+    });
+
+    assert.equal(result.summary.scheduledWorkloadHours, 6.0);
+    assert.equal(result.summary.totalCapacityHours, 30.0);
+    assert.equal(result.summary.averageUtilizationPercent, 20);
+    assert.equal(result.summary.utilizationRatio, 0.20);
+  });
+
+  it('Considers deadlines on non-working days (Sunday) satisfied if finished on preceding working day (Friday)', () => {
+    // Starts on Friday 2026-10-23.
+    // Task is 2h, due on Sunday 2026-10-25 (weekend).
+    // Scheduled on Friday Oct 23 -> On Time!
+    const tasks = [
+      { id: 't-weekend-due', title: 'Weekend Due', estimatedEffort: 2.0, dueDate: '2026-10-25' },
+    ];
+
+    const result = generateAdaptiveSchedule(tasks, {
+      startDate: '2026-10-23',
+      dailyCapacityHours: 6.0,
+    });
+
+    const p = result.proposedPlacements[0];
+    assert.equal(p.proposedDate, '2026-10-23');
+    assert.equal(p.status, 'on_time');
+    assert.equal(p.conflicts.length, 0);
   });
 });
 
@@ -333,5 +481,41 @@ describe('7. Core Engine Primitives & Constants', () => {
     });
 
     assert.ok(scoreUrgent > scoreNormal, 'Urgent task with high priority and risk should score higher');
+  });
+});
+
+describe('8. Schedule Proposal Safety & Application Integrity', () => {
+  it('Filters out invalid, unscheduled, blocked, or oversized placements from date application', () => {
+    const placements = [
+      { taskId: 't1', status: 'on_time', isDateChanged: true, originalDueDate: '2026-10-20', proposedDate: '2026-10-19' },
+      { taskId: 't2', status: 'blocked_by_dependency', isDateChanged: false, originalDueDate: '2026-10-25', proposedDate: null },
+      { taskId: 't3', status: 'oversized_exceeds_capacity', isDateChanged: false, originalDueDate: '2026-10-25', proposedDate: null },
+      { taskId: 't4', status: 'unscheduled', isDateChanged: false, originalDueDate: '2026-10-25', proposedDate: null },
+      { taskId: 't5', status: 'on_time', isDateChanged: false, originalDueDate: '2026-10-20', proposedDate: '2026-10-20' },
+    ];
+
+    const validChanges = placements.filter(
+      (p) =>
+        p.status !== 'unscheduled' &&
+        p.status !== 'blocked_by_dependency' &&
+        p.status !== 'oversized_exceeds_capacity' &&
+        p.isDateChanged &&
+        p.proposedDate &&
+        p.proposedDate !== p.originalDueDate
+    );
+
+    assert.equal(validChanges.length, 1);
+    assert.equal(validChanges[0].taskId, 't1');
+    assert.equal(validChanges[0].proposedDate, '2026-10-19');
+  });
+
+  it('Tie-breaks identically on identical priority scores using stable taskId', () => {
+    const task1 = { id: 'task-alpha', priority: 'medium', estimatedEffort: 2.0 };
+    const task2 = { id: 'task-beta', priority: 'medium', estimatedEffort: 2.0 };
+
+    const result = generateAdaptiveSchedule([task2, task1], { startDate: '2026-10-19', dailyCapacityHours: 6.0 });
+    // Stable locale comparison ensures 'task-alpha' is evaluated before 'task-beta'
+    assert.equal(result.proposedPlacements[0].taskId, 'task-alpha');
+    assert.equal(result.proposedPlacements[1].taskId, 'task-beta');
   });
 });
