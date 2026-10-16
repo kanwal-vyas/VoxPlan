@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import TaskCard from './TaskCard';
+import { estimateTaskDuration } from '../telemetry/personalModel';
 
 export default function TaskList({
   tasks,
   predictionsMap,
+  personalDurationModel,
   activeFilter,
   onChangeFilter,
   onToggleComplete,
@@ -98,12 +100,15 @@ export default function TaskList({
             const canMoveUp = globalIndex > 0;
             const canMoveDown = globalIndex >= 0 && globalIndex < tasks.length - 1;
 
+            const durationEstimate = estimateTaskDuration(personalDurationModel, task);
+
             return (
               <TaskCard
                 key={task.id}
                 index={index}
                 task={task}
                 prediction={predictionsMap[task.id]}
+                durationEstimate={durationEstimate}
                 onToggleComplete={onToggleComplete}
                 onDelete={onDelete}
                 onUpdateTitle={onUpdateTitle}

@@ -7,7 +7,7 @@ VoxPlan is being evolved from a student/sprint task tracker into an independent,
 
 ---
 
-## Current Architecture & System State (Phase 2)
+## Current Architecture & System State (Phase 3, Stage 1)
 
 ```
 BROWSER WEB SPEECH API / TEXT INPUT
@@ -16,19 +16,27 @@ BROWSER WEB SPEECH API / TEXT INPUT
                  ↓
 VOXPLAN COMMAND ENGINE (Deterministic NL Parser)
                  ↓
+SHARED TASK LIFECYCLE ENGINE (taskLifecycle.js)
+     │
+     ├─ Idempotent State Transitions (complete / reopen / delete)
+     ├─ Active Stopwatch Session Finalization & Duration Classification
+     └─ Reliable Behavioral Telemetry Event Generation
+                 ↓
 REACT / VITE DASHBOARD (Client State & Local-First Architecture)
      │
      ├─ Dynamic Task Roadmap (Real User Tasks & Dates)
      ├─ Dynamic Risk Visualizations (Genuine Model Probabilities)
      ├─ Interactive Stopwatch Timers (Start / Pause / Resume)
      ├─ Behavioral History & Habit Insights (Section 04)
+     ├─ Personal Duration Estimator (Weighted Median + Empirical Bayesian Shrinkage)
      ├─ Offline-Resilient Local State (Tasks & Active Timers)
      │
      ↕ (IndexedDB: voxplan_db)
-LOCAL EVENT STORE & TELEMETRY ENGINE
+LOCAL EVENT STORE & PERSONAL MODEL ENGINE
      ├─ Stable Profile Isolation (prof_<uuid>)
      ├─ 11 Versioned Event Types (Schema v1)
      ├─ Honest Duration Accounting (Tracked vs Self-Reported vs Unknown)
+     ├─ Local Personal Duration Estimator (personalModel.js)
      └─ Evidence-Based Behavioral Stats (Sparse-Data Guard < 3 tasks)
      │
      ↕ (HTTP REST, Optional Backend)
@@ -61,7 +69,8 @@ FASTAPI ML BACKEND (scikit-learn Pipeline & Batch Endpoints)
 ### 4. Personalization Roadmap
 - **Phase 1 (Completed)**: Unified arbitrary date parsing, task schema normalization, complete de-mocking of metrics and demo fallbacks, dynamic task-risk visualizations, and browser Web Speech integration.
 - **Phase 2 (Completed)**: Local-first IndexedDB persistence, behavioral telemetry event schema (11 event types), stopwatch working duration vs. self-reported vs. unknown duration, inline reschedule/effort/reorder instrumentation, sparse-data honest behavioral statistics (< 3 completions), Behavioral History & Habit Insights UI panel with JSON export and history deletion, and automated test suite.
-- **Phase 3 (Next)**: Personalized hybrid model adapting baseline predictions to actual user velocity, completion latency, and estimation accuracy.
+- **Phase 3, Stage 1 (Completed)**: Telemetry repair (command-bar lifecycle convergence, active timer finalization, idempotency) & transparent, local-first Personal Duration Estimator (`personalModel.js`) using weighted median and empirical Bayesian shrinkage toward 1.0. Dual duration badges on task cards.
+- **Phase 3, Stage 2 (Next)**: Personal Model Panel UI & hybrid completion-risk prediction (adapting synthetic baseline with empirical personal velocity).
 - **Phase 4**: Adaptive scheduling assistant and optimal task calendar allocation.
 - **Phase 5**: Conversational planning dialog & debriefing.
 
@@ -104,6 +113,60 @@ Every user action is recorded as an immutable, validated event with UUID v4 iden
 - Users can inspect their complete behavioral profile in Section 04 of the dashboard.
 - **Export**: One-click download of all telemetry events as standard JSON.
 - **Clear History**: Double-confirmed permanent deletion of profile telemetry from IndexedDB without affecting active tasks.
+
+---
+
+## Personal Duration Estimator & Telemetry Repair (Phase 3, Stage 1)
+
+Phase 3, Stage 1 repairs task completion telemetry across all natural language and UI input paths and introduces a local-first, evidence-based Personal Duration Estimator that learns personal effort-bias without backend dependencies or cloud services.
+
+### 1. Telemetry Convergence & Lifecycle Engine (`src/telemetry/taskLifecycle.js`)
+Previously, natural language voice and text commands mutated task status directly without executing stopwatch timer finalization or recording validated telemetry events.
+- **Unified Lifecycle**: Command-bar actions now route directly through `completeTaskLifecycle()` and `reopenTaskLifecycle()`, sharing identical logic with the interactive task card buttons.
+- **Active Timer Finalization**: Completing a task with a running stopwatch timer automatically finalizes the active session, calculates accurate elapsed working seconds excluding pauses, and attributes the duration as `duration_source: 'tracked'`.
+- **Idempotency & Duplicate Protection**: Executing repeated completion or reopening commands checks current state and returns `already_completed` or `already_open`. No duplicate telemetry events are generated.
+- **Duration Source Truth**: Duration is classified strictly as `tracked` (measured via stopwatch), `self_reported` (user prompt), or `unknown` (unmeasured). Unmeasured tasks store `null` elapsed duration rather than fabricating zero.
+
+### 2. Observation Eligibility & Privacy Safeguards (`src/telemetry/personalModel.js`)
+The estimator reconstructs personal work patterns exclusively from the local browser IndexedDB store:
+- **Observation Units**: Historical tasks joined by stable `task_id`.
+- **Reopening Policy**: Intermediate completions of reopened tasks are ignored; only the final completion state of a completed task is evaluated to prevent double-counting.
+- **Plausibility Filters**: Durations outside the range $[0.01\text{ hours}, 200.0\text{ hours}]$ ($36\text{ seconds}$ to $200\text{ hours}$) are excluded as non-finite or implausible artifacts.
+- **Ratio Requirements**: Tasks lacking a valid positive estimated effort ($> 0$) are excluded from effort-ratio calculations.
+- **Target Leakage Safeguard**: Post-completion attributes (actual completion time, tracked duration, duration source) are **never** used as prediction inputs. Prediction utilizes strictly pre-completion planning inputs (`estimatedEffort`, `category`).
+- **Zero Backend Exposure**: Personal telemetry remains 100% within the browser. Clearing history via the UI permanently wipes all observations and immediately restores the model to cold-start.
+
+### 3. Personal Effort-Bias Correction Formula
+For each eligible completed task $i$, the effort ratio is:
+$$r_i = \frac{\text{observed\_duration\_hours}_i}{\text{original\_estimated\_effort\_hours}_i}$$
+
+Each observation is weighted by evidence reliability:
+- **Tracked Stopwatch Sessions**: $w_i = 1.0$ (highest fidelity).
+- **Self-Reported Sessions**: $w_i = 0.5$ (lower weight to account for recall bias).
+- **Unknown Duration**: $w_i = 0.0$ (excluded from ratio).
+
+The central bias ratio is computed using a **Weighted Median**:
+$$r_{med} = \text{WeightedMedian}\left(\left\{(r_i, w_i)\right\}\right)$$
+
+To protect against extreme ratios from sparse observations, an **Empirical Bayesian Shrinkage** is applied toward a neutral ratio of $1.0$:
+$$r_{adjusted} = \frac{W \cdot r_{med} + K \cdot 1.0}{W + K}$$
+where $W = \sum w_i$ is the total effective observation weight and $K = 3.0$ is the shrinkage strength constant.
+
+The predicted duration is then:
+$$\hat{D} = \text{user\_estimate\_hours} \times r_{adjusted}$$
+
+### 4. Sample Size Tiers & Honest Uncertainty
+The estimator transparently signals sample maturity and avoids presenting heuristic intervals as calibrated statistical confidence intervals:
+- **`cold_start`** ($W = 0$): Returns original estimate unmodified. "Using your original estimate (no completed task history yet)".
+- **`sparse`** ($0 < W < 3$): Returns original estimate unmodified. "Collecting observations ($X$ recorded, 3 needed to adjust)".
+- **`developing`** ($3 \le W < 8$): Applies conservative shrinkage adjustment. "Adjusted using your observed task durations ($X$ observations)".
+- **`supported`** ($W \ge 8$): Applies full personal adjustment with empirical heuristic spread $[r_{p25} \dots r_{p75}]$.
+- **`unavailable`**: If the task lacks an initial effort estimate, personal duration prediction is explicitly marked unavailable.
+
+### 5. UI Integration & Task Cards
+- **Dual Duration Pill**: Task cards display the original estimate alongside the adjusted prediction when supported by genuine data (e.g., `⏱️ 2h → ~2.6h (4)`).
+- **Explanatory Tooltip**: Hovering discloses the exact sample count, effective weight, bias ratio, empirical range, and plain-English explanation.
+- **Baseline Distinction**: The completion-risk classifier remains a synthetic Random Forest baseline; duration estimation is explicitly labeled as the sole personalized component in Stage 1.
 
 ---
 

@@ -42,6 +42,7 @@ export default function TaskCard({
   index,
   task,
   prediction,
+  durationEstimate,
   onToggleComplete,
   onDelete,
   onUpdateTitle,
@@ -488,16 +489,37 @@ export default function TaskCard({
               <button type="button" onClick={() => setIsEditingEffort(false)} style={styles.smallCancelBtn}>✕</button>
             </div>
           ) : task.estimatedEffort != null ? (
-            <span
-              style={styles.effortBadge}
+            <div
+              style={styles.durationPillGroup}
               onClick={(e) => {
                 e.stopPropagation();
                 if (!task.completed) setIsEditingEffort(true);
               }}
-              title="Click to edit estimated effort hours"
+              title={
+                durationEstimate &&
+                (durationEstimate.personalization_status === 'sparse' ||
+                 durationEstimate.personalization_status === 'developing' ||
+                 durationEstimate.personalization_status === 'supported')
+                  ? `Estimate: ${task.estimatedEffort}h → Adjusted to ~${durationEstimate.predicted_duration_hours}h (${durationEstimate.explanation}) ${durationEstimate.uncertainty ? `[${durationEstimate.uncertainty.range_label}: ${durationEstimate.uncertainty.low_hours}h - ${durationEstimate.uncertainty.high_hours}h]` : ''}. Click to edit.`
+                  : `Estimated effort: ${task.estimatedEffort}h · VoxPlan is learning your pace (requires measured completions). Click to edit.`
+              }
             >
-              ⏱️ {task.estimatedEffort}h
-            </span>
+              <span style={styles.effortBadge}>
+                ⏱️ {task.estimatedEffort}h
+              </span>
+              {durationEstimate &&
+                (durationEstimate.personalization_status === 'sparse' ||
+                 durationEstimate.personalization_status === 'developing' ||
+                 durationEstimate.personalization_status === 'supported') &&
+                durationEstimate.predicted_duration_hours !== null && (
+                  <span style={styles.predictedDurationBadge}>
+                    → ~{durationEstimate.predicted_duration_hours}h
+                    <span style={styles.obsCountBadge} title={`Based on ${durationEstimate.eligible_observation_count} measured tasks`}>
+                      ({durationEstimate.eligible_observation_count})
+                    </span>
+                  </span>
+              )}
+            </div>
           ) : !task.completed ? (
             <button
               type="button"
@@ -506,7 +528,7 @@ export default function TaskCard({
                 setIsEditingEffort(true);
               }}
               style={styles.addEffortBtn}
-              title="Set estimated effort"
+              title="Set estimated effort to view personalized duration predictions"
             >
               + effort
             </button>
@@ -845,6 +867,32 @@ const styles = {
     fontSize: '10px',
     padding: '2px 5px',
     cursor: 'pointer',
+  },
+  durationPillGroup: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '5px',
+    cursor: 'pointer',
+    flexWrap: 'wrap',
+  },
+  predictedDurationBadge: {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '11px',
+    fontWeight: '700',
+    color: '#6366F1',
+    backgroundColor: '#EEF2FF',
+    border: '1px solid #C7D2FE',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '3px',
+    letterSpacing: '0.02em',
+  },
+  obsCountBadge: {
+    fontSize: '9px',
+    fontWeight: '600',
+    color: '#818CF8',
   },
   effortBadge: {
     fontFamily: "'JetBrains Mono', monospace",

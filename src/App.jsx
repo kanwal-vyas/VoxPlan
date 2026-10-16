@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import './App.css';
 
 import Header from './components/Header';
@@ -13,6 +13,8 @@ import LoadingScreen from './components/LoadingScreen';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { initCinematicScrollStory } from './animations/scrollStory';
 import { telemetry } from './telemetry/telemetryManager';
+import { completeTaskLifecycle, reopenTaskLifecycle } from './telemetry/taskLifecycle';
+import { buildPersonalDurationModel } from './telemetry/personalModel';
 import {
   checkBackendHealth,
   getModelStatus,
@@ -173,6 +175,20 @@ export default function App() {
     telemetry.init();
   }, []);
 
+  // Personal Duration Model state derived from local IndexedDB telemetry
+  const [telemetryEvents, setTelemetryEvents] = useState(() => telemetry.eventsCache);
+
+  useEffect(() => {
+    const unsub = telemetry.subscribe((events) => {
+      setTelemetryEvents([...events]);
+    });
+    return unsub;
+  }, []);
+
+  const personalDurationModel = useMemo(() => {
+    return buildPersonalDurationModel(telemetryEvents, tasks);
+  }, [telemetryEvents, tasks]);
+
   // ML State (truthfully initialized to empty/untrained state, without fabricated metrics)
   const [isBackendOnline, setIsBackendOnline] = useState(false);
   const [modelStatus, setModelStatus] = useState(UNTRAINED_MODEL_STATUS);
@@ -234,14 +250,9 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [feedback]);
 
-  const tasksRef = useRef(tasks);
-  useEffect(() => {
-    tasksRef.current = tasks;
-  }, [tasks]);
-
   // Fetch ML status and predictions from backend
   const refreshMLState = useCallback(async (customTasks) => {
-    const activeTasks = customTasks || tasksRef.current;
+    const activeTasks = customTasks || tasks;
     const health = await checkBackendHealth();
     setIsBackendOnline(health.online);
 
@@ -276,7 +287,7 @@ export default function App() {
     } catch (err) {
       console.warn('Error refreshing ML state:', err);
     }
-  }, []);
+  }, [tasks]);
 
   // Initial load: verify backend once on mount and gentle polling every 30s
   useEffect(() => {
@@ -434,68 +445,84 @@ export default function App() {
     setActiveTimerState(updatedState);
   };
 
-  // Task Operations with Telemetry Logging
-  const toggleTaskCompletion = async (taskId, durationInfo = {}) => {
+  // Task Operations with Telemetry Logging & Shared Lifecycle Transitions
+  const completeTask = async (taskId, durationInfo = {}) => {
     const target = tasks.find((t) => t.id === taskId);
     if (!target) return;
 
-    if (target.completed) {
-      // Reopen task
-      setTasks((prev) =>
-        prev.map((t) => (t.id === taskId ? { ...t, completed: false, completedAt: null } : t))
-      );
-      await telemetry.recordTaskReopened(taskId);
-      setFeedback({
-        type: 'info',
-        message: `Reopened task: "${target.title}"`,
-      });
+    const result = await completeTaskLifecycle({
+      task: target,
+      activeTimerState,
+      durationInfo,
+      stopTimerFn: (tid) => telemetry.stopTimer(tid),
+    });
+
+    if (!result.success) {
+      if (result.reason === 'already_completed') {
+        setFeedback({
+          type: 'info',
+          message: `Task is already completed: "${target.title}"`,
+        });
+      }
       return;
     }
 
-    // Completing uncompleted task
-    let finalTrackedSec = null;
-    if (activeTimerState && activeTimerState.taskId === taskId) {
-      finalTrackedSec = await telemetry.stopTimer(taskId);
+    if (result.timerStopped) {
       setActiveTimerState(null);
     }
 
-    const trackedSec = durationInfo.durationSource === 'tracked'
-      ? (durationInfo.trackedDurationSeconds ?? finalTrackedSec ?? 0)
-      : (finalTrackedSec || 0);
-
-    const effectiveDurationInfo = {
-      durationSource: durationInfo.durationSource || (trackedSec > 0 ? 'tracked' : 'unknown'),
-      trackedDurationSeconds: trackedSec > 0 ? trackedSec : null,
-      selfReportedDurationSeconds: durationInfo.selfReportedDurationSeconds || null,
-    };
-
     setTasks((prev) =>
-      prev.map((t) =>
-        t.id === taskId
-          ? {
-              ...t,
-              completed: true,
-              completedAt: new Date().toISOString(),
-              durationSource: effectiveDurationInfo.durationSource,
-              trackedDurationSeconds: effectiveDurationInfo.trackedDurationSeconds,
-              selfReportedDurationSeconds: effectiveDurationInfo.selfReportedDurationSeconds,
-            }
-          : t
-      )
+      prev.map((t) => (t.id === taskId ? result.updatedTask : t))
     );
 
-    await telemetry.recordTaskCompleted(taskId, effectiveDurationInfo);
+    await telemetry.recordTaskCompleted(taskId, result.telemetryPayload);
 
     setFeedback({
       type: 'success',
       message: `Completed task: "${target.title}"${
-        effectiveDurationInfo.durationSource === 'tracked'
-          ? ` (${Math.round(effectiveDurationInfo.trackedDurationSeconds / 60)}m timed)`
-          : effectiveDurationInfo.durationSource === 'self_reported'
-          ? ` (${Math.round(effectiveDurationInfo.selfReportedDurationSeconds / 60)}m reported)`
+        result.telemetryPayload.durationSource === 'tracked'
+          ? ` (${Math.round((result.telemetryPayload.trackedDurationSeconds || 0) / 60)}m timed)`
+          : result.telemetryPayload.durationSource === 'self_reported'
+          ? ` (${Math.round((result.telemetryPayload.selfReportedDurationSeconds || 0) / 60)}m reported)`
           : ''
       }`,
     });
+  };
+
+  const reopenTask = async (taskId) => {
+    const target = tasks.find((t) => t.id === taskId);
+    if (!target) return;
+
+    const result = reopenTaskLifecycle({ task: target });
+    if (!result.success) {
+      if (result.reason === 'already_open') {
+        setFeedback({
+          type: 'info',
+          message: `Task is already pending: "${target.title}"`,
+        });
+      }
+      return;
+    }
+
+    setTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? result.updatedTask : t))
+    );
+
+    await telemetry.recordTaskReopened(taskId);
+
+    setFeedback({
+      type: 'info',
+      message: `Reopened task: "${target.title}"`,
+    });
+  };
+
+  const toggleTaskCompletion = async (taskId, durationInfo = {}) => {
+    const target = tasks.find((t) => t.id === taskId);
+    if (!target) return;
+    if (target.completed) {
+      return reopenTask(taskId);
+    }
+    return completeTask(taskId, durationInfo);
   };
 
   const deleteTask = (taskId) => {
@@ -585,7 +612,7 @@ export default function App() {
   };
 
   // Comprehensive Natural Language & Voice Command Parser
-  const executeCommand = (rawText) => {
+  const executeCommand = async (rawText) => {
     const text = rawText.trim().replace(/[.!?]+$/, '');
     if (!text) return;
 
@@ -666,7 +693,7 @@ export default function App() {
       return;
     }
 
-    // 8. Task Command: Uncomplete / Mark as pending
+    // 8. Task Command: Uncomplete / Mark as pending (routed via reopenTask)
     const markPendingMatch = text.match(/^mark\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+as\s+(?:pending|incomplete|uncompleted|not\s+done|open)$/i);
     const uncompleteMatch = text.match(/^(?:uncomplete|uncheck|reopen)\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+)$/i);
 
@@ -680,15 +707,11 @@ export default function App() {
         });
         return;
       }
-      setTasks((prev) => prev.map((t) => (t.id === target.id ? { ...t, completed: false } : t)));
-      setFeedback({
-        type: 'success',
-        message: `Uncompleted task: ${target.title}`,
-      });
+      await reopenTask(target.id);
       return;
     }
 
-    // 9. Task Command: Complete / Mark as completed
+    // 9. Task Command: Complete / Mark as completed (routed via completeTask)
     const markCompletedMatch = text.match(/^mark\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+as\s+(?:completed|complete|done|finished)$/i);
     const completeMatch = text.match(/^(?:complete|finish|check)\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+)$/i);
 
@@ -702,15 +725,11 @@ export default function App() {
         });
         return;
       }
-      setTasks((prev) => prev.map((t) => (t.id === target.id ? { ...t, completed: true } : t)));
-      setFeedback({
-        type: 'success',
-        message: `Completed task: ${target.title}`,
-      });
+      await completeTask(target.id);
       return;
     }
 
-    // 10. Task Command: Delete task
+    // 10. Task Command: Delete task (routed via deleteTask)
     const deleteMatch = text.match(/^(?:delete|remove)\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+)$/i);
     if (deleteMatch) {
       const taskName = deleteMatch[1].trim();
@@ -722,11 +741,7 @@ export default function App() {
         });
         return;
       }
-      setTasks((prev) => prev.filter((t) => t.id !== target.id));
-      setFeedback({
-        type: 'success',
-        message: `Deleted task: ${target.title}`,
-      });
+      deleteTask(target.id);
       return;
     }
 
@@ -1008,6 +1023,7 @@ export default function App() {
         <TaskList
           tasks={tasks}
           predictionsMap={predictionsMap}
+          personalDurationModel={personalDurationModel}
           activeFilter={activeFilter}
           onChangeFilter={setActiveFilter}
           onToggleComplete={toggleTaskCompletion}

@@ -10,7 +10,8 @@ This document tracks the phased evolution of VoxPlan from a static task tracker 
 |---|---|---|---|
 | **Phase 1** | Foundation, Date Unification & De-mocking | **COMPLETED** | Consistent task schema, arbitrary calendar date handling, removal of demo metric fallbacks, dynamic task-risk visualizations, honest browser Web Speech API, backwards-compatible localStorage migration. |
 | **Phase 2** | Local Persistence & Behavioral Telemetry | **COMPLETED** | Local-first IndexedDB event store, versioned behavioral schema (11 event types), explicit stopwatch working duration vs self-reported vs unknown duration, inline reschedule/effort/reorder instrumentation, sparse-data honest behavioral statistics (< 3 completions), Behavioral History & Habit Insights UI panel with JSON export and history deletion, backend batch endpoints, and automated test suite. |
-| **Phase 3** | Personalization Engine & Hybrid ML Pipeline | Next Up | Per-user feature engineering, incremental learning / Bayesian blending of synthetic baseline with real user completion history, feature attribution. |
+| **Phase 3, Stage 1** | Telemetry Repair & Personal Duration Estimation | **COMPLETED** | Shared task lifecycle engine (`taskLifecycle.js`), active stopwatch finalization, command-bar completion/reopening convergence, idempotent telemetry, local-first Personal Duration Estimator (`personalModel.js`) with weighted median and empirical Bayesian shrinkage ($K = 3.0$), dual duration badges on task cards, cold-start and uncertainty tiers. |
+| **Phase 3, Stage 2** | Personal Risk Modeling & UI Insights | Next Up | Personal Model Panel UI with empirical parameter transparency, hybrid delay-risk adaptation blending synthetic baseline with observed personal velocity. |
 | **Phase 4** | Adaptive Scheduling & Workload Optimization | Planned | Workload density balancing, time-of-day affinity scheduling, dependency graph resolution, proactive bottleneck notifications. |
 | **Phase 5** | Voice & Conversational Planning Experience | Planned | Rich multi-turn planning dialog, schedule rescheduling commands, review debriefing via natural language. |
 
@@ -210,4 +211,99 @@ Before writing the database layer, the deployment and persistence constraints we
 1. **Cold-Start Random Forest Model**: The Random Forest classifier remains trained on the synthetic baseline dataset. Phase 2 collected trustworthy behavioral telemetry; Phase 3 will consume this telemetry to adapt model predictions to the user's actual velocity and estimation bias.
 2. **Local-First Single Device**: Telemetry is durably persisted in the client's IndexedDB. Cross-device synchronization is not claimed or implemented. Users can export their telemetry as JSON to migrate data if needed.
 3. **Statistical Sample Size**: Behavioral metrics require a minimum of 3 completed tasks to display meaningful patterns. The UI explicitly discloses this requirement to prevent misleading premature conclusions.
+
+---
+
+## Phase 3, Stage 1 Execution Record: Telemetry Repair & Local Personal Duration Estimation
+
+### Objective
+Fix command-bar completion and reopening telemetry, ensure active stopwatch timers finalize reliably without duplicate events, and implement a transparent, local-first personal duration estimator that learns user effort estimation bias using genuine historical observations from IndexedDB.
+
+### Completed Work by Component
+
+#### 1. Shared Task Lifecycle & Command-Bar Convergence
+- **File**: `src/telemetry/taskLifecycle.js` (NEW)
+  - Extracted pure lifecycle state transition logic: `completeTaskLifecycle` and `reopenTaskLifecycle`.
+  - **Convergence**: Both TaskCard clicks and CommandBar voice/text actions (`"Complete Prepare Report"`, `"Uncomplete Prepare Report"`) route through identical lifecycle functions.
+  - **Timer Finalization**: Automatically finalizes active stopwatch sessions on task completion, calculating non-paused working seconds and recording `duration_source: 'tracked'`.
+  - **Idempotency**: Protects against duplicate completion or reopening events on repeated natural language commands by returning `{ success: false, reason: 'already_completed' }` or `{ success: false, reason: 'already_open' }`.
+  - **Duration Truth**: Distinguishes `tracked`, `self_reported`, and `unknown` durations. Missing duration is recorded as `null` rather than zero.
+- **File**: `src/App.jsx`
+  - Integrated `completeTaskLifecycle` and `reopenTaskLifecycle` into `completeTask`, `reopenTask`, and `toggleTaskCompletion`.
+  - Rewired natural language commands 8 (uncomplete), 9 (complete), and 10 (delete) to call unified handlers.
+  - Memoized `personalDurationModel` from telemetry events and tasks, passing to `<TaskList />`.
+
+#### 2. Local-First Personal Duration Estimator
+- **File**: `src/telemetry/personalModel.js` (NEW)
+  - Client-side duration estimator extracting genuine observations from IndexedDB telemetry events.
+  - **Observation Eligibility**:
+    - Groups events by stable `task_id`.
+    - Handles reopening: ignores intermediate completion states of reopened tasks, evaluating only final completions.
+    - Plausibility boundaries: excludes durations $< 0.01\text{h}$ (36s) or $> 200\text{h}$.
+    - Positive initial effort requirement: requires `original_estimated_effort > 0` for ratio calculation.
+    - Target leakage safeguard: excludes all post-completion attributes (`completed_at`, `duration_source`, `tracked_duration_seconds`) from prediction inputs. Only pre-completion planning fields are used.
+  - **Weighting**: Tracked stopwatch duration $w = 1.0$; self-reported duration $w = 0.5$; unknown duration $w = 0.0$.
+  - **Mathematical Formula**:
+    $$r_i = \frac{\text{observed\_duration\_hours}_i}{\text{original\_estimated\_effort\_hours}_i}$$
+    $$r_{med} = \text{WeightedMedian}\left(\left\{(r_i, w_i)\right\}\right)$$
+    $$r_{adjusted} = \frac{W \cdot r_{med} + K \cdot 1.0}{W + K} \quad (K = 3.0)$$
+    $$\hat{D} = \text{user\_estimate\_hours} \times r_{adjusted}$$
+  - **Uncertainty & Sample Maturity**:
+    - `cold_start` ($W = 0$): returns unmodified estimate, explaining no completed tasks exist yet.
+    - `sparse` ($0 < W < 3$): returns unmodified estimate, reporting $X$ observations recorded and 3 needed.
+    - `developing` ($3 \le W < 8$): applies shrinkage toward 1.0, reporting emerging pattern.
+    - `supported` ($W \ge 8$): applies full personal adjustment with empirical spread $[r_{p25} \dots r_{p75}]$.
+    - `unavailable`: clearly indicated if user has not provided an effort estimate.
+  - **Privacy & History Deletion**: Computed purely on the client. Resetting telemetry via `clearProfileTelemetry()` immediately returns the estimator to cold-start without touching active tasks.
+
+#### 3. Task Card UI Integration
+- **File**: `src/components/TaskCard.jsx`
+  - Integrated dual duration indicator: when personal observations exist, shows `⏱️ 2h → ~2.6h (4)` with observation count badge.
+  - Rich explanatory tooltip disclosing user estimate, adjusted prediction, sample count, effective weight, bias ratio, empirical spread, and plain-language explanation.
+  - Distinguishes missing effort estimates with an honest "Duration estimation unavailable (no effort estimate)" message.
+  - Preserved pastel aesthetic and layout responsiveness.
+- **File**: `src/components/TaskList.jsx`
+  - Evaluates `estimateTaskDuration(personalDurationModel, task)` per task and supplies to `TaskCard`.
+
+#### 4. Automated Testing
+- **File**: `tests/personal_model.test.js` (NEW)
+  - 21 comprehensive unit tests covering:
+    - Weighted median calculation with odd/even weights and identical values.
+    - Cold-start with no observations.
+    - Unavailable state for missing user estimates.
+    - 1 tracked observation with shrinkage ($1.0 \times 1.4 \to 1.1$).
+    - Multiple consistent observations ($1.5 \to 1.34$).
+    - Self-reported lower weighting ($0.5$).
+    - Exclusion of unknown durations, negative durations, and implausible values ($> 200$h).
+    - Resistance to extreme outliers (100h bug).
+    - Shrinkage prevention of overcorrection on sparse data.
+    - Deduplication of duplicate completion events.
+    - Intermediate completion handling for reopened tasks (no double counting).
+    - Absence of fabricated category personalization.
+    - History deletion restoring cold-start state.
+    - Target leakage verification (post-completion fields do not alter prediction).
+    - Lifecycle completion, active timer finalization, idempotency duplicate rejection, and reopen transitions.
+
+---
+
+### Verification Results
+
+1. **Frontend Test Suite**: `npm test`
+   - **35 tests passing across 6 suites** (14 duration tests, 5 lifecycle tests, 16 Phase 2 telemetry tests).
+2. **Backend Pytest Suite**: `python -m pytest backend/tests/ -v`
+   - **27 tests passing** (18 date handling tests, 9 ML & API tests).
+3. **Frontend Linter**: `npm run lint` (`oxlint`)
+   - **0 errors, 0 warnings** across 23 files.
+4. **Production Build**: `npm run build` (`vite build`)
+   - Successfully built production bundle in 1.21s.
+
+---
+
+### Known Limitations & Phase 3, Stage 2 Plan
+
+1. **Duration vs Risk Model Scope**: Duration estimation is now personalized via client-side Bayesian shrinkage. The Random Forest completion-risk model remains an empirical baseline trained on synthetic data and is **not** yet personalized.
+2. **Stage 2 Deliverable**:
+   - Create a dedicated **Personal Model Panel UI** exposing observed velocity ratios, empirical parameter distributions, and sample maturity metrics.
+   - Design a hybrid completion-risk architecture that blends baseline risk with personal velocity and completion latency without introducing unstable small-sample retrained models.
+
 
