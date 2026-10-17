@@ -24,6 +24,11 @@ import {
   getFeatureImportance,
   predictBatchTasks,
 } from './api/mlApi';
+import {
+  dialogueManager,
+  CONVERSATION_INTENTS,
+  CONVERSATION_STATES,
+} from './conversation/dialogueManager';
 
 const STORAGE_KEY = 'voxplan_tasks';
 
@@ -171,11 +176,23 @@ export default function App() {
   const [feedback, setFeedback] = useState(null);
   const [isListening, setIsListening] = useState(false);
   const [activeTimerState, setActiveTimerState] = useState(() => telemetry.getActiveTimer());
+  const [conversationState, setConversationState] = useState(CONVERSATION_STATES.IDLE);
+  const [activeSubjectTaskId, setActiveSubjectTaskId] = useState(null);
 
   // Initialize persistent telemetry storage on mount
   useEffect(() => {
     telemetry.init();
   }, []);
+
+  // Synchronize tasks with DialogueManager to prevent stale context
+  useEffect(() => {
+    dialogueManager.syncTasks(tasks);
+  }, [tasks]);
+
+  const activeSubjectTask = useMemo(() => {
+    if (!activeSubjectTaskId) return null;
+    return tasks.find((t) => t.id === activeSubjectTaskId) || null;
+  }, [tasks, activeSubjectTaskId]);
 
   // Personal Duration Model state derived from local IndexedDB telemetry
   const [telemetryEvents, setTelemetryEvents] = useState(() => telemetry.eventsCache);
@@ -557,6 +574,10 @@ export default function App() {
   };
 
   const deleteTask = (taskId) => {
+    dialogueManager.invalidateTask(taskId);
+    if (activeSubjectTaskId === taskId) {
+      setActiveSubjectTaskId(null);
+    }
     const taskToDelete = tasks.find((t) => t.id === taskId);
     if (activeTimerState && activeTimerState.taskId === taskId) {
       telemetry.stopTimer(taskId);
@@ -680,279 +701,124 @@ export default function App() {
     await telemetry.recordTaskReordered(moved.id, fromIndex, toIndex, copy.map((t) => t.id));
   };
 
-  const findTaskByName = (taskList, query) => {
-    if (!query) return null;
-    const clean = query.trim().toLowerCase();
-    const exact = taskList.find((t) => t.title.trim().toLowerCase() === clean);
-    if (exact) return exact;
-
-    const stripped = clean.replace(/^(?:the|a|an)\s+/i, '').trim();
-    const exactStripped = taskList.find(
-      (t) => t.title.trim().toLowerCase().replace(/^(?:the|a|an)\s+/i, '') === stripped
-    );
-    if (exactStripped) return exactStripped;
-
-    return taskList.find(
-      (t) => t.title.toLowerCase().includes(clean) || clean.includes(t.title.toLowerCase())
-    ) || null;
-  };
-
-  // Comprehensive Natural Language & Voice Command Parser
+  // Comprehensive Natural Language & Voice Command Parser powered by DialogueManager
   const executeCommand = async (rawText) => {
-    const text = rawText.trim().replace(/[.!?]+$/, '');
-    if (!text) return;
-
-    // 1. ML Command: Train/Retrain model
-    if (/^(?:train|retrain|re-train)\s+(?:the\s+)?(?:ml\s+)?(?:model|random\s*forest|classifier)?$/i.test(text)) {
-      handleTrainModel();
-      return;
-    }
-
-    // 2. ML Command: Predict delay risk / Run predictions
-    if (/^(?:predict|run\s+predictions?|analyze\s+(?:project\s+)?risk|compute\s+risk|check\s+delays?)$/i.test(text)) {
-      handleRunPredictions();
-      return;
-    }
-
-    // 2b. Scheduler Command: Open Adaptive Sprint Scheduler
-    if (/^(?:plan\s+sprint|adaptive\s+schedule|schedule\s+sprint|open\s+scheduler|suggest\s+schedule)$/i.test(text)) {
-      setIsScheduleModalOpen(true);
-      setFeedback({
-        type: 'info',
-        message: 'Opening Adaptive Sprint Scheduler proposal...',
-      });
-      return;
-    }
-
-    // 3. ML Command: Filter / Show high risk tasks
-    if (/^(?:show|filter|find|list|view)\s+(?:me\s+)?(?:the\s+)?(?:highest\s+risk|high\s+risk|delayed|at\s*risk)\s*(?:tasks?)?$/i.test(text) ||
-        /^(?:which\s+tasks?\s+are\s+(?:most\s+likely\s+to\s+be\s+delayed|at\s+(?:the\s+)?highest\s+risk))$/i.test(text)) {
-      setActiveFilter('high-risk');
-      telemetry.recordRecommendationAction('high_risk_filter', 'filter_cmd', true);
-      setFeedback({
-        type: 'success',
-        message: 'Filtered view to highest delay-risk tasks.',
-      });
-      return;
-    }
-
-    // 4. ML Command: Show model performance / metrics
-    if (/^(?:show|view|display)\s+(?:model\s+)?(?:performance|metrics|accuracy|f1|status)$/i.test(text)) {
-      if (mlPanelRef.current) {
-        mlPanelRef.current.scrollIntoView({ behavior: 'smooth' });
-      }
-      setFeedback({
-        type: 'info',
-        message: modelStatus.is_trained
-          ? `Model Accuracy: ${((modelStatus.accuracy || 0) * 100).toFixed(1)}%, F1: ${((modelStatus.f1_score || 0) * 100).toFixed(1)}%`
-          : 'Model is not trained yet. Click "Train Model" to evaluate.',
-      });
-      return;
-    }
-
-    // 5. ML Command: Show feature importance
-    if (/^(?:show|view|what\s+drives)\s+(?:feature\s+importance|risk|delays?)$/i.test(text)) {
-      if (mlPanelRef.current) {
-        mlPanelRef.current.scrollIntoView({ behavior: 'smooth' });
-      }
-      setFeedback({
-        type: 'info',
-        message: 'Feature importance: Days remaining, Workload pressure, and Effort-to-time ratio are the top predictors.',
-      });
-      return;
-    }
-
-    // 6. ML Command: Explain risk
-    if (/^(?:explain|breakdown)\s+(?:the\s+)?(?:project\s+)?risk$/i.test(text)) {
-      setFeedback({
-        type: 'info',
-        message: `Project Risk Analysis: ${riskStats.highCount} high-risk, ${riskStats.mediumCount} medium-risk tasks. Click any task risk pill for details.`,
-      });
-      return;
-    }
-
-    // 7. Task Command: Clear completed tasks
-    if (/^(?:clear|remove|delete)\s+(?:all\s+)?completed(?:\s+tasks?)?$/i.test(text)) {
-      const completedTasks = tasks.filter((t) => t.completed);
-      if (completedTasks.length === 0) {
-        setFeedback({
-          type: 'info',
-          message: 'No completed tasks to clear',
-        });
-        return;
-      }
-      setTasks((prev) => prev.filter((t) => !t.completed));
-      setFeedback({
-        type: 'success',
-        message: `Cleared ${completedTasks.length} completed task${completedTasks.length > 1 ? 's' : ''}`,
-      });
-      return;
-    }
-
-    // 8. Task Command: Uncomplete / Mark as pending (routed via reopenTask)
-    const markPendingMatch = text.match(/^mark\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+as\s+(?:pending|incomplete|uncompleted|not\s+done|open)$/i);
-    const uncompleteMatch = text.match(/^(?:uncomplete|uncheck|reopen)\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+)$/i);
-
-    if (markPendingMatch || uncompleteMatch) {
-      const taskName = (markPendingMatch ? markPendingMatch[1] : uncompleteMatch[1]).trim();
-      const target = findTaskByName(tasks, taskName);
-      if (!target) {
-        setFeedback({
-          type: 'error',
-          message: `Task not found: "${taskName}"`,
-        });
-        return;
-      }
-      await reopenTask(target.id);
-      return;
-    }
-
-    // 9. Task Command: Complete / Mark as completed (routed via completeTask)
-    const markCompletedMatch = text.match(/^mark\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+as\s+(?:completed|complete|done|finished)$/i);
-    const completeMatch = text.match(/^(?:complete|finish|check)\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+)$/i);
-
-    if (markCompletedMatch || completeMatch) {
-      const taskName = (markCompletedMatch ? markCompletedMatch[1] : completeMatch[1]).trim();
-      const target = findTaskByName(tasks, taskName);
-      if (!target) {
-        setFeedback({
-          type: 'error',
-          message: `Task not found: "${taskName}"`,
-        });
-        return;
-      }
-      await completeTask(target.id);
-      return;
-    }
-
-    // 10. Task Command: Delete task (routed via deleteTask)
-    const deleteMatch = text.match(/^(?:delete|remove)\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+)$/i);
-    if (deleteMatch) {
-      const taskName = deleteMatch[1].trim();
-      const target = findTaskByName(tasks, taskName);
-      if (!target) {
-        setFeedback({
-          type: 'error',
-          message: `Task not found: "${taskName}"`,
-        });
-        return;
-      }
-      deleteTask(target.id);
-      return;
-    }
-
-    // 11. Task Command: Create / Add task with dynamic date & effort parsing
-    const isCreateIntent = /^(?:create|add|new|make|schedule)\b/i.test(text);
-    if (isCreateIntent) {
-      let priority = 'medium';
-      if (/\b(?:high\s+priority|urgent|critical)\b/i.test(text)) {
-        priority = 'high';
-      } else if (/\b(?:low\s+priority|trivial|minor)\b/i.test(text)) {
-        priority = 'low';
-      } else if (/\b(?:medium\s+priority|normal\s+priority)\b/i.test(text)) {
-        priority = 'medium';
-      }
-
-      // Extract effort if explicitly mentioned (e.g. "for 3 hours", "4h effort", "2.5 hrs")
-      let estimatedEffort = null;
-      const effortMatch = text.match(/\b(?:for|effort(?:\s+of)?|estimate(?:\s+of)?)\s+(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b/i);
-      if (effortMatch) {
-        estimatedEffort = parseFloat(effortMatch[1]);
-      }
-
-      // Extract real due date if mentioned
-      let dueDate = null;
-      const now = new Date();
-      const formatISO = (d) => d.toISOString().split('T')[0];
-
-      if (/\b(?:due\s+today|today)\b/i.test(text)) {
-        dueDate = formatISO(now);
-      } else if (/\b(?:due\s+tomorrow|tomorrow)\b/i.test(text)) {
-        const d = new Date(now);
-        d.setDate(now.getDate() + 1);
-        dueDate = formatISO(d);
-      } else {
-        const inDaysMatch = text.match(/\bdue\s+in\s+(\d+)\s+days?\b/i);
-        if (inDaysMatch) {
-          const d = new Date(now);
-          d.setDate(now.getDate() + parseInt(inDaysMatch[1], 10));
-          dueDate = formatISO(d);
-        } else if (/\bdue\s+next\s+week\b/i.test(text)) {
-          const d = new Date(now);
-          d.setDate(now.getDate() + 7);
-          dueDate = formatISO(d);
-        } else {
-          const isoDateMatch = text.match(/\bdue\s+(?:on\s+)?(\d{4}-\d{2}-\d{2})\b/i);
-          if (isoDateMatch) {
-            dueDate = isoDateMatch[1];
-          } else {
-            const humanDateMatch = text.match(/\bdue\s+(?:on\s+)?([a-zA-Z]+\s+\d{1,2}(?:st|nd|rd|th)?(?:\s*,\s*\d{4})?)\b/i);
-            if (humanDateMatch) {
-              const cleanDateStr = humanDateMatch[1].replace(/(?:st|nd|rd|th)/gi, '');
-              const parsed = new Date(cleanDateStr);
-              if (!isNaN(parsed.getTime())) {
-                if (!cleanDateStr.match(/\d{4}/)) {
-                  parsed.setFullYear(now.getFullYear());
-                }
-                dueDate = formatISO(parsed);
-              }
-            }
-          }
-        }
-      }
-
-      // Clean raw title
-      let rawTitle = text
-        .replace(/^(?:create|add|new|make|schedule)\s+/i, '')
-        .replace(/^(?:a|an)\s+/i, '')
-        .replace(/\bwith\s+(?:high|medium|low)\s+priority\b/gi, '')
-        .replace(/\b(?:high|medium|low)\s+priority\b/gi, '')
-        .replace(/^task\s+/i, '')
-        .replace(/^(?:called|named)\s+/i, '')
-        .replace(/\b(?:called|named)\s+/gi, '')
-        .replace(/\b(?:for|effort(?:\s+of)?|estimate(?:\s+of)?)\s+\d+(?:\.\d+)?\s*(?:hours?|hrs?|h)\b/gi, '')
-        .replace(/\b(?:due\s+today|due\s+tomorrow|due\s+in\s+\d+\s+days?|due\s+next\s+week)\b/gi, '')
-        .replace(/\bdue\s+(?:on\s+)?\d{4}-\d{2}-\d{2}\b/gi, '')
-        .replace(/\bdue\s+(?:on\s+)?[a-zA-Z]+\s+\d{1,2}(?:st|nd|rd|th)?(?:\s*,\s*\d{4})?\b/gi, '')
-        .trim();
-
-      rawTitle = rawTitle.replace(/\s+(?:with\s+)?(?:high|medium|low)\s+priority$/i, '').trim();
-
-      if (!rawTitle) {
-        setFeedback({
-          type: 'error',
-          message: 'Please specify a task name. Try: "add task [name] due tomorrow"',
-        });
-        return;
-      }
-
-      const newTask = {
-        id: `task-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-        title: rawTitle,
-        description: '',
-        priority,
-        dueDate, // Real parsed date or null (unspecified)
-        completed: false,
-        category: 'General',
-        estimatedEffort, // Real parsed effort or null (honest)
-        dependencies: [],
-        createdAt: new Date().toISOString(),
-      };
-
-      setTasks((prev) => [newTask, ...prev]);
-      telemetry.recordTaskCreated(newTask);
-      setFeedback({
-        type: 'success',
-        message: `Created task: "${rawTitle}"${dueDate ? ` (Due: ${dueDate})` : ''}`,
-      });
-      return;
-    }
-
-    // 12. Fallback
-    setFeedback({
-      type: 'error',
-      message: 'Command not recognized. Try: "add task [name] due tomorrow", "train the model", or "show high risk tasks"',
+    const result = dialogueManager.processInput(rawText, {
+      tasks,
+      riskStats,
+      modelStatus,
     });
+
+    setConversationState(result.state);
+    setActiveSubjectTaskId(dialogueManager.activeSubjectTaskId);
+
+    if (result.responseText) {
+      setFeedback({
+        type: result.feedbackType || 'info',
+        message: result.responseText,
+      });
+    }
+
+    if (!result.isAuthorized || !result.action) {
+      return;
+    }
+
+    const { action } = result;
+
+    switch (action.type) {
+      case CONVERSATION_INTENTS.TRAIN_MODEL:
+        handleTrainModel();
+        break;
+
+      case CONVERSATION_INTENTS.PREDICT_RISK:
+        handleRunPredictions();
+        break;
+
+      case CONVERSATION_INTENTS.OPEN_SCHEDULER:
+        setIsScheduleModalOpen(true);
+        break;
+
+      case CONVERSATION_INTENTS.FILTER_HIGH_RISK:
+        setActiveFilter('high-risk');
+        telemetry.recordRecommendationAction('high_risk_filter', 'filter_cmd', true);
+        break;
+
+      case CONVERSATION_INTENTS.SHOW_METRICS:
+      case CONVERSATION_INTENTS.SHOW_IMPORTANCE:
+        if (mlPanelRef.current) {
+          mlPanelRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+        break;
+
+      case CONVERSATION_INTENTS.CLEAR_COMPLETED: {
+        const completedTasks = tasks.filter((t) => t.completed);
+        for (const t of completedTasks) {
+          dialogueManager.invalidateTask(t.id);
+        }
+        setTasks((prev) => prev.filter((t) => !t.completed));
+        break;
+      }
+
+      case CONVERSATION_INTENTS.CLEAR_HISTORY: {
+        await telemetry.clearHistory();
+        dialogueManager.reset();
+        setConversationState(CONVERSATION_STATES.IDLE);
+        setActiveSubjectTaskId(null);
+        break;
+      }
+
+      case CONVERSATION_INTENTS.COMPLETE_TASK:
+        await completeTask(action.taskId);
+        dialogueManager.setActiveSubject(action.taskId);
+        setActiveSubjectTaskId(action.taskId);
+        break;
+
+      case CONVERSATION_INTENTS.REOPEN_TASK:
+        await reopenTask(action.taskId);
+        dialogueManager.setActiveSubject(action.taskId);
+        setActiveSubjectTaskId(action.taskId);
+        break;
+
+      case CONVERSATION_INTENTS.DELETE_TASK:
+        deleteTask(action.taskId);
+        break;
+
+      case CONVERSATION_INTENTS.RESCHEDULE_TASK:
+        await handleReschedule(action.taskId, action.newDueDate);
+        dialogueManager.setActiveSubject(action.taskId);
+        setActiveSubjectTaskId(action.taskId);
+        break;
+
+      case CONVERSATION_INTENTS.CREATE_TASK: {
+        const newTask = {
+          id: `task-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          title: action.title,
+          description: '',
+          priority: action.priority || 'medium',
+          dueDate: action.dueDate || null,
+          completed: false,
+          category: 'General',
+          estimatedEffort: action.estimatedEffort || null,
+          dependencies: [],
+          createdAt: new Date().toISOString(),
+        };
+        setTasks((prev) => [newTask, ...prev]);
+        await telemetry.recordTaskCreated(newTask);
+        dialogueManager.setActiveSubject(newTask.id);
+        setActiveSubjectTaskId(newTask.id);
+        break;
+      }
+
+      case CONVERSATION_INTENTS.DESCRIBE_TASK:
+        if (action.targetTask) {
+          dialogueManager.setActiveSubject(action.targetTask.id);
+          setActiveSubjectTaskId(action.targetTask.id);
+        }
+        break;
+
+      default:
+        break;
+    }
   };
 
   // Real Web Speech API browser voice dictation
@@ -1189,6 +1055,10 @@ export default function App() {
           onDismissFeedback={() => setFeedback(null)}
           isListening={isListening}
           onToggleListening={toggleListening}
+          conversationState={conversationState}
+          onConfirm={() => executeCommand('yes')}
+          onCancel={() => executeCommand('cancel')}
+          activeSubjectTask={activeSubjectTask}
         />
       </div>
 

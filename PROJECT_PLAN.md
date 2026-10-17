@@ -1328,25 +1328,67 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
 
 ---
 
-### Phase 5: Conversational Planning, Multi-Turn Dialog & Voice Experience (PLANNED)
+### Phase 5: Conversational Planning, Multi-Turn Dialog & Voice Experience (IN PROGRESS)
 
 **User-Facing Objective**: Enable users to plan sprints, negotiate schedule trade-offs, reschedule tasks, and debrief workload bottlenecks through a natural, multi-turn conversational interface—accessible via browser voice dictation or keyboard input with equal fidelity, completely offline and privacy-preserving.
 
-#### Stage 5.1: Conversational Planning State Machine & Turn Management
-- **Scope & Expected Deliverables**:
-  - Implement a dedicated dialog state manager (`src/conversation/dialogueManager.js`) maintaining session context across turns (active subject task, pending intent, clarification stack).
-  - Explicit confirmation protocols for consequential or destructive actions (e.g., bulk task deletion, clearing history, applying uninspected schedule overhauls).
-  - Configurable conversational idle timeout (clearing ephemeral dialogue context after 5 minutes of inactivity).
-  - Typed and voice inputs routed through identical state machine transitions.
-- **Dependencies**: Existing `CommandBar.jsx` regex parser and `taskLifecycle.js`.
-- **Acceptance Criteria**:
-  - Contextual references resolve deterministically: saying "Mark it done" immediately following a discussion about "Draft architecture audit" correctly identifies the target task without re-specifying the full title.
-  - Consequential actions require explicit `yes`/`no` or confirm/cancel responses; executing "Delete all completed tasks" prompts confirmation and does not mutate state if canceled.
-  - Expired or reset sessions cleanly transition back to the default `IDLE` listening state.
-- **Verification**:
-  - Unit tests for all state transitions, context retention across turns, timeout expiration, and confirmation guards (`tests/dialogue_manager.test.js`).
-  - Interactive command bar testing verifying typed and voice parity.
-- **Privacy & Safety**: In-memory dialogue state only; no session transcripts transmitted to external servers.
+#### Stage 5.1: Conversational Planning State Machine & Turn Management (COMPLETED)
+- **Status**: Completed and fully verified.
+- **Scope & Implemented Deliverables**:
+  - Dedicated deterministic dialogue manager (`src/conversation/dialogueManager.js`):
+    - Finite state machine: `IDLE`, `AWAITING_CLARIFICATION`, `AWAITING_CONFIRMATION`.
+    - Ephemeral session context: `activeSubjectTaskId`, `pendingIntent`, `pendingClarification`, `pendingAction`, `lastActivityTimestamp`.
+    - Deterministic pronoun and anaphoric reference resolution: saying "Mark it done", "Delete it", or "Complete this task" accurately resolves to the active subject task established in recent turns.
+    - Ambiguous task query resolution: queries matching multiple tasks (e.g., "test suite" matching "Unit test suite" and "Integration test suite") trigger clarification questions listing options rather than guessing arbitrarily.
+    - Missing parameter clarification: missing titles on task creation or missing dates on rescheduling pause intent execution and prompt for the specific missing attribute; user cancellation recovers cleanly to `IDLE`.
+    - Consequential operation confirmation safeguards: destructive or bulk operations (`DELETE_TASK`, `CLEAR_COMPLETED`, `CLEAR_HISTORY`) require explicit affirmative confirmation (`yes`, `confirm`, `proceed`) and render warm pastel confirmation buttons in the UI. Explicit cancellation (`no`, `cancel`, `nevermind`) leaves persisted state completely unmodified. Single-execution invariant prevents double execution.
+    - Context invalidation: task deletions or external task-list changes immediately invalidate active focus and pending actions referencing that task.
+    - Configurable 5-minute inactivity timeout: idle context resets to `IDLE` after 300,000 ms, with an injectable clock (`clock: () => timestamp`) for deterministic, zero-sleep automated testing.
+    - Shared unified dialogue pathway: browser Web Speech recognition dictation and typed keyboard inputs route through the exact same dialogue processing and state transitions.
+  - UI Integration (`src/components/CommandBar.jsx`, `src/App.jsx`, `src/components/BehavioralHistoryPanel.jsx`):
+    - Interactive warm pastel confirmation buttons ("✓ Confirm" / "✕ Cancel") and clarification indicator badges.
+    - Active task focus pill displaying currently focused task title.
+    - Telemetry history clearing resets dialogue context to prevent stale execution.
+- **Structured Dialogue Result Contract**:
+  - `state`: Current conversation state (`IDLE`, `AWAITING_CLARIFICATION`, `AWAITING_CONFIRMATION`).
+  - `intent`: Recognized intent constant (`CREATE_TASK`, `COMPLETE_TASK`, `DELETE_TASK`, etc.).
+  - `targetTask`: Resolved task object or null.
+  - `responseText`: User-facing message / prompt string.
+  - `feedbackType`: Toast category (`info`, `success`, `error`, `warning`).
+  - `requiresConfirmation`: Boolean flag.
+  - `isAuthorized`: Boolean authorization gate; true ONLY when operation is cleared to execute.
+  - `action`: Structured executable payload `{ type, taskId, ... }` or null.
+  - `error`: Error identifier code when applicable.
+- **Privacy & Local-First Guarantees Preserved**:
+  - 100% offline and local-first; zero external LLM or cloud AI integration.
+  - Ephemeral in-memory context only; zero telemetry recording or persistence of conversational transcripts.
+  - Zero remote network calls, analytics, or third-party storage.
+- **Automated Test Suite (32 tests passing across 8 suites)**:
+  - `tests/dialogue_manager.test.js`:
+    1. Dialogue State Machine Lifecycle & Initial State (3 tests).
+    2. Active Subject Task Establishment & Multi-Turn Pronoun Resolution (4 tests).
+    3. Clarification Handling for Ambiguous or Missing Information (6 tests).
+    4. Consequential Operations & Confirmation Safeguards (8 tests).
+    5. Context Invalidation & Unavailable Tasks (2 tests).
+    6. Deterministic Inactivity Timeout & Clock Injection (2 tests).
+    7. Existing Commands & Feature Parity Preservation (4 tests).
+    8. Voice & Programmatic Symmetry, Reopen Pronouns, and Context Reset (3 tests).
+  - Total repository tests: **147 tests passing across 38 suites** (0 failures).
+- **Verification Results**:
+  - `npm test`: **147 tests passing across 38 suites** (0 failures, 246ms).
+  - `npm run lint` (`oxlint`): **0 errors, 0 warnings** across 35 files.
+  - `npm run build` (`vite build`): Built successfully in 2.55s.
+  - `python -m pytest backend/tests/ -v`: **27 passed** in 8.04s.
+  - Browser verification on `http://localhost:5174/`: Verified multi-turn task references, active focus indicator, clarification dialog on incomplete input, confirmation prompt on deletion, cancellation preserving tasks, and task creation.
+- **Files Added / Modified**:
+  - Added: `src/conversation/dialogueManager.js`
+  - Added: `tests/dialogue_manager.test.js`
+  - Modified: `src/App.jsx`
+  - Modified: `src/components/CommandBar.jsx`
+  - Modified: `src/components/BehavioralHistoryPanel.jsx`
+  - Modified: `PROJECT_PLAN.md`
+- **Git Verification**: Verified on `main` via `feat(phase-5): add conversational planning state machine`.
+- **Next Stage**: Stage 5.2 (Natural Language Schedule Negotiation & Rescheduling Engine) — ready to implement.
 
 #### Stage 5.2: Natural Language Schedule Negotiation & Rescheduling Engine
 - **Scope & Expected Deliverables**:

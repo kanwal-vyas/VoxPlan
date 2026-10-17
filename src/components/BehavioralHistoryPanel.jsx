@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { telemetry } from '../telemetry/telemetryManager';
+import { dialogueManager } from '../conversation/dialogueManager';
 
 export default function BehavioralHistoryPanel({ tasks }) {
   const [stats, setStats] = useState(() => telemetry.getStats(tasks));
@@ -53,6 +54,7 @@ export default function BehavioralHistoryPanel({ tasks }) {
 
   const handleClearHistory = async () => {
     await telemetry.clearHistory();
+    dialogueManager.reset();
     setStats(telemetry.getStats(tasks));
     setShowConfirmClear(false);
     setFeedbackMsg('Behavioral telemetry history cleared. Active tasks preserved.');

@@ -6,6 +6,10 @@ export default function CommandBar({
   onDismissFeedback,
   isListening,
   onToggleListening,
+  conversationState = 'IDLE',
+  onConfirm,
+  onCancel,
+  activeSubjectTask = null,
 }) {
   const [inputVal, setInputVal] = useState('');
   const [isVisible, setIsVisible] = useState(false);
@@ -39,6 +43,14 @@ export default function CommandBar({
     onExecuteCommand(hint);
   };
 
+  const placeholderText = isListening
+    ? 'Listening via microphone... speak clearly!'
+    : conversationState === 'AWAITING_CONFIRMATION'
+    ? 'Type "yes" to confirm or "no" to cancel...'
+    : conversationState === 'AWAITING_CLARIFICATION'
+    ? 'Type or speak your answer (or "cancel")...'
+    : 'Ask or command (e.g. "Tell me about my database assignment", "Mark it done")...';
+
   return (
     <section ref={sectionRef} style={styles.section} id="command" aria-label="Command Assistant">
       <div style={styles.container}>
@@ -48,6 +60,12 @@ export default function CommandBar({
             <div style={styles.badgeRow}>
               <span style={styles.sectionNum}>06</span>
               <span style={styles.badge}>VOICE & NATURAL LANGUAGE</span>
+              {conversationState === 'AWAITING_CONFIRMATION' && (
+                <span style={styles.stateBadgeConfirmation}>⚠️ CONFIRMATION REQUIRED</span>
+              )}
+              {conversationState === 'AWAITING_CLARIFICATION' && (
+                <span style={styles.stateBadgeClarification}>💬 CLARIFYING DETAILS</span>
+              )}
             </div>
             <h2 style={styles.title}>
               <span className="command-title-word">TELL </span>
@@ -55,7 +73,7 @@ export default function CommandBar({
               <span className="command-title-word">WHAT YOU NEED</span>
             </h2>
             <p style={styles.subtitle}>
-              Voice input powered by browser Speech Recognition with natural language task execution
+              Voice input powered by browser Speech Recognition with deterministic multi-turn planning context
             </p>
           </div>
         </div>
@@ -64,15 +82,27 @@ export default function CommandBar({
         <div
           style={{
             ...styles.notebookCard,
-            borderColor: isListening ? '#FF8F82' : 'rgba(37, 36, 42, 0.08)',
+            borderColor: isListening ? '#FF8F82' : conversationState === 'AWAITING_CONFIRMATION' ? '#FFB5A7' : 'rgba(37, 36, 42, 0.08)',
             boxShadow: isListening ? '0 12px 32px rgba(255, 143, 130, 0.2)' : '0 4px 16px rgba(37, 36, 42, 0.04)',
           }}
           className="digital-card command-notebook-card"
         >
+          {/* Active Context Indicator */}
+          {activeSubjectTask && (
+            <div style={styles.contextBar} title="Follow-up commands like 'mark it done' or 'delete it' apply to this task">
+              <span style={styles.contextDot} />
+              <span style={styles.contextText}>
+                Active Task Focus: <strong>{activeSubjectTask.title}</strong>
+              </span>
+            </div>
+          )}
+
           {/* Input Form */}
           <form onSubmit={handleSubmit} style={styles.form}>
             <div style={styles.inputRow}>
-              <span style={styles.promptIcon}>💬</span>
+              <span style={styles.promptIcon}>
+                {conversationState === 'AWAITING_CONFIRMATION' ? '⚠️' : '💬'}
+              </span>
               <input
                 type="text"
                 value={inputVal}
@@ -80,7 +110,7 @@ export default function CommandBar({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleSubmit(e);
                 }}
-                placeholder={isListening ? 'Listening via microphone... speak clearly!' : 'Add a task or ask (e.g. "Add task Prepare Deck due Friday 4h")...'}
+                placeholder={placeholderText}
                 style={styles.input}
               />
 
@@ -133,13 +163,13 @@ export default function CommandBar({
               role="status"
               style={{
                 ...styles.feedbackBanner,
-                backgroundColor: feedback.type === 'success' ? '#EBF8F1' : feedback.type === 'error' ? '#FFE8E5' : '#F3EEFF',
-                borderColor: feedback.type === 'success' ? '#BFE8D0' : feedback.type === 'error' ? '#FFB5A7' : '#C9B6FF',
-                color: feedback.type === 'success' ? '#166534' : feedback.type === 'error' ? '#991B1B' : '#5B44BA',
+                backgroundColor: feedback.type === 'success' ? '#EBF8F1' : feedback.type === 'error' ? '#FFE8E5' : feedback.type === 'warning' ? '#FFF4E5' : '#F3EEFF',
+                borderColor: feedback.type === 'success' ? '#BFE8D0' : feedback.type === 'error' ? '#FFB5A7' : feedback.type === 'warning' ? '#FFE0B2' : '#C9B6FF',
+                color: feedback.type === 'success' ? '#166534' : feedback.type === 'error' ? '#991B1B' : feedback.type === 'warning' ? '#B45309' : '#5B44BA',
               }}
             >
               <span style={styles.feedbackEmoji}>
-                {feedback.type === 'success' ? '✓' : feedback.type === 'error' ? '!' : 'i'}
+                {feedback.type === 'success' ? '✓' : feedback.type === 'error' ? '!' : feedback.type === 'warning' ? '⚠️' : 'i'}
               </span>
               <span style={styles.feedbackMessage}>{feedback.message}</span>
               <button
@@ -153,14 +183,37 @@ export default function CommandBar({
             </div>
           )}
 
+          {/* Confirmation Controls Bar */}
+          {conversationState === 'AWAITING_CONFIRMATION' && (
+            <div style={styles.confirmationRow} aria-label="Confirmation Controls">
+              <span style={styles.confirmationPrompt}>Explicit confirmation required:</span>
+              <button
+                type="button"
+                onClick={onConfirm}
+                style={styles.confirmBtn}
+                aria-label="Confirm pending action"
+              >
+                ✓ Confirm
+              </button>
+              <button
+                type="button"
+                onClick={onCancel}
+                style={styles.cancelBtn}
+                aria-label="Cancel pending action"
+              >
+                ✕ Cancel
+              </button>
+            </div>
+          )}
+
           {/* Quick Prompt Chips */}
           <div style={styles.promptsRow}>
-            <span style={styles.promptsLabel}>Quick commands:</span>
+            <span style={styles.promptsLabel}>Try saying:</span>
             {[
               { label: 'Show high risk tasks', cmd: 'show high risk tasks' },
               { label: 'Explain project risk', cmd: 'explain project risk' },
-              { label: 'Train the model', cmd: 'train the model' },
-              { label: 'Show model performance', cmd: 'show model performance' },
+              { label: 'Plan sprint', cmd: 'plan sprint' },
+              { label: 'Train model', cmd: 'train the model' },
             ].map((item) => (
               <button
                 key={item.cmd}
@@ -351,6 +404,82 @@ const styles = {
     fontSize: '12px',
     fontWeight: '600',
     color: '#25242A',
+    cursor: 'pointer',
+  },
+  stateBadgeConfirmation: {
+    backgroundColor: '#FFE8E5',
+    color: '#991B1B',
+    padding: '4px 10px',
+    borderRadius: '9999px',
+    fontSize: '11px',
+    fontWeight: '800',
+    letterSpacing: '0.04em',
+    border: '1px solid #FFB5A7',
+  },
+  stateBadgeClarification: {
+    backgroundColor: '#FFF4E5',
+    color: '#B45309',
+    padding: '4px 10px',
+    borderRadius: '9999px',
+    fontSize: '11px',
+    fontWeight: '800',
+    letterSpacing: '0.04em',
+    border: '1px solid #FFE0B2',
+  },
+  contextBar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px 14px',
+    backgroundColor: '#FFF8EF',
+    borderRadius: '10px',
+    border: '1px solid rgba(37, 36, 42, 0.08)',
+    fontSize: '12px',
+    color: '#555259',
+  },
+  contextDot: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    backgroundColor: '#40916C',
+  },
+  contextText: {
+    fontWeight: '500',
+  },
+  confirmationRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '12px 16px',
+    backgroundColor: '#FFF5F3',
+    borderRadius: '12px',
+    border: '1px solid #FFB5A7',
+  },
+  confirmationPrompt: {
+    fontSize: '13px',
+    fontWeight: '700',
+    color: '#991B1B',
+    flex: 1,
+  },
+  confirmBtn: {
+    backgroundColor: '#FF8F82',
+    color: '#FFFFFF',
+    border: 'none',
+    padding: '8px 16px',
+    borderRadius: '8px',
+    fontSize: '13px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    boxShadow: '0 2px 6px rgba(255, 143, 130, 0.3)',
+  },
+  cancelBtn: {
+    backgroundColor: '#FFFFFF',
+    color: '#25242A',
+    border: '1px solid rgba(37, 36, 42, 0.15)',
+    padding: '8px 14px',
+    borderRadius: '8px',
+    fontSize: '13px',
+    fontWeight: '600',
     cursor: 'pointer',
   },
 };
