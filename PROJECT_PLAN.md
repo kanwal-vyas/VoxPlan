@@ -1644,6 +1644,67 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
 - **Status**: **COMPLETED**.
 - **Next Stage**: Stage 5.4 (Conversational Plan Explanations & Constraint Debriefing).
 
+### Critical Correctness Fix: Block Ambiguous Task Mutations (Phase 5 Hardening)
+- **Severity**: Critical Correctness Regression.
+- **Observed Defect & Reproduction**:
+  - Task collection contains 4 records:
+    1. `English assignment` — no deadline
+    2. `English presentation` — no deadline
+    3. `English` — due today (`2026-10-17`)
+    4. `English` — due tomorrow (`2026-10-18`)
+  - When the user requested "Complete English", VoxPlan marked `English` due tomorrow as completed without asking which task was intended.
+- **Root Cause Analysis**:
+  - In `resolveTaskReference` (`src/conversation/dialogueManager.js`), `tasks.find` was used to identify exact title matches: `const exact = tasks.find(t => t.title.trim().toLowerCase() === cleanLower || t.title.trim().toLowerCase() === stripped);`.
+  - `tasks.find` stopped at the very first element in the array matching the predicate. Because new tasks in React state are prepended (`setTasks(prev => [newTask, ...prev])`), Task 4 (`English` due tomorrow) was at index 0 of the tasks array.
+  - `tasks.find` returned Task 4, reported `{ status: 'exact', task: exact }`, and bypassed the ambiguity check completely, ignoring identical titles and overlapping candidates (`English assignment`, `English presentation`).
+- **Hard Mutation-Safety Boundary**:
+  - Exported canonical resolution contract `RESOLUTION_STATUS`:
+    - `resolved`: Exactly one sufficiently confident and unambiguous candidate.
+    - `ambiguous`: Multiple plausible candidates.
+    - `not_found`: No credible candidate.
+    - `needs_clarification`: Reference or intent is insufficiently clear.
+  - **Invariant Enforced at Mutation Boundary**: In `src/App.jsx` (`dispatchAction`), every mutating intent (`COMPLETE_TASK`, `REOPEN_TASK`, `DELETE_TASK`, `RESCHEDULE_TASK`, `CHANGE_PRIORITY`) requires a validated, non-empty `taskId` that exists in the current active task store. Unresolved fuzzy matches or missing IDs are blocked before state mutation.
+  - **Resolver Invariant**: In `resolveTaskReference` (`dialogueManager.js`) and `findMatchingTasks` (`scheduleNegotiator.js`), all exact, stripped, and token matches are aggregated. If `allCandidates.length > 1`, the result is **strictly ambiguous**. The highest-scoring fuzzy or first exact match is never substituted for uniqueness.
+- **Resolver & Clarification Behavior**:
+  - For the 4-task reproduction scenario, "Complete English" produces:
+    `"I found four matching tasks. Which one should I mark complete? 1. "English" (due today), 2. "English" (due tomorrow), 3. "English assignment" (no deadline), 4. "English presentation" (no deadline)"`
+  - Clarification resolution:
+    - `"the one due tomorrow"` resolves uniquely to Task 4.
+    - `"the one due today"` resolves uniquely to Task 3.
+    - `"the assignment"` resolves uniquely to Task 1.
+    - `"the presentation"` resolves uniquely to Task 2.
+    - `"the first one"` resolves candidate 0 against the stable displayed ordering.
+    - `"cancel"` aborts clarification and leaves all tasks untouched.
+  - **Revalidation & External Deletion Safeguard**: When the user provides a clarification response, the candidate task ID is verified against the latest live task collection. If the task was deleted externally while clarification was pending, execution is aborted with `'Referenced task is no longer available. Action cancelled.'`.
+- **Regression Tests Added**:
+  - Added dedicated test suite `Critical Correctness Regression — Ambiguous Task Mutation Prevention` in `tests/task_matching.test.js`:
+    1. "Complete English" returns AMBIGUOUS resolution, not a resolved ID, identifying all 4 tasks.
+    2. Dialogue presents actual candidates with distinguishing metadata; no task mutated before clarification.
+    3. Selecting "the one due tomorrow" resolves only Task 4 and executes only on that task.
+    4. Candidate selection variations: "the one due today", "the assignment", "the presentation", and "the first one".
+    5. Cancelling leaves all four tasks untouched.
+    6. Revalidation safeguard: aborted if selected candidate task is deleted before response.
+    7. Ambiguity safeguards also protect deletion, deadline changes, and priority changes.
+    8. Unique references still resolve and mutate normally without disabling fuzzy matching.
+- **Verification & Exact Results**:
+  - Node unit & integration tests: 274 passing, 0 failing across 56 test suites (`npm test`).
+  - Linter: 0 warnings, 0 errors across 44 files (`npm run lint` / `oxlint`).
+  - Production build: `vite build` completed cleanly in 315ms (`npm run build`).
+  - Backend tests: 27 passed in 4.92s (`python -m pytest backend/tests/ -v`).
+  - Browser E2E verification: Executed in browser on `http://localhost:5173/#command` recording WebP session `voxplan_ui_verify_1792260297754.webp`. Verified 4 English tasks created, "Complete English" prompted clarification with all 4 items and left all uncompleted, "the one due tomorrow" completed only Task 4, and "cancel" aborted cleanly without mutations.
+- **Files Modified**:
+  - `src/App.jsx` (hard mutation boundary in `dispatchAction`)
+  - `src/components/CommandBar.jsx` (automation-resilient command input handling)
+  - `src/conversation/dialogueManager.js` (exported `RESOLUTION_STATUS`, aggregated candidate resolution, distinguishing candidate formatting, stale task safeguards)
+  - `src/conversation/scheduleNegotiator.js` (aggregate matching and candidate counting in `findMatchingTasks`)
+  - `tests/task_matching.test.js` (added 4-task reproduction regression test suite)
+  - `PROJECT_PLAN.md` (audit, architecture, and verification documentation)
+- **Git Commit**: `57af0d0` (`fix(phase-5): block ambiguous task mutations`).
+- **Push Status**: Verified pushed to `origin main` at `https://github.com/kanwal-vyas/VoxPlan.git`.
+- **Remaining Limitations**:
+  - Disambiguation by relative dates supports standard conversational expressions ("today", "tomorrow", "no deadline", "unscheduled", "due <date>"); non-standard or distant relative expressions fall back to ordinal/distinctive title disambiguation.
+
+
 #### Stage 5.4: Conversational Plan Explanations & Constraint Debriefing
 - **Scope & Expected Deliverables**:
   - Implement schedule debriefing generator (`src/conversation/scheduleDebrief.js`) providing natural language explanations for scheduler placements:
