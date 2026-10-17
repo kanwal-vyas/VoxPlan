@@ -10,6 +10,9 @@ export default function CommandBar({
   onConfirm,
   onCancel,
   activeSubjectTask = null,
+  activeProposal = null,
+  onAcceptProposal,
+  onDiscardProposal,
 }) {
   const [inputVal, setInputVal] = useState('');
   const [isVisible, setIsVisible] = useState(false);
@@ -49,7 +52,9 @@ export default function CommandBar({
     ? 'Type "yes" to confirm or "no" to cancel...'
     : conversationState === 'AWAITING_CLARIFICATION'
     ? 'Type or speak your answer (or "cancel")...'
-    : 'Ask or command (e.g. "Tell me about my database assignment", "Mark it done")...';
+    : conversationState === 'AWAITING_PROPOSAL_DECISION'
+    ? 'Type "accept" to apply, "discard" to cancel, or ask "what if..."'
+    : 'Ask or command (e.g. "Move my database assignment to tomorrow", "Spread tasks over 3 days")...';
 
   return (
     <section ref={sectionRef} style={styles.section} id="command" aria-label="Command Assistant">
@@ -65,6 +70,9 @@ export default function CommandBar({
               )}
               {conversationState === 'AWAITING_CLARIFICATION' && (
                 <span style={styles.stateBadgeClarification}>💬 CLARIFYING DETAILS</span>
+              )}
+              {conversationState === 'AWAITING_PROPOSAL_DECISION' && (
+                <span style={styles.stateBadgeProposal}>📋 PROPOSAL PENDING REVIEW</span>
               )}
             </div>
             <h2 style={styles.title}>
@@ -82,14 +90,14 @@ export default function CommandBar({
         <div
           style={{
             ...styles.notebookCard,
-            borderColor: isListening ? '#FF8F82' : conversationState === 'AWAITING_CONFIRMATION' ? '#FFB5A7' : 'rgba(37, 36, 42, 0.08)',
-            boxShadow: isListening ? '0 12px 32px rgba(255, 143, 130, 0.2)' : '0 4px 16px rgba(37, 36, 42, 0.04)',
+            borderColor: isListening ? '#FF8F82' : conversationState === 'AWAITING_CONFIRMATION' ? '#FFB5A7' : conversationState === 'AWAITING_PROPOSAL_DECISION' ? '#BFE8D0' : 'rgba(37, 36, 42, 0.08)',
+            boxShadow: isListening ? '0 12px 32px rgba(255, 143, 130, 0.2)' : conversationState === 'AWAITING_PROPOSAL_DECISION' ? '0 8px 24px rgba(64, 145, 108, 0.12)' : '0 4px 16px rgba(37, 36, 42, 0.04)',
           }}
           className="digital-card command-notebook-card"
         >
           {/* Active Context Indicator */}
           {activeSubjectTask && (
-            <div style={styles.contextBar} title="Follow-up commands like 'mark it done' or 'delete it' apply to this task">
+            <div style={styles.contextBar} title="Follow-up commands like 'mark it done' or 'move it to Friday' apply to this task">
               <span style={styles.contextDot} />
               <span style={styles.contextText}>
                 Active Task Focus: <strong>{activeSubjectTask.title}</strong>
@@ -101,7 +109,7 @@ export default function CommandBar({
           <form onSubmit={handleSubmit} style={styles.form}>
             <div style={styles.inputRow}>
               <span style={styles.promptIcon}>
-                {conversationState === 'AWAITING_CONFIRMATION' ? '⚠️' : '💬'}
+                {conversationState === 'AWAITING_CONFIRMATION' ? '⚠️' : conversationState === 'AWAITING_PROPOSAL_DECISION' ? '📋' : '💬'}
               </span>
               <input
                 type="text"
@@ -110,6 +118,7 @@ export default function CommandBar({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleSubmit(e);
                 }}
+                id="command-input"
                 placeholder={placeholderText}
                 style={styles.input}
               />
@@ -144,6 +153,7 @@ export default function CommandBar({
 
               {/* Submit Button */}
               <button
+                id="command-submit-btn"
                 type="submit"
                 style={styles.sendBtn}
                 title="Execute command"
@@ -183,6 +193,117 @@ export default function CommandBar({
             </div>
           )}
 
+          {/* Schedule Proposal Review Card */}
+          {activeProposal && (
+            <div style={styles.proposalCard} aria-label="Schedule Proposal Details">
+              <div style={styles.proposalHeader}>
+                <div style={styles.proposalBadgeGroup}>
+                  <span style={styles.proposalPill}>PROPOSAL REVIEW</span>
+                  <span style={styles.strategyPill}>
+                    {activeProposal.strategy === 'conversational_reschedule'
+                      ? 'Task Move'
+                      : activeProposal.strategy === 'balanced_pace'
+                      ? 'Workload Spread'
+                      : activeProposal.strategy || 'Adaptive Proposal'}
+                  </span>
+                  <span
+                    style={{
+                      ...styles.feasibilityPill,
+                      backgroundColor:
+                        activeProposal.summary?.feasibilityStatus === 'infeasible_dependency'
+                          ? '#FFE8E5'
+                          : activeProposal.summary?.feasibilityStatus === 'capacity_warning'
+                          ? '#FFF4E5'
+                          : '#EBF8F1',
+                      color:
+                        activeProposal.summary?.feasibilityStatus === 'infeasible_dependency'
+                          ? '#991B1B'
+                          : activeProposal.summary?.feasibilityStatus === 'capacity_warning'
+                          ? '#B45309'
+                          : '#166534',
+                    }}
+                  >
+                    {activeProposal.summary?.feasibilityStatus === 'infeasible_dependency'
+                      ? '🚫 Dependency Conflict'
+                      : activeProposal.summary?.feasibilityStatus === 'capacity_warning'
+                      ? '⚠️ Capacity Alert'
+                      : '✓ Feasible'}
+                  </span>
+                </div>
+                <span style={styles.proposalIdText} title={activeProposal.scheduleId}>
+                  ID: {activeProposal.scheduleId.substring(0, 18)}...
+                </span>
+              </div>
+
+              {/* Placements Diff List */}
+              <div style={styles.placementsList}>
+                {(activeProposal.proposedPlacements || activeProposal.placements || []).map((p) => (
+                  <div key={p.taskId} style={styles.placementItem}>
+                    <div style={styles.placementLeft}>
+                      <span style={styles.placementTitle}>{p.taskTitle || p.taskId}</span>
+                      <span style={styles.placementDates}>
+                        <span style={styles.origDate}>{p.originalDueDate || 'No deadline'}</span>
+                        <span style={styles.arrowIcon}> ➜ </span>
+                        <strong style={styles.propDate}>{p.proposedDate || 'Unscheduled'}</strong>
+                      </span>
+                    </div>
+                    <div style={styles.placementRight}>
+                      <span style={styles.effortTag}>{p.effectiveHours || 2.0}h</span>
+                      <span
+                        style={{
+                          ...styles.statusTag,
+                          backgroundColor:
+                            p.status === 'blocked_by_dependency'
+                              ? '#FFE8E5'
+                              : p.status === 'capacity_warning'
+                              ? '#FFF4E5'
+                              : '#EBF8F1',
+                          color:
+                            p.status === 'blocked_by_dependency'
+                              ? '#991B1B'
+                              : p.status === 'capacity_warning'
+                              ? '#B45309'
+                              : '#166534',
+                        }}
+                      >
+                        {p.status === 'blocked_by_dependency'
+                          ? 'Blocked'
+                          : p.status === 'capacity_warning'
+                          ? 'Over Capacity'
+                          : 'On Time'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Action Buttons */}
+              <div style={styles.proposalActionsRow}>
+                <button
+                  id="proposal-apply-btn"
+                  type="button"
+                  onClick={() => onAcceptProposal && onAcceptProposal(activeProposal)}
+                  style={styles.acceptProposalBtn}
+                  aria-label="Accept schedule proposal"
+                >
+                  ✓ Apply Schedule
+                </button>
+                <button
+                  id="proposal-discard-btn"
+                  type="button"
+                  onClick={() => onDiscardProposal && onDiscardProposal(activeProposal, 'user_discard')}
+                  style={styles.discardProposalBtn}
+                  aria-label="Discard schedule proposal"
+                >
+                  ✕ Discard
+                </button>
+                <span style={styles.proposalHelpHint}>
+                  Say "Accept" to apply, "Discard" to cancel, or ask "What if..." to revise.
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Confirmation Controls Bar */}
           {conversationState === 'AWAITING_CONFIRMATION' && (
             <div style={styles.confirmationRow} aria-label="Confirmation Controls">
@@ -210,6 +331,7 @@ export default function CommandBar({
           <div style={styles.promptsRow}>
             <span style={styles.promptsLabel}>Try saying:</span>
             {[
+              { label: 'Spread tasks over 3 days', cmd: 'spread tasks across next 3 days' },
               { label: 'Show high risk tasks', cmd: 'show high risk tasks' },
               { label: 'Explain project risk', cmd: 'explain project risk' },
               { label: 'Plan sprint', cmd: 'plan sprint' },
@@ -459,6 +581,171 @@ const styles = {
     fontSize: '13px',
     fontWeight: '700',
     color: '#991B1B',
+    flex: 1,
+  },
+  stateBadgeProposal: {
+    backgroundColor: '#EBF8F1',
+    color: '#166534',
+    padding: '4px 10px',
+    borderRadius: '9999px',
+    fontSize: '11px',
+    fontWeight: '800',
+    letterSpacing: '0.04em',
+    border: '1px solid #BFE8D0',
+  },
+  proposalCard: {
+    backgroundColor: '#FAF9F6',
+    border: '1.5px solid #BFE8D0',
+    borderRadius: '14px',
+    padding: '16px 20px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '14px',
+    boxShadow: '0 4px 12px rgba(64, 145, 108, 0.08)',
+  },
+  proposalHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: '10px',
+  },
+  proposalBadgeGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexWrap: 'wrap',
+  },
+  proposalPill: {
+    backgroundColor: '#25242A',
+    color: '#FFFFFF',
+    fontSize: '11px',
+    fontWeight: '800',
+    padding: '3px 8px',
+    borderRadius: '6px',
+    letterSpacing: '0.04em',
+  },
+  strategyPill: {
+    backgroundColor: '#FFF4E5',
+    color: '#B45309',
+    fontSize: '11px',
+    fontWeight: '700',
+    padding: '3px 8px',
+    borderRadius: '6px',
+    border: '1px solid #FFE0B2',
+  },
+  feasibilityPill: {
+    fontSize: '11px',
+    fontWeight: '700',
+    padding: '3px 8px',
+    borderRadius: '6px',
+    border: '1px solid rgba(0,0,0,0.06)',
+  },
+  proposalIdText: {
+    fontSize: '11px',
+    fontFamily: "'JetBrains Mono', monospace",
+    color: '#706D73',
+  },
+  placementsList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  placementItem: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '10px 14px',
+    backgroundColor: '#FFFFFF',
+    borderRadius: '10px',
+    border: '1px solid rgba(37, 36, 42, 0.06)',
+    gap: '12px',
+    flexWrap: 'wrap',
+  },
+  placementLeft: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '3px',
+  },
+  placementTitle: {
+    fontSize: '14px',
+    fontWeight: '700',
+    color: '#25242A',
+  },
+  placementDates: {
+    fontSize: '12px',
+    color: '#706D73',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+  },
+  origDate: {
+    color: '#94A3B8',
+    textDecoration: 'line-through',
+  },
+  arrowIcon: {
+    color: '#166534',
+    fontWeight: '700',
+  },
+  propDate: {
+    color: '#166534',
+    fontWeight: '700',
+  },
+  placementRight: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  effortTag: {
+    fontSize: '12px',
+    fontFamily: "'JetBrains Mono', monospace",
+    fontWeight: '600',
+    color: '#555259',
+    backgroundColor: '#F1F5F9',
+    padding: '2px 8px',
+    borderRadius: '6px',
+  },
+  statusTag: {
+    fontSize: '11px',
+    fontWeight: '700',
+    padding: '3px 8px',
+    borderRadius: '6px',
+    border: '1px solid rgba(0,0,0,0.05)',
+  },
+  proposalActionsRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    flexWrap: 'wrap',
+    paddingTop: '6px',
+  },
+  acceptProposalBtn: {
+    backgroundColor: '#40916C',
+    color: '#FFFFFF',
+    border: 'none',
+    padding: '8px 18px',
+    borderRadius: '8px',
+    fontSize: '13px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    boxShadow: '0 2px 6px rgba(64, 145, 108, 0.3)',
+    transition: 'all 0.15s ease',
+  },
+  discardProposalBtn: {
+    backgroundColor: '#F1F5F9',
+    color: '#475569',
+    border: '1px solid rgba(37, 36, 42, 0.12)',
+    padding: '8px 14px',
+    borderRadius: '8px',
+    fontSize: '13px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+  },
+  proposalHelpHint: {
+    fontSize: '12px',
+    color: '#706D73',
+    fontStyle: 'italic',
     flex: 1,
   },
   confirmBtn: {

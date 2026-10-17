@@ -13,10 +13,14 @@
  * - Zero external LLM calls; zero telemetry storage of transcripts.
  */
 
+import { parseScheduleIntent, SCHEDULE_INTENTS } from './scheduleIntentParser.js';
+import { negotiateScheduleProposal } from './scheduleNegotiator.js';
+
 export const CONVERSATION_STATES = Object.freeze({
   IDLE: 'IDLE',
   AWAITING_CLARIFICATION: 'AWAITING_CLARIFICATION',
   AWAITING_CONFIRMATION: 'AWAITING_CONFIRMATION',
+  AWAITING_PROPOSAL_DECISION: 'AWAITING_PROPOSAL_DECISION',
 });
 
 export const CONVERSATION_INTENTS = Object.freeze({
@@ -36,6 +40,11 @@ export const CONVERSATION_INTENTS = Object.freeze({
   SHOW_METRICS: 'SHOW_METRICS',
   SHOW_IMPORTANCE: 'SHOW_IMPORTANCE',
   EXPLAIN_RISK: 'EXPLAIN_RISK',
+  SCHEDULE_NEGOTIATION: 'SCHEDULE_NEGOTIATION',
+  ACCEPT_PROPOSAL: 'ACCEPT_PROPOSAL',
+  DISCARD_PROPOSAL: 'DISCARD_PROPOSAL',
+  SIMULATE_SCHEDULE: 'SIMULATE_SCHEDULE',
+  QUERY_CAPACITY: 'QUERY_CAPACITY',
   CONFIRM: 'CONFIRM',
   CANCEL: 'CANCEL',
   HELP: 'HELP',
@@ -152,6 +161,8 @@ export class DialogueManager {
     this.pendingIntent = null;
     this.pendingAction = null;
     this.pendingClarification = null;
+    this.activeProposal = null;
+    this.proposalHistory = [];
     this.lastActivityTimestamp = this.clock();
   }
 
@@ -162,7 +173,7 @@ export class DialogueManager {
    */
   checkTimeout() {
     const now = this.clock();
-    if (this.state !== CONVERSATION_STATES.IDLE || this.activeSubjectTaskId !== null) {
+    if (this.state !== CONVERSATION_STATES.IDLE || this.activeSubjectTaskId !== null || this.activeProposal !== null) {
       if (now - this.lastActivityTimestamp >= this.timeoutMs) {
         this.reset();
         return true;
@@ -180,6 +191,7 @@ export class DialogueManager {
     this.pendingIntent = null;
     this.pendingAction = null;
     this.pendingClarification = null;
+    this.activeProposal = null;
     this.lastActivityTimestamp = this.clock();
   }
 
@@ -194,6 +206,7 @@ export class DialogueManager {
       pendingIntent: this.pendingIntent ? { ...this.pendingIntent } : null,
       pendingAction: this.pendingAction ? { ...this.pendingAction } : null,
       pendingClarification: this.pendingClarification ? { ...this.pendingClarification } : null,
+      activeProposal: this.activeProposal ? { ...this.activeProposal } : null,
       lastActivityTimestamp: this.lastActivityTimestamp,
     };
   }
@@ -213,15 +226,24 @@ export class DialogueManager {
         this.state = CONVERSATION_STATES.IDLE;
       }
     }
-    if (this.pendingClarification && this.pendingClarification.targetTaskId === taskId) {
+    if (this.pendingClarification && (this.pendingClarification.targetTaskId === taskId || this.pendingClarification.targetTask?.id === taskId)) {
       this.pendingClarification = null;
       if (this.state === CONVERSATION_STATES.AWAITING_CLARIFICATION) {
         this.state = CONVERSATION_STATES.IDLE;
       }
     }
-    if (this.pendingIntent && this.pendingIntent.targetTaskId === taskId) {
+    if (this.pendingIntent && (this.pendingIntent.targetTaskId === taskId || this.pendingIntent.targetTask?.id === taskId)) {
       this.pendingIntent = null;
       this.state = CONVERSATION_STATES.IDLE;
+    }
+    if (this.activeProposal) {
+      const placements = this.activeProposal.proposedPlacements || this.activeProposal.placements || [];
+      if (placements.some((p) => p.taskId === taskId)) {
+        this.activeProposal = null;
+        if (this.state === CONVERSATION_STATES.AWAITING_PROPOSAL_DECISION) {
+          this.state = CONVERSATION_STATES.IDLE;
+        }
+      }
     }
   }
 
@@ -378,7 +400,31 @@ export class DialogueManager {
       return this._handleAwaitingClarification(text, tasks, context);
     }
 
-    // Otherwise state is IDLE -> parse new command/intent
+    if (this.state === CONVERSATION_STATES.AWAITING_PROPOSAL_DECISION) {
+      return this._handleAwaitingProposalDecision(text, tasks, context);
+    }
+
+    // Check if input is a schedule negotiation intent
+    let activeSubjectTask = null;
+    if (this.activeSubjectTaskId) {
+      activeSubjectTask = tasks.find((t) => t.id === this.activeSubjectTaskId) || null;
+    }
+    if (!activeSubjectTask && this.activeProposal && this.activeProposal.proposedPlacements?.length > 0) {
+      const pId = this.activeProposal.proposedPlacements[0].taskId;
+      activeSubjectTask = tasks.find((t) => t.id === pId) || null;
+    }
+
+    const schedIntent = parseScheduleIntent(text, {
+      activeSubjectTask,
+      tasks,
+      clock: this.clock,
+    });
+
+    if (schedIntent.intent !== SCHEDULE_INTENTS.UNSUPPORTED) {
+      return this._handleScheduleIntent(schedIntent, text, tasks, context);
+    }
+
+    // Otherwise state is IDLE -> parse standard commands
     return this._handleIdleState(text, tasks, context);
   }
 
@@ -514,6 +560,44 @@ export class DialogueManager {
 
     // 1. Missing target task resolution
     if (clarification.missingField === 'targetTask') {
+      if (clarification.schedIntent) {
+        const resolution = this.resolveTaskReference(text, clarification.candidateTasks || tasks);
+        if (resolution.status === 'exact') {
+          const target = resolution.task;
+          this.state = CONVERSATION_STATES.IDLE;
+          this.pendingClarification = null;
+          this.pendingIntent = null;
+          this.activeSubjectTaskId = target.id;
+          clarification.schedIntent.params.targetTaskQuery = target.title;
+          return this._handleScheduleIntent(clarification.schedIntent, text, tasks, context);
+        }
+        if (resolution.status === 'ambiguous') {
+          const titleList = resolution.matches.map((m) => `"${m.title}"`).join(', ');
+          return {
+            state: CONVERSATION_STATES.AWAITING_CLARIFICATION,
+            intent: pendingIntent.intent,
+            targetTask: null,
+            responseText: `Multiple tasks matched "${text}": ${titleList}. Which one did you mean? (or say "cancel")`,
+            feedbackType: 'warning',
+            requiresConfirmation: false,
+            isAuthorized: false,
+            action: null,
+            error: 'ambiguous_reference',
+          };
+        }
+        return {
+          state: CONVERSATION_STATES.AWAITING_CLARIFICATION,
+          intent: pendingIntent.intent,
+          targetTask: null,
+          responseText: `Could not find a task matching "${text}". Please specify the full task title or say "cancel".`,
+          feedbackType: 'error',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: null,
+          error: 'task_not_found',
+        };
+      }
+
       const resolution = this.resolveTaskReference(text, tasks);
       if (resolution.status === 'exact') {
         const target = resolution.task;
@@ -558,6 +642,17 @@ export class DialogueManager {
     if (clarification.missingField === 'dueDate') {
       const parsedDate = parseDateExpression(text, new Date(this.clock()));
       if (parsedDate) {
+        if (clarification.schedIntent) {
+          const target = clarification.targetTask;
+          this.state = CONVERSATION_STATES.IDLE;
+          this.pendingClarification = null;
+          this.pendingIntent = null;
+          if (target) this.activeSubjectTaskId = target.id;
+          clarification.schedIntent.intent = SCHEDULE_INTENTS.DIRECT_RESCHEDULE;
+          clarification.schedIntent.params.targetDate = parsedDate;
+          return this._handleScheduleIntent(clarification.schedIntent, text, tasks, context);
+        }
+
         const target = clarification.targetTask;
         this.state = CONVERSATION_STATES.IDLE;
         this.pendingClarification = null;
@@ -639,6 +734,335 @@ export class DialogueManager {
     // Fallback: reset to IDLE and process text normally
     this.state = CONVERSATION_STATES.IDLE;
     return this._handleIdleState(text, tasks, context);
+  }
+
+  /**
+   * Handle user response when a schedule proposal is actively awaiting decision.
+   * @private
+   */
+  _handleAwaitingProposalDecision(text, tasks, context) {
+    const activeProp = this.activeProposal;
+
+    // 1. Explicit Cancellation
+    if (/^(?:cancel|nevermind|exit|stop)$/i.test(text)) {
+      const discarded = activeProp ? {
+        ...activeProp,
+        status: 'discarded',
+        discardedAt: this.clock(),
+        discardReason: 'user_cancel',
+      } : null;
+      if (discarded) this.proposalHistory.push(discarded);
+      this.activeProposal = null;
+      this.state = CONVERSATION_STATES.IDLE;
+
+      return {
+        state: CONVERSATION_STATES.IDLE,
+        intent: CONVERSATION_INTENTS.CANCEL,
+        targetTask: null,
+        proposal: discarded,
+        responseText: 'Schedule proposal cancelled. Schedule remains unchanged.',
+        feedbackType: 'info',
+        requiresConfirmation: false,
+        isAuthorized: false,
+        action: discarded ? {
+          type: 'DISCARD_SCHEDULE_PROPOSAL',
+          proposal: discarded,
+          reason: 'user_cancel',
+        } : null,
+        error: null,
+      };
+    }
+
+    // 2. Explicit Acceptance
+    if (/^(?:accept(?:\s+(?:the\s+)?(?:schedule|proposal|changes?))?|apply(?:\s+(?:the\s+)?(?:schedule|proposal|changes?))?|yes|confirm(?:\s+proposal)?|looks?\s+good|proceed)$/i.test(text)) {
+      if (!activeProp) {
+        this.state = CONVERSATION_STATES.IDLE;
+        return {
+          state: CONVERSATION_STATES.IDLE,
+          intent: CONVERSATION_INTENTS.ACCEPT_PROPOSAL,
+          targetTask: null,
+          responseText: 'No active schedule proposal to accept.',
+          feedbackType: 'warning',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: null,
+          error: 'no_active_proposal',
+        };
+      }
+
+      const accepted = {
+        ...activeProp,
+        status: 'accepted',
+        acceptedAt: this.clock(),
+      };
+      this.proposalHistory.push(accepted);
+      this.activeProposal = null;
+      this.state = CONVERSATION_STATES.IDLE;
+
+      return {
+        state: CONVERSATION_STATES.IDLE,
+        intent: CONVERSATION_INTENTS.ACCEPT_PROPOSAL,
+        targetTask: null,
+        proposal: accepted,
+        responseText: `Applying schedule proposal (${accepted.summary?.dateChangesCount || 1} task changes).`,
+        feedbackType: 'success',
+        requiresConfirmation: false,
+        isAuthorized: true,
+        action: {
+          type: 'ACCEPT_SCHEDULE_PROPOSAL',
+          proposal: accepted,
+        },
+        error: null,
+      };
+    }
+
+    // 3. Explicit Discard
+    if (/^(?:discard(?:\s+(?:the\s+)?(?:schedule|proposal|changes?))?|reject(?:\s+(?:the\s+)?(?:schedule|proposal|changes?))?|no|keep\s+(?:existing|current)\s+schedule|don't\s+apply)$/i.test(text)) {
+      if (!activeProp) {
+        this.state = CONVERSATION_STATES.IDLE;
+        return {
+          state: CONVERSATION_STATES.IDLE,
+          intent: CONVERSATION_INTENTS.DISCARD_PROPOSAL,
+          targetTask: null,
+          responseText: 'No active schedule proposal to discard.',
+          feedbackType: 'info',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: null,
+          error: null,
+        };
+      }
+
+      const discarded = {
+        ...activeProp,
+        status: 'discarded',
+        discardedAt: this.clock(),
+        discardReason: 'user_discard',
+      };
+      this.proposalHistory.push(discarded);
+      this.activeProposal = null;
+      this.state = CONVERSATION_STATES.IDLE;
+
+      return {
+        state: CONVERSATION_STATES.IDLE,
+        intent: CONVERSATION_INTENTS.DISCARD_PROPOSAL,
+        targetTask: null,
+        proposal: discarded,
+        responseText: 'Schedule proposal discarded. Your current schedule remains unchanged.',
+        feedbackType: 'info',
+        requiresConfirmation: false,
+        isAuthorized: false,
+        action: {
+          type: 'DISCARD_SCHEDULE_PROPOSAL',
+          proposal: discarded,
+          reason: 'user_discard',
+        },
+        error: null,
+      };
+    }
+
+    // 4. Revision or New Schedule Request
+    let targetSubject = null;
+    if (this.activeSubjectTaskId) {
+      targetSubject = tasks.find((t) => t.id === this.activeSubjectTaskId) || null;
+    }
+    if (!targetSubject && activeProp && activeProp.proposedPlacements && activeProp.proposedPlacements.length > 0) {
+      const primaryTaskId = activeProp.proposedPlacements[0].taskId;
+      targetSubject = tasks.find((t) => t.id === primaryTaskId) || null;
+    }
+
+    const schedIntent = parseScheduleIntent(text, {
+      activeSubjectTask: targetSubject,
+      tasks,
+      clock: this.clock,
+    });
+
+    if (schedIntent.intent !== SCHEDULE_INTENTS.UNSUPPORTED) {
+      return this._handleScheduleIntent(schedIntent, text, tasks, context);
+    }
+
+    // 5. Unrelated command entered: supersede active proposal cleanly, reset, and execute
+    if (activeProp) {
+      const superseded = {
+        ...activeProp,
+        status: 'superseded',
+        supersededAt: this.clock(),
+        supersededReason: 'superseded_by_new_command',
+      };
+      this.proposalHistory.push(superseded);
+      this.activeProposal = null;
+    }
+    this.state = CONVERSATION_STATES.IDLE;
+    return this._handleIdleState(text, tasks, context);
+  }
+
+  /**
+   * Handle scheduling intent execution, proposal generation, and negotiation.
+   * @private
+   */
+  _handleScheduleIntent(schedIntent, text, tasks, context) {
+    let activeSubjectTask = null;
+    if (this.activeSubjectTaskId) {
+      activeSubjectTask = tasks.find((t) => t.id === this.activeSubjectTaskId) || null;
+    }
+    if (!activeSubjectTask && this.activeProposal && this.activeProposal.proposedPlacements?.length > 0) {
+      const pId = this.activeProposal.proposedPlacements[0].taskId;
+      activeSubjectTask = tasks.find((t) => t.id === pId) || null;
+    }
+
+    const negotiation = negotiateScheduleProposal({
+      intentResult: schedIntent,
+      tasks,
+      activeProposal: this.activeProposal,
+      activeSubjectTask,
+      options: {
+        clock: this.clock,
+        dailyCapacityHours: context.dailyCapacityHours,
+        workingDays: context.workingDays,
+        horizonDays: context.horizonDays,
+        personalDurationModel: context.personalDurationModel,
+      },
+    });
+
+    if (negotiation.requiresClarification) {
+      this.state = CONVERSATION_STATES.AWAITING_CLARIFICATION;
+      this.pendingClarification = {
+        clarificationType: negotiation.clarificationType,
+        targetTask: negotiation.targetTask || null,
+        targetTaskId: negotiation.targetTask?.id || null,
+        candidateTasks: negotiation.candidateTasks || null,
+        missingField: negotiation.clarificationType === 'MISSING_DATE' ? 'dueDate' : 'targetTask',
+        schedIntent,
+      };
+      this.pendingIntent = {
+        intent: schedIntent.intent,
+        schedIntent,
+      };
+      if (negotiation.targetTask) {
+        this.activeSubjectTaskId = negotiation.targetTask.id;
+      }
+      return {
+        state: CONVERSATION_STATES.AWAITING_CLARIFICATION,
+        intent: schedIntent.intent,
+        targetTask: negotiation.targetTask || null,
+        responseText: negotiation.responseText,
+        feedbackType: negotiation.feedbackType || 'info',
+        requiresConfirmation: false,
+        isAuthorized: false,
+        action: null,
+        error: negotiation.clarificationType === 'AMBIGUOUS_TASK' ? 'ambiguous_reference' : 'missing_date',
+      };
+    }
+
+    if (negotiation.proposal) {
+      this.activeProposal = negotiation.proposal;
+      this.state = CONVERSATION_STATES.AWAITING_PROPOSAL_DECISION;
+
+      if (negotiation.supersededProposal) {
+        this.proposalHistory.push(negotiation.supersededProposal);
+      }
+
+      if (negotiation.targetTask) {
+        this.activeSubjectTaskId = negotiation.targetTask.id;
+      }
+
+      return {
+        state: CONVERSATION_STATES.AWAITING_PROPOSAL_DECISION,
+        intent: schedIntent.intent,
+        targetTask: negotiation.targetTask || activeSubjectTask,
+        proposal: negotiation.proposal,
+        supersededProposal: negotiation.supersededProposal || null,
+        responseText: negotiation.responseText,
+        feedbackType: negotiation.feedbackType || 'info',
+        requiresConfirmation: false,
+        isAuthorized: false,
+        action: null,
+        error: null,
+      };
+    }
+
+    if (negotiation.isSimulationOnly || negotiation.isFeasibilityQuery) {
+      if (negotiation.targetTask) {
+        this.activeSubjectTaskId = negotiation.targetTask.id;
+      }
+      return {
+        state: this.state,
+        intent: schedIntent.intent,
+        targetTask: negotiation.targetTask || activeSubjectTask,
+        isSimulationOnly: negotiation.isSimulationOnly || false,
+        isFeasibilityQuery: negotiation.isFeasibilityQuery || false,
+        simulationResult: negotiation.simulationResult || null,
+        queryResult: negotiation.queryResult || null,
+        responseText: negotiation.responseText,
+        feedbackType: negotiation.feedbackType || 'info',
+        requiresConfirmation: false,
+        isAuthorized: false,
+        action: null,
+        error: null,
+      };
+    }
+
+    if (negotiation.action) {
+      if (negotiation.action.type === 'ACCEPT_SCHEDULE_PROPOSAL') {
+        const propToApply = this.activeProposal || negotiation.action.proposal;
+        if (propToApply) {
+          this.proposalHistory.push({ ...propToApply, status: 'accepted', acceptedAt: this.clock() });
+        }
+        this.activeProposal = null;
+        this.state = CONVERSATION_STATES.IDLE;
+        return {
+          state: CONVERSATION_STATES.IDLE,
+          intent: CONVERSATION_INTENTS.ACCEPT_PROPOSAL,
+          targetTask: activeSubjectTask,
+          proposal: propToApply,
+          responseText: negotiation.responseText,
+          feedbackType: negotiation.feedbackType || 'success',
+          requiresConfirmation: false,
+          isAuthorized: true,
+          action: {
+            type: 'ACCEPT_SCHEDULE_PROPOSAL',
+            proposal: propToApply,
+          },
+          error: null,
+        };
+      }
+
+      if (negotiation.action.type === 'DISCARD_SCHEDULE_PROPOSAL') {
+        const propToDiscard = this.activeProposal || negotiation.discardedProposal;
+        if (propToDiscard) {
+          this.proposalHistory.push({ ...propToDiscard, status: 'discarded', discardedAt: this.clock() });
+        }
+        this.activeProposal = null;
+        this.state = CONVERSATION_STATES.IDLE;
+        return {
+          state: CONVERSATION_STATES.IDLE,
+          intent: CONVERSATION_INTENTS.DISCARD_PROPOSAL,
+          targetTask: activeSubjectTask,
+          responseText: negotiation.responseText,
+          feedbackType: negotiation.feedbackType || 'info',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: {
+            type: 'DISCARD_SCHEDULE_PROPOSAL',
+            proposal: propToDiscard,
+            reason: negotiation.action.reason || 'user_discard',
+          },
+          error: null,
+        };
+      }
+    }
+
+    return {
+      state: this.state,
+      intent: schedIntent.intent,
+      targetTask: activeSubjectTask,
+      responseText: negotiation.responseText || 'Could not process scheduling request.',
+      feedbackType: negotiation.feedbackType || 'warning',
+      requiresConfirmation: false,
+      isAuthorized: false,
+      action: null,
+      error: negotiation.success ? null : 'scheduling_error',
+    };
   }
 
   /**
@@ -1100,11 +1524,11 @@ export class DialogueManager {
    */
   _handleCreateTaskIntent(text) {
     let priority = 'medium';
-    if (/\b(?:high\s+priority|urgent|critical)\b/i.test(text)) {
+    if (/\b(?:high\s+priority|priority\s+high|urgent|critical)\b/i.test(text)) {
       priority = 'high';
-    } else if (/\b(?:low\s+priority|trivial|minor)\b/i.test(text)) {
+    } else if (/\b(?:low\s+priority|priority\s+low|trivial|minor)\b/i.test(text)) {
       priority = 'low';
-    } else if (/\b(?:medium\s+priority|normal\s+priority)\b/i.test(text)) {
+    } else if (/\b(?:medium\s+priority|priority\s+medium|normal\s+priority)\b/i.test(text)) {
       priority = 'medium';
     }
 
@@ -1124,6 +1548,7 @@ export class DialogueManager {
       .replace(/^(?:a|an)\s+/i, '')
       .replace(/\bwith\s+(?:high|medium|low)\s+priority\b/gi, '')
       .replace(/\b(?:high|medium|low)\s+priority\b/gi, '')
+      .replace(/\bpriority\s+(?:high|medium|low)\b/gi, '')
       .replace(/^task(?:\s+|$)/i, '')
       .replace(/^(?:called|named)\s+/i, '')
       .replace(/\b(?:called|named)\s+/gi, '')
@@ -1134,7 +1559,10 @@ export class DialogueManager {
       .replace(/\bdue\s+(?:on\s+)?(?:next\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, '')
       .trim();
 
-    rawTitle = rawTitle.replace(/\s+(?:with\s+)?(?:high|medium|low)\s+priority$/i, '').trim();
+    rawTitle = rawTitle
+      .replace(/\s+(?:with\s+)?(?:high|medium|low)\s+priority$/i, '')
+      .replace(/\s+priority\s+(?:high|medium|low)$/i, '')
+      .trim();
 
     if (!rawTitle) {
       // Missing title -> transition to AWAITING_CLARIFICATION

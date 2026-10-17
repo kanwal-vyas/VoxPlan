@@ -19,7 +19,7 @@ This document tracks the phased evolution of VoxPlan from a static task tracker 
 | **Phase 4, Stage 4** | Evidence-Driven Scheduler Optimization | **COMPLETED** | Rigorous baseline benchmark audit; replaced artificial depth penalty with bounded downstream unblocking bonus (`+ min(45, unblockCount * 15)`); eliminated unnecessary perturbation churn on satisfied dependencies (40% -> 0%, overall 24% -> 16%); multi-tier deterministic tie-breaking (score -> dueDate -> Shortest Processing Time -> taskId); evaluator metric honesty reporting `schedulableOnTimeRate` and `schedulerDaysDelayed`; enriched placement explainability; and 99 automated tests passing across 20 suites. |
 | **Phase 4, Stage 5** | Local Schedule Feedback & Outcome Tracking | **COMPLETED** | Versioned privacy-preserving telemetry schema (`SCHEMA_VERSION = 2`) recording proposal generation, acceptance, and discard actions; single-action deduplication; subsequent manual override detection (postponed vs advanced shifts); unaltered completion outcome matching; pure feedback analytics module (`scheduleFeedback.js`); modal feedback tab with explicit denominators and insufficient-data guards (< 3 observations); strict cautious learning boundary; and 110 automated tests across 27 suites. |
 | **Phase 4, Stage 6** | Schedule Feedback Integrity & Attribution Audit | **COMPLETED** | Stable session-scoped proposal identities; durable deduplication surviving page reloads without backend dependency (hydrating index from cached IndexedDB events on `telemetry.init()`); multi-proposal interval-based outcome attribution (`[acceptedAt, supersededAt)`); task lifecycle hardening (excluding reopened incomplete tasks & active backlog tasks); isolation of conflicting proposal decisions; standardized unique task denominators; privacy-preserving observability diagnostics; and 115 automated tests across 30 suites. |
-| **Phase 5** | Conversational Planning, Multi-Turn Dialog & Voice Experience | **PLANNED** | Multi-turn planning state machine, clarification dialog, natural language batch rescheduling, conversational schedule debriefing, accessible Web Speech voice synthesis and typed fallback symmetry (4 stages). |
+| **Phase 5** | Conversational Planning, Multi-Turn Dialog & Voice Experience | **IN PROGRESS (Stages 5.1 & 5.2 Completed)** | Multi-turn planning state machine, clarification dialog, natural language batch rescheduling & negotiation, conversational schedule debriefing, accessible Web Speech voice synthesis and typed fallback symmetry. |
 | **Phase 6** | Calendar-Aware Time-Blocking & Multi-Day Workload Modeling | **PLANNED** | Multi-day task chunking for oversized work, calendar focus time-blocking, meeting buffer constraints, interactive proposal canvas editing, and local RFC 5545 iCalendar (.ics) export (4 stages). |
 | **Phase 7** | Evidence-Gated Schedule Adaptation & Preference Learning | **PLANNED** | Longitudinal feedback maturity gate (20+ decisions, 15+ outcomes), empirical friction analysis, bounded heuristic weight tuning ($\pm 20\%$) with Bayesian shrinkage, simulation sandbox, and one-click rollback (4 stages). |
 | **Phase 8** | Production Hardening, Accessibility, Security & Release Readiness | **PLANNED** | Full WCAG 2.1 AA accessibility compliance, keyboard navigation, schema-versioned data lifecycle & encrypted backup, bundle code-splitting, PWA offline resilience, and CI/CD release verification (4 stages). |
@@ -1388,23 +1388,60 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
   - Modified: `src/components/BehavioralHistoryPanel.jsx`
   - Modified: `PROJECT_PLAN.md`
 - **Git Verification**: Verified on `main` via `feat(phase-5): add conversational planning state machine`.
-- **Next Stage**: Stage 5.2 (Natural Language Schedule Negotiation & Rescheduling Engine) — ready to implement.
+- **Stage 5.1 Status**: **COMPLETED**.
 
-#### Stage 5.2: Natural Language Schedule Negotiation & Rescheduling Engine
-- **Scope & Expected Deliverables**:
-  - Implement a schedule intent parser (`src/conversation/scheduleIntentParser.js`) capable of extracting structured scheduling commands:
-    - Relative date shifts: `"Push low-priority tasks by 2 days"`, `"Postpone Design Review to next Monday"`.
-    - Capacity queries: `"Do I have capacity for a 4-hour task on Thursday?"`.
-    - Hypothetical simulation: `"What happens if I delay the database migration by 3 days?"`.
-  - In-memory simulation runner returning a non-destructive proposal preview diff without modifying active tasks.
-- **Dependencies**: Stage 5.1; Phase 4 `adaptiveScheduler.js` and date utilities.
-- **Acceptance Criteria**:
-  - Relative temporal arithmetic correctly accounts for weekends, current date, and leap years.
-  - Hypothetical queries return immediate impact analyses: new projected completion dates, downstream dependency delays, and capacity status changes.
-  - Applying proposed conversational changes logs a standard `schedule_proposal_accepted` telemetry event with applied placements.
-- **Verification**:
-  - Automated tests covering 25+ natural language rescheduling expressions, priority filters, relative offsets, and simulation integrity (`tests/schedule_intent.test.js`).
-- **Privacy & Safety**: Simulations run strictly in-memory; cancellation guarantees zero state mutations.
+#### Stage 5.2: Natural Language Schedule Negotiation & Rescheduling Engine (COMPLETED)
+- **Objective**:
+  - Enable conversational schedule negotiation: direct task moves, relative-date offsets, batch shifts, workload spreading, capacity queries, dependency placements, and hypothetical simulation ("What if...").
+  - Enforce the foundational safety principle: "Conversation may create a proposal, but it must never silently modify the accepted schedule."
+  - Ensure all proposal generation routes through the existing deterministic scheduler engine (`src/scheduler/adaptiveScheduler.js`) and proposal review flow with explicit user acceptance.
+- **Architectural Deliverables**:
+  1. `src/conversation/scheduleIntentParser.js`:
+     - Deterministic intent classification supporting: `DIRECT_RESCHEDULE`, `RELATIVE_SHIFT`, `SPREAD_TASKS`, `CAPACITY_QUERY`, `HYPOTHETICAL_SIMULATION`, `SCHEDULE_AFTER`, `ACCEPT_PROPOSAL`, `DISCARD_PROPOSAL`, `INCOMPLETE_REQUEST`, and `UNSUPPORTED`.
+     - Natural-language temporal parsing for relative offsets ("push by 2 days", "move earlier by 1 day"), specific weekdays ("move to Friday"), month/year boundaries, and capacity queries ("Do I have capacity for a 4-hour task on Thursday?").
+     - Intent isolation preserving non-scheduling commands (e.g. `create task`, `plan sprint`, `show high risk tasks`).
+  2. `src/conversation/scheduleNegotiator.js`:
+     - Core negotiation and simulation engine: `negotiateScheduleProposal`, `findMatchingTasks` (with stop-word filtering for possessives like "my"), `calculateDateWorkloadHours`, `findFirstDayWithCapacity`.
+     - Conflict & constraint detection: `infeasible_dependency` (flagging prerequisite order violations), `capacity_warning` (flagging days exceeding daily limits), and non-working day rollover.
+     - Multi-turn proposal lifecycle: stable proposal ID generation (`prop-${Date.now()}`), attribution tracking via `supersedesScheduleId`, and automatic invalidation on task mutations or history clearing.
+     - Non-mutating simulation runner (`_simulateReschedule`) returning day names, ISO dates, capacity deltas, and feasibility metrics without state mutations.
+  3. `src/conversation/dialogueManager.js` Integration:
+     - Introduced `AWAITING_PROPOSAL_DECISION` state.
+     - Proposal state tracking (`activeProposal`, `proposalHistory`) with automatic clearance on task invalidation and 5-minute inactivity timeout.
+     - Multi-turn revision handling: subsequent schedule commands supersede active proposals with explicit attribution; unrelated commands cleanly cancel proposals with informative feedback.
+     - Integrated clarification flows for ambiguous task titles and missing target dates, resuming seamlessly upon resolution.
+  4. User Interface & Proposal Review Integration (`src/components/CommandBar.jsx` & `src/App.jsx`):
+     - Interactive Proposal Review Card in Section 06 displaying proposal badges ("PROPOSAL REVIEW", Strategy pill, Feasibility status pill), stable ID, and placement diffs (original date ➜ proposed date, effort tag, and status badges: "On Time", "Over Capacity", "Blocked").
+     - Explicit action controls: `✓ Apply Schedule` and `✕ Discard` buttons with keyboard command parity (`accept proposal`, `discard proposal`).
+     - Telemetry integration: proposals generated record `schedule_proposal_generated`, acceptance records `schedule_proposal_accepted`, and discard records `schedule_proposal_discarded` with attribution integrity.
+- **Privacy & Safety Enforcements**:
+  - 100% local-first and deterministic; zero external LLM or cloud AI provider.
+  - Zero telemetry persistence of natural language conversation strings or user queries.
+  - Strict human-in-the-loop: proposals remain in-memory review artifacts and never alter task due dates until explicitly accepted.
+- **Automated Test Suite (29 tests passing across 5 suites)**:
+  - `tests/schedule_intent.test.js`:
+    1. Natural-Language Schedule Intent Recognition (11 tests).
+    2. Deterministic Date Handling & Boundary Tests (5 tests).
+    3. Context-Aware Multi-Turn Negotiation (5 tests).
+    4. Scheduler and Proposal Integrity Constraints (5 tests).
+    5. Regression and Privacy Safeguards (3 tests).
+  - Total repository tests: **176 tests passing across 43 suites** (0 failures).
+- **Verification Results**:
+  - `npm test`: **176 tests passing across 43 suites** (0 failures, 252ms).
+  - `npm run lint` (`oxlint`): **0 errors, 0 warnings** across 38 files.
+  - `npm run build` (`vite build`): Built production bundle cleanly.
+  - `python -m pytest backend/tests/ -v`: **27 passed** in 7.50s.
+  - Browser verification on `http://localhost:5173/#command`: Verified natural-language schedule commands, proposal review card rendering with diffs and badges, hypothetical simulation responses, proposal application, and discard handling.
+- **Files Added / Modified**:
+  - Added: `src/conversation/scheduleIntentParser.js`
+  - Added: `src/conversation/scheduleNegotiator.js`
+  - Added: `tests/schedule_intent.test.js`
+  - Modified: `src/conversation/dialogueManager.js`
+  - Modified: `src/components/CommandBar.jsx`
+  - Modified: `src/App.jsx`
+  - Modified: `PROJECT_PLAN.md`
+- **Git Verification**: Committed via `feat(phase-5): add natural-language schedule negotiation`.
+- **Next Stage**: Stage 5.3 (Accessible Voice Interaction & Speech Synthesis Symmetry) — ready to implement.
 
 #### Stage 5.3: Accessible Voice Interaction & Speech Synthesis Symmetry
 - **Scope & Expected Deliverables**:

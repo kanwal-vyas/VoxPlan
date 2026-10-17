@@ -178,6 +178,7 @@ export default function App() {
   const [activeTimerState, setActiveTimerState] = useState(() => telemetry.getActiveTimer());
   const [conversationState, setConversationState] = useState(CONVERSATION_STATES.IDLE);
   const [activeSubjectTaskId, setActiveSubjectTaskId] = useState(null);
+  const [activeProposal, setActiveProposal] = useState(null);
 
   // Initialize persistent telemetry storage on mount
   useEffect(() => {
@@ -678,6 +679,37 @@ export default function App() {
     await telemetry.recordScheduleProposalDiscarded(proposal, reason);
   }, []);
 
+  const handleAcceptProposal = async (proposalToAccept) => {
+    const prop = proposalToAccept || activeProposal;
+    if (!prop) return;
+    if (prop.status === 'superseded') {
+      setFeedback({
+        type: 'warning',
+        message: 'This proposal was superseded by a newer proposal. Please review and apply the latest proposal.',
+      });
+      return;
+    }
+    await handleApplySchedule(prop);
+    dialogueManager.activeProposal = null;
+    dialogueManager.state = CONVERSATION_STATES.IDLE;
+    setActiveProposal(null);
+    setConversationState(CONVERSATION_STATES.IDLE);
+  };
+
+  const handleDiscardProposal = async (proposalToDiscard, reason = 'user_discard') => {
+    const prop = proposalToDiscard || activeProposal;
+    if (!prop) return;
+    await handleDiscardSchedule(prop, reason);
+    dialogueManager.activeProposal = null;
+    dialogueManager.state = CONVERSATION_STATES.IDLE;
+    setActiveProposal(null);
+    setConversationState(CONVERSATION_STATES.IDLE);
+    setFeedback({
+      type: 'info',
+      message: 'Schedule proposal discarded. Your current schedule remains unchanged.',
+    });
+  };
+
   const handleReviseEffort = async (taskId, newEffort) => {
     const target = tasks.find((t) => t.id === taskId);
     if (!target) return;
@@ -712,6 +744,14 @@ export default function App() {
     setConversationState(result.state);
     setActiveSubjectTaskId(dialogueManager.activeSubjectTaskId);
 
+    if (result.proposal) {
+      setActiveProposal(result.proposal);
+      await handleProposalGenerated(result.proposal);
+    }
+    if (result.supersededProposal) {
+      await handleDiscardSchedule(result.supersededProposal, 'superseded_by_revision');
+    }
+
     if (result.responseText) {
       setFeedback({
         type: result.feedbackType || 'info',
@@ -726,6 +766,21 @@ export default function App() {
     const { action } = result;
 
     switch (action.type) {
+      case 'ACCEPT_SCHEDULE_PROPOSAL':
+        if (action.proposal) {
+          await handleApplySchedule(action.proposal);
+          setActiveProposal(null);
+          setConversationState(CONVERSATION_STATES.IDLE);
+        }
+        break;
+
+      case 'DISCARD_SCHEDULE_PROPOSAL':
+        if (action.proposal) {
+          await handleDiscardSchedule(action.proposal, action.reason || 'user_discard');
+          setActiveProposal(null);
+          setConversationState(CONVERSATION_STATES.IDLE);
+        }
+        break;
       case CONVERSATION_INTENTS.TRAIN_MODEL:
         handleTrainModel();
         break;
@@ -1059,6 +1114,9 @@ export default function App() {
           onConfirm={() => executeCommand('yes')}
           onCancel={() => executeCommand('cancel')}
           activeSubjectTask={activeSubjectTask}
+          activeProposal={activeProposal}
+          onAcceptProposal={handleAcceptProposal}
+          onDiscardProposal={handleDiscardProposal}
         />
       </div>
 
