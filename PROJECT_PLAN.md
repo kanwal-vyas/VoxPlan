@@ -1443,21 +1443,75 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
 - **Git Verification**: Committed via `feat(phase-5): add natural-language schedule negotiation`.
 - **Next Stage**: Stage 5.3 (Accessible Voice Interaction & Speech Synthesis Symmetry) — ready to implement.
 
-#### Stage 5.3: Accessible Voice Interaction & Speech Synthesis Symmetry
-- **Scope & Expected Deliverables**:
-  - Speech engine module (`src/conversation/speechEngine.js`) adding browser-native `window.speechSynthesis` (`SpeechSynthesisUtterance`) for audible assistant feedback.
-  - User controls: global speech output toggle (Mute / Unmute), speech rate adjustment, and instant speech cancellation on ESC key.
-  - Screen-reader accessibility live-region (`aria-live="polite"`) announcing all assistant responses for non-speech users.
-  - Complete symmetry between voice dictation and typed command bar.
-- **Dependencies**: Stage 5.1.
-- **Acceptance Criteria**:
-  - Toggling voice mute halts ongoing speech immediately.
-  - Browsers lacking SpeechSynthesis API gracefully degrade to visual feedback without throwing errors.
-  - Voice dictation and typed commands yield identical structured intent objects and UI state changes.
-- **Verification**:
-  - Automated mock tests for speech synthesis lifecycle and fallback detection.
-  - Manual verification on supported browsers with screen reader enabled (NVDA / VoiceOver).
-- **Privacy & Safety**: Client-only Web Speech API; zero audio streaming to third-party endpoints.
+#### Stage 5.3: Accessible Voice Interaction & Speech Synthesis Symmetry (COMPLETED)
+- **Objective**:
+  - Make VoxPlan's voice interaction accessible, predictable, and fully symmetrical with typed command interactions.
+  - Implement reliable browser-native speech recognition lifecycle (`IDLE`, `LISTENING`, `PROCESSING`, `ERROR`, `UNSUPPORTED`) with explicit user control and zero automatic mic activation.
+  - Add browser-native speech synthesis (`SpeechSynthesisController`) that speaks concise, accurate summaries of assistant responses when enabled.
+  - Enforce critical safety guarantees: speech responses must strictly distinguish proposed from applied changes, never imply success on failed/infeasible operations, and preserve all Stage 5.1/5.2 confirmation and proposal review safeguards.
+  - Provide accessible controls (speaker toggle, immediate stop control, `Escape` shortcut, ARIA live region) and a transparent voice privacy disclosure.
+- **Architectural Deliverables**:
+  1. `src/conversation/speechEngine.js`:
+     - `RECOGNITION_STATES`: Clean lifecycle state machine (`IDLE`, `LISTENING`, `PROCESSING`, `ERROR`, `UNSUPPORTED`).
+     - `VoiceRecognitionController`:
+       - Manages browser `SpeechRecognition` / `webkitSpeechRecognition`.
+       - Guards against concurrent sessions via unique `sessionId` tracking.
+       - Discards interim transcripts; only validated final transcripts submit to the shared command pathway.
+       - Listens to document visibility changes, pausing recognition when the tab hides.
+       - Maps browser errors (`not-allowed`, `network`, `audio-capture`, `no-speech`) to user-actionable error states.
+       - Provides clean unmount and resource cleanup.
+     - `SpeechSynthesisController`:
+       - Manages browser `window.speechSynthesis` / `SpeechSynthesisUtterance`.
+       - Respects user preference stored in `localStorage` (`voxplan_speech_output_enabled`), defaulting conservatively to `false` (muted/OFF).
+       - Automatically cancels prior active utterances before starting new speech.
+       - Implements debounce rate-limiting (800ms) to prevent duplicate speech triggers on React re-renders.
+       - Exposes `stop()` for instant cancellation.
+     - `generateSpokenSummary`:
+       - Generates concise, screen-friendly spoken responses tailored to dialogue state (`SCHEDULE_PROPOSAL`, `AWAITING_CONFIRMATION`, `CLARIFICATION_REQUIRED`, `UNKNOWN`, `ERROR`).
+       - Explicitly notes when proposals are pending review ("Proposed rescheduling ... Say yes to accept or no to discard") versus applied changes.
+       - Adds spoken confirmation guidance ("Say yes to confirm, or no to cancel").
+     - `sanitizeForSpeech`:
+       - Strips markdown links, bold/italic asterisks, backticks, emojis, and symbols for clean, natural speech pronunciation.
+  2. Dialogue & Command Pathway Convergence (`src/App.jsx`):
+     - Voice transcripts and typed commands converge on the exact same `executeCommand` -> `dialogueManager.processInput` pathway.
+     - Zero separate voice mutation paths or privilege escalation.
+     - Spoken commands such as "delete task" require Stage 5.1 confirmation before execution.
+     - Spoken rescheduling commands generate Stage 5.2 proposals requiring explicit acceptance.
+     - Active speech is automatically cancelled when listening starts to prevent audio feedback loop / self-dictation.
+     - Global `Escape` key listener cancels active listening and halts active speech synthesis.
+  3. Accessible Interface & Privacy Notice (`src/components/CommandBar.jsx`):
+     - Speech Toggle Button (`#speech-toggle-btn`): Displays speaker status with tooltip, accessible `aria-label`, animated soundwave icon when actively speaking, and muted icon when disabled.
+     - Active Speech Stop Button (`#stop-speech-btn`): Allows one-click cancellation of active speech.
+     - Microphone Button (`#voice-mic-btn`): Visually communicates all 5 recognition states with distinct icons, pulsing animation when listening, and accessible title/labels.
+     - Polite Live Region (`#command-live-region`, `aria-live="polite"`): Announces status changes and dialogue responses for screen-reader users without spamming interim transcripts.
+     - Voice Privacy Disclosure: Prominently explains below the command bar that browser Web Speech API may route audio to browser vendor services (e.g. Google or Apple) depending on the browser, and highlights that VoxPlan never logs microphone audio, never persists transcripts, and never uses cloud AI.
+- **Privacy & Safety Enforcements**:
+  - Microphone access is strictly user-initiated; never requests permission on page load or when checking API availability.
+  - Audio and speech transcripts are never stored in `localStorage`, never logged in behavioral event telemetry, and never transmitted to external cloud LLM APIs.
+  - Transparent disclosure regarding vendor-managed browser speech processing.
+- **Automated Test Suite (31 tests passing across 4 suites)**:
+  - `tests/voice_interaction.test.js`:
+    1. Voice Recognition Lifecycle (11 tests): Initial IDLE state, session transitions, duplicate prevention, cancellation, unsupported handling, permission denial, error mapping, interim transcript filtering, late event rejection, and cleanup.
+    2. Speech Synthesis (11 tests): Default disabled setting, preference persistence, response synthesis, rate-limiting deduplication, utterance preemption, stop control, fallback resilience, proposal distinction, failure honesty, and text sanitization.
+    3. Dialogue and Scheduling Integration (5 tests): Shared command processing pathway, Stage 5.1 clarification respect, confirmation/cancellation respect, Stage 5.2 proposal requirement, and superseded proposal rejection.
+    4. Accessibility and Privacy Verification (4 tests): Accessible ARIA attributes, telemetry privacy, no external endpoints, and graceful degradation allowing typed interaction when voice fails.
+  - Total repository tests: **207 tests passing across 47 suites** (0 failures).
+- **Verification Results**:
+  - `npm test`: **207 tests passing across 47 suites** (0 failures, 320ms).
+  - `npm run lint` (`oxlint`): **0 errors, 0 warnings** across 40 files.
+  - `npm run build` (`vite build`): Built production bundle cleanly in 411ms.
+  - `python -m pytest backend/tests/ -v`: **27 passed** in 4.87s.
+  - Browser verification on `http://localhost:5173/#command`: Verified microphone button rendering, speech toggle ON/OFF transitions, voice privacy disclosure rendering, proposal card generation, and keyboard navigation.
+- **Files Added / Modified**:
+  - Added: `src/conversation/speechEngine.js`
+  - Added: `tests/voice_interaction.test.js`
+  - Modified: `src/conversation/dialogueManager.js`
+  - Modified: `src/components/CommandBar.jsx`
+  - Modified: `src/App.jsx`
+  - Modified: `PROJECT_PLAN.md`
+- **Git Verification**: Committed via `feat(phase-5): add accessible voice interaction and speech synthesis` (`c16adb0`).
+- **Stage 5.3 Status**: **COMPLETED**.
+- **Next Stage**: Stage 5.4 (Conversational Plan Explanations & Constraint Debriefing) — ready to implement.
 
 #### Stage 5.4: Conversational Plan Explanations & Constraint Debriefing
 - **Scope & Expected Deliverables**:

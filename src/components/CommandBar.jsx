@@ -4,8 +4,13 @@ export default function CommandBar({
   onExecuteCommand,
   feedback,
   onDismissFeedback,
-  isListening,
+  isListening = false,
+  recognitionState = 'IDLE',
   onToggleListening,
+  speechOutputEnabled = false,
+  isSpeaking = false,
+  onToggleSpeechOutput,
+  onStopSpeech,
   conversationState = 'IDLE',
   onConfirm,
   onCancel,
@@ -33,6 +38,17 @@ export default function CommandBar({
     return () => observer.disconnect();
   }, []);
 
+  const liveAnnouncement =
+    recognitionState === 'LISTENING'
+      ? 'Microphone active. Listening for voice command.'
+      : recognitionState === 'PROCESSING'
+      ? 'Processing spoken command.'
+      : recognitionState === 'ERROR'
+      ? 'Voice recognition error.'
+      : isSpeaking
+      ? 'Assistant is speaking response.'
+      : feedback?.message || '';
+
   const handleSubmit = (e) => {
     if (e && e.preventDefault) e.preventDefault();
     const trimmed = inputVal.trim();
@@ -46,15 +62,18 @@ export default function CommandBar({
     onExecuteCommand(hint);
   };
 
-  const placeholderText = isListening
-    ? 'Listening via microphone... speak clearly!'
-    : conversationState === 'AWAITING_CONFIRMATION'
-    ? 'Type "yes" to confirm or "no" to cancel...'
-    : conversationState === 'AWAITING_CLARIFICATION'
-    ? 'Type or speak your answer (or "cancel")...'
-    : conversationState === 'AWAITING_PROPOSAL_DECISION'
-    ? 'Type "accept" to apply, "discard" to cancel, or ask "what if..."'
-    : 'Ask or command (e.g. "Move my database assignment to tomorrow", "Spread tasks over 3 days")...';
+  const placeholderText =
+    recognitionState === 'LISTENING' || isListening
+      ? 'Listening via microphone... speak clearly! (Press Esc to stop)'
+      : recognitionState === 'PROCESSING'
+      ? 'Processing spoken command...'
+      : conversationState === 'AWAITING_CONFIRMATION'
+      ? 'Type or say "yes" to confirm or "no" to cancel...'
+      : conversationState === 'AWAITING_CLARIFICATION'
+      ? 'Type or speak your answer (or "cancel")...'
+      : conversationState === 'AWAITING_PROPOSAL_DECISION'
+      ? 'Type or say "accept" to apply, "discard" to cancel, or ask "what if..."'
+      : 'Ask or command (e.g. "Move my database assignment to tomorrow", "Spread tasks over 3 days")...';
 
   return (
     <section ref={sectionRef} style={styles.section} id="command" aria-label="Command Assistant">
@@ -123,25 +142,127 @@ export default function CommandBar({
                 style={styles.input}
               />
 
-              {/* Browser Speech Dictation Mic Button */}
+              {/* Spoken Responses Toggle (Speaker Button) */}
               <button
+                id="speech-toggle-btn"
                 type="button"
+                onClick={onToggleSpeechOutput}
+                style={{
+                  ...styles.speakerBtn,
+                  backgroundColor: speechOutputEnabled ? '#D1F2D9' : '#F3F0EC',
+                  color: speechOutputEnabled ? '#166534' : '#706D73',
+                  borderColor: speechOutputEnabled ? '#BFE8D0' : 'rgba(37, 36, 42, 0.12)',
+                }}
+                title={
+                  speechOutputEnabled
+                    ? isSpeaking
+                      ? 'Assistant is speaking... Click to mute or press Esc to stop'
+                      : 'Spoken responses: ON (Click to mute)'
+                    : 'Spoken responses: OFF (Click to unmute)'
+                }
+                aria-label={speechOutputEnabled ? 'Mute spoken responses' : 'Enable spoken responses'}
+              >
+                {speechOutputEnabled ? (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                  </svg>
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                    <line x1="23" y1="9" x2="17" y2="15" />
+                    <line x1="17" y1="9" x2="23" y2="15" />
+                  </svg>
+                )}
+              </button>
+
+              {/* Stop Speech Quick Button (visible when assistant is speaking) */}
+              {isSpeaking && (
+                <button
+                  id="stop-speech-btn"
+                  type="button"
+                  onClick={onStopSpeech}
+                  style={styles.stopSpeechBtn}
+                  title="Stop speaking (or press Esc)"
+                  aria-label="Stop speaking"
+                >
+                  ■ Stop
+                </button>
+              )}
+
+              {/* Browser Speech Dictation Mic Button (5 Lifecycle States) */}
+              <button
+                id="voice-mic-btn"
+                type="button"
+                disabled={recognitionState === 'UNSUPPORTED'}
                 onClick={onToggleListening}
                 style={{
                   ...styles.micBtn,
-                  backgroundColor: isListening ? '#FF8F82' : '#FFE58A',
-                  color: isListening ? '#FFFFFF' : '#25242A',
+                  backgroundColor:
+                    recognitionState === 'LISTENING' || isListening
+                      ? '#FF8F82'
+                      : recognitionState === 'PROCESSING'
+                      ? '#E4DAFF'
+                      : recognitionState === 'ERROR'
+                      ? '#FFE8E5'
+                      : recognitionState === 'UNSUPPORTED'
+                      ? '#EAE8E4'
+                      : '#FFE58A',
+                  color:
+                    recognitionState === 'LISTENING' || isListening
+                      ? '#FFFFFF'
+                      : recognitionState === 'ERROR'
+                      ? '#991B1B'
+                      : '#25242A',
+                  cursor: recognitionState === 'UNSUPPORTED' ? 'not-allowed' : 'pointer',
+                  opacity: recognitionState === 'UNSUPPORTED' ? 0.6 : 1,
                 }}
-                title={isListening ? 'Stop voice listening' : 'Dictate command using browser speech recognition'}
-                aria-label="Toggle voice listening"
+                title={
+                  recognitionState === 'LISTENING' || isListening
+                    ? 'Listening via microphone... click to stop (or press Esc)'
+                    : recognitionState === 'PROCESSING'
+                    ? 'Processing voice command...'
+                    : recognitionState === 'ERROR'
+                    ? 'Microphone error. Click to retry.'
+                    : recognitionState === 'UNSUPPORTED'
+                    ? 'Speech recognition not supported in this browser'
+                    : 'Dictate command using browser speech recognition'
+                }
+                aria-label={
+                  recognitionState === 'LISTENING' || isListening
+                    ? 'Stop voice listening'
+                    : recognitionState === 'PROCESSING'
+                    ? 'Processing voice command'
+                    : recognitionState === 'ERROR'
+                    ? 'Microphone error. Click to retry'
+                    : recognitionState === 'UNSUPPORTED'
+                    ? 'Speech recognition not supported in this browser'
+                    : 'Toggle voice listening'
+                }
               >
-                {isListening ? (
+                {recognitionState === 'LISTENING' || isListening ? (
                   <div style={styles.waveBars}>
                     <span style={{ ...styles.bar, animation: 'waveBar 0.6s infinite ease-in-out 0ms' }} />
                     <span style={{ ...styles.bar, animation: 'waveBar 0.6s infinite ease-in-out 150ms' }} />
                     <span style={{ ...styles.bar, animation: 'waveBar 0.6s infinite ease-in-out 300ms' }} />
                     <span style={{ ...styles.bar, animation: 'waveBar 0.6s infinite ease-in-out 150ms' }} />
                   </div>
+                ) : recognitionState === 'PROCESSING' ? (
+                  <div style={styles.waveBars}>
+                    <span style={{ ...styles.bar, backgroundColor: '#5B44BA', animation: 'waveBar 0.4s infinite ease-in-out 0ms' }} />
+                    <span style={{ ...styles.bar, backgroundColor: '#5B44BA', animation: 'waveBar 0.4s infinite ease-in-out 100ms' }} />
+                    <span style={{ ...styles.bar, backgroundColor: '#5B44BA', animation: 'waveBar 0.4s infinite ease-in-out 200ms' }} />
+                  </div>
+                ) : recognitionState === 'UNSUPPORTED' ? (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="2" y1="2" x2="22" y2="22" />
+                    <path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2" />
+                    <path d="M5 10v2a7 7 0 0 0 12 5" />
+                    <path d="M15 9.34V5a3 3 0 0 0-5.68-1.33" />
+                    <path d="M9 9v3a3 3 0 0 0 5.12 2.12" />
+                    <line x1="12" y1="19" x2="12" y2="22" />
+                  </svg>
                 ) : (
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
@@ -166,6 +287,19 @@ export default function CommandBar({
               </button>
             </div>
           </form>
+
+          {/* Accessible Screen-Reader Live Region */}
+          <div role="status" aria-live="polite" style={styles.srOnly}>
+            {liveAnnouncement}
+          </div>
+
+          {/* Voice Privacy & Browser Compatibility Notice */}
+          <div style={styles.privacyNote} aria-label="Voice privacy notice">
+            <span style={styles.privacyLockIcon}>🔒</span>
+            <span style={styles.privacyText}>
+              <strong>Voice Privacy:</strong> Spoken commands use your browser's native Web Speech API. Audio recognition is performed by your browser vendor (e.g. Google or Apple) and is never sent to third-party AI services or stored on VoxPlan servers.
+            </span>
+          </div>
 
           {/* Feedback Toast Banner */}
           {feedback && (
@@ -768,5 +902,62 @@ const styles = {
     fontSize: '13px',
     fontWeight: '600',
     cursor: 'pointer',
+  },
+  speakerBtn: {
+    width: '42px',
+    height: '42px',
+    borderRadius: '50%',
+    border: '1px solid',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    flexShrink: 0,
+    boxShadow: '0 2px 6px rgba(37, 36, 42, 0.06)',
+    transition: 'all 0.15s ease',
+  },
+  stopSpeechBtn: {
+    backgroundColor: '#FFE8E5',
+    color: '#991B1B',
+    border: '1px solid #FFB5A7',
+    borderRadius: '9999px',
+    padding: '6px 12px',
+    fontSize: '12px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    boxShadow: '0 2px 6px rgba(255, 143, 130, 0.2)',
+  },
+  privacyNote: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '8px',
+    fontSize: '11px',
+    color: '#706D73',
+    lineHeight: '1.4',
+    padding: '4px 8px',
+    borderRadius: '8px',
+    backgroundColor: 'rgba(37, 36, 42, 0.02)',
+  },
+  privacyLockIcon: {
+    fontSize: '12px',
+    marginTop: '1px',
+    flexShrink: 0,
+  },
+  privacyText: {
+    flex: 1,
+  },
+  srOnly: {
+    position: 'absolute',
+    width: '1px',
+    height: '1px',
+    padding: 0,
+    margin: '-1px',
+    overflow: 'hidden',
+    clip: 'rect(0, 0, 0, 0)',
+    whiteSpace: 'nowrap',
+    border: 0,
   },
 };

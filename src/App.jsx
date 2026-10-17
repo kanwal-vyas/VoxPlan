@@ -29,6 +29,12 @@ import {
   CONVERSATION_INTENTS,
   CONVERSATION_STATES,
 } from './conversation/dialogueManager';
+import {
+  VoiceRecognitionController,
+  SpeechSynthesisController,
+  generateSpokenSummary,
+  RECOGNITION_STATES,
+} from './conversation/speechEngine';
 
 const STORAGE_KEY = 'voxplan_tasks';
 
@@ -175,10 +181,22 @@ export default function App() {
   const [activeFilter, setActiveFilter] = useState('all');
   const [feedback, setFeedback] = useState(null);
   const [isListening, setIsListening] = useState(false);
+  const [recognitionState, setRecognitionState] = useState(RECOGNITION_STATES.IDLE);
+  const [speechOutputEnabled, setSpeechOutputEnabled] = useState(() => {
+    try {
+      return typeof localStorage !== 'undefined' && localStorage.getItem('voxplan_speech_output_enabled') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const [activeTimerState, setActiveTimerState] = useState(() => telemetry.getActiveTimer());
   const [conversationState, setConversationState] = useState(CONVERSATION_STATES.IDLE);
   const [activeSubjectTaskId, setActiveSubjectTaskId] = useState(null);
   const [activeProposal, setActiveProposal] = useState(null);
+
+  const voiceRecognitionRef = useRef(null);
+  const speechSynthesisRef = useRef(null);
 
   // Initialize persistent telemetry storage on mount
   useEffect(() => {
@@ -251,7 +269,6 @@ export default function App() {
 
   const mlPanelRef = useRef(null);
   const gsapCleanupRef = useRef(null);
-  const speechRecognitionRef = useRef(null);
 
   // Initial viewport setup: ensure page ALWAYS starts at top on every reload/refresh
   useEffect(() => {
@@ -694,6 +711,11 @@ export default function App() {
     dialogueManager.state = CONVERSATION_STATES.IDLE;
     setActiveProposal(null);
     setConversationState(CONVERSATION_STATES.IDLE);
+
+    if (speechOutputEnabled && speechSynthesisRef.current) {
+      const summary = generateSpokenSummary(null, { event: 'PROPOSAL_ACCEPTED', proposal: prop });
+      speechSynthesisRef.current.speak(summary);
+    }
   };
 
   const handleDiscardProposal = async (proposalToDiscard, reason = 'user_discard') => {
@@ -708,6 +730,11 @@ export default function App() {
       type: 'info',
       message: 'Schedule proposal discarded. Your current schedule remains unchanged.',
     });
+
+    if (speechOutputEnabled && speechSynthesisRef.current) {
+      const summary = generateSpokenSummary(null, { event: 'PROPOSAL_DISCARDED' });
+      speechSynthesisRef.current.speak(summary);
+    }
   };
 
   const handleReviseEffort = async (taskId, newEffort) => {
@@ -757,6 +784,14 @@ export default function App() {
         type: result.feedbackType || 'info',
         message: result.responseText,
       });
+    }
+
+    // Accessible speech synthesis feedback
+    if (speechOutputEnabled && speechSynthesisRef.current) {
+      const spokenSummary = generateSpokenSummary(result);
+      if (spokenSummary) {
+        speechSynthesisRef.current.speak(spokenSummary);
+      }
     }
 
     if (!result.isAuthorized || !result.action) {
@@ -876,79 +911,87 @@ export default function App() {
     }
   };
 
-  // Real Web Speech API browser voice dictation
-  const toggleListening = () => {
-    const SpeechRecognition =
-      typeof window !== 'undefined' &&
-      (window.SpeechRecognition || window.webkitSpeechRecognition);
+  const executeCommandRef = useRef(executeCommand);
+  useEffect(() => {
+    executeCommandRef.current = executeCommand;
+  });
 
-    if (!SpeechRecognition) {
-      setFeedback({
-        type: 'info',
-        message: 'Speech recognition is not supported in this browser. Please type your command into the command bar.',
-      });
-      return;
+  // Initialize browser speech recognition and synthesis controllers with keyboard shortcuts
+  useEffect(() => {
+    const synth = new SpeechSynthesisController({
+      onSpeakingChange: (speaking) => setIsSpeaking(speaking),
+    });
+    speechSynthesisRef.current = synth;
+
+    const recog = new VoiceRecognitionController({
+      onStateChange: (state) => {
+        setRecognitionState(state);
+        setIsListening(state === RECOGNITION_STATES.LISTENING);
+      },
+      onResult: (transcript) => {
+        setFeedback({
+          type: 'info',
+          message: `Heard: "${transcript}"`,
+        });
+        if (executeCommandRef.current) {
+          executeCommandRef.current(transcript);
+        }
+      },
+      onError: (err) => {
+        setFeedback({
+          type: 'error',
+          message: err.message,
+        });
+      },
+    });
+
+    if (!recog.isSupported()) {
+      setRecognitionState(RECOGNITION_STATES.UNSUPPORTED);
     }
+    voiceRecognitionRef.current = recog;
 
-    if (isListening) {
-      if (speechRecognitionRef.current) {
-        try {
-          speechRecognitionRef.current.stop();
-        } catch {}
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        synth.stop();
+        recog.stop();
       }
-      setIsListening(false);
-      return;
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      synth.destroy();
+      recog.destroy();
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  // Real Web Speech API browser voice dictation controller toggle
+  const toggleListening = () => {
+    if (!voiceRecognitionRef.current) return;
+    if (recognitionState === RECOGNITION_STATES.LISTENING) {
+      voiceRecognitionRef.current.stop();
+    } else {
+      // Cancel speech before listening so microphone does not pick up assistant's voice
+      if (speechSynthesisRef.current) {
+        speechSynthesisRef.current.stop();
+      }
+      voiceRecognitionRef.current.start();
     }
+  };
 
-    try {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.lang = 'en-US';
+  const toggleSpeechOutput = () => {
+    if (!speechSynthesisRef.current) return;
+    const next = !speechOutputEnabled;
+    speechSynthesisRef.current.setEnabled(next);
+    setSpeechOutputEnabled(next);
+    if (next) {
+      speechSynthesisRef.current.speak('Spoken responses enabled.', { force: true });
+    }
+  };
 
-      recognition.onstart = () => {
-        setIsListening(true);
-      };
-
-      recognition.onresult = (event) => {
-        setIsListening(false);
-        const transcript = event.results?.[0]?.[0]?.transcript;
-        if (transcript && transcript.trim()) {
-          setFeedback({
-            type: 'info',
-            message: `Heard: "${transcript}"`,
-          });
-          executeCommand(transcript);
-        }
-      };
-
-      recognition.onerror = (event) => {
-        setIsListening(false);
-        if (event.error === 'not-allowed') {
-          setFeedback({
-            type: 'error',
-            message: 'Microphone permission was denied. Please allow mic access or type your command.',
-          });
-        } else if (event.error !== 'no-speech') {
-          setFeedback({
-            type: 'error',
-            message: `Voice recognition error: ${event.error}`,
-          });
-        }
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-      };
-
-      speechRecognitionRef.current = recognition;
-      recognition.start();
-    } catch (err) {
-      setIsListening(false);
-      setFeedback({
-        type: 'error',
-        message: `Could not start voice recognition: ${err.message}`,
-      });
+  const handleStopSpeech = () => {
+    if (speechSynthesisRef.current) {
+      speechSynthesisRef.current.stop();
     }
   };
 
@@ -1108,8 +1151,13 @@ export default function App() {
           onExecuteCommand={executeCommand}
           feedback={feedback}
           onDismissFeedback={() => setFeedback(null)}
-          isListening={isListening}
+          isListening={recognitionState === RECOGNITION_STATES.LISTENING || isListening}
+          recognitionState={recognitionState}
           onToggleListening={toggleListening}
+          speechOutputEnabled={speechOutputEnabled}
+          isSpeaking={isSpeaking}
+          onToggleSpeechOutput={toggleSpeechOutput}
+          onStopSpeech={handleStopSpeech}
           conversationState={conversationState}
           onConfirm={() => executeCommand('yes')}
           onCancel={() => executeCommand('cancel')}

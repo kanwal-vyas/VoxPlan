@@ -951,6 +951,8 @@ export class DialogueManager {
         isAuthorized: false,
         action: null,
         error: negotiation.clarificationType === 'AMBIGUOUS_TASK' ? 'ambiguous_reference' : 'missing_date',
+        clarificationType: negotiation.clarificationType || null,
+        candidateTasks: negotiation.candidateTasks || null,
       };
     }
 
