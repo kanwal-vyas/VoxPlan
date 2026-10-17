@@ -1581,7 +1581,68 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
   - Modified: `PROJECT_PLAN.md`
 - **Git Verification**: Committed via `fix(phase-5): harden voice interaction and compound commands` (`c4253b2`).
 - **Phase 5.3 Hardening Status**: **COMPLETED**.
-- **Next Stage**: Stage 5.4 (Conversational Plan Explanations & Constraint Debriefing) — ready to begin in next cycle.
+
+#### Phase 5.3 Corrective Hardening: Voice Intent, Date Resolution & Contextual Task Matching Hardening
+- **Objective**: Fix correctness gaps in VoxPlan's natural-language task creation, deadline extraction, date resolution, and existing-task identification without introducing external APIs or altering the local-first architecture.
+- **Gate 1 Date Audit Findings & Authoritative Date Rules**:
+  - *Root Cause Analysis*: The reported date discrepancies ("tomorrow" resolving to October 22 vs October 17 reference) stemmed from two factors: (1) serialization via `new Date().toISOString().split('T')[0]` in `App.jsx` which converted local dates to UTC and caused a 1-day backward shift in positive UTC timezones (e.g. UTC+05:30), and (2) partial month names mapping in older helper functions.
+  - *Authoritative Rules Established*:
+    - All date arithmetic and formatting uses local calendar dates via `formatISODate(d)` (`YYYY-MM-DD` built with `getFullYear()`, `getMonth() + 1`, and `getDate()`).
+    - With fixed reference clock October 17, 2026: "today" = `2026-10-17`, "tomorrow" = `2026-10-18`, "the 19th" / "October 19" = `2026-10-19`, "next Monday" = `2026-10-19`.
+    - Date-only deadlines preserve local calendar boundaries with zero UTC conversion offset.
+    - Single injectable clock parameter (`clock`) unified across `compoundCommandParser.js`, `dialogueManager.js`, `scheduleIntentParser.js`, and `scheduleNegotiator.js`.
+  - *Prerequisite Date Fix Commit*: `81b6e5b` (`fix(phase-5): unify local date resolution and fix UTC timezone shifts`).
+  - *Date Resolution Test Evidence*: 10/10 deterministic tests passing in `tests/date_resolution.test.js`.
+- **Gate 2 Task-Title Extraction & Compound Command Parsing**:
+  - Implemented boundary lookahead patterns `(?=[,;\s]*(?:with\b|and\b|for\b|$))` in `parseCompoundTaskCreation` to extract dates cleanly before finalizing titles without leaking prepositions (`for today`, `for tomorrow`, `for the 19th`, `due Friday`, `by October 19`).
+  - Verified mandatory examples with clock injected at October 17, 2026:
+    - `"Create task English for today"` -> title: `"English"`, dueDate: `"2026-10-17"`
+    - `"Create task English for tomorrow"` -> title: `"English"`, dueDate: `"2026-10-18"`
+    - `"Create task English for the 19th"` -> title: `"English"`, dueDate: `"2026-10-19"`
+    - `"Create task English for 19th October"` -> title: `"English"`, dueDate: `"2026-10-19"`
+    - `"Create a task called English Assignment, due tomorrow"` -> title: `"English Assignment"`, dueDate: `"2026-10-18"`
+    - `"Add a task to revise English grammar by October 19"` -> title: `"Revise English grammar"`, dueDate: `"2026-10-19"`
+    - `"Create task English"` -> title: `"English"`, dueDate: `null`
+    - `"Create task English for today with high priority"` -> title: `"English"`, dueDate: `"2026-10-17"`, priority: `"high"`
+  - Preserved legitimate date-like words in titles (e.g. `"Read USA Today"`, `"Friday Night Dinner"`).
+- **Gate 3 Contextual Matching & Ambiguity Clarification for Existing Tasks**:
+  - Implemented dedicated multi-tiered task reference resolution in `resolveTaskReference`:
+    1. Active subject pronoun resolution (`"it"`, `"this task"`, `"that task"`).
+    2. Active clarification ordinal selection (`"the first one"`, `"the second one"`, `"1"`, `"2"`).
+    3. Anaphoric contrast resolution (`"the other one"`, `"the other English task"`).
+    4. Conversational noise stripping (`"the"`, `"my"`, `"task about"`, `"called"`, trailing `"task"`).
+    5. Exact title and stripped title matching.
+    6. Token overlap scoring with distinctive word weighting and prefix stemming (`"prepare"` / `"preparing"`).
+  - Ambiguity policy:
+    - Multiple matches prompt clarification with candidate names: `"I found two matching tasks: English Assignment and English Presentation. Which one should I mark complete?"`.
+    - Distinctive clarification (`"The assignment"`) resolves to `English Assignment`.
+    - Ordinal clarification (`"the first one"`) resolves candidate 0.
+    - Cancellation (`"cancel"`) resets conversation state without modifying any tasks.
+    - Mutation safeguards: Re-validates target task existence in active collection when user replies to prevent modifying externally deleted tasks.
+- **Gate 4 Deadline Updates & Dialogue Integration**:
+  - Enhanced `scheduleIntentParser.js` to decouple with-date and without-date reschedule expressions (`"Move English to the 19th"`, `"Set the English assignment deadline to tomorrow"`, `"Change the deadline for the task about preparing my presentation to tomorrow"`).
+  - Multi-turn negotiation: `"Change that to Friday instead"`, `"What about Monday instead?"` updates proposed dates dynamically without mutating the task store until explicit acceptance (`"accept"`).
+- **Verification & Exact Results**:
+  - Node unit & integration tests: 266 passing, 0 failing across 55 suites (`npm test`).
+  - Linter: 0 warnings, 0 errors on 44 files (`npm run lint` / `oxlint`).
+  - Production build: `vite build` completed cleanly in 281ms (`npm run build`).
+  - Backend tests: 27 passed in 4.59s (`python -m pytest backend/tests/ -v`).
+- **Files Modified / Added**:
+  - Modified: `src/App.jsx` (local date formatting)
+  - Modified: `src/conversation/compoundCommandParser.js` (lookahead date extraction, month parsing)
+  - Modified: `src/conversation/dialogueManager.js` (task reference scoring, ordinal clarification, deadline inquiry)
+  - Modified: `src/conversation/scheduleIntentParser.js` (direct rescheduling regexes, deadline modification)
+  - Modified: `src/conversation/scheduleNegotiator.js` (complex task description matching)
+  - Modified: `tests/dialogue_manager.test.js` (aligned ambiguity prompt assertion)
+  - Modified: `tests/compound_commands.test.js` (added Gate 2 mandatory task creation test suite)
+  - Added: `tests/date_resolution.test.js` (Gate 1 local date consistency tests)
+  - Added: `tests/task_matching.test.js` (Gate 3 & Gate 4 contextual matching and deadline tests)
+- **Git Commits & Push Verification**:
+  - Date Resolution Fix: `81b6e5b` (`fix(phase-5): unify local date resolution and fix UTC timezone shifts`).
+  - Main Implementation: `6a1aef0` (`fix(phase-5): improve date parsing and contextual task resolution`).
+  - Push status: Verified pushed to `origin main` at `https://github.com/kanwal-vyas/VoxPlan.git`.
+- **Status**: **COMPLETED**.
+- **Next Stage**: Stage 5.4 (Conversational Plan Explanations & Constraint Debriefing).
 
 #### Stage 5.4: Conversational Plan Explanations & Constraint Debriefing
 - **Scope & Expected Deliverables**:
