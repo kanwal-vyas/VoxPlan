@@ -125,6 +125,7 @@ export class VoiceRecognitionController {
     getSpeechRecognition = null,
     onStateChange = () => {},
     onResult = () => {},
+    onInterimResult = () => {},
     onError = () => {},
     lang = 'en-US',
   } = {}) {
@@ -136,12 +137,14 @@ export class VoiceRecognitionController {
       });
     this._onStateChange = onStateChange;
     this._onResult = onResult;
+    this._onInterimResult = onInterimResult;
     this._onError = onError;
     this.lang = lang;
 
     this.state = RECOGNITION_STATES.IDLE;
     this.activeSession = null;
     this.sessionId = 0;
+    this._isStarting = false;
     this._visibilityHandler = null;
 
     this._initVisibilityListener();
@@ -150,7 +153,7 @@ export class VoiceRecognitionController {
   _initVisibilityListener() {
     if (typeof document !== 'undefined' && document.addEventListener) {
       this._visibilityHandler = () => {
-        if (document.hidden && this.state === RECOGNITION_STATES.LISTENING) {
+        if (document.hidden && (this.state === RECOGNITION_STATES.LISTENING || this._isStarting)) {
           this.stop();
         }
       };
@@ -189,62 +192,92 @@ export class VoiceRecognitionController {
       return false;
     }
 
-    // Prevent duplicate sessions
-    if (this.state === RECOGNITION_STATES.LISTENING || this.state === RECOGNITION_STATES.PROCESSING) {
+    // Prevent duplicate sessions or race condition on rapid clicks
+    if (this._isStarting || this.state === RECOGNITION_STATES.LISTENING || this.state === RECOGNITION_STATES.PROCESSING) {
       return false;
     }
 
+    this._isStarting = true;
     this.sessionId += 1;
     const currentSessionId = this.sessionId;
 
     try {
       const recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = false;
+      recognition.continuous = true;
+      recognition.interimResults = true;
       recognition.lang = this.lang;
       recognition.maxAlternatives = 1;
 
       recognition.onstart = () => {
         if (this.sessionId !== currentSessionId) return;
+        this._isStarting = false;
         this._setState(RECOGNITION_STATES.LISTENING);
       };
 
       recognition.onresult = (event) => {
         if (this.sessionId !== currentSessionId) return;
 
-        let transcript = '';
+        let hasFinalResult = false;
+        let finalTranscript = '';
+        let interimTranscript = '';
+
         if (event.results && event.results.length > 0) {
-          const firstResult = event.results[0];
-          // Ensure we only process final results
-          if (firstResult.isFinal !== false && firstResult[0]) {
-            transcript = firstResult[0].transcript || '';
+          for (let i = 0; i < event.results.length; i++) {
+            const res = event.results[i];
+            if (res.isFinal) {
+              hasFinalResult = true;
+              finalTranscript += (res[0]?.transcript || '') + ' ';
+            } else {
+              interimTranscript += (res[0]?.transcript || '') + ' ';
+            }
           }
         }
 
-        const trimmed = transcript.trim();
-        if (!trimmed) {
-          this._setState(RECOGNITION_STATES.IDLE);
+        // Notify draft transcript for non-executable UI preview
+        const trimmedInterim = interimTranscript.trim();
+        if (trimmedInterim) {
+          this._onInterimResult(trimmedInterim);
+        }
+
+        const trimmedFinal = finalTranscript.trim();
+        if (!trimmedFinal) {
+          if (hasFinalResult && !trimmedInterim) {
+            this._setState(RECOGNITION_STATES.IDLE);
+          }
           return;
         }
 
+        // Transition to processing once final transcript arrives
         this._setState(RECOGNITION_STATES.PROCESSING);
+        this._onInterimResult('');
+
         try {
-          this._onResult(trimmed);
+          // Stop further recording so this utterance is processed cleanly once
+          if (this.activeSession) {
+            try {
+              this.activeSession.stop();
+            } catch {}
+          }
+          this._onResult(trimmedFinal);
         } finally {
           this._setState(RECOGNITION_STATES.IDLE);
+          this.activeSession = null;
         }
       };
 
       recognition.onerror = (event) => {
         if (this.sessionId !== currentSessionId) return;
+        this._isStarting = false;
 
         const errorType = event.error || 'unknown';
-        if (errorType === 'no-speech') {
-          // Normal timeout with no speech detected; transition quietly to IDLE
+        if (errorType === 'no-speech' || errorType === 'aborted') {
+          // Normal timeout with no speech detected or cleanly aborted; transition quietly to IDLE
+          this._onInterimResult('');
           this._setState(RECOGNITION_STATES.IDLE);
           return;
         }
 
+        this._onInterimResult('');
         this._setState(RECOGNITION_STATES.ERROR);
         let userMessage = `Voice recognition error: ${errorType}`;
         if (errorType === 'not-allowed') {
@@ -263,7 +296,9 @@ export class VoiceRecognitionController {
 
       recognition.onend = () => {
         if (this.sessionId !== currentSessionId) return;
-        if (this.state === RECOGNITION_STATES.LISTENING) {
+        this._isStarting = false;
+        this._onInterimResult('');
+        if (this.state === RECOGNITION_STATES.LISTENING || this.state === RECOGNITION_STATES.PROCESSING) {
           this._setState(RECOGNITION_STATES.IDLE);
         }
         this.activeSession = null;
@@ -273,6 +308,8 @@ export class VoiceRecognitionController {
       recognition.start();
       return true;
     } catch (err) {
+      this._isStarting = false;
+      this._onInterimResult('');
       this._setState(RECOGNITION_STATES.ERROR);
       this._onError({
         code: 'start_failed',
@@ -283,13 +320,19 @@ export class VoiceRecognitionController {
   }
 
   /**
-   * Stops the active speech recognition session.
+   * Stops the active speech recognition session immediately.
    */
   stop() {
     this.sessionId += 1; // Invalidate current session callbacks
+    this._isStarting = false;
+    this._onInterimResult('');
     if (this.activeSession) {
       try {
-        this.activeSession.stop();
+        if (typeof this.activeSession.abort === 'function') {
+          this.activeSession.abort();
+        } else {
+          this.activeSession.stop();
+        }
       } catch {}
       this.activeSession = null;
     }

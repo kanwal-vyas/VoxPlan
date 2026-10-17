@@ -6,6 +6,7 @@ export default function CommandBar({
   onDismissFeedback,
   isListening = false,
   recognitionState = 'IDLE',
+  interimTranscript = '',
   onToggleListening,
   speechOutputEnabled = false,
   isSpeaking = false,
@@ -121,6 +122,60 @@ export default function CommandBar({
               <span style={styles.contextText}>
                 Active Task Focus: <strong>{activeSubjectTask.title}</strong>
               </span>
+            </div>
+          )}
+
+          {/* Persistent Active Voice Session Banner */}
+          {(recognitionState === 'LISTENING' || isListening || recognitionState === 'PROCESSING') && (
+            <div
+              id="voice-active-indicator"
+              style={{
+                ...styles.voiceSessionCard,
+                backgroundColor: recognitionState === 'PROCESSING' ? '#F4F0FF' : '#FFF0EE',
+                borderColor: recognitionState === 'PROCESSING' ? '#C9B6FF' : '#FF8F82',
+              }}
+              aria-label="Active Voice Recognition Session"
+            >
+              <div style={styles.voiceSessionLeft}>
+                <div style={styles.voiceIndicatorBadge}>
+                  <span
+                    style={{
+                      ...styles.voicePulseDot,
+                      backgroundColor: recognitionState === 'PROCESSING' ? '#5B44BA' : '#E5484D',
+                    }}
+                  />
+                  <span style={styles.voiceSessionStateText}>
+                    {recognitionState === 'PROCESSING' ? 'PROCESSING AUDIO...' : 'LISTENING (MIC ACTIVE)'}
+                  </span>
+                </div>
+
+                <div style={styles.voiceTranscriptArea}>
+                  {interimTranscript ? (
+                    <span style={styles.voiceInterimDraft} aria-label="Draft speech transcript">
+                      Draft: <em>"{interimTranscript}"</em>
+                    </span>
+                  ) : (
+                    <span style={styles.voiceListeningHint}>
+                      {recognitionState === 'PROCESSING'
+                        ? 'Analyzing captured command...'
+                        : 'Speak clearly into your microphone... (e.g. "Add a database assignment due tomorrow")'}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div style={styles.voiceSessionActions}>
+                <button
+                  id="voice-stop-listening-btn"
+                  type="button"
+                  onClick={onToggleListening}
+                  style={styles.stopListeningBtn}
+                  title="Stop voice recognition (or press Esc)"
+                  aria-label="Stop listening"
+                >
+                  ■ Stop Listening
+                </button>
+              </div>
             </div>
           )}
 
@@ -959,5 +1014,78 @@ const styles = {
     clip: 'rect(0, 0, 0, 0)',
     whiteSpace: 'nowrap',
     border: 0,
+  },
+  voiceSessionCard: {
+    borderRadius: '12px',
+    border: '1.5px solid',
+    padding: '12px 16px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '16px',
+    transition: 'all 0.2s ease',
+  },
+  voiceSessionLeft: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    flex: 1,
+    minWidth: 0,
+  },
+  voiceIndicatorBadge: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  voicePulseDot: {
+    width: '10px',
+    height: '10px',
+    borderRadius: '50%',
+    display: 'inline-block',
+    boxShadow: '0 0 0 3px rgba(229, 72, 77, 0.25)',
+  },
+  voiceSessionStateText: {
+    fontSize: '11px',
+    fontWeight: '800',
+    letterSpacing: '0.06em',
+    color: '#25242A',
+  },
+  voiceTranscriptArea: {
+    display: 'flex',
+    alignItems: 'center',
+    fontSize: '13px',
+    color: '#4B4850',
+    minHeight: '20px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  voiceInterimDraft: {
+    color: '#D9483B',
+    fontWeight: '600',
+    fontStyle: 'italic',
+  },
+  voiceListeningHint: {
+    color: '#706D73',
+    fontSize: '12px',
+  },
+  voiceSessionActions: {
+    display: 'flex',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  stopListeningBtn: {
+    backgroundColor: '#FFE8E5',
+    color: '#991B1B',
+    border: '1px solid #FFB5A7',
+    borderRadius: '8px',
+    padding: '7px 14px',
+    fontSize: '12px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    transition: 'all 0.15s ease',
   },
 };

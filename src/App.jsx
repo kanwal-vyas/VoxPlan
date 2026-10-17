@@ -182,6 +182,7 @@ export default function App() {
   const [feedback, setFeedback] = useState(null);
   const [isListening, setIsListening] = useState(false);
   const [recognitionState, setRecognitionState] = useState(RECOGNITION_STATES.IDLE);
+  const [interimTranscript, setInterimTranscript] = useState('');
   const [speechOutputEnabled, setSpeechOutputEnabled] = useState(() => {
     try {
       return typeof localStorage !== 'undefined' && localStorage.getItem('voxplan_speech_output_enabled') === 'true';
@@ -800,115 +801,142 @@ export default function App() {
 
     const { action } = result;
 
-    switch (action.type) {
-      case 'ACCEPT_SCHEDULE_PROPOSAL':
-        if (action.proposal) {
-          await handleApplySchedule(action.proposal);
-          setActiveProposal(null);
+    const dispatchAction = async (act) => {
+      if (!act) return;
+
+      switch (act.type) {
+        case 'COMPOUND_ACTIONS':
+          if (Array.isArray(act.actions)) {
+            for (const subAct of act.actions) {
+              await dispatchAction(subAct);
+            }
+          }
+          break;
+
+        case 'ACCEPT_SCHEDULE_PROPOSAL':
+          if (act.proposal) {
+            await handleApplySchedule(act.proposal);
+            setActiveProposal(null);
+            setConversationState(CONVERSATION_STATES.IDLE);
+          }
+          break;
+
+        case 'DISCARD_SCHEDULE_PROPOSAL':
+          if (act.proposal) {
+            await handleDiscardSchedule(act.proposal, act.reason || 'user_discard');
+            setActiveProposal(null);
+            setConversationState(CONVERSATION_STATES.IDLE);
+          }
+          break;
+
+        case CONVERSATION_INTENTS.TRAIN_MODEL:
+          handleTrainModel();
+          break;
+
+        case CONVERSATION_INTENTS.PREDICT_RISK:
+          handleRunPredictions();
+          break;
+
+        case CONVERSATION_INTENTS.OPEN_SCHEDULER:
+          setIsScheduleModalOpen(true);
+          break;
+
+        case CONVERSATION_INTENTS.FILTER_HIGH_RISK:
+          setActiveFilter('high-risk');
+          telemetry.recordRecommendationAction('high_risk_filter', 'filter_cmd', true);
+          break;
+
+        case CONVERSATION_INTENTS.SHOW_METRICS:
+        case CONVERSATION_INTENTS.SHOW_IMPORTANCE:
+          if (mlPanelRef.current) {
+            mlPanelRef.current.scrollIntoView({ behavior: 'smooth' });
+          }
+          break;
+
+        case CONVERSATION_INTENTS.CLEAR_COMPLETED: {
+          const completedTasks = tasks.filter((t) => t.completed);
+          for (const t of completedTasks) {
+            dialogueManager.invalidateTask(t.id);
+          }
+          setTasks((prev) => prev.filter((t) => !t.completed));
+          break;
+        }
+
+        case CONVERSATION_INTENTS.CLEAR_HISTORY: {
+          await telemetry.clearHistory();
+          dialogueManager.reset();
           setConversationState(CONVERSATION_STATES.IDLE);
+          setActiveSubjectTaskId(null);
+          break;
         }
-        break;
 
-      case 'DISCARD_SCHEDULE_PROPOSAL':
-        if (action.proposal) {
-          await handleDiscardSchedule(action.proposal, action.reason || 'user_discard');
-          setActiveProposal(null);
-          setConversationState(CONVERSATION_STATES.IDLE);
+        case CONVERSATION_INTENTS.COMPLETE_TASK:
+          await completeTask(act.taskId);
+          dialogueManager.setActiveSubject(act.taskId);
+          setActiveSubjectTaskId(act.taskId);
+          break;
+
+        case CONVERSATION_INTENTS.REOPEN_TASK:
+          await reopenTask(act.taskId);
+          dialogueManager.setActiveSubject(act.taskId);
+          setActiveSubjectTaskId(act.taskId);
+          break;
+
+        case CONVERSATION_INTENTS.DELETE_TASK:
+          deleteTask(act.taskId);
+          break;
+
+        case CONVERSATION_INTENTS.RESCHEDULE_TASK:
+          await handleReschedule(act.taskId, act.newDueDate);
+          dialogueManager.setActiveSubject(act.taskId);
+          setActiveSubjectTaskId(act.taskId);
+          break;
+
+        case CONVERSATION_INTENTS.CHANGE_PRIORITY: {
+          const target = tasks.find((t) => t.id === act.taskId);
+          const prevPriority = target ? target.priority : 'medium';
+          setTasks((prev) =>
+            prev.map((t) => (t.id === act.taskId ? { ...t, priority: act.priority } : t))
+          );
+          await telemetry.recordTaskPriorityChanged(act.taskId, prevPriority, act.priority);
+          dialogueManager.setActiveSubject(act.taskId);
+          setActiveSubjectTaskId(act.taskId);
+          break;
         }
-        break;
-      case CONVERSATION_INTENTS.TRAIN_MODEL:
-        handleTrainModel();
-        break;
 
-      case CONVERSATION_INTENTS.PREDICT_RISK:
-        handleRunPredictions();
-        break;
-
-      case CONVERSATION_INTENTS.OPEN_SCHEDULER:
-        setIsScheduleModalOpen(true);
-        break;
-
-      case CONVERSATION_INTENTS.FILTER_HIGH_RISK:
-        setActiveFilter('high-risk');
-        telemetry.recordRecommendationAction('high_risk_filter', 'filter_cmd', true);
-        break;
-
-      case CONVERSATION_INTENTS.SHOW_METRICS:
-      case CONVERSATION_INTENTS.SHOW_IMPORTANCE:
-        if (mlPanelRef.current) {
-          mlPanelRef.current.scrollIntoView({ behavior: 'smooth' });
+        case CONVERSATION_INTENTS.CREATE_TASK: {
+          const newTask = {
+            id: `task-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            title: act.title,
+            description: '',
+            priority: act.priority || 'medium',
+            dueDate: act.dueDate || null,
+            completed: false,
+            category: 'General',
+            estimatedEffort: act.estimatedEffort || null,
+            dependencies: [],
+            createdAt: new Date().toISOString(),
+          };
+          setTasks((prev) => [newTask, ...prev]);
+          await telemetry.recordTaskCreated(newTask);
+          dialogueManager.setActiveSubject(newTask.id);
+          setActiveSubjectTaskId(newTask.id);
+          break;
         }
-        break;
 
-      case CONVERSATION_INTENTS.CLEAR_COMPLETED: {
-        const completedTasks = tasks.filter((t) => t.completed);
-        for (const t of completedTasks) {
-          dialogueManager.invalidateTask(t.id);
-        }
-        setTasks((prev) => prev.filter((t) => !t.completed));
-        break;
+        case CONVERSATION_INTENTS.DESCRIBE_TASK:
+          if (act.targetTask) {
+            dialogueManager.setActiveSubject(act.targetTask.id);
+            setActiveSubjectTaskId(act.targetTask.id);
+          }
+          break;
+
+        default:
+          break;
       }
+    };
 
-      case CONVERSATION_INTENTS.CLEAR_HISTORY: {
-        await telemetry.clearHistory();
-        dialogueManager.reset();
-        setConversationState(CONVERSATION_STATES.IDLE);
-        setActiveSubjectTaskId(null);
-        break;
-      }
-
-      case CONVERSATION_INTENTS.COMPLETE_TASK:
-        await completeTask(action.taskId);
-        dialogueManager.setActiveSubject(action.taskId);
-        setActiveSubjectTaskId(action.taskId);
-        break;
-
-      case CONVERSATION_INTENTS.REOPEN_TASK:
-        await reopenTask(action.taskId);
-        dialogueManager.setActiveSubject(action.taskId);
-        setActiveSubjectTaskId(action.taskId);
-        break;
-
-      case CONVERSATION_INTENTS.DELETE_TASK:
-        deleteTask(action.taskId);
-        break;
-
-      case CONVERSATION_INTENTS.RESCHEDULE_TASK:
-        await handleReschedule(action.taskId, action.newDueDate);
-        dialogueManager.setActiveSubject(action.taskId);
-        setActiveSubjectTaskId(action.taskId);
-        break;
-
-      case CONVERSATION_INTENTS.CREATE_TASK: {
-        const newTask = {
-          id: `task-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          title: action.title,
-          description: '',
-          priority: action.priority || 'medium',
-          dueDate: action.dueDate || null,
-          completed: false,
-          category: 'General',
-          estimatedEffort: action.estimatedEffort || null,
-          dependencies: [],
-          createdAt: new Date().toISOString(),
-        };
-        setTasks((prev) => [newTask, ...prev]);
-        await telemetry.recordTaskCreated(newTask);
-        dialogueManager.setActiveSubject(newTask.id);
-        setActiveSubjectTaskId(newTask.id);
-        break;
-      }
-
-      case CONVERSATION_INTENTS.DESCRIBE_TASK:
-        if (action.targetTask) {
-          dialogueManager.setActiveSubject(action.targetTask.id);
-          setActiveSubjectTaskId(action.targetTask.id);
-        }
-        break;
-
-      default:
-        break;
-    }
+    await dispatchAction(action);
   };
 
   const executeCommandRef = useRef(executeCommand);
@@ -927,8 +955,15 @@ export default function App() {
       onStateChange: (state) => {
         setRecognitionState(state);
         setIsListening(state === RECOGNITION_STATES.LISTENING);
+        if (state !== RECOGNITION_STATES.LISTENING && state !== RECOGNITION_STATES.PROCESSING) {
+          setInterimTranscript('');
+        }
+      },
+      onInterimResult: (draft) => {
+        setInterimTranscript(draft);
       },
       onResult: (transcript) => {
+        setInterimTranscript('');
         setFeedback({
           type: 'info',
           message: `Heard: "${transcript}"`,
@@ -938,6 +973,7 @@ export default function App() {
         }
       },
       onError: (err) => {
+        setInterimTranscript('');
         setFeedback({
           type: 'error',
           message: err.message,
@@ -1153,6 +1189,7 @@ export default function App() {
           onDismissFeedback={() => setFeedback(null)}
           isListening={recognitionState === RECOGNITION_STATES.LISTENING || isListening}
           recognitionState={recognitionState}
+          interimTranscript={interimTranscript}
           onToggleListening={toggleListening}
           speechOutputEnabled={speechOutputEnabled}
           isSpeaking={isSpeaking}

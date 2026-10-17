@@ -15,6 +15,12 @@
 
 import { parseScheduleIntent, SCHEDULE_INTENTS } from './scheduleIntentParser.js';
 import { negotiateScheduleProposal } from './scheduleNegotiator.js';
+import {
+  parseCompoundTaskCreation,
+  splitCompoundCommands,
+  parseEnhancedDate,
+  formatISODate,
+} from './compoundCommandParser.js';
 
 export const CONVERSATION_STATES = Object.freeze({
   IDLE: 'IDLE',
@@ -28,6 +34,8 @@ export const CONVERSATION_INTENTS = Object.freeze({
   COMPLETE_TASK: 'COMPLETE_TASK',
   REOPEN_TASK: 'REOPEN_TASK',
   DELETE_TASK: 'DELETE_TASK',
+  CHANGE_PRIORITY: 'CHANGE_PRIORITY',
+  QUERY_TASKS: 'QUERY_TASKS',
   CLEAR_COMPLETED: 'CLEAR_COMPLETED',
   CLEAR_HISTORY: 'CLEAR_HISTORY',
   DESCRIBE_TASK: 'DESCRIBE_TASK',
@@ -711,21 +719,25 @@ export class DialogueManager {
       this.pendingClarification = null;
       this.pendingIntent = null;
 
-      const parsedDate = parseDateExpression(rawTitle, new Date(this.clock()));
+      const savedParams = pendingIntent?.params || {};
+      const dueDate = savedParams.dueDate || parseEnhancedDate(rawTitle, new Date(this.clock())) || parseDateExpression(rawTitle, new Date(this.clock())) || null;
+      const priority = savedParams.priority || 'medium';
+      const estimatedEffort = savedParams.estimatedEffort || null;
+
       return {
         state: CONVERSATION_STATES.IDLE,
         intent: CONVERSATION_INTENTS.CREATE_TASK,
         targetTask: null,
-        responseText: `Creating task: "${rawTitle}"`,
+        responseText: `Creating task: "${rawTitle}"${dueDate ? ` (Due: ${dueDate})` : ''}`,
         feedbackType: 'success',
         requiresConfirmation: false,
         isAuthorized: true,
         action: {
           type: CONVERSATION_INTENTS.CREATE_TASK,
           title: rawTitle,
-          dueDate: parsedDate || null,
-          priority: 'medium',
-          estimatedEffort: null,
+          dueDate,
+          priority,
+          estimatedEffort,
         },
         error: null,
       };
@@ -1068,10 +1080,94 @@ export class DialogueManager {
   }
 
   /**
+   * Handle compound sequential or multi-intent commands deterministically.
+   * If any sub-command requires clarification or confirmation, stops and presents that safeguard.
+   * If all sub-commands are authorized or informational queries, executes them safely and combines results.
+   * @private
+   */
+  _handleCompoundCommands(subCommands, tasks, context) {
+    const results = [];
+    let currentTasks = [...tasks];
+    let compoundActions = [];
+    let combinedResponses = [];
+    let feedbackType = 'info';
+
+    for (let i = 0; i < subCommands.length; i++) {
+      const subCmd = subCommands[i];
+      const res = this.processInput(subCmd, { ...context, tasks: currentTasks });
+      results.push(res);
+
+      // If any subCommand triggers clarification or confirmation, stop and present that immediately to preserve safety
+      if (
+        res.state === CONVERSATION_STATES.AWAITING_CONFIRMATION ||
+        res.state === CONVERSATION_STATES.AWAITING_CLARIFICATION ||
+        res.state === CONVERSATION_STATES.AWAITING_PROPOSAL_DECISION
+      ) {
+        return res;
+      }
+
+      if (res.error) {
+        return {
+          ...res,
+          responseText: combinedResponses.length > 0
+            ? `${combinedResponses.join(' ')} Then encountered error: ${res.responseText}`
+            : res.responseText,
+        };
+      }
+
+      if (res.responseText) {
+        combinedResponses.push(res.responseText);
+      }
+      if (res.feedbackType === 'success' || res.feedbackType === 'warning' || res.feedbackType === 'error') {
+        feedbackType = res.feedbackType;
+      }
+
+      if (res.action) {
+        compoundActions.push(res.action);
+        // If it created a task or mutated tasks in memory, update currentTasks for subsequent commands
+        if (res.action.type === CONVERSATION_INTENTS.CREATE_TASK) {
+          const simulatedTask = {
+            id: `temp-${Date.now()}-${i}`,
+            title: res.action.title,
+            dueDate: res.action.dueDate,
+            priority: res.action.priority,
+            estimatedEffort: res.action.estimatedEffort,
+            completed: false,
+          };
+          currentTasks.push(simulatedTask);
+          this.activeSubjectTaskId = simulatedTask.id;
+        }
+      }
+    }
+
+    const lastResult = results[results.length - 1] || {};
+    return {
+      state: this.state,
+      intent: 'COMPOUND_COMMANDS',
+      targetTask: lastResult.targetTask || null,
+      responseText: combinedResponses.join(' '),
+      feedbackType,
+      requiresConfirmation: false,
+      isAuthorized: compoundActions.length > 0,
+      action: compoundActions.length === 1 ? compoundActions[0] : (compoundActions.length > 1 ? {
+        type: 'COMPOUND_ACTIONS',
+        actions: compoundActions,
+      } : null),
+      error: null,
+    };
+  }
+
+  /**
    * Handle command parsing from IDLE state.
    * @private
    */
   _handleIdleState(text, tasks, context) {
+    // 0. Compound Sequential / Multi-Intent Requests
+    const subCommands = splitCompoundCommands(text);
+    if (subCommands.length > 1) {
+      return this._handleCompoundCommands(subCommands, tasks, context);
+    }
+
     // 1. ML Command: Train/Retrain model
     if (/^(?:train|retrain|re-train)\s+(?:the\s+)?(?:ml\s+)?(?:model|random\s*forest|classifier)?$/i.test(text)) {
       return {
@@ -1244,14 +1340,149 @@ export class DialogueManager {
       };
     }
 
-    // 10. Task Inquiry / Inspection ("Tell me about...", "Describe task...", "Show task...")
-    const describeMatch = text.match(/^(?:tell\s+me\s+about|describe|show(?:\s+details\s+of)?|what\s+is|inspect)\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+)$/i);
+    // 10. Overdue Tasks Query ("Show my overdue tasks", "What tasks are overdue?", "List overdue tasks", "What is overdue?")
+    if (/\b(?:show|list|what\s+are|view)\s+(?:my\s+)?overdue\s+tasks?\b/i.test(text) || /^what(?:'s|\s+is)\s+overdue\b/i.test(text)) {
+      const todayISO = formatISODate(new Date(this.clock()));
+      const overdue = tasks.filter((t) => !t.completed && t.dueDate && t.dueDate < todayISO);
+      if (overdue.length === 0) {
+        return {
+          state: CONVERSATION_STATES.IDLE,
+          intent: CONVERSATION_INTENTS.QUERY_TASKS,
+          targetTask: null,
+          responseText: 'You have no overdue tasks! All active tasks are on track.',
+          feedbackType: 'success',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: null,
+          error: null,
+        };
+      }
+      const list = overdue.map((t) => `"${t.title}" (Due: ${t.dueDate})`).join(', ');
+      return {
+        state: CONVERSATION_STATES.IDLE,
+        intent: CONVERSATION_INTENTS.QUERY_TASKS,
+        targetTask: overdue[0],
+        responseText: `Found ${overdue.length} overdue task${overdue.length > 1 ? 's' : ''}: ${list}.`,
+        feedbackType: 'warning',
+        requiresConfirmation: false,
+        isAuthorized: false,
+        action: null,
+        error: null,
+      };
+    }
+
+    // 11. Upcoming Tasks Query ("Show tasks due this week", "Show upcoming tasks", "What's due this week?", "What's due tomorrow?")
+    if (/\b(?:show|list|view)\s+(?:my\s+)?(?:upcoming|tasks?\s+due\s+this\s+week)\s*(?:tasks?)?\b/i.test(text) || /^what(?:'s|\s+is)\s+due\s+(?:today|tomorrow|this\s+week)\b/i.test(text)) {
+      const todayISO = formatISODate(new Date(this.clock()));
+      const nextWeekD = new Date(this.clock());
+      nextWeekD.setDate(nextWeekD.getDate() + 7);
+      const nextWeekISO = formatISODate(nextWeekD);
+      const upcoming = tasks.filter((t) => !t.completed && t.dueDate && t.dueDate >= todayISO && t.dueDate <= nextWeekISO);
+      if (upcoming.length === 0) {
+        return {
+          state: CONVERSATION_STATES.IDLE,
+          intent: CONVERSATION_INTENTS.QUERY_TASKS,
+          targetTask: null,
+          responseText: 'No tasks scheduled in the next 7 days.',
+          feedbackType: 'info',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: null,
+          error: null,
+        };
+      }
+      const list = upcoming.map((t) => `"${t.title}" (Due: ${t.dueDate})`).join(', ');
+      return {
+        state: CONVERSATION_STATES.IDLE,
+        intent: CONVERSATION_INTENTS.QUERY_TASKS,
+        targetTask: upcoming[0],
+        responseText: `Tasks due in the next 7 days (${upcoming.length}): ${list}.`,
+        feedbackType: 'info',
+        requiresConfirmation: false,
+        isAuthorized: false,
+        action: null,
+        error: null,
+      };
+    }
+
+    // 12. Task Deadline Inquiry on active or referenced task ("When is it due?", "What is its deadline?", "And what is its deadline?")
+    if (/^(?:(?:and\s+)?what\s+is\s+(?:its|the)\s+deadline\??|when\s+is\s+it\s+due\??|tell\s+me\s+its\s+deadline\??)$/i.test(text)) {
+      const activeTask = this.activeSubjectTaskId ? tasks.find((t) => t.id === this.activeSubjectTaskId) : null;
+      if (!activeTask) {
+        return {
+          state: CONVERSATION_STATES.AWAITING_CLARIFICATION,
+          intent: CONVERSATION_INTENTS.DESCRIBE_TASK,
+          targetTask: null,
+          responseText: 'Which task would you like to check the deadline for?',
+          feedbackType: 'warning',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: null,
+          error: 'missing_context',
+        };
+      }
+      return {
+        state: CONVERSATION_STATES.IDLE,
+        intent: CONVERSATION_INTENTS.DESCRIBE_TASK,
+        targetTask: activeTask,
+        responseText: `"${activeTask.title}" is due on ${activeTask.dueDate || 'no deadline set'} (${activeTask.priority || 'medium'} priority).`,
+        feedbackType: 'info',
+        requiresConfirmation: false,
+        isAuthorized: true,
+        action: { type: CONVERSATION_INTENTS.DESCRIBE_TASK, targetTask: activeTask },
+        error: null,
+      };
+    }
+
+    // 13. Find task and tell deadline ("Find my network lab and tell me its deadline")
+    const findDeadlineMatch = text.match(/^(?:find|lookup|search(?:\s+for)?)\s+(?:my\s+|the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+and\s+(?:tell\s+me\s+its\s+deadline|what\s+is\s+its\s+deadline|when\s+is\s+it\s+due)$/i);
+    if (findDeadlineMatch) {
+      const taskName = findDeadlineMatch[1].trim();
+      const resolution = this.resolveTaskReference(taskName, tasks);
+      if (resolution.status === 'exact') {
+        const target = resolution.task;
+        this.activeSubjectTaskId = target.id;
+        return {
+          state: CONVERSATION_STATES.IDLE,
+          intent: CONVERSATION_INTENTS.DESCRIBE_TASK,
+          targetTask: target,
+          responseText: `"${target.title}" is due on ${target.dueDate || 'no deadline set'} (${target.priority || 'medium'} priority).`,
+          feedbackType: 'info',
+          requiresConfirmation: false,
+          isAuthorized: true,
+          action: { type: CONVERSATION_INTENTS.DESCRIBE_TASK, targetTask: target },
+          error: null,
+        };
+      }
+      return this._resolveAndDispatch(CONVERSATION_INTENTS.DESCRIBE_TASK, taskName, {}, tasks);
+    }
+
+    // 14. Priority Change Command ("Make it high priority", "Set priority to low", "Change priority of Database Assignment to high")
+    const priorityMatch = text.match(/^(?:make\s+(?:it|this\s+task)|set\s+(?:the\s+)?priority(?:\s+of)?|change\s+priority(?:\s+of)?|mark\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?)(.+?)(?:\s+to|\s+as)?\s+(high|medium|low|urgent|critical|minor|trivial)(?:\s+priority)?$/i) ||
+                         text.match(/^(?:make\s+(?:it|this\s+task)|set\s+priority\s+to|change\s+to)\s+(high|medium|low|urgent|critical|minor|trivial)(?:\s+priority)?$/i);
+    if (priorityMatch) {
+      let targetName = 'it';
+      let priorityWord = 'medium';
+      if (priorityMatch[2]) {
+        targetName = priorityMatch[1].trim();
+        priorityWord = priorityMatch[2].toLowerCase();
+      } else {
+        priorityWord = priorityMatch[1].toLowerCase();
+      }
+      const priority = ['urgent', 'critical', 'high'].includes(priorityWord) ? 'high'
+        : ['minor', 'trivial', 'low'].includes(priorityWord) ? 'low' : 'medium';
+
+      return this._resolveAndDispatch(CONVERSATION_INTENTS.CHANGE_PRIORITY, targetName, { priority }, tasks);
+    }
+
+    // 15. Task Inquiry / Inspection ("Tell me about...", "Describe task...", "Show task...", "Find...", "Lookup...")
+    const describeMatch = text.match(/^(?:tell\s+me\s+about|describe|show(?:\s+details\s+of)?|what\s+is|inspect|find|lookup|search(?:\s+for)?)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+)$/i);
     if (describeMatch) {
       const taskName = describeMatch[1].trim();
       return this._resolveAndDispatch(CONVERSATION_INTENTS.DESCRIBE_TASK, taskName, {}, tasks);
     }
 
-    // 11. Task Command: Uncomplete / Mark as pending / Reopen
+    // 16. Task Command: Uncomplete / Mark as pending / Reopen
     const markPendingMatch = text.match(/^mark\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+as\s+(?:pending|incomplete|uncompleted|not\s+done|open)$/i);
     const uncompleteMatch = text.match(/^(?:uncomplete|uncheck|reopen)\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+)$/i);
     if (markPendingMatch || uncompleteMatch) {
@@ -1259,7 +1490,7 @@ export class DialogueManager {
       return this._resolveAndDispatch(CONVERSATION_INTENTS.REOPEN_TASK, taskName, {}, tasks);
     }
 
-    // 12. Task Command: Complete / Mark as completed / "Mark it done"
+    // 17. Task Command: Complete / Mark as completed / "Mark it done"
     const markCompletedMatch = text.match(/^mark\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+(?:as\s+)?(?:completed|complete|done|finished)$/i);
     const completeMatch = text.match(/^(?:complete|finish|check(?:\s+off)?)\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+)$/i);
     if (markCompletedMatch || completeMatch) {
@@ -1267,29 +1498,31 @@ export class DialogueManager {
       return this._resolveAndDispatch(CONVERSATION_INTENTS.COMPLETE_TASK, taskName, {}, tasks);
     }
 
-    // 13. Consequential Command: Delete task (requires confirmation!)
+    // 18. Consequential Command: Delete task (requires confirmation!)
     const deleteMatch = text.match(/^(?:delete|remove)\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+)$/i);
     if (deleteMatch) {
       const taskName = deleteMatch[1].trim();
       return this._resolveAndDispatch(CONVERSATION_INTENTS.DELETE_TASK, taskName, {}, tasks);
     }
 
-    // 14. Task Command: Reschedule task
+    // 19. Task Command: Reschedule task
     const rescheduleMatch = text.match(/^reschedule\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)(?:\s+to(?:\s+(.+))?)?$/i);
     if (rescheduleMatch) {
       const taskName = rescheduleMatch[1].trim();
       const rawDate = rescheduleMatch[2] ? rescheduleMatch[2].trim() : '';
-      const parsedDate = rawDate ? parseDateExpression(rawDate, new Date(this.clock())) : null;
+      const parsedDate = rawDate ? (parseEnhancedDate(rawDate, new Date(this.clock())) || parseDateExpression(rawDate, new Date(this.clock()))) : null;
       return this._resolveAndDispatch(CONVERSATION_INTENTS.RESCHEDULE_TASK, taskName, { newDueDate: parsedDate, rawDate }, tasks);
     }
 
-    // 15. Task Command: Create / Add task
-    const isCreateIntent = /^(?:create|add|new|make|schedule)\b/i.test(text);
+    // 20. Task Command: Create / Add task (handles simple and compound requests)
+    const isCreateIntent = /^(?:create|add|new|make|schedule)\b/i.test(text) ||
+      /^(?:remind\s+me\s+to|i\s+need\s+to|i\s+have\s+to|i\s+must|put|place)\b/i.test(text) ||
+      /\badd\s+(?:it\s+)?to\s+(?:my\s+)?tasks\b/i.test(text);
     if (isCreateIntent) {
       return this._handleCreateTaskIntent(text);
     }
 
-    // 16. Fallback: Unrecognized input
+    // 21. Fallback: Unrecognized input
     return {
       state: CONVERSATION_STATES.IDLE,
       intent: CONVERSATION_INTENTS.UNKNOWN,
@@ -1506,6 +1739,27 @@ export class DialogueManager {
       };
     }
 
+    // 6. Change Priority
+    if (intent === CONVERSATION_INTENTS.CHANGE_PRIORITY) {
+      const priority = params?.priority || 'medium';
+      return {
+        state: CONVERSATION_STATES.IDLE,
+        intent: CONVERSATION_INTENTS.CHANGE_PRIORITY,
+        targetTask: target,
+        responseText: `Setting priority of "${target.title}" to ${priority}.`,
+        feedbackType: 'success',
+        requiresConfirmation: false,
+        isAuthorized: true,
+        action: {
+          type: CONVERSATION_INTENTS.CHANGE_PRIORITY,
+          taskId: target.id,
+          targetTask: target,
+          priority,
+        },
+        error: null,
+      };
+    }
+
     // Fallback
     return {
       state: CONVERSATION_STATES.IDLE,
@@ -1522,56 +1776,22 @@ export class DialogueManager {
 
   /**
    * Parse task creation parameters or request clarification if title is missing.
+   * Leverages parseCompoundTaskCreation to cleanly separate title from deadline and priority phrases.
    * @private
    */
   _handleCreateTaskIntent(text) {
-    let priority = 'medium';
-    if (/\b(?:high\s+priority|priority\s+high|urgent|critical)\b/i.test(text)) {
-      priority = 'high';
-    } else if (/\b(?:low\s+priority|priority\s+low|trivial|minor)\b/i.test(text)) {
-      priority = 'low';
-    } else if (/\b(?:medium\s+priority|priority\s+medium|normal\s+priority)\b/i.test(text)) {
-      priority = 'medium';
-    }
+    const parsed = parseCompoundTaskCreation(text, new Date(this.clock()));
 
-    // Extract effort if mentioned
-    let estimatedEffort = null;
-    const effortMatch = text.match(/\b(?:for|effort(?:\s+of)?|estimate(?:\s+of)?)\s+(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b/i);
-    if (effortMatch) {
-      estimatedEffort = parseFloat(effortMatch[1]);
-    }
-
-    // Extract due date
-    const dueDate = parseDateExpression(text, new Date(this.clock()));
-
-    // Clean title
-    let rawTitle = text
-      .replace(/^(?:create|add|new|make|schedule)\s+/i, '')
-      .replace(/^(?:a|an)\s+/i, '')
-      .replace(/\bwith\s+(?:high|medium|low)\s+priority\b/gi, '')
-      .replace(/\b(?:high|medium|low)\s+priority\b/gi, '')
-      .replace(/\bpriority\s+(?:high|medium|low)\b/gi, '')
-      .replace(/^task(?:\s+|$)/i, '')
-      .replace(/^(?:called|named)\s+/i, '')
-      .replace(/\b(?:called|named)\s+/gi, '')
-      .replace(/\b(?:for|effort(?:\s+of)?|estimate(?:\s+of)?)\s+\d+(?:\.\d+)?\s*(?:hours?|hrs?|h)\b/gi, '')
-      .replace(/\b(?:due\s+today|due\s+tomorrow|due\s+in\s+\d+\s+days?|due\s+next\s+week)\b/gi, '')
-      .replace(/\bdue\s+(?:on\s+)?\d{4}-\d{2}-\d{2}\b/gi, '')
-      .replace(/\bdue\s+(?:on\s+)?[a-zA-Z]+\s+\d{1,2}(?:st|nd|rd|th)?(?:\s*,\s*\d{4})?\b/gi, '')
-      .replace(/\bdue\s+(?:on\s+)?(?:next\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, '')
-      .trim();
-
-    rawTitle = rawTitle
-      .replace(/\s+(?:with\s+)?(?:high|medium|low)\s+priority$/i, '')
-      .replace(/\s+priority\s+(?:high|medium|low)$/i, '')
-      .trim();
-
-    if (!rawTitle) {
+    if (!parsed || !parsed.title) {
       // Missing title -> transition to AWAITING_CLARIFICATION
       this.state = CONVERSATION_STATES.AWAITING_CLARIFICATION;
       this.pendingIntent = {
         intent: CONVERSATION_INTENTS.CREATE_TASK,
-        params: { priority, estimatedEffort, dueDate },
+        params: {
+          priority: parsed?.priority || 'medium',
+          estimatedEffort: parsed?.estimatedEffort || null,
+          dueDate: parsed?.dueDate || null,
+        },
       };
       this.pendingClarification = {
         missingField: 'taskTitle',
@@ -1588,6 +1808,11 @@ export class DialogueManager {
         error: 'missing_title',
       };
     }
+
+    const priority = parsed.priority || 'medium';
+    const dueDate = parsed.dueDate || null;
+    const estimatedEffort = parsed.estimatedEffort || null;
+    const rawTitle = parsed.title;
 
     return {
       state: CONVERSATION_STATES.IDLE,

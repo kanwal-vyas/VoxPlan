@@ -15,6 +15,7 @@
  */
 
 import { parseDateExpression } from './dialogueManager.js';
+import { parseEnhancedDate } from './compoundCommandParser.js';
 
 export const SCHEDULE_INTENTS = Object.freeze({
   DIRECT_RESCHEDULE: 'DIRECT_RESCHEDULE',
@@ -86,7 +87,48 @@ export function parseScheduleIntent(rawText, options = {}) {
     };
   }
 
-  // 3. Hypothetical Simulation / "What if" Questions
+  // 3a. Conversational Revision on Active Subject: "What about Monday instead?", "How about Friday?", "What about tomorrow?", "To Monday instead", "Monday instead"
+  const whatAboutDateMatch = text.match(/^(?:what\s+about|how\s+about)\s+(.+?)(?:\s+instead)?$/i) ||
+                             text.match(/^(?:to|on)\s+(.+?)\s+instead$/i) ||
+                             text.match(/^([a-zA-Z]+|\d{4}-\d{2}-\d{2})\s+instead$/i);
+  if (whatAboutDateMatch) {
+    const rawDatePart = whatAboutDateMatch[1].trim();
+    const parsedDate = parseEnhancedDate(rawDatePart, now) || parseDateExpression(rawDatePart, now);
+    if (parsedDate) {
+      return {
+        intent: SCHEDULE_INTENTS.DIRECT_RESCHEDULE,
+        confidence: 0.95,
+        params: {
+          targetTaskQuery: activeSubject ? activeSubject.title : 'it',
+          targetDate: parsedDate,
+          rawDateString: rawDatePart,
+        },
+        rawText,
+      };
+    }
+  }
+
+  // 3b. Conversational Relative Extension: "Give it two more days", "Give it 3 days", "Give it another day"
+  const giveMoreMatch = text.match(/^(?:give\s+(?:it|this\s+task)\s+(\d+|[a-zA-Z]+)\s+more\s+days?|give\s+(?:it|this\s+task)\s+another\s+day)$/i);
+  if (giveMoreMatch) {
+    let days = 1;
+    if (giveMoreMatch[1]) {
+      const token = giveMoreMatch[1].toLowerCase();
+      days = /^\d+$/.test(token) ? parseInt(token, 10) : token === 'two' ? 2 : token === 'three' ? 3 : 1;
+    }
+    return {
+      intent: SCHEDULE_INTENTS.RELATIVE_SHIFT,
+      confidence: 0.95,
+      params: {
+        isBatch: false,
+        targetTaskQuery: activeSubject ? activeSubject.title : 'it',
+        offsetDays: days,
+      },
+      rawText,
+    };
+  }
+
+  // 3c. Hypothetical Simulation / "What if" Questions
   // Examples:
   // "What happens if I move this task to Friday?"
   // "What if I delay the database migration by 3 days?"
@@ -230,7 +272,7 @@ export function parseScheduleIntent(rawText, options = {}) {
   if (directMatch) {
     const targetTaskQuery = directMatch[1].trim();
     const rawDatePart = directMatch[2] ? directMatch[2].trim() : '';
-    const parsedDate = rawDatePart ? parseDateExpression(rawDatePart, now) : null;
+    const parsedDate = rawDatePart ? (parseEnhancedDate(rawDatePart, now) || parseDateExpression(rawDatePart, now)) : null;
 
     if (!rawDatePart) {
       return {
@@ -289,7 +331,7 @@ function _parseActionBody(actionText, activeSubject, now) {
   if (moveMatch) {
     const targetQuery = moveMatch[1].trim();
     const rawDate = moveMatch[2].trim();
-    const parsedDate = parseDateExpression(rawDate, now);
+    const parsedDate = parseEnhancedDate(rawDate, now) || parseDateExpression(rawDate, now);
     return {
       subIntent: SCHEDULE_INTENTS.DIRECT_RESCHEDULE,
       targetTaskQuery: targetQuery,
@@ -298,17 +340,19 @@ function _parseActionBody(actionText, activeSubject, now) {
     };
   }
 
-  // If input is simply a date (e.g. after a prior move): "to Saturday instead", "on Friday"
-  const dateOnlyMatch = text.match(/^(?:to|on)\s+(.+?)(?:\s+instead)?$/i);
+  // If input is simply a date (e.g. after a prior move): "to Saturday instead", "on Friday", "Monday instead"
+  const dateOnlyMatch = text.match(/^(?:to|on|what\s+about|how\s+about)\s+(.+?)(?:\s+instead)?$/i) || text.match(/^(.+?)\s+instead$/i);
   if (dateOnlyMatch) {
     const rawDate = dateOnlyMatch[1].trim();
-    const parsedDate = parseDateExpression(rawDate, now);
-    return {
-      subIntent: SCHEDULE_INTENTS.DIRECT_RESCHEDULE,
-      targetTaskQuery: activeSubject ? 'it' : null,
-      targetDate: parsedDate,
-      rawDateString: rawDate,
-    };
+    const parsedDate = parseEnhancedDate(rawDate, now) || parseDateExpression(rawDate, now);
+    if (parsedDate) {
+      return {
+        subIntent: SCHEDULE_INTENTS.DIRECT_RESCHEDULE,
+        targetTaskQuery: activeSubject ? (activeSubject.title || 'it') : 'it',
+        targetDate: parsedDate,
+        rawDateString: rawDate,
+      };
+    }
   }
 
   return {

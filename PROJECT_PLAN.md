@@ -1511,7 +1511,77 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
   - Modified: `PROJECT_PLAN.md`
 - **Git Verification**: Committed via `feat(phase-5): add accessible voice interaction and speech synthesis` (`c16adb0`).
 - **Stage 5.3 Status**: **COMPLETED**.
-- **Next Stage**: Stage 5.4 (Conversational Plan Explanations & Constraint Debriefing) — ready to implement.
+- **Next Stage**: Phase 5.3 Hardening (Corrective Engineering Stage) — COMPLETED; Stage 5.4 (Conversational Plan Explanations & Constraint Debriefing) — ready to implement next.
+
+#### Phase 5.3 Hardening: Persistent Voice UI, Compound Commands & Adaptive Intent Resolution (COMPLETED)
+- **Objective**: Corrective hardening of voice UI lifecycle, single-utterance compound commands, and deterministic intent expansion prior to commencing Stage 5.4.
+- **Observed Failures & Root Cause Analysis**:
+  1. *Premature Voice Session Closure*: `VoiceRecognitionController` initialized browser Web Speech API with `continuous: false` and `interimResults: false`. Natural conversational pauses between words (~500ms) caused the browser engine to emit `onend` immediately, returning state to `IDLE` before the utterance completed.
+  2. *Lack of Persistent Visual Session Indicator*: `CommandBar.jsx` only modified input placeholder text and mic button background; there was no persistent dedicated card or banner showing real-time transcription status, draft text, or an explicit stop button.
+  3. *Start Race Conditions*: Rapid successive clicks on the microphone button before `onstart` fired incremented `sessionId` while `state` was still `IDLE`, causing parallel recognition instances.
+  4. *Compound Command Title Pollution*: Naive regex stripping in `_handleCreateTaskIntent` left deadline clauses (e.g. `"with a deadline of Friday"`, `"due tomorrow"`) and command verbs inside the task title.
+  5. *Brittle Rescheduling Phrasing*: Conversational proposal revision (`"What about Monday instead?"`) failed because `scheduleIntentParser.js` only checked `"what if"` and `"to [date] instead"`.
+- **Architectural & Corrective Implementation**:
+  1. *Persistent Listening Session & Real-Time Drafts* (`src/conversation/speechEngine.js`):
+     - Enabled `continuous: true` and `interimResults: true` on `SpeechRecognition` so natural mid-utterance pauses do not terminate the session.
+     - Added `_isStarting` lifecycle guard to eliminate rapid-click race conditions.
+     - Implemented `onInterimResult(draft)` callback: interim transcripts stream to the UI as non-executable drafts.
+     - Once final transcript arrives, transitions to `PROCESSING`, stops recognition cleanly, routes to dialogue engine exactly once, and resets to `IDLE`.
+     - Enhanced `stop()` to call `abort()` where available, immediately clearing draft state and releasing microphone resources.
+  2. *Persistent Voice UI Card & Stop Control* (`src/components/CommandBar.jsx` & `src/App.jsx`):
+     - Added `interimTranscript` state and wired `onInterimResult` from `VoiceRecognitionController`.
+     - Rendered persistent `#voice-active-indicator` inside notebook assistant when in `LISTENING` or `PROCESSING` state.
+     - Displays live pulsing audio indicator, current session status (`LISTENING (MIC ACTIVE)` / `PROCESSING AUDIO...`), real-time draft transcription (`Draft: "..."`), and an explicit `#voice-stop-listening-btn` (`■ Stop Listening`).
+     - Kept command interface open and accessible throughout processing, clarification questions, and proposal reviews.
+  3. *Deterministic Compound Task Creation Parser* (`src/conversation/compoundCommandParser.js`):
+     - `parseCompoundTaskCreation(text, referenceDate)`: Accurately isolates task title from command instruction verbs (`create a task called`, `remind me to finish`, `i need to complete`, `put ... on my task list`), deadline clauses (`due tomorrow`, `with a deadline of Friday`, `by October 25`, `by the end of this week`, `due in three days`), and priority tiers (`high`, `medium`, `low`).
+     - `parseEnhancedDate(text, referenceDate)`: Deterministic parser supporting word numbers (`three days`), relative offsets (`in X days`), weekday resolution, end-of-week calendar calculations (`Sunday`), human dates (`October 25`), and ISO strings.
+     - `extractPriority(text)`: Extracts priority tiers (`urgent`, `critical`, `high`, `minor`, `trivial`, `low`).
+     - `extractEstimatedEffort(text)`: Extracts duration estimates (e.g. `4 hours`, `2.5h`).
+  4. *Broader Intent Adaptability & Safe Multi-Intent Sequencing* (`src/conversation/dialogueManager.js`):
+     - Added `CONVERSATION_INTENTS.CHANGE_PRIORITY`: Supports `"Make it high priority"`, `"Set priority of Network Lab to low"`.
+     - Added `CONVERSATION_INTENTS.QUERY_TASKS`: Supports `"Show my overdue tasks"` and `"Show tasks due this week"`.
+     - Added `CONVERSATION_INTENTS.DESCRIBE_TASK` deadline inquiries: Supports `"When is it due?"`, `"Find my network lab and tell me its deadline"`.
+     - Enhanced `scheduleIntentParser.js`: Supports conversational proposal revisions on active subject (`"What about Monday instead?"`, `"How about Friday?"`).
+     - Implemented `_handleCompoundCommands`: Safely handles multi-intent sequential requests (e.g. `"Show my overdue tasks and then show tasks due this week"`). If any sub-command requires clarification or confirmation, stops and preserves the safeguard immediately.
+     - Integrated `dispatchAction` in `src/App.jsx` supporting atomic multi-actions and priority updates with telemetry logging (`telemetry.recordTaskPriorityChanged`).
+- **Automated Test Suite (232 tests passing across 51 suites)**:
+  - `tests/compound_commands.test.js` (25 tests):
+    1. Voice UI Lifecycle (4 tests): Listening state, interim draft streaming, explicit stop, error transition, duplicate start prevention.
+    2. Compound Task Creation (11 tests): All 8 representative Section B1 examples (due tomorrow, deadline Friday, by October 25, next Monday, November 3, end of week, in three days, high priority), atomic execution, missing title clarification with preserved params.
+    3. Broader Command Adaptability (8 tests): Priority changes by pronoun and title, overdue query, upcoming query, deadline inquiries, conversational revision (`"What about Monday instead?"`), multi-intent sequencing.
+    4. Regression and Safety Safeguards (2 tests): Deletion confirmation requirement preserved, proposal acceptance requirement preserved.
+  - `tests/voice_interaction.test.js` (31 tests): All lifecycle, speech synthesis, and dialogue integration tests passing.
+  - `tests/dialogue_manager.test.js` (32 tests): All dialogue state machine, clarification, confirmation, and timeout tests passing.
+  - Total repository tests: **232 tests passing across 51 suites** (0 failures).
+- **Verification Results**:
+  - `npm test`: **232 tests passing across 51 suites** (0 failures, 351ms).
+  - `npm run lint` (`oxlint`): **0 errors, 0 warnings** across 42 files.
+  - `npm run build` (`vite build`): Built client production bundle cleanly in 303ms.
+  - `python -m pytest backend/tests/ -v`: **27 passed** in 5.77s.
+  - Browser Verification (`http://localhost:5173/#command`):
+    - Verified persistent `#voice-active-indicator` and `#voice-stop-listening-btn`.
+    - Executed Scenario 2: Created `"Database Assignment"` due tomorrow with clean title.
+    - Executed Scenario 3: Created `"Network Security Lab"` with deadline Friday and high priority.
+    - Executed Scenario 4: Rescheduled task to Friday, conversationally revised proposal to Monday, and discarded cleanly.
+    - Executed Scenario 5: Tested deletion confirmation prompt and verified Cancel aborts safely.
+    - Executed Scenario 6: Verified typed fallback and privacy disclosures intact.
+- **Privacy & Local-First Compliance**:
+  - Zero external LLM or cloud API dependencies; 100% deterministic local pattern resolution.
+  - No natural language transcripts or task details added to telemetry.
+  - Voice recognition remains strictly opt-in via explicit user action; vendor-managed browser speech processing disclosure remains prominently visible.
+- **Files Added / Modified**:
+  - Added: `src/conversation/compoundCommandParser.js`
+  - Added: `tests/compound_commands.test.js`
+  - Modified: `src/conversation/speechEngine.js`
+  - Modified: `src/conversation/scheduleIntentParser.js`
+  - Modified: `src/conversation/dialogueManager.js`
+  - Modified: `src/App.jsx`
+  - Modified: `src/components/CommandBar.jsx`
+  - Modified: `PROJECT_PLAN.md`
+- **Git Verification**: Committed via `fix(phase-5): harden voice interaction and compound commands` (`15bdf16`).
+- **Phase 5.3 Hardening Status**: **COMPLETED**.
+- **Next Stage**: Stage 5.4 (Conversational Plan Explanations & Constraint Debriefing) — ready to begin in next cycle.
 
 #### Stage 5.4: Conversational Plan Explanations & Constraint Debriefing
 - **Scope & Expected Deliverables**:
