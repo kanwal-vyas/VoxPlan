@@ -1579,7 +1579,7 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
   - Modified: `src/App.jsx`
   - Modified: `src/components/CommandBar.jsx`
   - Modified: `PROJECT_PLAN.md`
-- **Git Verification**: Committed via `fix(phase-5): harden voice interaction and compound commands` (`15bdf16`).
+- **Git Verification**: Committed via `fix(phase-5): harden voice interaction and compound commands` (`c4253b2`).
 - **Phase 5.3 Hardening Status**: **COMPLETED**.
 - **Next Stage**: Stage 5.4 (Conversational Plan Explanations & Constraint Debriefing) — ready to begin in next cycle.
 
