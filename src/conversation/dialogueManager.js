@@ -209,27 +209,33 @@ export class DialogueManager {
   /**
    * Resolve a task name or reference deterministically against the provided task list.
    * Supports:
-   * 1. Pronoun/anaphoric reference ("it", "this", "that", "this task") -> resolves to activeSubjectTaskId
-   * 2. Exact match (case-insensitive)
-   * 3. Exact stripped match (omitting leading 'the', 'a', 'an')
-   * 4. Substring / keyword matches with ambiguity detection (returns all matches if > 1)
+   * 1. Pronoun/anaphoric reference ("it", "this", "that", "this task", "my task") -> resolves to activeSubjectTaskId
+   * 2. Ordinal / position references ("the first one", "the second one", "1", "2") against candidateTasks
+   * 3. Anaphoric contrast references ("the other one", "the other task", "the other English task")
+   * 4. Exact match (case-insensitive and whitespace normalized)
+   * 5. Exact stripped match (omitting leading 'the', 'my', 'a', 'an' and trailing 'task')
+   * 6. Token overlap and distinctive word matching with transparent scoring
+   * 7. Ambiguity detection: returns all plausible matches when multiple tasks qualify
    *
    * @param {string} query
    * @param {Array<Object>} tasks
+   * @param {Object} [options]
+   * @param {Array<Object>} [options.candidateTasks] Specific candidates from active clarification
    * @returns {Object} Resolution result:
    *   { status: 'exact', task, isContextual: boolean }
    *   { status: 'ambiguous', matches: Array<Object> }
    *   { status: 'not_found' }
    *   { status: 'missing_context', reason: string }
    */
-  resolveTaskReference(query, tasks = []) {
+  resolveTaskReference(query, tasks = [], options = {}) {
     if (!query || typeof query !== 'string') {
       return { status: 'not_found' };
     }
-    const clean = query.trim().toLowerCase();
+    const cleanRaw = query.trim();
+    const cleanLower = cleanRaw.toLowerCase();
 
-    // Check for pronoun or contextual reference
-    const isPronoun = /^(?:it|this|that|this\s+task|that\s+task|the\s+task)$/i.test(clean);
+    // 1. Check for pronoun or contextual reference
+    const isPronoun = /^(?:it|this|that|this\s+task|that\s+task|the\s+task|my\s+task)$/i.test(cleanLower);
     if (isPronoun) {
       if (!this.activeSubjectTaskId) {
         return { status: 'missing_context', reason: 'no_active_subject' };
@@ -242,17 +248,87 @@ export class DialogueManager {
       return { status: 'exact', task: contextualTask, isContextual: true };
     }
 
-    // Exact title match (case-insensitive)
-    const exact = tasks.find((t) => t.title.trim().toLowerCase() === clean);
+    const candidatePool = Array.isArray(options.candidateTasks) && options.candidateTasks.length > 0
+      ? options.candidateTasks
+      : (this.pendingClarification?.matches || null);
+
+    // 2. Check for ordinal / position selection in active clarification context
+    if (candidatePool && candidatePool.length > 0) {
+      if (/^(?:the\s+)?(?:first(?:\s+one|\s+task)?|1st|number\s+1|1)$/i.test(cleanLower)) {
+        const candidate = candidatePool[0];
+        const verified = tasks.find((t) => t.id === candidate.id) || candidate;
+        return { status: 'exact', task: verified, isContextual: true };
+      }
+      if (/^(?:the\s+)?(?:second(?:\s+one|\s+task)?|2nd|number\s+2|2)$/i.test(cleanLower) && candidatePool.length >= 2) {
+        const candidate = candidatePool[1];
+        const verified = tasks.find((t) => t.id === candidate.id) || candidate;
+        return { status: 'exact', task: verified, isContextual: true };
+      }
+      if (/^(?:the\s+)?(?:third(?:\s+one|\s+task)?|3rd|number\s+3|3)$/i.test(cleanLower) && candidatePool.length >= 3) {
+        const candidate = candidatePool[2];
+        const verified = tasks.find((t) => t.id === candidate.id) || candidate;
+        return { status: 'exact', task: verified, isContextual: true };
+      }
+      if (/^(?:the\s+)?other(?:\s+one|\s+task)?$/i.test(cleanLower)) {
+        if (candidatePool.length === 2) {
+          const targetCandidate = candidatePool.find((c) => c.id !== this.activeSubjectTaskId) || candidatePool[1];
+          const verified = tasks.find((t) => t.id === targetCandidate.id) || targetCandidate;
+          return { status: 'exact', task: verified, isContextual: true };
+        }
+      }
+    }
+
+    // 3. Contrast reference: "the other [X] task" or "what about the other [X] task"
+    const otherMatch = cleanLower.match(/^(?:what\s+about\s+)?(?:the\s+)?other\s+(.+?)(?:\s+task)?$/i);
+    if (otherMatch) {
+      const topic = otherMatch[1].trim();
+      const topicMatches = tasks.filter((t) => t.title && t.title.toLowerCase().includes(topic));
+      if (topicMatches.length > 0) {
+        const otherTask = topicMatches.find((t) => t.id !== this.activeSubjectTaskId) || topicMatches[0];
+        if (otherTask) {
+          return { status: 'exact', task: otherTask, isContextual: true };
+        }
+      }
+    }
+
+    // 4. Strip conversational noise words for clean matching
+    let stripped = cleanLower
+      .replace(/^(?:the|my|a|an)\s+/i, '')
+      .replace(/^(?:task\s+(?:about|for|called|named)\s+)/i, '')
+      .replace(/\s+task$/i, '')
+      .trim();
+
+    // 5. If answering clarification, evaluate against candidates in pool first
+    if (candidatePool && candidatePool.length > 0) {
+      const poolMatches = candidatePool.filter((t) => {
+        const titleNorm = t.title.toLowerCase();
+        return titleNorm.includes(stripped) || stripped.includes(titleNorm);
+      });
+      if (poolMatches.length === 1) {
+        const verified = tasks.find((t) => t.id === poolMatches[0].id) || poolMatches[0];
+        return { status: 'exact', task: verified, isContextual: true };
+      }
+      if (poolMatches.length > 1) {
+        return { status: 'ambiguous', matches: poolMatches };
+      }
+    }
+
+    // 6. Full Matching across all available tasks
+    // 6a. Exact title match (case-insensitive)
+    const exact = tasks.find((t) => t.title.trim().toLowerCase() === cleanLower || t.title.trim().toLowerCase() === stripped);
     if (exact) {
       return { status: 'exact', task: exact, isContextual: false };
     }
 
-    // Exact stripped title match (omitting 'the', 'a', 'an')
-    const stripped = clean.replace(/^(?:the|a|an)\s+/i, '').trim();
-    const strippedMatches = tasks.filter(
-      (t) => t.title.trim().toLowerCase().replace(/^(?:the|a|an)\s+/i, '') === stripped
-    );
+    // 6b. Exact stripped title match
+    const strippedMatches = tasks.filter((t) => {
+      const tStripped = t.title.trim().toLowerCase()
+        .replace(/^(?:the|my|a|an)\s+/i, '')
+        .replace(/^(?:task\s+(?:about|for|called|named)\s+)/i, '')
+        .replace(/\s+task$/i, '')
+        .trim();
+      return tStripped === stripped;
+    });
     if (strippedMatches.length === 1) {
       return { status: 'exact', task: strippedMatches[0], isContextual: false };
     }
@@ -260,20 +336,68 @@ export class DialogueManager {
       return { status: 'ambiguous', matches: strippedMatches };
     }
 
-    // Substring / keyword matches
-    const substringMatches = tasks.filter((t) => {
-      const titleLower = t.title.trim().toLowerCase();
-      return titleLower.includes(clean) || clean.includes(titleLower);
-    });
+    // 6c. Token overlap and distinctive word matching
+    const STOP_WORDS = new Set(['the', 'my', 'a', 'an', 'task', 'tasks', 'called', 'named', 'about', 'for', 'to', 'of', 'in', 'on', 'at', 'with', 'and', 'is']);
+    const normalize = (s) => s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    const qTokens = normalize(stripped).split(' ').filter((tok) => tok.length > 0 && !STOP_WORDS.has(tok));
 
-    if (substringMatches.length === 1) {
-      return { status: 'exact', task: substringMatches[0], isContextual: false };
-    }
-    if (substringMatches.length > 1) {
-      return { status: 'ambiguous', matches: substringMatches };
+    const scored = [];
+    for (const t of tasks) {
+      if (!t.title) continue;
+      const titleNorm = normalize(t.title);
+      const titleTokens = titleNorm.split(' ').filter((tok) => tok.length > 0 && !STOP_WORDS.has(tok));
+
+      let score = 0;
+      if (titleNorm === normalize(stripped)) {
+        score = 100;
+      } else if (new RegExp(`\\b${stripped}\\b`, 'i').test(titleNorm)) {
+        score = 85;
+      } else if (titleNorm.includes(stripped) || stripped.includes(titleNorm)) {
+        score = 75;
+      }
+
+      if (qTokens.length > 0) {
+        let matchedCount = 0;
+        for (const qt of qTokens) {
+          if (titleTokens.some((tt) => tt === qt || tt.startsWith(qt) || qt.startsWith(tt))) {
+            matchedCount++;
+          }
+        }
+        const tokenRatio = matchedCount / qTokens.length;
+        if (tokenRatio === 1.0) {
+          score = Math.max(score, 75 + (matchedCount / Math.max(titleTokens.length, 1)) * 15);
+        } else if (tokenRatio >= 0.5) {
+          score = Math.max(score, 50 * tokenRatio);
+        }
+      }
+
+      if (score >= 50) {
+        scored.push({ task: t, score });
+      }
     }
 
-    return { status: 'not_found' };
+    scored.sort((a, b) => b.score - a.score);
+
+    if (scored.length === 0) {
+      return { status: 'not_found' };
+    }
+
+    if (scored.length === 1) {
+      if (scored[0].score >= 60) {
+        return { status: 'exact', task: scored[0].task, isContextual: false };
+      }
+      return { status: 'ambiguous', matches: [scored[0].task] };
+    }
+
+    const topScore = scored[0].score;
+    const runnerUpScore = scored[1].score;
+
+    if (topScore >= 85 && topScore >= runnerUpScore + 25) {
+      return { status: 'exact', task: scored[0].task, isContextual: false };
+    }
+
+    const matches = scored.filter((c) => c.score >= topScore - 20).map((c) => c.task);
+    return { status: 'ambiguous', matches };
   }
 
   /**
@@ -491,54 +615,42 @@ export class DialogueManager {
 
     // 1. Missing target task resolution
     if (clarification.missingField === 'targetTask') {
-      if (clarification.schedIntent) {
-        const resolution = this.resolveTaskReference(text, clarification.candidateTasks || tasks);
-        if (resolution.status === 'exact') {
-          const target = resolution.task;
+      const candidates = clarification.matches || clarification.candidateTasks || tasks;
+      const resolution = this.resolveTaskReference(text, candidates, { candidateTasks: candidates });
+
+      if (resolution.status === 'exact') {
+        const target = resolution.task;
+        // Verify target task still exists in the latest task collection (deletion/mutation safeguard)
+        const currentTask = tasks.find((t) => t.id === target.id);
+        if (!currentTask) {
           this.state = CONVERSATION_STATES.IDLE;
           this.pendingClarification = null;
           this.pendingIntent = null;
-          this.activeSubjectTaskId = target.id;
-          clarification.schedIntent.params.targetTaskQuery = target.title;
-          return this._handleScheduleIntent(clarification.schedIntent, text, tasks, context);
-        }
-        if (resolution.status === 'ambiguous') {
-          const titleList = resolution.matches.map((m) => `"${m.title}"`).join(', ');
           return {
-            state: CONVERSATION_STATES.AWAITING_CLARIFICATION,
+            state: CONVERSATION_STATES.IDLE,
             intent: pendingIntent.intent,
             targetTask: null,
-            responseText: `Multiple tasks matched "${text}": ${titleList}. Which one did you mean? (or say "cancel")`,
-            feedbackType: 'warning',
+            responseText: `Task "${target.title}" is no longer available. Action cancelled.`,
+            feedbackType: 'error',
             requiresConfirmation: false,
             isAuthorized: false,
             action: null,
-            error: 'ambiguous_reference',
+            error: 'task_not_found',
           };
         }
-        return {
-          state: CONVERSATION_STATES.AWAITING_CLARIFICATION,
-          intent: pendingIntent.intent,
-          targetTask: null,
-          responseText: `Could not find a task matching "${text}". Please specify the full task title or say "cancel".`,
-          feedbackType: 'error',
-          requiresConfirmation: false,
-          isAuthorized: false,
-          action: null,
-          error: 'task_not_found',
-        };
-      }
 
-      const resolution = this.resolveTaskReference(text, tasks);
-      if (resolution.status === 'exact') {
-        const target = resolution.task;
         this.state = CONVERSATION_STATES.IDLE;
         this.pendingClarification = null;
         this.pendingIntent = null;
-        this.activeSubjectTaskId = target.id;
+        this.activeSubjectTaskId = currentTask.id;
+
+        if (clarification.schedIntent) {
+          clarification.schedIntent.params.targetTaskQuery = currentTask.title;
+          return this._handleScheduleIntent(clarification.schedIntent, text, tasks, context);
+        }
 
         // Resume the pending intent with the resolved target task
-        return this._dispatchIntentWithTarget(pendingIntent.intent, target, pendingIntent.params, tasks);
+        return this._dispatchIntentWithTarget(pendingIntent.intent, currentTask, pendingIntent.params, tasks);
       }
 
       if (resolution.status === 'ambiguous') {
@@ -1357,6 +1469,13 @@ export class DialogueManager {
       };
     }
 
+    // 12b. Direct Task Deadline Inquiry ("When is my English task due?", "When is English due?", "What is the deadline for English?")
+    const directTaskDeadlineMatch = text.match(/^(?:when\s+is|what\s+is\s+the\s+deadline\s+(?:for|of))\s+(?:my\s+|the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)(?:\s+due)?\??$/i);
+    if (directTaskDeadlineMatch) {
+      const taskName = directTaskDeadlineMatch[1].trim();
+      return this._resolveAndDispatch(CONVERSATION_INTENTS.DESCRIBE_TASK, taskName, {}, tasks);
+    }
+
     // 13. Find task and tell deadline ("Find my network lab and tell me its deadline")
     const findDeadlineMatch = text.match(/^(?:find|lookup|search(?:\s+for)?)\s+(?:my\s+|the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+and\s+(?:tell\s+me\s+its\s+deadline|what\s+is\s+its\s+deadline|when\s+is\s+it\s+due)$/i);
     if (findDeadlineMatch) {
@@ -1380,8 +1499,9 @@ export class DialogueManager {
       return this._resolveAndDispatch(CONVERSATION_INTENTS.DESCRIBE_TASK, taskName, {}, tasks);
     }
 
-    // 14. Priority Change Command ("Make it high priority", "Set priority to low", "Change priority of Database Assignment to high")
+    // 14. Priority Change Command ("Make it high priority", "Set priority to low", "Make the English assignment high priority")
     const priorityMatch = text.match(/^(?:make\s+(?:it|this\s+task)|set\s+(?:the\s+)?priority(?:\s+of)?|change\s+priority(?:\s+of)?|mark\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?)(.+?)(?:\s+to|\s+as)?\s+(high|medium|low|urgent|critical|minor|trivial)(?:\s+priority)?$/i) ||
+                         text.match(/^(?:make)\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+(?:to\s+|as\s+)?(high|medium|low|urgent|critical|minor|trivial)(?:\s+priority)?$/i) ||
                          text.match(/^(?:make\s+(?:it|this\s+task)|set\s+priority\s+to|change\s+to)\s+(high|medium|low|urgent|critical|minor|trivial)(?:\s+priority)?$/i);
     if (priorityMatch) {
       let targetName = 'it';
@@ -1398,8 +1518,8 @@ export class DialogueManager {
       return this._resolveAndDispatch(CONVERSATION_INTENTS.CHANGE_PRIORITY, targetName, { priority }, tasks);
     }
 
-    // 15. Task Inquiry / Inspection ("Tell me about...", "Describe task...", "Show task...", "Find...", "Lookup...")
-    const describeMatch = text.match(/^(?:tell\s+me\s+about|describe|show(?:\s+details\s+of)?|what\s+is|inspect|find|lookup|search(?:\s+for)?)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+)$/i);
+    // 15. Task Inquiry / Inspection ("Tell me about...", "Describe task...", "Show task...", "Find...", "Lookup...", "What about the other English task?")
+    const describeMatch = text.match(/^(?:tell\s+me\s+about|describe|show(?:\s+details\s+of)?|what\s+is|what\s+about|inspect|find|lookup|search(?:\s+for)?)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+)$/i);
     if (describeMatch) {
       const taskName = describeMatch[1].trim();
       return this._resolveAndDispatch(CONVERSATION_INTENTS.DESCRIBE_TASK, taskName, {}, tasks);
@@ -1481,12 +1601,23 @@ export class DialogueManager {
         query: taskNameQuery,
         matches: resolution.matches,
       };
-      const titleList = resolution.matches.map((m) => `"${m.title}"`).join(', ');
+      const count = resolution.matches.length;
+      const countWord = count === 2 ? 'two' : count === 3 ? 'three' : count === 4 ? 'four' : `${count}`;
+      const titleNames = count === 2
+        ? `${resolution.matches[0].title} and ${resolution.matches[1].title}`
+        : `${resolution.matches.slice(0, -1).map((m) => m.title).join(', ')}, and ${resolution.matches[count - 1].title}`;
+      const verb = intent === CONVERSATION_INTENTS.COMPLETE_TASK ? 'mark complete'
+        : intent === CONVERSATION_INTENTS.DELETE_TASK ? 'delete'
+        : intent === CONVERSATION_INTENTS.RESCHEDULE_TASK ? 'reschedule'
+        : intent === CONVERSATION_INTENTS.CHANGE_PRIORITY ? 'update'
+        : intent === CONVERSATION_INTENTS.REOPEN_TASK ? 'reopen'
+        : intent === CONVERSATION_INTENTS.DESCRIBE_TASK ? 'check'
+        : 'modify';
       return {
         state: CONVERSATION_STATES.AWAITING_CLARIFICATION,
         intent,
         targetTask: null,
-        responseText: `Multiple tasks matched "${taskNameQuery}": ${titleList}. Which one did you mean?`,
+        responseText: `I found ${countWord} matching tasks: ${titleNames}. Which one should I ${verb}?`,
         feedbackType: 'warning',
         requiresConfirmation: false,
         isAuthorized: false,

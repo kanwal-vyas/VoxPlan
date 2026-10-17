@@ -71,14 +71,18 @@ export function findMatchingTasks(query, tasks = [], activeSubjectTask = null) {
   const exactTitles = tasks.filter((t) => t.title && t.title.toLowerCase() === lower);
   if (exactTitles.length > 0) return exactTitles;
 
-  // Stripped title match (without 'my', 'the', 'a', 'an', or trailing 'task')
-  const strippedClean = clean.replace(/^(?:my|the|a|an)\s+/i, '').replace(/\s+task$/i, '').trim();
+  // Stripped title match (without 'my', 'the', 'a', 'an', 'task about', etc. or trailing 'task')
+  const strippedClean = clean
+    .replace(/^(?:my|the|a|an)\s+/i, '')
+    .replace(/^(?:task\s+(?:about|for|called|named)\s+)/i, '')
+    .replace(/\s+task$/i, '')
+    .trim();
   const strippedLower = strippedClean.toLowerCase();
   const strippedExact = tasks.filter((t) => t.title && t.title.toLowerCase() === strippedLower);
   if (strippedExact.length > 0) return strippedExact;
 
   // Normalized token subset match (ignoring stop words)
-  const STOP_WORDS = new Set(['my', 'the', 'a', 'an', 'task', 'tasks', 'called', 'named']);
+  const STOP_WORDS = new Set(['my', 'the', 'a', 'an', 'task', 'tasks', 'called', 'named', 'about', 'for', 'to', 'of', 'in', 'on', 'at', 'with', 'and', 'is']);
   const normQ = normalizeQuery(strippedClean);
   const qTokens = normQ.split(' ').filter((tok) => tok.length > 1 && !STOP_WORDS.has(tok));
 
@@ -89,7 +93,7 @@ export function findMatchingTasks(query, tasks = [], activeSubjectTask = null) {
   const matched = tasks.filter((t) => {
     if (!t.title) return false;
     const normTitle = normalizeQuery(t.title);
-    return qTokens.every((tok) => normTitle.includes(tok));
+    return qTokens.every((tok) => normTitle.includes(tok) || normTitle.split(' ').some((tt) => (tt.length >= 4 && tok.length >= 4 && (tt.startsWith(tok.slice(0, 4)) || tok.startsWith(tt.slice(0, 4))))));
   });
 
   if (matched.length > 0) return matched;
@@ -98,7 +102,7 @@ export function findMatchingTasks(query, tasks = [], activeSubjectTask = null) {
   const partials = tasks.filter((t) => {
     if (!t.title) return false;
     const normTitle = normalizeQuery(t.title);
-    return qTokens.some((tok) => tok.length > 3 && normTitle.includes(tok));
+    return qTokens.some((tok) => tok.length > 3 && (normTitle.includes(tok) || normTitle.split(' ').some((tt) => (tt.length >= 4 && (tt.startsWith(tok.slice(0, 4)) || tok.startsWith(tt.slice(0, 4)))))));
   });
 
   return partials;

@@ -87,10 +87,12 @@ export function parseScheduleIntent(rawText, options = {}) {
     };
   }
 
-  // 3a. Conversational Revision on Active Subject: "What about Monday instead?", "How about Friday?", "What about tomorrow?", "To Monday instead", "Monday instead"
-  const whatAboutDateMatch = text.match(/^(?:what\s+about|how\s+about)\s+(.+?)(?:\s+instead)?$/i) ||
-                             text.match(/^(?:to|on)\s+(.+?)\s+instead$/i) ||
-                             text.match(/^([a-zA-Z]+|\d{4}-\d{2}-\d{2})\s+instead$/i);
+  // 3a. Conversational Revision on Active Subject: "What about Monday instead?", "How about Friday?", "What about tomorrow?", "To Monday instead", "Monday instead", "Change that to Friday instead"
+  const whatAboutDateMatch =
+    text.match(/^(?:what\s+about|how\s+about)\s+(.+?)(?:\s+instead)?$/i) ||
+    text.match(/^(?:change|move|shift|set)\s+(?:that|it|this)\s+(?:to|on)\s+(.+?)(?:\s+instead)?$/i) ||
+    text.match(/^(?:to|on)\s+(.+?)\s+instead$/i) ||
+    text.match(/^([a-zA-Z]+|\d{4}-\d{2}-\d{2})\s+instead$/i);
   if (whatAboutDateMatch) {
     const rawDatePart = whatAboutDateMatch[1].trim();
     const parsedDate = parseEnhancedDate(rawDatePart, now) || parseDateExpression(rawDatePart, now);
@@ -267,11 +269,57 @@ export function parseScheduleIntent(rawText, options = {}) {
     };
   }
 
-  // 9. Direct Task Rescheduling (e.g. "Move my database assignment to Friday", "Reschedule task X to tomorrow")
-  const directMatch = text.match(/^(?:move|reschedule|shift|schedule|put|postpone)\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)(?:\s+(?:to|on)\s+(.+))?$/i);
+  // 9a. Explicit Deadline Modification ("Change the deadline for English to the 19th", "Set the English assignment deadline to tomorrow", "Change the deadline for the task about preparing my presentation")
+  const deadlineWithDateMatch =
+    text.match(/^(?:change|set|update)\s+(?:the\s+)?deadline\s+(?:for|of)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:about\s+|called\s+|named\s+)?(.+?)\s+(?:to|on)\s+(.+)$/i) ||
+    text.match(/^(?:set|change|update)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+deadline\s+(?:to|on)\s+(.+)$/i);
+  const deadlineWithoutDateMatch = !deadlineWithDateMatch
+    ? text.match(/^(?:change|set|update)\s+(?:the\s+)?deadline\s+(?:for|of)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:about\s+|called\s+|named\s+)?(.+)$/i)
+    : null;
+
+  const deadlineChangeMatch = deadlineWithDateMatch || deadlineWithoutDateMatch;
+
+  if (deadlineChangeMatch) {
+    let targetTaskQuery = deadlineChangeMatch[1].trim();
+    // Normalize target query: remove trailing noise words
+    targetTaskQuery = targetTaskQuery.replace(/^(?:the\s+|my\s+)?(?:task\s+)?(?:about\s+)?/i, '').trim();
+    const rawDatePart = deadlineWithDateMatch ? deadlineWithDateMatch[2].trim() : '';
+    const parsedDate = rawDatePart ? (parseEnhancedDate(rawDatePart, now) || parseDateExpression(rawDatePart, now)) : null;
+
+    if (!rawDatePart) {
+      return {
+        intent: SCHEDULE_INTENTS.INCOMPLETE_REQUEST,
+        confidence: 0.9,
+        params: {
+          missingField: 'targetDate',
+          targetTaskQuery,
+        },
+        rawText,
+      };
+    }
+
+    return {
+      intent: SCHEDULE_INTENTS.DIRECT_RESCHEDULE,
+      confidence: 0.95,
+      params: {
+        targetTaskQuery,
+        targetDate: parsedDate,
+        rawDateString: rawDatePart,
+      },
+      rawText,
+    };
+  }
+
+  // 9b. Direct Task Rescheduling (e.g. "Move my database assignment to Friday", "Reschedule task X to tomorrow", "Move English to the 19th")
+  const directWithDateMatch = text.match(/^(?:move|reschedule|shift|schedule|put|postpone)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+(?:to|on)\s+(.+)$/i);
+  const directWithoutDateMatch = !directWithDateMatch
+    ? text.match(/^(?:move|reschedule|shift|schedule|put|postpone)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+)$/i)
+    : null;
+  const directMatch = directWithDateMatch || directWithoutDateMatch;
   if (directMatch) {
-    const targetTaskQuery = directMatch[1].trim();
-    const rawDatePart = directMatch[2] ? directMatch[2].trim() : '';
+    let targetTaskQuery = directMatch[1].trim();
+    targetTaskQuery = targetTaskQuery.replace(/^(?:the\s+|my\s+)?(?:task\s+)?(?:about\s+)?/i, '').replace(/\s+task$/i, '').trim();
+    const rawDatePart = directWithDateMatch ? directWithDateMatch[2].trim() : '';
     const parsedDate = rawDatePart ? (parseEnhancedDate(rawDatePart, now) || parseDateExpression(rawDatePart, now)) : null;
 
     if (!rawDatePart) {

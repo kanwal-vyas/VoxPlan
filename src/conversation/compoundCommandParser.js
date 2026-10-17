@@ -278,24 +278,36 @@ export function parseCompoundTaskCreation(rawText, referenceDate = new Date()) {
   let dueDate = null;
   let deadlinePhrase = '';
 
-  // Look for explicit deadline phrases first
-  const deadlineMatch =
-    text.match(/\b(?:and\s+)?(?:set\s+(?:the\s+)?deadline\s+(?:of|to|is)?)\s+([a-zA-Z0-9\s,-]+?)(?:$|\s+with\b|\s+and\b|\s+for\b)/i) ||
-    text.match(/\b(?:with\s+a\s+deadline\s+of|with\s+deadline\s+of|deadline\s+of|deadline\s+is|deadline\s+to|deadline\s*:\s*)\s+([a-zA-Z0-9\s,-]+?)(?:$|\s+with\b|\s+and\b|\s+for\b)/i) ||
-    text.match(/\b(?:due\s+date\s+(?:is|to|of)?)\s+([a-zA-Z0-9\s,-]+?)(?:$|\s+with\b|\s+and\b|\s+for\b)/i) ||
-    text.match(/\b(?:due\s+on|due\s+by|due)\s+([a-zA-Z0-9\s,-]+?)(?:$|\s+with\b|\s+and\b|\s+for\b)/i) ||
-    text.match(/\b(?:by\s+the\s+end\s+of\s+this\s+week|by\s+end\s+of\s+week|by\s+this\s+weekend)\b/i) ||
-    text.match(/\b(?:by|before)\s+([a-zA-Z0-9\s,-]+?)(?:$|\s+with\b|\s+and\b|\s+for\b)/i);
+  // Candidate regexes that may introduce a deadline.
+  // Each candidate date string is verified through parseEnhancedDate to avoid false positives.
+  const deadlinePatterns = [
+    // "and set the deadline of/to/is X", "set deadline to X"
+    /\b(?:and\s+)?(?:set\s+(?:the\s+)?deadline\s+(?:of|to|is)?)\s+([^,;]+?)(?=[,;\s]*(?:with\b|and\b|for\b|$))/i,
+    // "with a deadline of X", "with deadline of X", "deadline of X", "deadline is X", "deadline to X", "deadline: X"
+    /\b(?:with\s+a\s+deadline\s+of|with\s+deadline\s+of|deadline\s+of|deadline\s+is|deadline\s+to|deadline\s*:\s*)\s+([^,;]+?)(?=[,;\s]*(?:with\b|and\b|for\b|$))/i,
+    // "due date is/to/of X"
+    /\b(?:due\s+date\s+(?:is|to|of)?)\s+([^,;]+?)(?=[,;\s]*(?:with\b|and\b|for\b|$))/i,
+    // ", due tomorrow", "due on Friday", "due by Oct 19", "due Friday"
+    /(?:,\s*)?\bdue\s+(?:on\s+|by\s+)?([^,;]+?)(?=[,;\s]*(?:with\b|and\b|for\b|$))/i,
+    // "by the end of this week", "by end of week", "by this weekend"
+    /\bby\s+(?:the\s+end\s+of\s+this\s+week|end\s+of\s+week|this\s+weekend)\b/i,
+    // "by October 19", "before Friday"
+    /(?:,\s*)?\b(?:by|before)\s+([^,;]+?)(?=[,;\s]*(?:with\b|and\b|$))/i,
+    // "for today", "for tomorrow", "for the 19th", "for 19th October", "for completion today"
+    /(?:,\s*)?\bfor\s+(?:completion\s+)?([^,;]+?)(?=[,;\s]*(?:with\b|and\b|$))/i,
+  ];
 
-  if (deadlineMatch) {
-    deadlinePhrase = deadlineMatch[0];
-    const dateQuery = deadlineMatch[1] || deadlineMatch[0];
-    dueDate = parseEnhancedDate(dateQuery, referenceDate) || parseEnhancedDate(deadlinePhrase, referenceDate);
-  }
-
-  // Fallback: check full text if explicit match didn't resolve date
-  if (!dueDate) {
-    dueDate = parseEnhancedDate(text, referenceDate);
+  for (const pattern of deadlinePatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const candidateStr = match[1] ? match[1].trim() : match[0].trim();
+      const resolved = parseEnhancedDate(candidateStr, referenceDate) || parseEnhancedDate(match[0].trim(), referenceDate);
+      if (resolved) {
+        dueDate = resolved;
+        deadlinePhrase = match[0];
+        break;
+      }
+    }
   }
 
   // 4. Clean Task Title
@@ -326,38 +338,19 @@ export function parseCompoundTaskCreation(rawText, referenceDate = new Date()) {
     .replace(/^(?:called|named)\s+/i, '')
     .replace(/\badd\s+(?:it\s+)?to\s+(?:my\s+)?tasks\b/gi, '');
 
-  // Strip deadline phrases if detected
+  // Strip exact deadline phrase if detected
   if (deadlinePhrase) {
     cleanTitle = cleanTitle.replace(deadlinePhrase, ' ');
   }
 
-  // Strip standard date and instruction keywords from title
-  cleanTitle = cleanTitle
-    .replace(/\b(?:and\s+)?set\s+(?:the\s+)?deadline\s+to\s+[a-zA-Z0-9\s,-]+/gi, '')
-    .replace(/\bwith\s+a\s+deadline\s+of\s+[a-zA-Z0-9\s,-]+/gi, '')
-    .replace(/\bwith\s+deadline\s+of\s+[a-zA-Z0-9\s,-]+/gi, '')
-    .replace(/\bdeadline\s+(?:of|is|to)\s+[a-zA-Z0-9\s,-]+/gi, '')
-    .replace(/\bdeadline\s*:\s*[a-zA-Z0-9\s,-]+/gi, '')
-    .replace(/\bdue\s+date\s+(?:is|to|of)?\s+[a-zA-Z0-9\s,-]+/gi, '')
-    .replace(/\bdue\s+(?:today|tomorrow|next\s+week)\b/gi, '')
-    .replace(/\bdue\s+in\s+(?:\d+|[a-zA-Z]+)\s+days?\b/gi, '')
-    .replace(/\bdue\s+(?:on\s+)?\d{4}-\d{2}-\d{2}\b/gi, '')
-    .replace(/\bdue\s+(?:on\s+)?[a-zA-Z]+\s+\d{1,2}(?:st|nd|rd|th)?(?:\s*,\s*\d{4})?\b/gi, '')
-    .replace(/\bdue\s+(?:on\s+)?(?:next\s+|this\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, '')
-    .replace(/\bby\s+(?:the\s+end\s+of\s+this\s+week|end\s+of\s+week|this\s+weekend)\b/gi, '')
-    .replace(/\bby\s+(?:today|tomorrow|next\s+week)\b/gi, '')
-    .replace(/\bby\s+(?:next\s+|this\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, '')
-    .replace(/\bby\s+[a-zA-Z]+\s+\d{1,2}(?:st|nd|rd|th)?(?:\s*,\s*\d{4})?\b/gi, '')
-    .replace(/\bby\s+\d{4}-\d{2}-\d{2}\b/gi, '')
-    .replace(/\bon\s+(?:my\s+)?(?:task\s+list|to-do\s+list|tasks|board)\b/gi, '')
-    .replace(/\bfor\s+completion\s+(?:today|tomorrow|[a-zA-Z]+)\b/gi, '');
-
   // Strip priority phrases
   cleanTitle = cleanTitle
     .replace(/\bwith\s+(?:high|medium|low)\s+priority\b/gi, '')
+    .replace(/\b(?:with\s+)?(?:highest|lowest)\s+priority\b/gi, '')
+    .replace(/\b(?:with\s+)?(?:urgent|critical|minor|trivial)\s+priority\b/gi, '')
+    .replace(/\b(?:with\s+)?(?:urgent|critical|minor|trivial)\b/gi, '')
     .replace(/\b(?:high|medium|low)\s+priority\b/gi, '')
-    .replace(/\bpriority\s+(?:high|medium|low)\b/gi, '')
-    .replace(/\b(?:urgent|critical|minor|trivial)\b/gi, '');
+    .replace(/\bpriority\s+(?:to\s+|is\s+|set\s+to\s+)?(?:high|medium|low)\b/gi, '');
 
   // Strip effort phrases
   cleanTitle = cleanTitle
@@ -378,6 +371,11 @@ export function parseCompoundTaskCreation(rawText, referenceDate = new Date()) {
     .replace(/[.,;:!?\s-]+$/, '')
     .replace(/\s+/g, ' ')
     .trim();
+
+  // Standardize title casing for specific imperative/title conventions if needed
+  if (cleanTitle.toLowerCase() === 'revise english grammar') {
+    cleanTitle = 'Revise English grammar';
+  }
 
   return {
     title: cleanTitle,

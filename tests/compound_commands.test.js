@@ -408,3 +408,91 @@ describe('D. Regression and Safety Safeguards', () => {
     assert.equal(discardRes.isAuthorized, false);
   });
 });
+
+describe('E. Gate 2 — Mandatory Task Creation Examples & Title Preservation (Ref: Oct 17, 2026)', () => {
+  // Reference date: Saturday, October 17, 2026
+  const refOct17 = new Date(2026, 9, 17, 12, 0, 0);
+
+  test('Create task English for today -> English | Today (2026-10-17)', () => {
+    const res = parseCompoundTaskCreation('Create task English for today', refOct17);
+    assert.ok(res);
+    assert.equal(res.title, 'English');
+    assert.equal(res.dueDate, '2026-10-17');
+  });
+
+  test('Create task English for tomorrow -> English | Tomorrow (2026-10-18)', () => {
+    const res = parseCompoundTaskCreation('Create task English for tomorrow', refOct17);
+    assert.ok(res);
+    assert.equal(res.title, 'English');
+    assert.equal(res.dueDate, '2026-10-18');
+  });
+
+  test('Create task English for the 19th -> English | October 19, 2026', () => {
+    const res = parseCompoundTaskCreation('Create task English for the 19th', refOct17);
+    assert.ok(res);
+    assert.equal(res.title, 'English');
+    assert.equal(res.dueDate, '2026-10-19');
+  });
+
+  test('Create task English for 19th October -> English | October 19, 2026', () => {
+    const res = parseCompoundTaskCreation('Create task English for 19th October', refOct17);
+    assert.ok(res);
+    assert.equal(res.title, 'English');
+    assert.equal(res.dueDate, '2026-10-19');
+  });
+
+  test('Create a task called English Assignment, due tomorrow -> English Assignment | Tomorrow', () => {
+    const res = parseCompoundTaskCreation('Create a task called English Assignment, due tomorrow', refOct17);
+    assert.ok(res);
+    assert.equal(res.title, 'English Assignment');
+    assert.equal(res.dueDate, '2026-10-18');
+  });
+
+  test('Add a task to revise English grammar by October 19 -> Revise English grammar | October 19, 2026', () => {
+    const res = parseCompoundTaskCreation('Add a task to revise English grammar by October 19', refOct17);
+    assert.ok(res);
+    assert.equal(res.title, 'Revise English grammar');
+    assert.equal(res.dueDate, '2026-10-19');
+  });
+
+  test('Create task English -> English | No deadline', () => {
+    const res = parseCompoundTaskCreation('Create task English', refOct17);
+    assert.ok(res);
+    assert.equal(res.title, 'English');
+    assert.equal(res.dueDate, null);
+  });
+
+  test('Create task English for today with high priority -> English | Today; high priority', () => {
+    const res = parseCompoundTaskCreation('Create task English for today with high priority', refOct17);
+    assert.ok(res);
+    assert.equal(res.title, 'English');
+    assert.equal(res.dueDate, '2026-10-17');
+    assert.equal(res.priority, 'high');
+  });
+
+  test('Preserves meaningful title text containing date-like words without false deadline extraction', () => {
+    // "Read USA Today" contains "Today"
+    const res1 = parseCompoundTaskCreation('Create task Read USA Today for tomorrow', refOct17);
+    assert.ok(res1);
+    assert.equal(res1.title, 'Read USA Today');
+    assert.equal(res1.dueDate, '2026-10-18');
+
+    // "Friday Night Dinner" contains "Friday"
+    const res2 = parseCompoundTaskCreation('Create task Friday Night Dinner', refOct17);
+    assert.ok(res2);
+    assert.equal(res2.title, 'Friday Night Dinner');
+    assert.equal(res2.dueDate, null);
+
+    // "Plan Octoberfest event" contains "October"
+    const res3 = parseCompoundTaskCreation('Create task Plan Octoberfest event', refOct17);
+    assert.ok(res3);
+    assert.equal(res3.title, 'Plan Octoberfest event');
+    assert.equal(res3.dueDate, null);
+
+    // "Watch Friday the 13th movie" contains "Friday" and ordinal "13th"
+    const res4 = parseCompoundTaskCreation('Create task Watch Friday the 13th movie', refOct17);
+    assert.ok(res4);
+    assert.equal(res4.title, 'Watch Friday the 13th movie');
+    assert.equal(res4.dueDate, null);
+  });
+});

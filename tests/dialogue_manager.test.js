@@ -161,7 +161,7 @@ describe('3. Clarification Handling for Ambiguous or Missing Information', () =>
     assert.equal(res.state, CONVERSATION_STATES.AWAITING_CLARIFICATION);
     assert.equal(res.intent, CONVERSATION_INTENTS.COMPLETE_TASK);
     assert.equal(res.isAuthorized, false);
-    assert.ok(res.responseText.includes('Multiple tasks matched'));
+    assert.ok(res.responseText.includes('matching tasks'));
     assert.ok(res.responseText.includes('Unit test suite'));
     assert.ok(res.responseText.includes('Integration test suite'));
   });
