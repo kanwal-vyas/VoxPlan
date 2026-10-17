@@ -61,6 +61,17 @@ export const CONVERSATION_INTENTS = Object.freeze({
 
 export const DEFAULT_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
+export const RESOLUTION_STATUS = Object.freeze({
+  RESOLVED: 'resolved',
+  AMBIGUOUS: 'ambiguous',
+  NOT_FOUND: 'not_found',
+  NEEDS_CLARIFICATION: 'needs_clarification',
+});
+
+function escapeRegex(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /**
  * Natural language relative and absolute date parser.
  * Deterministic helper converting common date expressions into ISO YYYY-MM-DD format.
@@ -229,7 +240,7 @@ export class DialogueManager {
    */
   resolveTaskReference(query, tasks = [], options = {}) {
     if (!query || typeof query !== 'string') {
-      return { status: 'not_found' };
+      return { status: RESOLUTION_STATUS.NOT_FOUND, query: '' };
     }
     const cleanRaw = query.trim();
     const cleanLower = cleanRaw.toLowerCase();
@@ -238,42 +249,136 @@ export class DialogueManager {
     const isPronoun = /^(?:it|this|that|this\s+task|that\s+task|the\s+task|my\s+task)$/i.test(cleanLower);
     if (isPronoun) {
       if (!this.activeSubjectTaskId) {
-        return { status: 'missing_context', reason: 'no_active_subject' };
+        return { status: RESOLUTION_STATUS.NEEDS_CLARIFICATION, reason: 'no_active_subject' };
       }
       const contextualTask = tasks.find((t) => t.id === this.activeSubjectTaskId);
       if (!contextualTask) {
         this.activeSubjectTaskId = null;
-        return { status: 'missing_context', reason: 'task_deleted' };
+        return { status: RESOLUTION_STATUS.NEEDS_CLARIFICATION, reason: 'task_deleted' };
       }
-      return { status: 'exact', task: contextualTask, isContextual: true };
+      return { status: RESOLUTION_STATUS.RESOLVED, task: contextualTask, isContextual: true };
     }
 
     const candidatePool = Array.isArray(options.candidateTasks) && options.candidateTasks.length > 0
       ? options.candidateTasks
-      : (this.pendingClarification?.matches || null);
+      : (this.pendingClarification?.matches || this.pendingClarification?.candidateTasks || null);
 
-    // 2. Check for ordinal / position selection in active clarification context
+    const now = new Date(this.clock());
+    const todayISO = formatISODate(now);
+    const tomorrowD = new Date(this.clock());
+    tomorrowD.setDate(tomorrowD.getDate() + 1);
+    const tomorrowISO = formatISODate(tomorrowD);
+
+    // 2. If answering clarification, evaluate against candidates in pool FIRST
     if (candidatePool && candidatePool.length > 0) {
+      // 2a. Ordinal / position selection against stable displayed ordering
       if (/^(?:the\s+)?(?:first(?:\s+one|\s+task)?|1st|number\s+1|1)$/i.test(cleanLower)) {
         const candidate = candidatePool[0];
-        const verified = tasks.find((t) => t.id === candidate.id) || candidate;
-        return { status: 'exact', task: verified, isContextual: true };
+        const verified = tasks.find((t) => t.id === candidate.id);
+        if (verified) return { status: RESOLUTION_STATUS.RESOLVED, task: verified, isContextual: true };
+        return { status: RESOLUTION_STATUS.NOT_FOUND, reason: 'task_deleted' };
       }
       if (/^(?:the\s+)?(?:second(?:\s+one|\s+task)?|2nd|number\s+2|2)$/i.test(cleanLower) && candidatePool.length >= 2) {
         const candidate = candidatePool[1];
-        const verified = tasks.find((t) => t.id === candidate.id) || candidate;
-        return { status: 'exact', task: verified, isContextual: true };
+        const verified = tasks.find((t) => t.id === candidate.id);
+        if (verified) return { status: RESOLUTION_STATUS.RESOLVED, task: verified, isContextual: true };
+        return { status: RESOLUTION_STATUS.NOT_FOUND, reason: 'task_deleted' };
       }
       if (/^(?:the\s+)?(?:third(?:\s+one|\s+task)?|3rd|number\s+3|3)$/i.test(cleanLower) && candidatePool.length >= 3) {
         const candidate = candidatePool[2];
-        const verified = tasks.find((t) => t.id === candidate.id) || candidate;
-        return { status: 'exact', task: verified, isContextual: true };
+        const verified = tasks.find((t) => t.id === candidate.id);
+        if (verified) return { status: RESOLUTION_STATUS.RESOLVED, task: verified, isContextual: true };
+        return { status: RESOLUTION_STATUS.NOT_FOUND, reason: 'task_deleted' };
+      }
+      if (/^(?:the\s+)?(?:fourth(?:\s+one|\s+task)?|4th|number\s+4|4)$/i.test(cleanLower) && candidatePool.length >= 4) {
+        const candidate = candidatePool[3];
+        const verified = tasks.find((t) => t.id === candidate.id);
+        if (verified) return { status: RESOLUTION_STATUS.RESOLVED, task: verified, isContextual: true };
+        return { status: RESOLUTION_STATUS.NOT_FOUND, reason: 'task_deleted' };
+      }
+      if (/^(?:the\s+)?(?:fifth(?:\s+one|\s+task)?|5th|number\s+5|5)$/i.test(cleanLower) && candidatePool.length >= 5) {
+        const candidate = candidatePool[4];
+        const verified = tasks.find((t) => t.id === candidate.id);
+        if (verified) return { status: RESOLUTION_STATUS.RESOLVED, task: verified, isContextual: true };
+        return { status: RESOLUTION_STATUS.NOT_FOUND, reason: 'task_deleted' };
+      }
+      if (/^(?:the\s+)?last(?:\s+one|\s+task)?$/i.test(cleanLower) && candidatePool.length > 0) {
+        const candidate = candidatePool[candidatePool.length - 1];
+        const verified = tasks.find((t) => t.id === candidate.id);
+        if (verified) return { status: RESOLUTION_STATUS.RESOLVED, task: verified, isContextual: true };
+        return { status: RESOLUTION_STATUS.NOT_FOUND, reason: 'task_deleted' };
       }
       if (/^(?:the\s+)?other(?:\s+one|\s+task)?$/i.test(cleanLower)) {
         if (candidatePool.length === 2) {
           const targetCandidate = candidatePool.find((c) => c.id !== this.activeSubjectTaskId) || candidatePool[1];
-          const verified = tasks.find((t) => t.id === targetCandidate.id) || targetCandidate;
-          return { status: 'exact', task: verified, isContextual: true };
+          const verified = tasks.find((t) => t.id === targetCandidate.id);
+          if (verified) return { status: RESOLUTION_STATUS.RESOLVED, task: verified, isContextual: true };
+          return { status: RESOLUTION_STATUS.NOT_FOUND, reason: 'task_deleted' };
+        }
+      }
+
+      // 2b. Relative deadline disambiguation ("the one due tomorrow", "due tomorrow", "tomorrow", "due today", "today", "the one with no deadline")
+      const isTomorrow = /\b(?:due\s+)?tomorrow\b/i.test(cleanLower);
+      const isToday = /\b(?:due\s+)?today\b/i.test(cleanLower);
+      const isNoDeadline = /\b(?:no\s+deadline|without\s+(?:a\s+)?deadline|unscheduled)\b/i.test(cleanLower);
+
+      if (isTomorrow) {
+        const tomorrowMatches = candidatePool.filter((t) => t.dueDate === tomorrowISO);
+        if (tomorrowMatches.length === 1) {
+          const verified = tasks.find((t) => t.id === tomorrowMatches[0].id);
+          if (verified) return { status: RESOLUTION_STATUS.RESOLVED, task: verified, isContextual: true };
+          return { status: RESOLUTION_STATUS.NOT_FOUND, reason: 'task_deleted' };
+        }
+        if (tomorrowMatches.length > 1) {
+          return { status: RESOLUTION_STATUS.AMBIGUOUS, matches: tomorrowMatches };
+        }
+      }
+
+      if (isToday) {
+        const todayMatches = candidatePool.filter((t) => t.dueDate === todayISO);
+        if (todayMatches.length === 1) {
+          const verified = tasks.find((t) => t.id === todayMatches[0].id);
+          if (verified) return { status: RESOLUTION_STATUS.RESOLVED, task: verified, isContextual: true };
+          return { status: RESOLUTION_STATUS.NOT_FOUND, reason: 'task_deleted' };
+        }
+        if (todayMatches.length > 1) {
+          return { status: RESOLUTION_STATUS.AMBIGUOUS, matches: todayMatches };
+        }
+      }
+
+      if (isNoDeadline) {
+        const noDeadlineMatches = candidatePool.filter((t) => !t.dueDate);
+        if (noDeadlineMatches.length === 1) {
+          const verified = tasks.find((t) => t.id === noDeadlineMatches[0].id);
+          if (verified) return { status: RESOLUTION_STATUS.RESOLVED, task: verified, isContextual: true };
+          return { status: RESOLUTION_STATUS.NOT_FOUND, reason: 'task_deleted' };
+        }
+        if (noDeadlineMatches.length > 1) {
+          return { status: RESOLUTION_STATUS.AMBIGUOUS, matches: noDeadlineMatches };
+        }
+      }
+
+      // 2c. Substring / Distinctive token matching inside candidatePool
+      const poolStripped = cleanLower
+        .replace(/^(?:the|my|a|an)\s+/i, '')
+        .replace(/^(?:task\s+(?:about|for|called|named)\s+)/i, '')
+        .replace(/\s+task$/i, '')
+        .replace(/\b(?:one)\b/i, '')
+        .trim();
+
+      if (poolStripped) {
+        const poolMatches = candidatePool.filter((t) => {
+          const titleNorm = t.title.toLowerCase();
+          return titleNorm.includes(poolStripped) || poolStripped.includes(titleNorm) ||
+            titleNorm.split(/\s+/).some((w) => w === poolStripped);
+        });
+        if (poolMatches.length === 1) {
+          const verified = tasks.find((t) => t.id === poolMatches[0].id);
+          if (verified) return { status: RESOLUTION_STATUS.RESOLVED, task: verified, isContextual: true };
+          return { status: RESOLUTION_STATUS.NOT_FOUND, reason: 'task_deleted' };
+        }
+        if (poolMatches.length > 1) {
+          return { status: RESOLUTION_STATUS.AMBIGUOUS, matches: poolMatches };
         }
       }
     }
@@ -286,7 +391,7 @@ export class DialogueManager {
       if (topicMatches.length > 0) {
         const otherTask = topicMatches.find((t) => t.id !== this.activeSubjectTaskId) || topicMatches[0];
         if (otherTask) {
-          return { status: 'exact', task: otherTask, isContextual: true };
+          return { status: RESOLUTION_STATUS.RESOLVED, task: otherTask, isContextual: true };
         }
       }
     }
@@ -298,30 +403,21 @@ export class DialogueManager {
       .replace(/\s+task$/i, '')
       .trim();
 
-    // 5. If answering clarification, evaluate against candidates in pool first
-    if (candidatePool && candidatePool.length > 0) {
-      const poolMatches = candidatePool.filter((t) => {
-        const titleNorm = t.title.toLowerCase();
-        return titleNorm.includes(stripped) || stripped.includes(titleNorm);
-      });
-      if (poolMatches.length === 1) {
-        const verified = tasks.find((t) => t.id === poolMatches[0].id) || poolMatches[0];
-        return { status: 'exact', task: verified, isContextual: true };
-      }
-      if (poolMatches.length > 1) {
-        return { status: 'ambiguous', matches: poolMatches };
-      }
+    if (!stripped) {
+      return { status: RESOLUTION_STATUS.NOT_FOUND, query };
     }
 
-    // 6. Full Matching across all available tasks
-    // 6a. Exact title match (case-insensitive)
-    const exact = tasks.find((t) => t.title.trim().toLowerCase() === cleanLower || t.title.trim().toLowerCase() === stripped);
-    if (exact) {
-      return { status: 'exact', task: exact, isContextual: false };
-    }
+    // 5. Full Matching across all available tasks
+    // Step 5a: Exact title matches
+    const exactTitleMatches = tasks.filter((t) => {
+      if (!t.title) return false;
+      const tClean = t.title.trim().toLowerCase();
+      return tClean === cleanLower || tClean === stripped;
+    });
 
-    // 6b. Exact stripped title match
+    // Step 5b: Exact stripped title matches
     const strippedMatches = tasks.filter((t) => {
+      if (!t.title) return false;
       const tStripped = t.title.trim().toLowerCase()
         .replace(/^(?:the|my|a|an)\s+/i, '')
         .replace(/^(?:task\s+(?:about|for|called|named)\s+)/i, '')
@@ -329,75 +425,70 @@ export class DialogueManager {
         .trim();
       return tStripped === stripped;
     });
-    if (strippedMatches.length === 1) {
-      return { status: 'exact', task: strippedMatches[0], isContextual: false };
-    }
-    if (strippedMatches.length > 1) {
-      return { status: 'ambiguous', matches: strippedMatches };
-    }
 
-    // 6c. Token overlap and distinctive word matching
+    // Step 5c: Word and token overlap matches
     const STOP_WORDS = new Set(['the', 'my', 'a', 'an', 'task', 'tasks', 'called', 'named', 'about', 'for', 'to', 'of', 'in', 'on', 'at', 'with', 'and', 'is']);
     const normalize = (s) => s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
-    const qTokens = normalize(stripped).split(' ').filter((tok) => tok.length > 0 && !STOP_WORDS.has(tok));
+    const qNorm = normalize(stripped);
+    const qTokens = qNorm.split(' ').filter((tok) => tok.length > 0 && !STOP_WORDS.has(tok));
 
-    const scored = [];
-    for (const t of tasks) {
-      if (!t.title) continue;
-      const titleNorm = normalize(t.title);
-      const titleTokens = titleNorm.split(' ').filter((tok) => tok.length > 0 && !STOP_WORDS.has(tok));
+    const candidateMap = new Map();
 
-      let score = 0;
-      if (titleNorm === normalize(stripped)) {
-        score = 100;
-      } else if (new RegExp(`\\b${stripped}\\b`, 'i').test(titleNorm)) {
-        score = 85;
-      } else if (titleNorm.includes(stripped) || stripped.includes(titleNorm)) {
-        score = 75;
-      }
+    for (const t of exactTitleMatches) {
+      candidateMap.set(t.id, t);
+    }
+    for (const t of strippedMatches) {
+      candidateMap.set(t.id, t);
+    }
 
-      if (qTokens.length > 0) {
-        let matchedCount = 0;
-        for (const qt of qTokens) {
-          if (titleTokens.some((tt) => tt === qt || tt.startsWith(qt) || qt.startsWith(tt))) {
-            matchedCount++;
-          }
-        }
-        const tokenRatio = matchedCount / qTokens.length;
-        if (tokenRatio === 1.0) {
-          score = Math.max(score, 75 + (matchedCount / Math.max(titleTokens.length, 1)) * 15);
-        } else if (tokenRatio >= 0.5) {
-          score = Math.max(score, 50 * tokenRatio);
+    if (qTokens.length > 0) {
+      for (const t of tasks) {
+        if (!t.title) continue;
+        const tNorm = normalize(t.title);
+        const tTokens = tNorm.split(' ').filter((tok) => tok.length > 0 && !STOP_WORDS.has(tok));
+
+        const hasWord = new RegExp(`\\b${escapeRegex(qNorm)}\\b`, 'i').test(tNorm);
+        const hasAllTokens = (qTokens.length > 0 && qTokens.every((qt) =>
+          tTokens.some((tt) => tt === qt || tt.startsWith(qt) || qt.startsWith(tt))
+        ));
+
+        if (hasWord || hasAllTokens) {
+          candidateMap.set(t.id, t);
         }
       }
+    }
 
-      if (score >= 50) {
-        scored.push({ task: t, score });
+    const allCandidates = Array.from(candidateMap.values());
+
+    if (allCandidates.length === 0) {
+      // Fallback: check partial token overlap for typos or longer descriptions
+      const partials = [];
+      for (const t of tasks) {
+        if (!t.title) continue;
+        const tNorm = normalize(t.title);
+        const tTokens = tNorm.split(' ').filter((tok) => tok.length > 0 && !STOP_WORDS.has(tok));
+        if (qTokens.length > 0 && qTokens.some((qt) => qt.length >= 4 && tTokens.some((tt) => tt.startsWith(qt.slice(0, 4)) || qt.startsWith(tt.slice(0, 4))))) {
+          partials.push(t);
+        }
       }
-    }
-
-    scored.sort((a, b) => b.score - a.score);
-
-    if (scored.length === 0) {
-      return { status: 'not_found' };
-    }
-
-    if (scored.length === 1) {
-      if (scored[0].score >= 60) {
-        return { status: 'exact', task: scored[0].task, isContextual: false };
+      if (partials.length === 1) {
+        return { status: RESOLUTION_STATUS.RESOLVED, task: partials[0], isContextual: false };
       }
-      return { status: 'ambiguous', matches: [scored[0].task] };
+      if (partials.length > 1) {
+        return { status: RESOLUTION_STATUS.AMBIGUOUS, matches: partials };
+      }
+      return { status: RESOLUTION_STATUS.NOT_FOUND, query };
     }
 
-    const topScore = scored[0].score;
-    const runnerUpScore = scored[1].score;
-
-    if (topScore >= 85 && topScore >= runnerUpScore + 25) {
-      return { status: 'exact', task: scored[0].task, isContextual: false };
+    // CRITICAL MUTATION SAFETY INVARIANT:
+    // If more than 1 candidate matches the query, it is ALWAYS ambiguous.
+    // Never pick one arbitrarily, even if one candidate is an exact title match.
+    if (allCandidates.length > 1) {
+      return { status: RESOLUTION_STATUS.AMBIGUOUS, matches: allCandidates };
     }
 
-    const matches = scored.filter((c) => c.score >= topScore - 20).map((c) => c.task);
-    return { status: 'ambiguous', matches };
+    // Exactly 1 candidate uniquely matches
+    return { status: RESOLUTION_STATUS.RESOLVED, task: allCandidates[0], isContextual: false };
   }
 
   /**
@@ -616,9 +707,26 @@ export class DialogueManager {
     // 1. Missing target task resolution
     if (clarification.missingField === 'targetTask') {
       const candidates = clarification.matches || clarification.candidateTasks || tasks;
-      const resolution = this.resolveTaskReference(text, candidates, { candidateTasks: candidates });
+      const resolution = this.resolveTaskReference(text, tasks, { candidateTasks: candidates });
 
-      if (resolution.status === 'exact') {
+      if (resolution.reason === 'task_deleted') {
+        this.state = CONVERSATION_STATES.IDLE;
+        this.pendingClarification = null;
+        this.pendingIntent = null;
+        return {
+          state: CONVERSATION_STATES.IDLE,
+          intent: pendingIntent.intent,
+          targetTask: null,
+          responseText: 'Referenced task is no longer available. Action cancelled.',
+          feedbackType: 'error',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: null,
+          error: 'task_not_found',
+        };
+      }
+
+      if (resolution.status === RESOLUTION_STATUS.RESOLVED || resolution.status === 'exact') {
         const target = resolution.task;
         // Verify target task still exists in the latest task collection (deletion/mutation safeguard)
         const currentTask = tasks.find((t) => t.id === target.id);
@@ -653,13 +761,39 @@ export class DialogueManager {
         return this._dispatchIntentWithTarget(pendingIntent.intent, currentTask, pendingIntent.params, tasks);
       }
 
-      if (resolution.status === 'ambiguous') {
-        const titleList = resolution.matches.map((m) => `"${m.title}"`).join(', ');
+      if (resolution.status === RESOLUTION_STATUS.AMBIGUOUS || resolution.status === 'ambiguous') {
+        clarification.matches = resolution.matches;
+        const count = resolution.matches.length;
+        const countWord = count === 2 ? 'two' : count === 3 ? 'three' : count === 4 ? 'four' : `${count}`;
+        const verb = pendingIntent.intent === CONVERSATION_INTENTS.COMPLETE_TASK ? 'mark complete'
+          : pendingIntent.intent === CONVERSATION_INTENTS.DELETE_TASK ? 'delete'
+          : pendingIntent.intent === CONVERSATION_INTENTS.RESCHEDULE_TASK ? 'reschedule'
+          : 'modify';
+
+        const now = new Date(this.clock());
+        const todayISO = formatISODate(now);
+        const tomorrowD = new Date(this.clock());
+        tomorrowD.setDate(tomorrowD.getDate() + 1);
+        const tomorrowISO = formatISODate(tomorrowD);
+
+        const formattedCandidates = resolution.matches.map((t, idx) => {
+          const meta = [];
+          if (t.dueDate) {
+            if (t.dueDate === todayISO) meta.push('due today');
+            else if (t.dueDate === tomorrowISO) meta.push('due tomorrow');
+            else meta.push(`due ${t.dueDate}`);
+          } else {
+            meta.push('no deadline');
+          }
+          const metaStr = meta.length > 0 ? ` (${meta.join(', ')})` : '';
+          return `${idx + 1}. "${t.title}"${metaStr}`;
+        }).join(', ');
+
         return {
           state: CONVERSATION_STATES.AWAITING_CLARIFICATION,
           intent: pendingIntent.intent,
           targetTask: null,
-          responseText: `Multiple tasks matched "${text}": ${titleList}. Which one did you mean? (or say "cancel")`,
+          responseText: `I still found ${countWord} matching tasks. Which one should I ${verb}? ${formattedCandidates}`,
           feedbackType: 'warning',
           requiresConfirmation: false,
           isAuthorized: false,
@@ -1587,13 +1721,27 @@ export class DialogueManager {
   _resolveAndDispatch(intent, taskNameQuery, params, tasks) {
     const resolution = this.resolveTaskReference(taskNameQuery, tasks);
 
-    if (resolution.status === 'exact') {
+    if (resolution.status === RESOLUTION_STATUS.RESOLVED || resolution.status === 'exact') {
       const target = resolution.task;
+      // HARD MUTATION SAFETY INVARIANT: Task must exist in current tasks with valid ID
+      if (!target || !target.id || !tasks.some((t) => t.id === target.id)) {
+        return {
+          state: CONVERSATION_STATES.IDLE,
+          intent,
+          targetTask: null,
+          responseText: `Referenced task is no longer available.`,
+          feedbackType: 'error',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: null,
+          error: 'task_not_found',
+        };
+      }
       this.activeSubjectTaskId = target.id;
       return this._dispatchIntentWithTarget(intent, target, params, tasks);
     }
 
-    if (resolution.status === 'ambiguous') {
+    if (resolution.status === RESOLUTION_STATUS.AMBIGUOUS || resolution.status === 'ambiguous') {
       this.state = CONVERSATION_STATES.AWAITING_CLARIFICATION;
       this.pendingIntent = { intent, params };
       this.pendingClarification = {
@@ -1601,11 +1749,15 @@ export class DialogueManager {
         query: taskNameQuery,
         matches: resolution.matches,
       };
+
+      const now = new Date(this.clock());
+      const todayISO = formatISODate(now);
+      const tomorrowD = new Date(this.clock());
+      tomorrowD.setDate(tomorrowD.getDate() + 1);
+      const tomorrowISO = formatISODate(tomorrowD);
+
       const count = resolution.matches.length;
       const countWord = count === 2 ? 'two' : count === 3 ? 'three' : count === 4 ? 'four' : `${count}`;
-      const titleNames = count === 2
-        ? `${resolution.matches[0].title} and ${resolution.matches[1].title}`
-        : `${resolution.matches.slice(0, -1).map((m) => m.title).join(', ')}, and ${resolution.matches[count - 1].title}`;
       const verb = intent === CONVERSATION_INTENTS.COMPLETE_TASK ? 'mark complete'
         : intent === CONVERSATION_INTENTS.DELETE_TASK ? 'delete'
         : intent === CONVERSATION_INTENTS.RESCHEDULE_TASK ? 'reschedule'
@@ -1613,11 +1765,48 @@ export class DialogueManager {
         : intent === CONVERSATION_INTENTS.REOPEN_TASK ? 'reopen'
         : intent === CONVERSATION_INTENTS.DESCRIBE_TASK ? 'check'
         : 'modify';
+
+      // Check if duplicate titles exist across matching candidates
+      const titleCounts = {};
+      for (const m of resolution.matches) {
+        const norm = m.title.trim().toLowerCase();
+        titleCounts[norm] = (titleCounts[norm] || 0) + 1;
+      }
+      const hasDuplicateTitles = Object.values(titleCounts).some((c) => c > 1);
+
+      // Distinguishing labels for candidates with stable numbers
+      const formattedCandidates = resolution.matches.map((t, idx) => {
+        const meta = [];
+        if (t.dueDate) {
+          if (t.dueDate === todayISO) {
+            meta.push('due today');
+          } else if (t.dueDate === tomorrowISO) {
+            meta.push('due tomorrow');
+          } else {
+            meta.push(`due ${t.dueDate}`);
+          }
+        } else {
+          meta.push('no deadline');
+        }
+        if (t.category && t.category !== 'General') {
+          meta.push(t.category);
+        }
+        const metaStr = meta.length > 0 ? ` (${meta.join(', ')})` : '';
+        return `${idx + 1}. "${t.title}"${metaStr}`;
+      }).join(', ');
+
+      let responseText = '';
+      if (hasDuplicateTitles || count > 2) {
+        responseText = `I found ${countWord} matching tasks. Which one should I ${verb}? ${formattedCandidates}`;
+      } else {
+        responseText = `I found ${countWord} matching tasks: ${resolution.matches[0].title} and ${resolution.matches[1].title}. Which one should I ${verb}?`;
+      }
+
       return {
         state: CONVERSATION_STATES.AWAITING_CLARIFICATION,
         intent,
         targetTask: null,
-        responseText: `I found ${countWord} matching tasks: ${titleNames}. Which one should I ${verb}?`,
+        responseText,
         feedbackType: 'warning',
         requiresConfirmation: false,
         isAuthorized: false,
@@ -1626,7 +1815,7 @@ export class DialogueManager {
       };
     }
 
-    if (resolution.status === 'missing_context') {
+    if (resolution.status === 'missing_context' || resolution.status === RESOLUTION_STATUS.NEEDS_CLARIFICATION) {
       this.state = CONVERSATION_STATES.AWAITING_CLARIFICATION;
       this.pendingIntent = { intent, params };
       this.pendingClarification = {

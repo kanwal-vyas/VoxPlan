@@ -805,6 +805,36 @@ export default function App() {
     const dispatchAction = async (act) => {
       if (!act) return;
 
+      // Hard Mutation Safety Invariant:
+      // Any operation that modifies, completes, reschedules, or deletes an existing task
+      // MUST have a validated, unique task ID present in the active task store.
+      const MUTATING_INTENTS = new Set([
+        CONVERSATION_INTENTS.COMPLETE_TASK,
+        CONVERSATION_INTENTS.REOPEN_TASK,
+        CONVERSATION_INTENTS.DELETE_TASK,
+        CONVERSATION_INTENTS.RESCHEDULE_TASK,
+        CONVERSATION_INTENTS.CHANGE_PRIORITY,
+      ]);
+
+      if (MUTATING_INTENTS.has(act.type)) {
+        const targetId = act.taskId || act.targetTaskId;
+        if (!targetId || typeof targetId !== 'string') {
+          setFeedback({
+            type: 'error',
+            message: 'Mutation blocked: A validated, unique task ID is required.',
+          });
+          return;
+        }
+        const exists = tasks.some((t) => t.id === targetId);
+        if (!exists) {
+          setFeedback({
+            type: 'error',
+            message: 'Mutation aborted: Target task ID no longer exists in task store.',
+          });
+          return;
+        }
+      }
+
       switch (act.type) {
         case 'COMPOUND_ACTIONS':
           if (Array.isArray(act.actions)) {

@@ -50,6 +50,10 @@ function normalizeQuery(str) {
  * @param {Object|null} activeSubjectTask
  * @returns {Array<Object>} Candidate tasks
  */
+function escapeRegex(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export function findMatchingTasks(query, tasks = [], activeSubjectTask = null) {
   if (!query || typeof query !== 'string') {
     return activeSubjectTask ? [activeSubjectTask] : [];
@@ -67,10 +71,6 @@ export function findMatchingTasks(query, tasks = [], activeSubjectTask = null) {
   const byId = tasks.find((t) => t.id === clean || t.id.toLowerCase() === lower);
   if (byId) return [byId];
 
-  // Exact title match (case-insensitive)
-  const exactTitles = tasks.filter((t) => t.title && t.title.toLowerCase() === lower);
-  if (exactTitles.length > 0) return exactTitles;
-
   // Stripped title match (without 'my', 'the', 'a', 'an', 'task about', etc. or trailing 'task')
   const strippedClean = clean
     .replace(/^(?:my|the|a|an)\s+/i, '')
@@ -78,25 +78,45 @@ export function findMatchingTasks(query, tasks = [], activeSubjectTask = null) {
     .replace(/\s+task$/i, '')
     .trim();
   const strippedLower = strippedClean.toLowerCase();
-  const strippedExact = tasks.filter((t) => t.title && t.title.toLowerCase() === strippedLower);
-  if (strippedExact.length > 0) return strippedExact;
 
   // Normalized token subset match (ignoring stop words)
   const STOP_WORDS = new Set(['my', 'the', 'a', 'an', 'task', 'tasks', 'called', 'named', 'about', 'for', 'to', 'of', 'in', 'on', 'at', 'with', 'and', 'is']);
   const normQ = normalizeQuery(strippedClean);
   const qTokens = normQ.split(' ').filter((tok) => tok.length > 1 && !STOP_WORDS.has(tok));
 
-  if (qTokens.length === 0) {
+  if (qTokens.length === 0 && !strippedLower) {
     return activeSubjectTask ? [activeSubjectTask] : [];
   }
 
-  const matched = tasks.filter((t) => {
-    if (!t.title) return false;
-    const normTitle = normalizeQuery(t.title);
-    return qTokens.every((tok) => normTitle.includes(tok) || normTitle.split(' ').some((tt) => (tt.length >= 4 && tok.length >= 4 && (tt.startsWith(tok.slice(0, 4)) || tok.startsWith(tt.slice(0, 4))))));
-  });
+  const candidateMap = new Map();
 
-  if (matched.length > 0) return matched;
+  // Exact title and stripped title matches (case-insensitive)
+  for (const t of tasks) {
+    if (!t.title) continue;
+    const tLower = t.title.trim().toLowerCase();
+    const tStripped = tLower.replace(/^(?:my|the|a|an)\s+/i, '').replace(/\s+task$/i, '').trim();
+    if (tLower === lower || tLower === strippedLower || tStripped === strippedLower) {
+      candidateMap.set(t.id, t);
+    }
+  }
+
+  // Token and word matches across all tasks
+  if (qTokens.length > 0) {
+    for (const t of tasks) {
+      if (!t.title) continue;
+      const normTitle = normalizeQuery(t.title);
+      const hasWord = new RegExp(`\\b${escapeRegex(strippedLower)}\\b`, 'i').test(normTitle);
+      const hasTokens = qTokens.every((tok) =>
+        normTitle.includes(tok) || normTitle.split(' ').some((tt) => (tt.length >= 4 && tok.length >= 4 && (tt.startsWith(tok.slice(0, 4)) || tok.startsWith(tt.slice(0, 4)))))
+      );
+      if (hasWord || hasTokens) {
+        candidateMap.set(t.id, t);
+      }
+    }
+  }
+
+  const allCandidates = Array.from(candidateMap.values());
+  if (allCandidates.length > 0) return allCandidates;
 
   // Partial match: at least one substantial token matches
   const partials = tasks.filter((t) => {
@@ -605,13 +625,15 @@ export function negotiateScheduleProposal({
     }
 
     if (candidates.length > 1) {
+      const count = candidates.length;
+      const countWord = count === 2 ? 'two' : count === 3 ? 'three' : count === 4 ? 'four' : `${count}`;
       return {
         handled: true,
         requiresClarification: true,
         clarificationType: 'AMBIGUOUS_TASK',
         candidateTasks: candidates,
         pendingIntent: intentResult,
-        responseText: `Found ${candidates.length} matching tasks. Which one would you like to move? (${candidates.map((t) => `"${t.title}"`).join(', ')})`,
+        responseText: `I found ${countWord} matching tasks. Which one would you like to move? (${candidates.map((t) => `"${t.title}"`).join(', ')})`,
         feedbackType: 'info',
       };
     }

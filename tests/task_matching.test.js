@@ -1,6 +1,11 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DialogueManager, CONVERSATION_STATES, CONVERSATION_INTENTS } from '../src/conversation/dialogueManager.js';
+import {
+  DialogueManager,
+  CONVERSATION_STATES,
+  CONVERSATION_INTENTS,
+  RESOLUTION_STATUS,
+} from '../src/conversation/dialogueManager.js';
 
 // Fixed reference date: Saturday, October 17, 2026
 const FIXED_REFERENCE_TIME = new Date('2026-10-17T12:00:00.000Z').getTime();
@@ -320,3 +325,206 @@ describe('Gate 4 — Deadline Updates and Dialogue Integration', () => {
     assert.equal(res.proposal.proposedPlacements[0].proposedDate, '2026-10-19');
   });
 });
+
+describe('Critical Correctness Regression — Ambiguous Task Mutation Prevention', () => {
+  function createExactFourTaskScenario() {
+    return [
+      {
+        id: 'task-eng-assign',
+        title: 'English assignment',
+        dueDate: null,
+        priority: 'medium',
+        completed: false,
+        estimatedEffort: 3,
+      },
+      {
+        id: 'task-eng-pres',
+        title: 'English presentation',
+        dueDate: null,
+        priority: 'low',
+        completed: false,
+        estimatedEffort: 2,
+      },
+      {
+        id: 'task-eng-today',
+        title: 'English',
+        dueDate: '2026-10-17', // Today (Saturday Oct 17, 2026)
+        priority: 'high',
+        completed: false,
+        estimatedEffort: 1,
+      },
+      {
+        id: 'task-eng-tomorrow',
+        title: 'English',
+        dueDate: '2026-10-18', // Tomorrow (Sunday Oct 18, 2026)
+        priority: 'high',
+        completed: false,
+        estimatedEffort: 1,
+      },
+    ];
+  }
+
+  test('1 & 2. "Complete English" returns AMBIGUOUS resolution, not a resolved ID, identifying all 4 tasks', () => {
+    const dm = new DialogueManager({ clock: () => FIXED_REFERENCE_TIME });
+    const tasks = createExactFourTaskScenario();
+
+    const resolution = dm.resolveTaskReference('English', tasks);
+    assert.equal(resolution.status, RESOLUTION_STATUS.AMBIGUOUS);
+    assert.equal(resolution.matches.length, 4);
+    const ids = resolution.matches.map((m) => m.id);
+    assert.ok(ids.includes('task-eng-assign'));
+    assert.ok(ids.includes('task-eng-pres'));
+    assert.ok(ids.includes('task-eng-today'));
+    assert.ok(ids.includes('task-eng-tomorrow'));
+  });
+
+  test('3 & 4. Dialogue presents actual candidates with distinguishing metadata; no task mutated before clarification', () => {
+    const dm = new DialogueManager({ clock: () => FIXED_REFERENCE_TIME });
+    const tasks = createExactFourTaskScenario();
+
+    const res = dm.processInput('Complete English', { tasks });
+    assert.equal(res.state, CONVERSATION_STATES.AWAITING_CLARIFICATION);
+    assert.equal(res.intent, CONVERSATION_INTENTS.COMPLETE_TASK);
+    assert.equal(res.isAuthorized, false);
+    assert.equal(res.action, null);
+
+    // Assert every task remains uncompleted
+    assert.ok(tasks.every((t) => t.completed === false));
+
+    // Assert prompt presents candidate count and distinguishes duplicate titles
+    assert.ok(res.responseText.includes('four matching tasks'));
+    assert.ok(res.responseText.includes('"English" (due today)'));
+    assert.ok(res.responseText.includes('"English" (due tomorrow)'));
+    assert.ok(res.responseText.includes('"English assignment" (no deadline)'));
+    assert.ok(res.responseText.includes('"English presentation" (no deadline)'));
+  });
+
+  test('5 & 6. Selecting "the one due tomorrow" resolves only Task 4 and executes only on that task', () => {
+    const dm = new DialogueManager({ clock: () => FIXED_REFERENCE_TIME });
+    const tasks = createExactFourTaskScenario();
+
+    dm.processInput('Complete English', { tasks });
+    assert.equal(dm.state, CONVERSATION_STATES.AWAITING_CLARIFICATION);
+
+    const res2 = dm.processInput('the one due tomorrow', { tasks });
+    assert.equal(res2.state, CONVERSATION_STATES.IDLE);
+    assert.equal(res2.isAuthorized, true);
+    assert.equal(res2.targetTask.id, 'task-eng-tomorrow');
+    assert.equal(res2.action.type, CONVERSATION_INTENTS.COMPLETE_TASK);
+    assert.equal(res2.action.taskId, 'task-eng-tomorrow');
+
+    // Simulate mutation application at boundary
+    const updated = tasks.map((t) => (t.id === res2.action.taskId ? { ...t, completed: true } : t));
+    assert.equal(updated.find((t) => t.id === 'task-eng-tomorrow').completed, true);
+    assert.equal(updated.find((t) => t.id === 'task-eng-today').completed, false);
+    assert.equal(updated.find((t) => t.id === 'task-eng-assign').completed, false);
+    assert.equal(updated.find((t) => t.id === 'task-eng-pres').completed, false);
+  });
+
+  test('Candidate selection variations: "the one due today", "the assignment", "the presentation", and "the first one"', () => {
+    const dm = new DialogueManager({ clock: () => FIXED_REFERENCE_TIME });
+    const tasks = createExactFourTaskScenario();
+
+    // 1. "the one due today"
+    dm.processInput('Complete English', { tasks });
+    const resToday = dm.processInput('the one due today', { tasks });
+    assert.equal(resToday.targetTask.id, 'task-eng-today');
+
+    // 2. "the assignment"
+    dm.processInput('Complete English', { tasks });
+    const resAssign = dm.processInput('the assignment', { tasks });
+    assert.equal(resAssign.targetTask.id, 'task-eng-assign');
+
+    // 3. "the presentation"
+    dm.processInput('Complete English', { tasks });
+    const resPres = dm.processInput('the presentation', { tasks });
+    assert.equal(resPres.targetTask.id, 'task-eng-pres');
+
+    // 4. "the first one" against stable displayed ordering
+    dm.processInput('Complete English', { tasks });
+    const firstCandidateId = dm.pendingClarification.matches[0].id;
+    const resFirst = dm.processInput('the first one', { tasks });
+    assert.equal(resFirst.targetTask.id, firstCandidateId);
+  });
+
+  test('7. Cancelling leaves all four tasks untouched', () => {
+    const dm = new DialogueManager({ clock: () => FIXED_REFERENCE_TIME });
+    const tasks = createExactFourTaskScenario();
+
+    dm.processInput('Complete English', { tasks });
+    assert.equal(dm.state, CONVERSATION_STATES.AWAITING_CLARIFICATION);
+
+    const res2 = dm.processInput('cancel', { tasks });
+    assert.equal(res2.state, CONVERSATION_STATES.IDLE);
+    assert.equal(res2.intent, CONVERSATION_INTENTS.CANCEL);
+    assert.equal(res2.isAuthorized, false);
+    assert.equal(res2.action, null);
+    assert.equal(dm.pendingClarification, null);
+    assert.ok(tasks.every((t) => t.completed === false));
+  });
+
+  test('8. Revalidation safeguard: aborted if selected candidate task is deleted before response', () => {
+    const dm = new DialogueManager({ clock: () => FIXED_REFERENCE_TIME });
+    const tasks = createExactFourTaskScenario();
+
+    dm.processInput('Complete English', { tasks });
+    assert.equal(dm.state, CONVERSATION_STATES.AWAITING_CLARIFICATION);
+
+    // English due tomorrow is deleted externally
+    const tasksWithoutTomorrow = tasks.filter((t) => t.id !== 'task-eng-tomorrow');
+
+    const res2 = dm.processInput('the one due tomorrow', { tasks: tasksWithoutTomorrow });
+    assert.equal(res2.state, CONVERSATION_STATES.IDLE);
+    assert.equal(res2.isAuthorized, false);
+    assert.equal(res2.error, 'task_not_found');
+    assert.ok(res2.responseText.includes('no longer available'));
+    assert.equal(dm.pendingClarification, null);
+  });
+
+  test('9. Ambiguity safeguards also protect deletion, deadline changes, and priority changes', () => {
+    const dm = new DialogueManager({ clock: () => FIXED_REFERENCE_TIME });
+    const tasks = createExactFourTaskScenario();
+
+    // Deletion
+    const delRes = dm.processInput('Delete English', { tasks });
+    assert.equal(delRes.state, CONVERSATION_STATES.AWAITING_CLARIFICATION);
+    assert.equal(delRes.isAuthorized, false);
+    assert.equal(delRes.action, null);
+    assert.ok(delRes.responseText.includes('four matching tasks'));
+    dm.processInput('cancel', { tasks });
+
+    // Deadline reschedule
+    const reschedRes = dm.processInput('Reschedule English to next Monday', { tasks });
+    assert.equal(reschedRes.state, CONVERSATION_STATES.AWAITING_CLARIFICATION);
+    assert.equal(reschedRes.isAuthorized, false);
+    assert.equal(reschedRes.action, null);
+    assert.ok(reschedRes.responseText.includes('four matching tasks'));
+    dm.processInput('cancel', { tasks });
+
+    // Priority change
+    const prioRes = dm.processInput('Make English high priority', { tasks });
+    assert.equal(prioRes.state, CONVERSATION_STATES.AWAITING_CLARIFICATION);
+    assert.equal(prioRes.isAuthorized, false);
+    assert.equal(prioRes.action, null);
+    assert.ok(prioRes.responseText.includes('four matching tasks'));
+    dm.processInput('cancel', { tasks });
+  });
+
+  test('10. Unique references still resolve and mutate normally without disabling fuzzy matching', () => {
+    const dm = new DialogueManager({ clock: () => FIXED_REFERENCE_TIME });
+    const tasks = createExactFourTaskScenario();
+
+    // Unique match "English assignment"
+    const res1 = dm.processInput('Complete English assignment', { tasks });
+    assert.equal(res1.state, CONVERSATION_STATES.IDLE);
+    assert.equal(res1.isAuthorized, true);
+    assert.equal(res1.targetTask.id, 'task-eng-assign');
+
+    // Unique match "English presentation"
+    const res2 = dm.processInput('Complete English presentation', { tasks });
+    assert.equal(res2.state, CONVERSATION_STATES.IDLE);
+    assert.equal(res2.isAuthorized, true);
+    assert.equal(res2.targetTask.id, 'task-eng-pres');
+  });
+});
+

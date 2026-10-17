@@ -52,10 +52,13 @@ export default function CommandBar({
 
   const handleSubmit = (e) => {
     if (e && e.preventDefault) e.preventDefault();
-    const trimmed = inputVal.trim();
+    const domVal = document.getElementById('command-input')?.value || '';
+    const trimmed = (inputVal || domVal).trim();
     if (!trimmed) return;
 
     setInputVal('');
+    const inputElem = document.getElementById('command-input');
+    if (inputElem) inputElem.value = '';
     onExecuteCommand(trimmed);
   };
 
@@ -189,6 +192,7 @@ export default function CommandBar({
                 type="text"
                 value={inputVal}
                 onChange={(e) => setInputVal(e.target.value)}
+                onInput={(e) => setInputVal(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleSubmit(e);
                 }}
