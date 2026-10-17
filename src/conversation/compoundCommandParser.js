@@ -43,18 +43,34 @@ export function formatISODate(d) {
   return `${year}-${month}-${day}`;
 }
 
+const MONTH_MAP = Object.freeze({
+  january: 0, jan: 0,
+  february: 1, feb: 1,
+  march: 2, mar: 2,
+  april: 3, apr: 3,
+  may: 4,
+  june: 5, jun: 5,
+  july: 6, jul: 6,
+  august: 7, aug: 7,
+  september: 8, sep: 8, sept: 8,
+  october: 9, oct: 9,
+  november: 10, nov: 10,
+  december: 11, dec: 11,
+});
+
 /**
  * Enhanced natural-language date parser supporting:
- * - "today", "tomorrow", "yesterday"
+ * - "today", "tomorrow", "for today", "for tomorrow"
  * - "in X days", "in three days", "due in 2 days"
  * - "next week", "this week", "by the end of this week", "end of week"
- * - "Friday", "next Monday", "this Thursday"
- * - "October 25", "Nov 3", "November 3rd", "25th of October"
+ * - "Friday", "next Monday", "this Thursday", "for Friday"
+ * - "October 25", "Nov 3", "November 3rd", "25th of October", "19th October", "19th of October"
+ * - Standalone ordinals: "the 19th", "19th", "for the 19th", "due the 19th"
  * - ISO format "YYYY-MM-DD"
  *
  * @param {string} text
  * @param {Date} [referenceDate]
- * @returns {string|null} ISO date string or null
+ * @returns {string|null} ISO date string (YYYY-MM-DD) or null
  */
 export function parseEnhancedDate(text, referenceDate = new Date()) {
   if (!text || typeof text !== 'string') return null;
@@ -66,19 +82,19 @@ export function parseEnhancedDate(text, referenceDate = new Date()) {
   // 1. Direct ISO match: YYYY-MM-DD
   const isoMatch = clean.match(/\b(\d{4}-\d{2}-\d{2})\b/);
   if (isoMatch) {
-    const d = new Date(isoMatch[1] + 'T00:00:00');
-    if (!isNaN(d.getTime())) return isoMatch[1];
+    const parts = isoMatch[1].split('-').map(Number);
+    const d = new Date(parts[0], parts[1] - 1, parts[2]);
+    if (!isNaN(d.getTime()) && d.getDate() === parts[2]) return isoMatch[1];
   }
 
-  // 2. Today
-  if (/\b(?:due\s+)?today\b/i.test(clean)) {
+  // 2. Today ("today", "due today", "for today", "on today")
+  if (/\b(?:(?:due|for|on)\s+)?today\b/i.test(clean)) {
     return formatISODate(now);
   }
 
-  // 3. Tomorrow
-  if (/\b(?:due\s+)?tomorrow\b/i.test(clean)) {
-    const d = new Date(now);
-    d.setDate(now.getDate() + 1);
+  // 3. Tomorrow ("tomorrow", "due tomorrow", "for tomorrow", "on tomorrow")
+  if (/\b(?:(?:due|for|on)\s+)?tomorrow\b/i.test(clean)) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     return formatISODate(d);
   }
 
@@ -88,8 +104,7 @@ export function parseEnhancedDate(text, referenceDate = new Date()) {
     const token = inDaysMatch[1].toLowerCase();
     const count = /^\d+$/.test(token) ? parseInt(token, 10) : WORD_TO_NUMBER[token];
     if (typeof count === 'number' && !isNaN(count)) {
-      const d = new Date(now);
-      d.setDate(now.getDate() + count);
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + count);
       return formatISODate(d);
     }
   }
@@ -99,59 +114,93 @@ export function parseEnhancedDate(text, referenceDate = new Date()) {
     const currentDay = now.getDay(); // 0 is Sunday, 1 is Monday ... 6 is Saturday
     let diff = 0 - currentDay; // target Sunday (end of calendar week)
     if (diff <= 0) diff += 7;
-    const d = new Date(now);
-    d.setDate(now.getDate() + diff);
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diff);
     return formatISODate(d);
   }
 
   // 6. "next week" (7 days)
-  if (/\b(?:due\s+)?next\s+week\b/i.test(clean)) {
-    const d = new Date(now);
-    d.setDate(now.getDate() + 7);
+  if (/\b(?:(?:due|for|by)\s+)?next\s+week\b/i.test(clean)) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7);
     return formatISODate(d);
   }
 
-  // 7. Day of week (e.g. "due Friday", "deadline of Friday", "by next Monday")
+  // 7. Day of week (e.g. "due Friday", "deadline of Friday", "by next Monday", "for Friday", "next Monday")
   const weekdayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-  const dayMatch = clean.match(/\b(?:(?:due\s+(?:on\s+)?|deadline\s+(?:of\s+|to\s+|is\s+)?|by\s+|on\s+)?(?:next\s+|this\s+)?)(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i);
+  const dayMatch = clean.match(/\b(?:(?:due\s+(?:on\s+)?|deadline\s+(?:of\s+|to\s+|is\s+)?|by\s+|on\s+|for\s+)?(?:next\s+|this\s+)?)(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i);
   if (dayMatch) {
     const targetDayIndex = weekdayNames.indexOf(dayMatch[1].toLowerCase());
     if (targetDayIndex !== -1) {
       const currentDayIndex = now.getDay();
       let diff = targetDayIndex - currentDayIndex;
       if (diff <= 0) diff += 7;
-      const d = new Date(now);
-      d.setDate(now.getDate() + diff);
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diff);
       return formatISODate(d);
     }
   }
 
-  // 8. Human date like "October 25", "November 3", "25th of October", "3rd of November"
-  const dayOfMonthFirst = clean.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+of\s+([a-zA-Z]+)(?:\s*,?\s*(\d{4}))?\b/i);
-  if (dayOfMonthFirst) {
-    const day = parseInt(dayOfMonthFirst[1], 10);
-    const month = dayOfMonthFirst[2];
-    const year = dayOfMonthFirst[3] ? parseInt(dayOfMonthFirst[3], 10) : now.getFullYear();
-    const parsed = new Date(`${month} ${day}, ${year}`);
-    if (!isNaN(parsed.getTime())) {
-      if (!dayOfMonthFirst[3] && parsed.getTime() < now.getTime() - 86400000) {
-        parsed.setFullYear(year + 1);
+  // 8. Day of month first with month name:
+  // e.g. "the 19th of October", "19th October", "19th of Oct", "19 October"
+  const dayMonthMatch = clean.match(/\b(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)?(?:\s+of)?\s+([a-zA-Z]+)(?:\s*,?\s*(\d{4}))?\b/i);
+  if (dayMonthMatch) {
+    const mStr = dayMonthMatch[2].toLowerCase();
+    if (mStr in MONTH_MAP) {
+      const day = parseInt(dayMonthMatch[1], 10);
+      const monthIndex = MONTH_MAP[mStr];
+      let year = dayMonthMatch[3] ? parseInt(dayMonthMatch[3], 10) : now.getFullYear();
+      if (!dayMonthMatch[3]) {
+        const candidate = new Date(year, monthIndex, day);
+        if (candidate.getTime() < now.getTime() - 86400000) {
+          year += 1;
+        }
       }
-      return formatISODate(parsed);
+      const target = new Date(year, monthIndex, day);
+      if (!isNaN(target.getTime()) && target.getDate() === day) {
+        return formatISODate(target);
+      }
     }
   }
 
-  const monthFirst = clean.match(/\b([a-zA-Z]+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s*,?\s*(\d{4}))?\b/i);
-  if (monthFirst) {
-    const month = monthFirst[1];
-    const day = parseInt(monthFirst[2], 10);
-    const year = monthFirst[3] ? parseInt(monthFirst[3], 10) : now.getFullYear();
-    const parsed = new Date(`${month} ${day}, ${year}`);
-    if (!isNaN(parsed.getTime())) {
-      if (!monthFirst[3] && parsed.getTime() < now.getTime() - 86400000) {
-        parsed.setFullYear(year + 1);
+  // 9. Month first with day of month:
+  // e.g. "October 19", "October 19th", "Oct 19, 2026", "October the 19th"
+  const monthDayMatch = clean.match(/\b([a-zA-Z]+)\s+(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)?(?:\s*,?\s*(\d{4}))?\b/i);
+  if (monthDayMatch) {
+    const mStr = monthDayMatch[1].toLowerCase();
+    if (mStr in MONTH_MAP) {
+      const day = parseInt(monthDayMatch[2], 10);
+      const monthIndex = MONTH_MAP[mStr];
+      let year = monthDayMatch[3] ? parseInt(monthDayMatch[3], 10) : now.getFullYear();
+      if (!monthDayMatch[3]) {
+        const candidate = new Date(year, monthIndex, day);
+        if (candidate.getTime() < now.getTime() - 86400000) {
+          year += 1;
+        }
       }
-      return formatISODate(parsed);
+      const target = new Date(year, monthIndex, day);
+      if (!isNaN(target.getTime()) && target.getDate() === day) {
+        return formatISODate(target);
+      }
+    }
+  }
+
+  // 10. Standalone ordinal day:
+  // e.g. "the 19th", "19th", "for the 19th", "due the 19th", "by the 19th", "on 19th", "to the 19th"
+  const ordinalMatch = clean.match(/\b(?:(?:due\s+(?:on\s+)?|for\s+|on\s+|by\s+|to\s+)?(?:the\s+)?|the\s+)(\d{1,2})(?:st|nd|rd|th)\b/i);
+  if (ordinalMatch) {
+    const day = parseInt(ordinalMatch[1], 10);
+    if (day >= 1 && day <= 31) {
+      let year = now.getFullYear();
+      let monthIndex = now.getMonth();
+      if (day < now.getDate()) {
+        monthIndex += 1;
+        if (monthIndex > 11) {
+          monthIndex = 0;
+          year += 1;
+        }
+      }
+      const target = new Date(year, monthIndex, day);
+      if (!isNaN(target.getTime()) && target.getDate() === day) {
+        return formatISODate(target);
+      }
     }
   }
 

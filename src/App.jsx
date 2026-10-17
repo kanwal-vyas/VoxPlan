@@ -35,6 +35,7 @@ import {
   generateSpokenSummary,
   RECOGNITION_STATES,
 } from './conversation/speechEngine';
+import { formatISODate } from './conversation/compoundCommandParser';
 
 const STORAGE_KEY = 'voxplan_tasks';
 
@@ -43,7 +44,7 @@ const STORAGE_KEY = 'voxplan_tasks';
  */
 const getDefaultTasks = () => {
   const now = new Date();
-  const formatISO = (d) => d.toISOString().split('T')[0];
+  const formatISO = (d) => formatISODate(d);
 
   const today = new Date(now);
   const tomorrow = new Date(now);
@@ -125,7 +126,7 @@ const normalizeTask = (t) => {
       } else {
         const parsed = new Date(rawStr);
         if (!isNaN(parsed.getTime())) {
-          dueDate = parsed.toISOString().split('T')[0];
+          dueDate = formatISODate(parsed);
         } else {
           dueDate = rawStr;
         }

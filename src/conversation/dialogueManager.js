@@ -64,91 +64,14 @@ export const DEFAULT_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 /**
  * Natural language relative and absolute date parser.
  * Deterministic helper converting common date expressions into ISO YYYY-MM-DD format.
+ * Delegates to parseEnhancedDate for unified, single-source-of-truth date resolution.
+ *
+ * @param {string} text
+ * @param {Date} [referenceDate]
+ * @returns {string|null} ISO date string (YYYY-MM-DD) or null
  */
 export function parseDateExpression(text, referenceDate = new Date()) {
-  if (!text || typeof text !== 'string') return null;
-  const clean = text.trim();
-  const now = referenceDate instanceof Date && !isNaN(referenceDate.getTime())
-    ? new Date(referenceDate)
-    : new Date();
-
-  const formatISO = (d) => {
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  // Direct ISO match YYYY-MM-DD
-  const isoMatch = clean.match(/\b(\d{4}-\d{2}-\d{2})\b/);
-  if (isoMatch) {
-    const d = new Date(isoMatch[1] + 'T00:00:00');
-    if (!isNaN(d.getTime())) return isoMatch[1];
-  }
-
-  // Today
-  if (/\b(?:due\s+)?today\b/i.test(clean)) {
-    return formatISO(now);
-  }
-
-  // Tomorrow
-  if (/\b(?:due\s+)?tomorrow\b/i.test(clean)) {
-    const d = new Date(now);
-    d.setDate(now.getDate() + 1);
-    return formatISO(d);
-  }
-
-  // in X days
-  const inDaysMatch = clean.match(/\b(?:due\s+in|in)\s+(\d+)\s+days?\b/i);
-  if (inDaysMatch) {
-    const days = parseInt(inDaysMatch[1], 10);
-    const d = new Date(now);
-    d.setDate(now.getDate() + days);
-    return formatISO(d);
-  }
-
-  // Next week (7 days)
-  if (/\b(?:due\s+)?next\s+week\b/i.test(clean)) {
-    const d = new Date(now);
-    d.setDate(now.getDate() + 7);
-    return formatISO(d);
-  }
-
-  // Day of week (e.g., "due Friday", "next Monday")
-  const weekdayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-  const dayMatch = clean.match(/\b(?:due\s+(?:on\s+)?)?(?:next\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i);
-  if (dayMatch) {
-    const targetDayIndex = weekdayNames.indexOf(dayMatch[1].toLowerCase());
-    if (targetDayIndex !== -1) {
-      const currentDayIndex = now.getDay();
-      let diff = targetDayIndex - currentDayIndex;
-      if (diff <= 0) diff += 7;
-      if (/\bnext\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i.test(clean) && diff < 7) {
-        diff += 7;
-      }
-      const d = new Date(now);
-      d.setDate(now.getDate() + diff);
-      return formatISO(d);
-    }
-  }
-
-  // Human date like "October 25" or "Oct 25, 2026"
-  const humanDateMatch = clean.match(/\b(?:due\s+(?:on\s+)?)?([a-zA-Z]+\s+\d{1,2}(?:st|nd|rd|th)?(?:\s*,\s*\d{4})?)\b/i);
-  if (humanDateMatch) {
-    const cleanDateStr = humanDateMatch[1].replace(/(?:st|nd|rd|th)/gi, '');
-    const parsed = new Date(cleanDateStr);
-    if (!isNaN(parsed.getTime())) {
-      if (!cleanDateStr.match(/\d{4}/)) {
-        parsed.setFullYear(now.getFullYear());
-        if (parsed.getTime() < now.getTime() - 86400000) {
-          parsed.setFullYear(now.getFullYear() + 1);
-        }
-      }
-      return formatISO(parsed);
-    }
-  }
-
-  return null;
+  return parseEnhancedDate(text, referenceDate);
 }
 
 /**
