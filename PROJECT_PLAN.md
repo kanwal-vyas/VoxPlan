@@ -14,11 +14,15 @@ This document tracks the phased evolution of VoxPlan from a static task tracker 
 | **Phase 3, Stage 2** | Personal Model Dashboard & Evaluation | **COMPLETED** | Personal Model Dashboard (`PersonalModelDashboard.jsx`), sample weight transparency, Bayesian shrinkage formula explainer, leak-free chronological walk-forward holdout evaluation (`evaluatePersonalDurationModel`), MAE/MdAPE baseline comparison, and honest cold-start states. |
 | **Phase 3, Stage 3** | Hybrid Completion-Risk Personalization | **COMPLETED** | Guarded hybrid completion-risk estimator (`personalRiskModel.js`), hardened evaluation guard (min 3 train, min 5 held-out, 8 total tasks), leakage protection, bounded adjustments ($\pm 15\%$), confidence shrinkage ($W / (W+5.0)$), transparent explainability modal, and 53 automated unit tests. |
 | **Phase 4, Stage 1** | Adaptive Scheduling Foundations | **COMPLETED** | Standalone deterministic local-first scheduling engine (`src/scheduler/adaptiveScheduler.js`), dependency DAG analysis with cycle detection, personalized duration integration with cold-start fallbacks, daily working-hour capacity bin-packing, weekend rollover, proposal review modal (`AdaptiveScheduleModal.jsx`), safe approval flow, non-destructive diffs, and 19 unit tests (72 tests total). |
+| **Phase 4, Stage 2** | Scheduling Correctness & Reliability Audit | **COMPLETED** | Kahn's topological ready-queue (guaranteed DAG order over priority scores), explicit 3-color DFS cycle isolation, blocked dependent propagation, oversized task manual resolution (`status: 'oversized_exceeds_capacity'`), cumulative daily capacity constraint enforcement, accurate capacity utilization denominator, timezone-safe deadline policies, stale-proposal detection with one-click regeneration, non-destructive diff filtering, deduplicated telemetry, and 81 automated tests across 16 suites. |
 | **Phase 4, Stage 3** | Schedule Quality Evaluation & Benchmarking | **COMPLETED** | Documented deterministic schedule quality evaluation module (`src/scheduler/scheduleEvaluator.js`) across 7 dimensions (coverage, deadline feasibility, dependency correctness, capacity compliance, workload balance CV, horizon coverage, stability churn), multi-strategy benchmarking comparing Adaptive against Earliest Deadline First (EDF) and Priority-First under identical hard constraints, 12 reproducible scenario fixtures (`src/scheduler/scheduleBenchmarks.js`), perturbation churn analysis, modal benchmark UI tab, and 93 automated tests across 19 suites. |
 | **Phase 4, Stage 4** | Evidence-Driven Scheduler Optimization | **COMPLETED** | Rigorous baseline benchmark audit; replaced artificial depth penalty with bounded downstream unblocking bonus (`+ min(45, unblockCount * 15)`); eliminated unnecessary perturbation churn on satisfied dependencies (40% -> 0%, overall 24% -> 16%); multi-tier deterministic tie-breaking (score -> dueDate -> Shortest Processing Time -> taskId); evaluator metric honesty reporting `schedulableOnTimeRate` and `schedulerDaysDelayed`; enriched placement explainability; and 99 automated tests passing across 20 suites. |
 | **Phase 4, Stage 5** | Local Schedule Feedback & Outcome Tracking | **COMPLETED** | Versioned privacy-preserving telemetry schema (`SCHEMA_VERSION = 2`) recording proposal generation, acceptance, and discard actions; single-action deduplication; subsequent manual override detection (postponed vs advanced shifts); unaltered completion outcome matching; pure feedback analytics module (`scheduleFeedback.js`); modal feedback tab with explicit denominators and insufficient-data guards (< 3 observations); strict cautious learning boundary; and 110 automated tests across 27 suites. |
 | **Phase 4, Stage 6** | Schedule Feedback Integrity & Attribution Audit | **COMPLETED** | Stable session-scoped proposal identities; durable deduplication surviving page reloads without backend dependency (hydrating index from cached IndexedDB events on `telemetry.init()`); multi-proposal interval-based outcome attribution (`[acceptedAt, supersededAt)`); task lifecycle hardening (excluding reopened incomplete tasks & active backlog tasks); isolation of conflicting proposal decisions; standardized unique task denominators; privacy-preserving observability diagnostics; and 115 automated tests across 30 suites. |
-| **Phase 5** | Voice & Conversational Planning Experience | Next Up | Rich multi-turn planning dialog, schedule rescheduling commands, review debriefing via natural language. |
+| **Phase 5** | Conversational Planning, Multi-Turn Dialog & Voice Experience | **PLANNED** | Multi-turn planning state machine, clarification dialog, natural language batch rescheduling, conversational schedule debriefing, accessible Web Speech voice synthesis and typed fallback symmetry (4 stages). |
+| **Phase 6** | Calendar-Aware Time-Blocking & Multi-Day Workload Modeling | **PLANNED** | Multi-day task chunking for oversized work, calendar focus time-blocking, meeting buffer constraints, interactive proposal canvas editing, and local RFC 5545 iCalendar (.ics) export (4 stages). |
+| **Phase 7** | Evidence-Gated Schedule Adaptation & Preference Learning | **PLANNED** | Longitudinal feedback maturity gate (20+ decisions, 15+ outcomes), empirical friction analysis, bounded heuristic weight tuning ($\pm 20\%$) with Bayesian shrinkage, simulation sandbox, and one-click rollback (4 stages). |
+| **Phase 8** | Production Hardening, Accessibility, Security & Release Readiness | **PLANNED** | Full WCAG 2.1 AA accessibility compliance, keyboard navigation, schema-versioned data lifecycle & encrypted backup, bundle code-splitting, PWA offline resilience, and CI/CD release verification (4 stages). |
 
 ---
 
@@ -1243,10 +1247,373 @@ Exposed non-sensitive, aggregated diagnostic pill badges in the feedback modal:
 
 ---
 
-### 9. Remaining Evidence Gaps & Prerequisite for Future Learning (Phase 5)
+### 9. Remaining Evidence Gaps & Transition to Phase 5
 1. **Sufficient Longitudinal Sample**: Learning user scheduling preferences requires observing at least 20+ independent scheduling decisions across diverse sprint workloads. Sparse feedback cannot distinguish task-specific friction from systemic algorithmic bias.
-2. **Multi-Turn Conversational Rescheduling**: Users currently override dates manually via inline date pickers. Phase 5 will add natural language rescheduling dialog in the Command Center (e.g., "Postpone low-priority tasks by 2 days due to an unexpected client escalation").
-3. **Next Stage (Phase 5: Voice & Conversational Planning Experience)**:
-   - Rich multi-turn conversational planning dialog in `CommandBar`.
-   - Natural language rescheduling commands.
-   - Interactive review and debriefing via voice speech-to-text.
+2. **Multi-Turn Conversational Rescheduling**: Users currently override dates manually via inline date pickers. Phase 5 adds natural language rescheduling dialog in the Command Center (e.g., "Postpone low-priority tasks by 2 days due to an unexpected client escalation").
+3. **Immediate Next Step**: Phase 5, Stage 5.1 (Conversational Planning State Machine & Turn Management).
+
+---
+
+## Future Roadmap: Phases 5 – 8 Architecture & Detailed Specifications
+
+### 1. Roadmap Rationale & Architectural Progression
+
+The sequencing of Phases 5 through 8 is governed by strict architectural prerequisites, user value delivery, and local-first data integrity:
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│ Phase 4 (Completed): Adaptive Scheduling Engine & Feedback Integrity   │
+└────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ Phase 5 (Planned): Conversational Planning, Multi-Turn Dialog & Voice  │
+│ - Natural language schedule negotiation & batch rescheduling commands  │
+│ - Structured multi-turn state machine with safety confirmations        │
+│ - Bidirectional voice synthesis/dictation with 100% typed-input parity │
+└────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ Phase 6 (Planned): Calendar-Aware Time-Blocking & Multi-Day Modeling   │
+│ - Multi-day task chunking for oversized work (> daily capacity)        │
+│ - Intra-day focus windows, meeting buffers & blackout intervals        │
+│ - Visual drag-and-drop proposal editing & RFC 5545 iCalendar (.ics)    │
+└────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ Phase 7 (Planned): Evidence-Gated Schedule Adaptation & Learning       │
+│ - Longitudinal maturity gate (>= 20 decisions, >= 15 verified outcomes)│
+│ - Empirical friction profiling (category bias, postponement patterns)  │
+│ - Bounded Bayesian weight adaptation (±20%) with one-click rollback    │
+└────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ Phase 8 (Planned): Production Hardening, Accessibility & Release       │
+│ - Full WCAG 2.1 AA accessibility & complete keyboard navigation        │
+│ - Schema-versioned data lifecycle & client-encrypted JSON backups      │
+│ - Bundle code-splitting (<250kB initial), PWA offline service worker   │
+│ - Automated end-to-end CI/CD verification & security audit             │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Why Phase 5 Precedes Phase 6 and Phase 7:
+1. **Rich Feedback Generation**: High-fidelity schedule feedback cannot be collected while users are restricted to static inline date inputs. Conversational planning (Phase 5) unlocks realistic rescheduling scenarios ("push low priority tasks", "what if I take Friday off?") that generate the behavioural data needed for Phase 7.
+2. **Deterministic Governance First**: Building a robust conversational state machine on top of the verified Phase 4 deterministic engine guarantees that voice/text interaction never bypasses hard DAG and capacity constraints.
+
+#### Why Phase 6 Precedes Phase 7:
+1. **Workload Realism**: Tasks in real projects frequently exceed single-day capacity (e.g., 14-hour architectural write-ups). Forcing oversized tasks into a single day creates artificial deadline misses that distort feedback metrics. Phase 6's multi-day chunking models real work realistically before any automated tuning is attempted.
+
+#### Why Phase 7 Precedes Phase 8:
+1. **Algorithmic Stability**: Tuning boundaries and preference telemetry schemas must stabilize before freezing data lifecycle policies, backup schemas, and offline service worker contracts in Phase 8.
+
+---
+
+### 2. Strict Product Boundaries: What VoxPlan Is and Is Not
+
+To preserve VoxPlan's identity as a local-first, evidence-based personal planning tool, the following candidate features are **explicitly rejected or deferred**:
+
+| Candidate Feature | Status | Architectural Rationale & Trade-Off |
+|---|---|---|
+| **Generic Cloud LLM Wrapper (OpenAI/Anthropic APIs)** | **REJECTED** | Violates local-first privacy, introduces recurring third-party API costs, requires cloud network connectivity, and produces non-deterministic hallucinations. VoxPlan requires verifiable constraint satisfaction, not speculative chat text. |
+| **Mandatory Cloud Database & User Accounts (Firebase, Supabase)** | **REJECTED** | Conflicts with zero-knowledge local storage (`IndexedDB`). Centralized databases expose user task contents and create unnecessary infrastructure overhead. |
+| **Multi-User Collaborative Synchronization (Real-time CRDTs)** | **DEFERRED** | VoxPlan is fundamentally designed for individual cognitive focus, personal pace learning, and personal effort bias correction. Multi-tenant conflict resolution introduces massive synchronization complexity without benefiting single-user planning. |
+| **Cross-Platform Native Apps (React Native / Flutter)** | **DEFERRED** | Progressive Web App (PWA) standards in Phase 8 satisfy mobile and desktop installability with 100% code reuse, avoiding multi-platform codebase fragmentation. |
+
+---
+
+### 3. Detailed Specifications for Planned Phases
+
+---
+
+### Phase 5: Conversational Planning, Multi-Turn Dialog & Voice Experience (PLANNED)
+
+**User-Facing Objective**: Enable users to plan sprints, negotiate schedule trade-offs, reschedule tasks, and debrief workload bottlenecks through a natural, multi-turn conversational interface—accessible via browser voice dictation or keyboard input with equal fidelity, completely offline and privacy-preserving.
+
+#### Stage 5.1: Conversational Planning State Machine & Turn Management
+- **Scope & Expected Deliverables**:
+  - Implement a dedicated dialog state manager (`src/conversation/dialogueManager.js`) maintaining session context across turns (active subject task, pending intent, clarification stack).
+  - Explicit confirmation protocols for consequential or destructive actions (e.g., bulk task deletion, clearing history, applying uninspected schedule overhauls).
+  - Configurable conversational idle timeout (clearing ephemeral dialogue context after 5 minutes of inactivity).
+  - Typed and voice inputs routed through identical state machine transitions.
+- **Dependencies**: Existing `CommandBar.jsx` regex parser and `taskLifecycle.js`.
+- **Acceptance Criteria**:
+  - Contextual references resolve deterministically: saying "Mark it done" immediately following a discussion about "Draft architecture audit" correctly identifies the target task without re-specifying the full title.
+  - Consequential actions require explicit `yes`/`no` or confirm/cancel responses; executing "Delete all completed tasks" prompts confirmation and does not mutate state if canceled.
+  - Expired or reset sessions cleanly transition back to the default `IDLE` listening state.
+- **Verification**:
+  - Unit tests for all state transitions, context retention across turns, timeout expiration, and confirmation guards (`tests/dialogue_manager.test.js`).
+  - Interactive command bar testing verifying typed and voice parity.
+- **Privacy & Safety**: In-memory dialogue state only; no session transcripts transmitted to external servers.
+
+#### Stage 5.2: Natural Language Schedule Negotiation & Rescheduling Engine
+- **Scope & Expected Deliverables**:
+  - Implement a schedule intent parser (`src/conversation/scheduleIntentParser.js`) capable of extracting structured scheduling commands:
+    - Relative date shifts: `"Push low-priority tasks by 2 days"`, `"Postpone Design Review to next Monday"`.
+    - Capacity queries: `"Do I have capacity for a 4-hour task on Thursday?"`.
+    - Hypothetical simulation: `"What happens if I delay the database migration by 3 days?"`.
+  - In-memory simulation runner returning a non-destructive proposal preview diff without modifying active tasks.
+- **Dependencies**: Stage 5.1; Phase 4 `adaptiveScheduler.js` and date utilities.
+- **Acceptance Criteria**:
+  - Relative temporal arithmetic correctly accounts for weekends, current date, and leap years.
+  - Hypothetical queries return immediate impact analyses: new projected completion dates, downstream dependency delays, and capacity status changes.
+  - Applying proposed conversational changes logs a standard `schedule_proposal_accepted` telemetry event with applied placements.
+- **Verification**:
+  - Automated tests covering 25+ natural language rescheduling expressions, priority filters, relative offsets, and simulation integrity (`tests/schedule_intent.test.js`).
+- **Privacy & Safety**: Simulations run strictly in-memory; cancellation guarantees zero state mutations.
+
+#### Stage 5.3: Accessible Voice Interaction & Speech Synthesis Symmetry
+- **Scope & Expected Deliverables**:
+  - Speech engine module (`src/conversation/speechEngine.js`) adding browser-native `window.speechSynthesis` (`SpeechSynthesisUtterance`) for audible assistant feedback.
+  - User controls: global speech output toggle (Mute / Unmute), speech rate adjustment, and instant speech cancellation on ESC key.
+  - Screen-reader accessibility live-region (`aria-live="polite"`) announcing all assistant responses for non-speech users.
+  - Complete symmetry between voice dictation and typed command bar.
+- **Dependencies**: Stage 5.1.
+- **Acceptance Criteria**:
+  - Toggling voice mute halts ongoing speech immediately.
+  - Browsers lacking SpeechSynthesis API gracefully degrade to visual feedback without throwing errors.
+  - Voice dictation and typed commands yield identical structured intent objects and UI state changes.
+- **Verification**:
+  - Automated mock tests for speech synthesis lifecycle and fallback detection.
+  - Manual verification on supported browsers with screen reader enabled (NVDA / VoiceOver).
+- **Privacy & Safety**: Client-only Web Speech API; zero audio streaming to third-party endpoints.
+
+#### Stage 5.4: Conversational Plan Explanations & Constraint Debriefing
+- **Scope & Expected Deliverables**:
+  - Implement schedule debriefing generator (`src/conversation/scheduleDebrief.js`) providing natural language explanations for scheduler placements:
+    - `"Why is Infrastructure Audit scheduled for next Tuesday?"` -> Explains dependency prerequisites, daily capacity limits, or urgency ranking.
+    - `"What is currently blocking the frontend release?"` -> Identifies uncompleted upstream dependencies.
+    - `"Summarize my sprint plan"` -> Generates an executive summary of total tasks, critical path duration, and capacity utilization.
+- **Dependencies**: Stage 5.1, Stage 5.2; Phase 4 `scheduleEvaluator.js`.
+- **Acceptance Criteria**:
+  - Explanations ground strictly in mathematical scheduler outputs; no fabricated justifications.
+  - Unscheduled or blocked tasks clearly explain their specific blocking constraints (`blocked_by_dependency`, `oversized_exceeds_capacity`, `capacity_exceeded`).
+- **Verification**:
+  - Automated tests validating debriefing texts across all 12 benchmark fixtures (`tests/schedule_debrief.test.js`).
+- **Phase 5 Objective Exit Criteria**:
+  - Multi-turn planning dialog handles 10-turn sessions without state leakage or orphan context.
+  - 100% feature parity between typed command input and voice interaction.
+  - Zero third-party network requests during conversational planning.
+  - All existing Phase 1–4 automated tests pass with 0 regressions.
+
+---
+
+### Phase 6: Calendar-Aware Time-Blocking & Multi-Day Workload Modeling (PLANNED)
+
+**User-Facing Objective**: Allow users to schedule long-running tasks across multiple consecutive days, allocate focused intra-day time blocks (morning deep work, afternoon admin), avoid meeting collisions, and export schedule proposals to standard calendar software via `.ics`.
+
+#### Stage 6.1: Multi-Day Chunking & Segment Modeling for Oversized Tasks
+- **Scope & Expected Deliverables**:
+  - Task chunking module (`src/scheduler/taskChunker.js`) allowing tasks exceeding daily working capacity (e.g. 14h task under 6h/day capacity) to be split into coherent daily segments across consecutive working weekdays.
+  - Configurable minimum chunk duration (default 2.0h) to prevent excessive micro-fragmentation.
+  - Segment tracking: each segment records `segmentIndex`, `totalSegments`, `allocatedHours`, and `scheduledDate`, linking back to master `taskId`.
+- **Dependencies**: Phase 4 `adaptiveScheduler.js`.
+- **Acceptance Criteria**:
+  - Oversized tasks are no longer blocked with `oversized_exceeds_capacity` when sufficient multi-day horizon exists.
+  - Daily capacity constraints ($C_{max}$) remain strictly enforced across all days; segments never exceed remaining day capacity.
+  - Segment $k+1$ is strictly scheduled on or after the day of segment $k$.
+  - Completing or rescheduling a multi-day task updates its constituent segments consistently.
+- **Verification**:
+  - Unit tests evaluating tasks of 8h, 14h, and 30h across varying daily capacities (4h, 6h, 8h) verifying zero capacity overrun and strictly monotonic segment dates (`tests/task_chunker.test.js`).
+- **Safety & Invariants**: Total allocated segment hours strictly equal task total effort; DAG dependencies on multi-day tasks enforce that downstream tasks cannot begin until the *final* segment completes.
+
+#### Stage 6.2: Intra-Day Time-Blocking & Focus Window Constraints
+- **Scope & Expected Deliverables**:
+  - Time-block allocator (`src/scheduler/timeBlockScheduler.js`) mapping daily task allocations to explicit hourly time slots (e.g. 09:00–12:00 Deep Work, 13:00–15:00 Collaboration).
+  - Blackout interval support: user-configured non-working windows and fixed recurring meeting slots that the scheduler treats as hard zero-capacity zones.
+  - Configurable transition buffers (e.g. 15-minute rest buffers between consecutive focus blocks).
+- **Dependencies**: Stage 6.1.
+- **Acceptance Criteria**:
+  - Tasks are placed exclusively within valid focus windows; meeting blackout slots are never double-booked.
+  - Daily capacity is dynamically computed as the sum of available focus window hours minus meeting blackouts.
+- **Verification**:
+  - Automated collision-detection tests verifying zero overlap between scheduled tasks and blackout intervals (`tests/time_block_scheduler.test.js`).
+- **Privacy**: Meeting titles and calendar blackout reasons stored locally; no external calendar credentials required.
+
+#### Stage 6.3: Interactive Proposal Editing & Visual Override Canvas
+- **Scope & Expected Deliverables**:
+  - Enhance `AdaptiveScheduleModal.jsx` with an interactive calendar canvas:
+    - Drag-and-drop or click-to-move adjustment of proposed task placements across days or time blocks.
+    - Live client-side recalculation of capacity pressure and dependency validity upon manual adjustment.
+    - Immediate visual warning pills if a manual shift introduces a dependency violation or capacity overrun.
+- **Dependencies**: Stage 6.1, Stage 6.2.
+- **Acceptance Criteria**:
+  - Manual adjustments update the pending proposal in real time without mutating saved task state.
+  - Moving a prerequisite past its dependent immediately highlights both tasks with a clear topological warning.
+  - Clicking "Apply Schedule" persists only the final edited proposal.
+- **Verification**:
+  - Component tests verifying drag-and-drop state updates, conflict warning triggers, and diff generation (`tests/interactive_schedule_modal.test.js`).
+
+#### Stage 6.4: Standard Calendar Export & Local Synchronization
+- **Scope & Expected Deliverables**:
+  - RFC 5545 compliant iCalendar (`.ics`) file generator (`src/scheduler/icalExporter.js`).
+  - One-click export button in the schedule proposal modal generating an `.ics` file containing all scheduled focus blocks with UIDs, start/end timestamps, task titles, and categories.
+  - Clean local download flow with zero cloud calendar permissions or OAuth dependencies.
+- **Dependencies**: Stage 6.2.
+- **Acceptance Criteria**:
+  - Generated `.ics` files pass strict RFC 5545 format linters.
+  - Exported files cleanly import into Apple Calendar, Google Calendar, and Microsoft Outlook with correct start/end times and timezones.
+- **Verification**:
+  - Automated validation tests checking iCalendar line folding, UTC timestamp formatting (`Z`), escape sequences, and multi-day segment handling (`tests/ical_exporter.test.js`).
+- **Phase 6 Objective Exit Criteria**:
+  - Multi-day tasks schedule and display seamlessly across horizon days.
+  - Zero time-slot collisions in presence of blackout windows.
+  - RFC 5545 `.ics` export imports cleanly without errors across major calendar software.
+
+---
+
+### Phase 7: Evidence-Gated Schedule Adaptation & Preference Learning (PLANNED)
+
+**User-Facing Objective**: Allow VoxPlan to safely learn individual scheduling preferences (such as personal day-of-week velocity, category-specific buffer needs, or task-switching tolerances) based on verified longitudinal outcome data—with strict sample maturity gates, bounded weight changes, and one-click rollback.
+
+#### Stage 7.1: Longitudinal Sample Maturity Gating & Readiness Diagnostics
+- **Scope & Expected Deliverables**:
+  - Learning readiness gatekeeper (`src/scheduler/learningReadinessGate.js`) that evaluates the maturity of the local schedule feedback dataset.
+  - Strict minimum evidence criteria before adaptation is unlocked:
+    - $\ge 20$ decided schedule proposals (`decidedCount >= 20`).
+    - $\ge 15$ verified unaltered task completions (`eligibleCompletedCount >= 15`).
+    - $\ge 3$ distinct task categories with completion observations.
+    - $\ge 14$ days of elapsed active telemetry history.
+  - Detailed diagnostic panel in Section 05 indicating exact progress toward readiness.
+- **Dependencies**: Phase 4 Stages 5 & 6 feedback telemetry.
+- **Acceptance Criteria**:
+  - If any readiness criterion is unmet, automatic adaptation remains strictly disabled (`status: 'insufficient_evidence'`).
+  - Cold-start factory scheduler weights remain active and immutable until readiness criteria are 100% satisfied.
+  - Clearing behavioral history immediately locks the gatekeeper and resets readiness status to 0%.
+- **Verification**:
+  - Comprehensive boundary tests evaluating sets with 19 proposals (blocked), 14 completions (blocked), 2 categories (blocked), and 20+ proposals with 15+ completions (unlocked) (`tests/learning_readiness_gate.test.js`).
+- **Safety**: Prevents premature adaptation on small, noisy datasets.
+
+#### Stage 7.2: Empirical Preference Signal Derivation & Friction Profiling
+- **Scope & Expected Deliverables**:
+  - Preference signal analyzer (`src/scheduler/preferenceAnalyzer.js`) extracting statistically significant behavioral friction patterns from telemetry:
+    - **Category Effort Underestimation**: Categories with consistent completion duration overruns ($r_{cat} > 1.2$).
+    - **Postponement Friction Tendencies**: Priority tiers or categories disproportionately shifted forward in manual overrides.
+    - **Day-of-Week Focus Realism**: Empirical completion velocity by weekday (e.g. consistently lower task completion on Fridays).
+- **Dependencies**: Stage 7.1.
+- **Acceptance Criteria**:
+  - Preference signals require at least 3 independent observations per category/weekday; sparse segments are ignored.
+  - Statistical significance tests (bootstrap confidence intervals) ensure signals reflect genuine habits rather than transient anomalies.
+  - Derived signals are transparently listed in the UI with observation counts and confidence bounds.
+- **Verification**:
+  - Unit tests using synthetic multi-week behavioral profiles verifying accurate extraction of known intentional friction patterns (`tests/preference_analyzer.test.js`).
+- **Privacy**: Profiling runs entirely on the client device inside IndexedDB.
+
+#### Stage 7.3: Bounded Heuristic Weight Adaptation & Bayesian Shrinkage
+- **Scope & Expected Deliverables**:
+  - Adaptive weight tuner (`src/scheduler/adaptiveWeightTuner.js`) adjusting heuristic scoring coefficients:
+    - $W_{urgency}$ (deadline urgency), $W_{priority}$ (priority boost), $W_{unblock}$ (downstream unblocking bonus), $W_{friction}$ (category buffer).
+  - Mathematical safety guards:
+    - Strict Bayesian shrinkage toward default factory weights ($K_{prior} = 10$).
+    - Hard clamp: No weight may deviate by more than $\pm 20\%$ from its baseline default.
+    - Hard constraints (topological DAG ordering and daily capacity limits) are **never** weighted or relaxed.
+- **Dependencies**: Stage 7.2.
+- **Acceptance Criteria**:
+  - Adapted weights always satisfy $\forall w: 0.8 \times w_{default} \le w \le 1.2 \times w_{default}$.
+  - Adapted scheduler run against all 12 benchmark fixtures achieves equal or lower schedule churn without introducing a single deadline or capacity violation.
+- **Verification**:
+  - Automated benchmark regression suite evaluating adapted vs baseline models across all 12 fixtures (`tests/adaptive_weight_tuner.test.js`).
+- **Safety**: Hard constraints are mathematically decoupled from heuristic weights; cyclic or capacity-violating proposals remain impossible.
+
+#### Stage 7.4: User Control Dashboard, Schedule Simulation & One-Click Rollback
+- **Scope & Expected Deliverables**:
+  - "Adaptive Scheduling Preferences" control card in Section 05:
+    - Visual display of default vs adapted heuristic weights.
+    - Side-by-side proposal simulator showing how adapted weights influence task placement compared to baseline.
+    - Master toggle: "Enable Personal Schedule Adaptation" (default: OFF).
+    - Emergency button: "Reset All Weights to Factory Defaults".
+- **Dependencies**: Stage 7.3.
+- **Acceptance Criteria**:
+  - Clicking "Reset" instantly deletes adapted parameters from local storage and restores default weights in under 10ms.
+  - Toggling adaptation OFF immediately causes subsequent proposals to generate using pure baseline weights.
+  - Telemetry clear history triggers automatic parameter reset.
+- **Verification**:
+  - Unit and UI tests verifying reset latency, toggle synchronization, and simulator diff rendering (`tests/schedule_preferences_ui.test.js`).
+- **Phase 7 Objective Exit Criteria**:
+  - Gatekeeper safely protects cold-start users from premature adaptation.
+  - Bounded adaptation provably improves schedule acceptance or stability on longitudinal benchmark fixtures.
+  - One-click rollback restores baseline weights immediately.
+  - Zero external network dependencies.
+
+---
+
+### Phase 8: Production Hardening, Accessibility, Security & Release Readiness (PLANNED)
+
+**User-Facing Objective**: Finalize VoxPlan as an accessible, high-performance, resilient, and enterprise-grade local-first productivity tool ready for wide adoption, compliant with web accessibility standards (WCAG 2.1 AA), fully functional offline, and secured with client-side encrypted backup capabilities.
+
+#### Stage 8.1: Full WCAG 2.1 AA Accessibility & Keyboard Navigation Audit
+- **Scope & Expected Deliverables**:
+  - Comprehensive a11y audit across all components:
+    - Full keyboard navigation: focus traps in modals, logical tab order, ESC to close, keyboard shortcut help modal (`?`).
+    - Screen reader announcements: ARIA live regions for active stopwatch updates, task completions, and modal tab switching.
+    - Visual accessibility: color contrast ratio verification across all pastel tokens meeting WCAG 2.1 AA minimum 4.5:1 for normal text (3:1 for large text/badges).
+    - Reduced motion: full enforcement of `@media (prefers-reduced-motion: reduce)` disabling non-essential GSAP animations and instant UI state transitions.
+- **Dependencies**: Phases 1–7 UI components.
+- **Acceptance Criteria**:
+  - Zero accessibility violations reported by automated Axe-core linter.
+  - All critical user flows (task creation, voice dictation, schedule review, history clearing) achievable using keyboard alone.
+- **Verification**:
+  - Automated Axe-core test integration in test suite (`tests/accessibility.test.js`).
+  - Manual screen reader audit using NVDA and VoiceOver.
+
+#### Stage 8.2: Data Lifecycle Governance, Schema Migration & Encrypted Backup
+- **Scope & Expected Deliverables**:
+  - Data governance module (`src/telemetry/dataGovernance.js`):
+    - Automated schema version migration pipeline for IndexedDB and localStorage.
+    - Data retention controls: optional user policy to prune or archive events older than 90/180/365 days.
+    - Password-protected encrypted JSON backup/restore using Web Crypto API (`AES-GCM` with `PBKDF2` key derivation).
+- **Dependencies**: Phases 2–7 data stores.
+- **Acceptance Criteria**:
+  - Database schema upgrades execute seamlessly without data loss or user intervention.
+  - Encrypted backup cannot be decrypted without correct passphrase; corrupted or tampered backup files safely rejected.
+  - Exported encrypted archives restore complete state on a fresh browser instance.
+- **Verification**:
+  - Unit tests for encryption, decryption, incorrect passphrase rejection, tampered payload detection, and schema migration roll-forward (`tests/data_governance.test.js`).
+- **Privacy & Security**: Encryption keys never leave browser memory; zero cloud recovery backdoors.
+
+#### Stage 8.3: Performance, Bundle Code-Splitting & Offline PWA Service Worker
+- **Scope & Expected Deliverables**:
+  - Production bundle optimization:
+    - Dynamic lazy-loading (`React.lazy` / `import()`) for heavy modals (`AdaptiveScheduleModal`, `PersonalModelDashboard`, `MLModelPanel`, `TaskExplanationModal`).
+    - Code-splitting reducing initial load bundle below 250 kB gzip (addressing current Vite build warning).
+  - Progressive Web App (PWA) manifest and Service Worker (`sw.js`) for full offline functionality and desktop/mobile installability.
+- **Dependencies**: Full frontend codebase.
+- **Acceptance Criteria**:
+  - Initial page load transfers $< 250\text{ kB}$ gzip of JavaScript.
+  - Application loads and operates 100% offline once cached; offline banner clearly indicates local-only operation.
+  - Lighthouse performance score $\ge 90/100$.
+- **Verification**:
+  - Automated bundle size check in build step (`npm run build`).
+  - Offline mode verification in headless browser with network emulation set to offline.
+
+#### Stage 8.4: End-to-End Verification, Security Audit & Release Pipeline
+- **Scope & Expected Deliverables**:
+  - Comprehensive end-to-end integration test suite covering the entire user journey:
+    - Welcome tasks -> Task creation -> Stopwatch focus tracking -> Personal model update -> Schedule generation -> Interactive adjustment -> Acceptance -> Feedback attribution -> Encrypted export -> History clear.
+  - Security audit: Content Security Policy (CSP) headers, dependency vulnerability audit (`npm audit`, `pip-audit`), and sanitization verification.
+  - Automated GitHub Actions CI workflow running lint, test, build, pytest, and bundle checks on every pull request.
+- **Dependencies**: Stages 8.1–8.3.
+- **Acceptance Criteria**:
+  - 100% pass rate across all automated test suites (Node tests, Pytest, a11y, bundle checks).
+  - `npm audit` reports 0 high or critical vulnerabilities.
+  - Strict CSP blocks any unexpected network connection.
+- **Verification**:
+  - Complete CI pipeline dry run locally and on GitHub Actions.
+- **Phase 8 Objective Exit Criteria**:
+  - Lighthouse scores $\ge 90$ across Performance, Accessibility, Best Practices, and SEO.
+  - Complete offline PWA capability verified.
+  - Zero critical security vulnerabilities and clean dependency audit.
+  - Official VoxPlan v1.0 Production Release milestone achieved.
+
+---
+
+### 4. Consolidated Roadmap Governance & Checkpoint Summary
+
+| Milestone | Phase Focus | Key Deliverable | Exit Criteria |
+|---|---|---|---|
+| **M1** | Phase 5: Conversational Planning | Multi-turn dialog state machine, natural language rescheduling, voice synthesis | 10-turn dialogue without leakage; 100% typed/voice symmetry; zero regressions. |
+| **M2** | Phase 6: Time-Blocking & Workload | Multi-day task chunking, intra-day focus blocks, `.ics` calendar export | Oversized tasks scheduled cleanly; 0 time-slot collisions; valid RFC 5545 export. |
+| **M3** | Phase 7: Schedule Adaptation | Longitudinal readiness gate, bounded weight tuning ($\pm 20\%$), one-click rollback | $\ge 20$ decisions / $\ge 15$ completions gate enforced; zero hard constraint violations; instant rollback. |
+| **M4** | Phase 8: Production Readiness | WCAG 2.1 AA a11y, encrypted backup, PWA offline service worker, bundle $<250$kB | Lighthouse $\ge 90$ across all categories; 100% test pass rate; v1.0 release tagged. |
