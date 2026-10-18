@@ -1705,23 +1705,72 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
   - Disambiguation by relative dates supports standard conversational expressions ("today", "tomorrow", "no deadline", "unscheduled", "due <date>"); non-standard or distant relative expressions fall back to ordinal/distinctive title disambiguation.
 
 
-#### Stage 5.4: Conversational Plan Explanations & Constraint Debriefing
-- **Scope & Expected Deliverables**:
-  - Implement schedule debriefing generator (`src/conversation/scheduleDebrief.js`) providing natural language explanations for scheduler placements:
-    - `"Why is Infrastructure Audit scheduled for next Tuesday?"` -> Explains dependency prerequisites, daily capacity limits, or urgency ranking.
-    - `"What is currently blocking the frontend release?"` -> Identifies uncompleted upstream dependencies.
-    - `"Summarize my sprint plan"` -> Generates an executive summary of total tasks, critical path duration, and capacity utilization.
-- **Dependencies**: Stage 5.1, Stage 5.2; Phase 4 `scheduleEvaluator.js`.
-- **Acceptance Criteria**:
-  - Explanations ground strictly in mathematical scheduler outputs; no fabricated justifications.
-  - Unscheduled or blocked tasks clearly explain their specific blocking constraints (`blocked_by_dependency`, `oversized_exceeds_capacity`, `capacity_exceeded`).
-- **Verification**:
-  - Automated tests validating debriefing texts across all 12 benchmark fixtures (`tests/schedule_debrief.test.js`).
-- **Phase 5 Objective Exit Criteria**:
-  - Multi-turn planning dialog handles 10-turn sessions without state leakage or orphan context.
-  - 100% feature parity between typed command input and voice interaction.
-  - Zero third-party network requests during conversational planning.
-  - All existing Phase 1–4 automated tests pass with 0 regressions.
+#### Stage 5.4: Conversational Plan Explanations & Constraint Debriefing (COMPLETED)
+- **Scope & Deliverables Implemented**:
+  - Implemented conversational explanation and debriefing engine (`src/conversation/scheduleDebrief.js`) providing grounded answers without cloud LLMs or fabricated causal claims.
+  - **Feature A — Explain Scheduling Decisions**:
+    - Grounded explanations for task scheduling decisions (`explainScheduleDecision`):
+      - Prerequisite topological blocking (`blocked_by_dependency`) identifying specific uncompleted prerequisite tasks.
+      - Oversized task effort exceeding daily working capacity (`oversized_exceeds_capacity`).
+      - Planning window capacity exhaustion (`capacity_exhausted`).
+      - Specific day capacity constraints: explains why a task could not fit on an earlier requested date (e.g. today vs tomorrow) based on allocated hours vs daily limit.
+      - Non-working day settings preventing weekend or non-workday placement.
+      - Deadline urgency, priority elevation, and workload balancing factors.
+      - Causal limitation honesty: states explicitly when slot comparisons beyond capacity limits were not recorded.
+      - Distinguishes proposed schedules from accepted schedules.
+      - Ambiguous task references reuse the Stage 5.1/5.3 clarification flow (`_resolveAndDispatch`).
+  - **Feature B — Explain Schedule Changes**:
+    - Grounded proposal comparisons (`explainScheduleChanges`):
+      - Compares active proposal against previous proposal or baseline using stable task IDs (not titles alone).
+      - Identifies tasks moved, added, or removed, with exact day offset calculations (`dayDifference`).
+      - Causal integrity: Distinguishes recorded user reschedule triggers (from `task_rescheduled` telemetry events) from unrecorded automated scheduler balancing shifts. Never invents causal reasons.
+      - Supports single-task movement inquiry ("Why did [task] move?") as well as general schedule change inquiries ("What changed in my schedule?").
+  - **Feature C — Conversational Planning Debriefs**:
+    - Evidence-based planned vs actual outcomes (`generatePlanDebrief`):
+      - Analyzes accepted proposals, scheduled due dates, and completion telemetry events for requested periods ("today", "yesterday", or specific ISO dates).
+      - Computes planned tasks, completed tasks, incomplete tasks, and completion percentages.
+      - Punctuality integrity: Verifies on-time vs late completions *strictly* when completion timestamps and deadlines exist; explicitly tallies `unverifiedTimingCount` when timestamp is missing without guessing.
+      - Reports tracked vs self-reported focus duration from `duration_source`.
+      - Incorporates schedule feedback metrics (`computeScheduleFeedback`).
+      - Insufficient data guard: When no scheduled tasks or completions exist for the period, reports insufficient recorded data rather than synthesizing statistics.
+      - Evidence-based suggestions: Cautious workload overload notes (planned effort > daily capacity) without psychological or productivity claims.
+  - **Conversational & UI Integration**:
+    - Integrated with `DialogueManager` (`src/conversation/dialogueManager.js`):
+      - Added intents `EXPLAIN_SCHEDULE_DECISION`, `EXPLAIN_SCHEDULE_CHANGES`, `PLAN_DEBRIEF`.
+      - Preserves pending proposal decision state when user asks explanation or comparison questions during proposal review (`AWAITING_PROPOSAL_DECISION`).
+      - Read-only safety invariant: All explanation and debrief queries produce `isAuthorized: false` and `action: null`, guaranteeing zero task mutations.
+    - Integrated with `speechEngine.js`:
+      - `generateSpokenSummary` returns concise `spokenSummary` for speech synthesis without reading lengthy multi-line tables.
+    - Integrated with `CommandBar.jsx` & `App.jsx`:
+      - Added quick prompt chips for "How did my plan go?" and "What changed in my schedule?".
+      - Passes `telemetryEvents` and `activeProposal` into dialogue processing context.
+- **Verification & Exact Results**:
+  - Node unit & integration tests: 293 passing, 0 failing across 60 test suites (`npm test` including 19 new tests in `tests/schedule_debrief.test.js`).
+  - Linter: 0 warnings, 0 errors across 45 files (`npm run lint` / `oxlint`).
+  - Production build: `vite build` completed cleanly in 1.56s (`npm run build`).
+  - Backend tests: 27 passed in 35.65s (`python -m pytest backend/tests/ -v`).
+  - Browser UI verification:
+    - Executed in browser on `http://localhost:5173/#command` recording WebP session `debrief_chips_demo`.
+    - Verified "How did my plan go?" triggered planning debrief toast: `Planning Debrief for TODAY (2026-10-18): • Planned Tasks: 1 • Completed: 0 (0%) • Incomplete: 1 • Recorded Focus Time: None recorded for this period Unfinished Tasks: - "Database Assignment" (medium priority)`.
+    - Verified "What changed in my schedule?" handled missing proposal history honestly without crashing.
+    - Verified "Why was English scheduled for tomorrow?" with ambiguous tasks prompted multi-turn clarification and resolved safely.
+- **Files Created / Modified**:
+  - Created: `src/conversation/scheduleDebrief.js` (core explanation, change comparison, and debriefing algorithms)
+  - Created: `tests/schedule_debrief.test.js` (comprehensive unit and integration test suite)
+  - Modified: `src/conversation/dialogueManager.js` (intents, pattern matching, state preservation, read-only dispatching)
+  - Modified: `src/conversation/speechEngine.js` (concise spoken summaries for explanations and debriefs)
+  - Modified: `src/components/CommandBar.jsx` (quick prompt chips)
+  - Modified: `src/App.jsx` (context plumbing for activeProposal and telemetryEvents)
+- **Git Commit & Push**:
+  - Commit: `e927a9a` (`feat(phase-5): add conversational plan explanations and debriefing`).
+  - Push status: Verified pushed to `origin main` at `https://github.com/kanwal-vyas/VoxPlan.git`.
+- **Status**: **COMPLETED**.
+- **Phase 5 Objective Exit Status**:
+  - Multi-turn planning dialog handles complex multi-turn sessions without state leakage.
+  - 100% feature parity between typed commands and voice interaction.
+  - Zero third-party network requests during planning, explanation, or debriefing.
+  - All Phase 1–5 automated tests pass with 0 regressions (293 JS tests, 27 Python tests).
+- **Next Phase**: Phase 6 (Calendar-Aware Time-Blocking & Multi-Day Workload Modeling).
 
 ---
 
