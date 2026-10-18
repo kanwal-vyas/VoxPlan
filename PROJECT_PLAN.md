@@ -2170,38 +2170,78 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
 - **Scope Boundary Enforcement**:
   - Read-only diagnostics and gating evaluation only. No scheduler weights adapted, no models trained, no heuristics tuned, and no preferences learned. Factory baseline weights remain fully active.
 
-#### Stage 7.2: Empirical Preference Signal Derivation & Friction Profiling
-- **Status**: **COMPLETED**.
-- **Implementation Commit**: `a41583cd17d99e9da833166ad560fc9c60362e77`
+#### Stage 7.2: Empirical Preference Signal Derivation & Friction Profiling (COMPLETED & HARDENED)
+- **Status**: **COMPLETED & HARDENED**.
+- **Initial Implementation Commit**: `a41583cd17d99e9da833166ad560fc9c60362e77`
+- **Initial Documentation Commit**: `cb37975c5db2fc774c147b841d3037d355cfb553`
+- **Hardening Implementation Commit**: `43f150e02faf8e487032cc68c0a4222257cf7f2a` (`fix(phase-7): harden empirical signal integrity`)
+- **Hardening Documentation Commit**: `docs(phase-7): document signal integrity audit`
 - **Scope & Delivered Artifacts**:
   - Deterministic preference signal analyzer (`src/scheduler/preferenceAnalyzer.js`) extracting behavioral friction patterns from telemetry with strict sample maturity gating and statistical restraint:
-    - **Category Effort Underestimation**: Detects categories with consistent completion duration overruns ($r_{cat} = \text{median}(A/E) > 1.2$, $N \ge 3$).
-    - **Postponement Friction Tendencies**: Identifies priority tiers or categories disproportionately shifted forward in manual overrides ($\ge 60\%$ postponed, $N \ge 3$).
-    - **Day-of-Week Focus Realism**: Evaluates empirical completion velocity by weekday, identifying low-velocity friction days.
-    - **Proposal Decision Friction**: Tracks deduplicated proposal discard rates ($D / (A + D)$), exposing adoption friction.
+    - **Category Effort Underestimation**: Detects categories with consistent completion duration overruns ($r_{cat} = \text{median}(A/E) > 1.2$, $N \ge 3$). Deduplicated by task ID, excluding open backlog tasks and reopened tasks.
+    - **Postponement Friction Tendencies**: Identifies priority tiers or categories disproportionately shifted forward in manual overrides ($\ge 60\%$ postponed, $N \ge 3$). Strictly guards against single-task clustering by requiring $\ge 3$ distinct tasks before signal derivation.
+    - **Day-of-Week Focus Realism**: Evaluates empirical completion velocity across working weekdays (Mon–Fri), explicitly acknowledging weekends as non-working days rather than personal velocity dips.
+    - **Proposal Decision Friction**: Tracks deduplicated proposal discard rates ($D / (A + D)$), neutrally presented as exploratory observations without claiming user dissatisfaction or scheduler defects.
     - **Intraday Time-Window Friction**: Explicitly marked as unavailable (`missing_intraday_window_provenance`) due to telemetry schema omitting original-vs-shifted intraday time-block identifiers.
+  - Authoritative classification function `classifySignalEvidenceLevel` with deterministic precedence:
+    1. Missing schema provenance $\rightarrow$ `UNAVAILABLE`.
+    2. Insufficient samples ($N < 3$), unassessable data, contradictions, or task clustering $\rightarrow$ `INSUFFICIENT_EVIDENCE`.
+    3. Global readiness unmet $\rightarrow$ `PRELIMINARY` (global gate strictly overrides local sample size).
+    4. Mature sample ($N \ge 5$) under passing gate $\rightarrow$ `ELIGIBLE_FOR_LATER_EVALUATION`.
+    5. Consistent sample ($3 \le N < 5$) under passing gate $\rightarrow$ `REPEATED_OBSERVATION`.
   - Interactive, accessible UI card (`src/components/PreferenceSignalsCard.jsx`) embedded in Section 05 (`PersonalModelDashboard.jsx` / `LearningReadinessPanel.jsx`):
-    - Status pill displaying gating state (`● MATURE TELEMETRY — CANDIDATE SIGNALS DERIVED` vs `🔒 ADAPTATION LOCKED — PRELIMINARY AGGREGATES ONLY`).
-    - Descriptive friction overview: Proposal Discard Rate, Forward Postponement Tendency, and Paired Effort Overrun with exact numerators and denominators.
+    - Dynamic threshold references in statistical restraint banner (`{current}/{required}`).
+    - Descriptive friction overview: Observed Discard Ratio (Exploratory), Forward Postponement Tendency, and Paired Effort Overrun with exact numerators and denominators.
     - Candidate signal cards with evidence level pills, observed behavior, supporting sample size, observation span, status statement, and collapsible confounders list.
     - Telemetry schema gaps & unavailable signals disclosure explaining missing intraday window provenance.
     - Local-first privacy and governance notice stating that all analysis is on-device, descriptive only, and weights remain unmodified.
-- **Dependencies**: Stage 7.1.
-- **Statistical Restraint & Evidence Levels**:
-  - Machine-readable evidence levels: `INSUFFICIENT_EVIDENCE`, `PRELIMINARY`, `REPEATED_OBSERVATION`, `ELIGIBLE_FOR_LATER_EVALUATION`, `UNAVAILABLE`.
-  - When Phase 7.1 readiness is unmet, signals are strictly marked as preliminary / exploratory; no definitive personalized preferences are claimed.
-  - Slices with $< 3$ observations are excluded from signal derivation.
+- **Audit Findings & Hardening Summary**:
+  - **Audit A (Decision Provenance & Deduplication)**:
+    - Verified that one logical proposal is uniquely identified by `schedule_id`, and one final decision corresponds to an explicit `schedule_proposal_accepted` or `schedule_proposal_discarded` event.
+    - Duplicate event deliveries are filtered without inflating `decidedCount`. Conflicting decisions (both accepted and discarded) are isolated and excluded from both counts.
+    - Pending proposal generation drafts, unaccepted edits, and cancellations are excluded from the decided denominator.
+  - **Audit B (Discard-Rate Integrity & Neutral Framing)**:
+    - Current observed discard metric recomputed from live telemetry: 5 discarded / 7 decided (71%) [or 4 / 5 (80%) in initial baseline].
+    - Relabeled from "Proposal Discard Rate" to neutral "Observed Discard Ratio (Exploratory)" with explicit denominator.
+    - Added explicit neutral disclaimer: small sample size ($n \le 7$) is exploratory and descriptive; does not indicate dissatisfaction, ineffective heuristics, or a stable personal preference.
+  - **Audit C (Evidence-Level Contract & Hierarchy)**:
+    - Refined and exported `classifySignalEvidenceLevel` establishing non-overlapping precedence.
+    - Verified boundary tests across sample sizes 0, 1, 2, 3, 4, 5, with readiness both true and false.
+  - **Audit D (Readiness Gate Enforcement)**:
+    - Verified that `preferenceAnalyzer.js` reuses the authoritative `evaluateLearningReadiness` implementation and never independently weakens or bypasss it.
+    - Unmet readiness gate strictly bounds all signals to `PRELIMINARY` or `INSUFFICIENT_EVIDENCE`.
+    - Live environment readiness recomputed: `decidedProposals: 7/20`, `verifiedCompletions: 0/15`, `taskCategories: 0/3`, `activeDuration: 2/14 days`. Adaptation remains 100% locked.
+  - **Audit E (Signal Validity, Multi-Task Independence & Confounders)**:
+    - Effort overrun paired tasks deduplicated by `taskId` to take the latest completion event, excluding open tasks and reopened tasks.
+    - Postponement overrides track unique tasks (`uniqueTasksCount`) per priority/category; single-task clustering ($< 3$ distinct tasks) returns `INSUFFICIENT_EVIDENCE`.
+    - Weekday completion velocity evaluates working weekdays (Mon–Fri); weekend days (Sat/Sun) are excluded from dip evaluation as non-working days.
+  - **Audit F (UI Claims & Privacy)**:
+    - Banner updated to use dynamic threshold references (`readiness.gates.X.required`).
+    - Adaptation lock badge visibly clear without color reliance alone (`🔒 ADAPTATION LOCKED`).
+    - Clearing telemetry immediately removes all candidate signals and resets friction profile to empty.
 - **Verification & Test Suite**:
-  - 12 focused unit and regression tests in `tests/preference_analyzer.test.js`: readiness gating integration, candidate derivation under mature fixture, category underestimation, postponement friction, discard friction, weekday velocity dip, reopened task exclusion, explicit unavailable signal handling, immutability, and schedule-generation invariance.
-  - Full frontend suite: 456 passing tests across 91 test suites with 0 failures (`npm test`).
-  - Backend suite: 27 passing tests (`python -m pytest backend/tests/ -q`).
-  - Linter: 0 errors across 60 files (`npm run lint`).
-  - Production build: Clean bundle build in 358ms (`npm run build`).
-  - Browser verification: Headless subagent verified accurate rendering of Section 05 friction profiling, status pill, descriptive metrics with exact counts, preliminary observation banner, and telemetry gap disclosures.
-- **Scope Boundary Enforcement**:
-  - Read-only analysis and diagnostics only. No scheduler weights adapted, no models trained, no heuristics tuned, and schedule generation remains 100% invariant. Factory baseline weights remain fully active.
+  - 29 focused tests in `tests/preference_analyzer.test.js`:
+    - Readiness gating integration and strict preliminary bounding.
+    - Candidate derivation under mature fixture.
+    - Category underestimation, paired task deduplication, and open/reopened task exclusions.
+    - Postponement friction and multi-task clustering safeguards.
+    - Weekday velocity dip on working weekdays and weekend exclusion.
+    - Proposal discard friction and neutral exploratory wording.
+    - Explicitly unavailable intraday time-window provenance handling.
+    - Boundary tests for `classifySignalEvidenceLevel` at counts 0–5, readiness pass/fail, contradictions, and clustering.
+    - Deduplication of duplicate event delivery, conflict isolation, and malformed event safety.
+    - Evidence clearing and pure determinism across multiple runs.
+    - Strict immutability of inputs and 100% schedule-generation invariance.
+  - Full frontend suite: **473 passing tests across 96 test suites** with 0 failures (`npm test`).
+  - Backend suite: **27 passing tests** (`python -m pytest backend/tests/ -q`).
+  - Linter: **0 errors** across 60 files (`npm run lint` / `oxlint`).
+  - Production build: Clean bundle build in 339ms (`npm run build`).
+  - Browser verification: Verified in Chrome subagent session `verify_hardened_ui_1792332989942.webp` on `http://localhost:5173/#personal-model` confirming dynamic thresholds, neutral exploratory discard ratio, preliminary badges, and telemetry gap disclosures.
+- **Scope Boundary Enforcement & Confirmation**:
+  - Read-only analysis and diagnostics only. No scheduler weights adapted, no Bayesian updating, no models trained, no heuristics tuned, and schedule generation remains 100% invariant. Baseline factory weights remain fully active.
+  - Phase 7.3 remains completely **UNIMPLEMENTED**.
 
-#### Stage 7.3: Bounded Heuristic Weight Adaptation & Bayesian Shrinkage
+#### Stage 7.3: Bounded Heuristic Weight Adaptation & Bayesian Shrinkage (PLANNED)
 - **Scope & Expected Deliverables**:
   - Adaptive weight tuner (`src/scheduler/adaptiveWeightTuner.js`) adjusting heuristic scoring coefficients:
     - $W_{urgency}$ (deadline urgency), $W_{priority}$ (priority boost), $W_{unblock}$ (downstream unblocking bonus), $W_{friction}$ (category buffer).
