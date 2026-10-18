@@ -281,6 +281,9 @@ export class DialogueManager {
     const isPronoun = /^(?:it|this|that|this\s+task|that\s+task|the\s+task|my\s+task)$/i.test(cleanLower);
     if (isPronoun) {
       if (!this.activeSubjectTaskId) {
+        if (tasks.length === 1) {
+          return { status: RESOLUTION_STATUS.RESOLVED, task: tasks[0], isContextual: true };
+        }
         return { status: RESOLUTION_STATUS.NEEDS_CLARIFICATION, reason: 'no_active_subject' };
       }
       const contextualTask = tasks.find((t) => t.id === this.activeSubjectTaskId);
@@ -1423,6 +1426,173 @@ export class DialogueManager {
       }
     }
 
+    const explainSplitInProp = text.match(
+      /^(?:why\s+(?:was|is|did\s+you\s+split)\s+(?:the\s+task\s+|my\s+task\s+)?(.+?)\s+(?:split|partitioned|divided)(?:\s+across\s+.+?)?\??)$/i
+    ) || text.match(
+      /^(?:why\s+(?:did\s+you\s+)?split\s+(?:the\s+task\s+|my\s+task\s+)?(.+?)(?:\s+across\s+.+?)?\??)$/i
+    );
+    if (explainSplitInProp) {
+      const taskQuery = explainSplitInProp[1].trim();
+      const resolution = this.resolveTaskReference(taskQuery, tasks);
+      if (resolution.status === RESOLUTION_STATUS.RESOLVED || resolution.status === 'exact') {
+        const explRes = explainScheduleDecision({
+          targetTask: resolution.task,
+          inquiryType: 'why_split',
+          tasks,
+          activeProposal: activeProp,
+          proposalHistory: this.proposalHistory,
+          telemetryEvents: context.telemetryEvents || [],
+          clock: this.clock,
+        });
+        return {
+          state: CONVERSATION_STATES.AWAITING_PROPOSAL_DECISION,
+          intent: CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION,
+          targetTask: resolution.task,
+          proposal: activeProp,
+          responseText: explRes.responseText,
+          spokenSummary: explRes.spokenSummary,
+          evidence: explRes.evidence,
+          feedbackType: 'info',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: null,
+          error: null,
+        };
+      }
+    }
+
+    const workScheduledInProp = text.match(
+      /^(?:how\s+much\s+(?:work|effort|time|hours?)\s+(?:is|was)\s+scheduled\s+(?:for|on)\s+(?:the\s+task\s+|my\s+task\s+)?(.+?)\??)$/i
+    );
+    if (workScheduledInProp) {
+      const taskQuery = workScheduledInProp[1].trim();
+      const resolution = this.resolveTaskReference(taskQuery, tasks);
+      if (resolution.status === RESOLUTION_STATUS.RESOLVED || resolution.status === 'exact') {
+        const explRes = explainScheduleDecision({
+          targetTask: resolution.task,
+          inquiryType: 'work_scheduled',
+          tasks,
+          activeProposal: activeProp,
+          proposalHistory: this.proposalHistory,
+          telemetryEvents: context.telemetryEvents || [],
+          clock: this.clock,
+        });
+        return {
+          state: CONVERSATION_STATES.AWAITING_PROPOSAL_DECISION,
+          intent: CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION,
+          targetTask: resolution.task,
+          proposal: activeProp,
+          responseText: explRes.responseText,
+          spokenSummary: explRes.spokenSummary,
+          evidence: explRes.evidence,
+          feedbackType: 'info',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: null,
+          error: null,
+        };
+      }
+    }
+
+    const workUnscheduledInProp = text.match(
+      /^(?:how\s+much\s+(?:of\s+)?(?:the\s+task\s+|my\s+task\s+)?(.+?)\s+remains?\s+unscheduled\??|how\s+much\s+unscheduled\s+work\s+(?:remains\s+for|is\s+left\s+for)\s+(?:the\s+task\s+|my\s+task\s+)?(.+?)\??)$/i
+    );
+    if (workUnscheduledInProp) {
+      const taskQuery = (workUnscheduledInProp[1] || workUnscheduledInProp[2]).trim();
+      const resolution = this.resolveTaskReference(taskQuery, tasks);
+      if (resolution.status === RESOLUTION_STATUS.RESOLVED || resolution.status === 'exact') {
+        const explRes = explainScheduleDecision({
+          targetTask: resolution.task,
+          inquiryType: 'work_unscheduled',
+          tasks,
+          activeProposal: activeProp,
+          proposalHistory: this.proposalHistory,
+          telemetryEvents: context.telemetryEvents || [],
+          clock: this.clock,
+        });
+        return {
+          state: CONVERSATION_STATES.AWAITING_PROPOSAL_DECISION,
+          intent: CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION,
+          targetTask: resolution.task,
+          proposal: activeProp,
+          responseText: explRes.responseText,
+          spokenSummary: explRes.spokenSummary,
+          evidence: explRes.evidence,
+          feedbackType: 'info',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: null,
+          error: null,
+        };
+      }
+    }
+
+    const fitBeforeDeadlineInProp = text.match(
+      /^(?:why\s+(?:couldn't|could\s+not|can't|can\s+not)\s+(?:you\s+)?fit\s+(?:the\s+whole\s+|all\s+of\s+)?(?:the\s+task\s+|my\s+task\s+)?(.+?)\s+(?:before|by)\s+(?:its\s+|the\s+)?deadline\??)$/i
+    );
+    if (fitBeforeDeadlineInProp) {
+      const taskQuery = fitBeforeDeadlineInProp[1].trim();
+      const resolution = this.resolveTaskReference(taskQuery, tasks);
+      if (resolution.status === RESOLUTION_STATUS.RESOLVED || resolution.status === 'exact') {
+        const explRes = explainScheduleDecision({
+          targetTask: resolution.task,
+          inquiryType: 'why_not_fit_before_deadline',
+          tasks,
+          activeProposal: activeProp,
+          proposalHistory: this.proposalHistory,
+          telemetryEvents: context.telemetryEvents || [],
+          clock: this.clock,
+        });
+        return {
+          state: CONVERSATION_STATES.AWAITING_PROPOSAL_DECISION,
+          intent: CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION,
+          targetTask: resolution.task,
+          proposal: activeProp,
+          responseText: explRes.responseText,
+          spokenSummary: explRes.spokenSummary,
+          evidence: explRes.evidence,
+          feedbackType: 'info',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: null,
+          error: null,
+        };
+      }
+    }
+
+    const sessionCountInProp = text.match(
+      /^(?:how\s+many\s+sessions?\s+(?:did\s+you\s+propose|are\s+proposed|were\s+proposed)\s+(?:for\s+)?(?:the\s+task\s+|my\s+task\s+)?(.+?)\??)$/i
+    );
+    if (sessionCountInProp) {
+      const taskQuery = sessionCountInProp[1].trim();
+      const resolution = this.resolveTaskReference(taskQuery, tasks);
+      if (resolution.status === RESOLUTION_STATUS.RESOLVED || resolution.status === 'exact') {
+        const explRes = explainScheduleDecision({
+          targetTask: resolution.task,
+          inquiryType: 'session_count',
+          tasks,
+          activeProposal: activeProp,
+          proposalHistory: this.proposalHistory,
+          telemetryEvents: context.telemetryEvents || [],
+          clock: this.clock,
+        });
+        return {
+          state: CONVERSATION_STATES.AWAITING_PROPOSAL_DECISION,
+          intent: CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION,
+          targetTask: resolution.task,
+          proposal: activeProp,
+          responseText: explRes.responseText,
+          spokenSummary: explRes.spokenSummary,
+          evidence: explRes.evidence,
+          feedbackType: 'info',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: null,
+          error: null,
+        };
+      }
+    }
+
     // 5. Unrelated command entered: supersede active proposal cleanly, reset, and execute
     if (activeProp) {
       const superseded = {
@@ -1813,6 +1983,68 @@ export class DialogueManager {
     if (explainGeneralMatch) {
       const taskQuery = explainGeneralMatch[1].trim();
       return this._resolveAndDispatch(CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION, taskQuery, {
+        telemetryEvents: context.telemetryEvents || [],
+      }, tasks);
+    }
+
+    // Pattern 5: Why was [task] split?
+    const explainSplitMatch = text.match(
+      /^(?:why\s+(?:was|is|did\s+you\s+split)\s+(?:the\s+task\s+|my\s+task\s+)?(.+?)\s+(?:split|partitioned|divided)(?:\s+across\s+.+?)?\??)$/i
+    ) || text.match(
+      /^(?:why\s+(?:did\s+you\s+)?split\s+(?:the\s+task\s+|my\s+task\s+)?(.+?)(?:\s+across\s+.+?)?\??)$/i
+    );
+    if (explainSplitMatch) {
+      const taskQuery = explainSplitMatch[1].trim();
+      return this._resolveAndDispatch(CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION, taskQuery, {
+        inquiryType: 'why_split',
+        telemetryEvents: context.telemetryEvents || [],
+      }, tasks);
+    }
+
+    // Pattern 6: How much work is scheduled for [task]?
+    const workScheduledMatch = text.match(
+      /^(?:how\s+much\s+(?:work|effort|time|hours?)\s+(?:is|was)\s+scheduled\s+(?:for|on)\s+(?:the\s+task\s+|my\s+task\s+)?(.+?)\??)$/i
+    );
+    if (workScheduledMatch) {
+      const taskQuery = workScheduledMatch[1].trim();
+      return this._resolveAndDispatch(CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION, taskQuery, {
+        inquiryType: 'work_scheduled',
+        telemetryEvents: context.telemetryEvents || [],
+      }, tasks);
+    }
+
+    // Pattern 7: How much of [task] remains unscheduled?
+    const workUnscheduledMatch = text.match(
+      /^(?:how\s+much\s+(?:of\s+)?(?:the\s+task\s+|my\s+task\s+)?(.+?)\s+remains?\s+unscheduled\??|how\s+much\s+unscheduled\s+work\s+(?:remains\s+for|is\s+left\s+for)\s+(?:the\s+task\s+|my\s+task\s+)?(.+?)\??)$/i
+    );
+    if (workUnscheduledMatch) {
+      const taskQuery = (workUnscheduledMatch[1] || workUnscheduledMatch[2]).trim();
+      return this._resolveAndDispatch(CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION, taskQuery, {
+        inquiryType: 'work_unscheduled',
+        telemetryEvents: context.telemetryEvents || [],
+      }, tasks);
+    }
+
+    // Pattern 8: Why couldn't you fit the whole task before its deadline?
+    const fitBeforeDeadlineMatch = text.match(
+      /^(?:why\s+(?:couldn't|could\s+not|can't|can\s+not)\s+(?:you\s+)?fit\s+(?:the\s+whole\s+|all\s+of\s+)?(?:the\s+task\s+|my\s+task\s+)?(.+?)\s+(?:before|by)\s+(?:its\s+|the\s+)?deadline\??)$/i
+    );
+    if (fitBeforeDeadlineMatch) {
+      const taskQuery = fitBeforeDeadlineMatch[1].trim();
+      return this._resolveAndDispatch(CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION, taskQuery, {
+        inquiryType: 'why_not_fit_before_deadline',
+        telemetryEvents: context.telemetryEvents || [],
+      }, tasks);
+    }
+
+    // Pattern 9: How many sessions did you propose for [task]?
+    const sessionCountMatch = text.match(
+      /^(?:how\s+many\s+sessions?\s+(?:did\s+you\s+propose|are\s+proposed|were\s+proposed)\s+(?:for\s+)?(?:the\s+task\s+|my\s+task\s+)?(.+?)\??)$/i
+    );
+    if (sessionCountMatch) {
+      const taskQuery = sessionCountMatch[1].trim();
+      return this._resolveAndDispatch(CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION, taskQuery, {
+        inquiryType: 'session_count',
         telemetryEvents: context.telemetryEvents || [],
       }, tasks);
     }
@@ -2495,6 +2727,7 @@ export class DialogueManager {
       const res = explainScheduleDecision({
         targetTask: target,
         targetDateQuery: params?.targetDateQuery || null,
+        inquiryType: params?.inquiryType || null,
         tasks: _tasks,
         activeProposal: this.activeProposal,
         proposalHistory: this.proposalHistory,

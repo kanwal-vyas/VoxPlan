@@ -411,41 +411,46 @@ export function evaluateScheduleStability(scheduleA, scheduleB) {
   const placementsA = scheduleA.proposedPlacements || [];
   const placementsB = scheduleB.proposedPlacements || [];
 
+  const getPlacementKey = (p) =>
+    p.placementId || p.chunkId || (p.chunkIndex !== undefined ? `${p.taskId}_seg_${p.chunkIndex}` : p.taskId);
+
   const mapA = new Map();
   for (const p of placementsA) {
     if (p && p.taskId && p.proposedDate !== null) {
-      mapA.set(p.taskId, p.proposedDate);
+      mapA.set(getPlacementKey(p), { date: p.proposedDate, taskId: p.taskId, chunkIndex: p.chunkIndex });
     }
   }
 
   const mapB = new Map();
   for (const p of placementsB) {
     if (p && p.taskId && p.proposedDate !== null) {
-      mapB.set(p.taskId, p.proposedDate);
+      mapB.set(getPlacementKey(p), { date: p.proposedDate, taskId: p.taskId, chunkIndex: p.chunkIndex });
     }
   }
 
-  // Common scheduled tasks present in both schedules
-  const commonTaskIds = [];
+  // Common scheduled placements present in both schedules
+  const commonPlacementKeys = [];
   const dateDifferences = [];
 
-  for (const [taskId, dateA] of mapA.entries()) {
-    if (mapB.has(taskId)) {
-      commonTaskIds.push(taskId);
-      const dateB = mapB.get(taskId);
-      if (dateA !== dateB) {
-        const daysShift = getCalendarDaysDiff(dateA, dateB);
+  for (const [key, itemA] of mapA.entries()) {
+    if (mapB.has(key)) {
+      commonPlacementKeys.push(key);
+      const itemB = mapB.get(key);
+      if (itemA.date !== itemB.date) {
+        const daysShift = getCalendarDaysDiff(itemA.date, itemB.date);
         dateDifferences.push({
-          taskId,
-          dateA,
-          dateB,
+          placementKey: key,
+          taskId: itemA.taskId,
+          chunkIndex: itemA.chunkIndex,
+          dateA: itemA.date,
+          dateB: itemB.date,
           daysShift,
         });
       }
     }
   }
 
-  const commonCount = commonTaskIds.length;
+  const commonCount = commonPlacementKeys.length;
   const shiftedCount = dateDifferences.length;
   const churnRate = commonCount > 0
     ? Math.round((shiftedCount / commonCount) * 1000) / 1000

@@ -20,6 +20,21 @@
  */
 
 import { estimateTaskDuration } from '../telemetry/personalModel.js';
+import {
+  isTaskChunkable,
+  scheduleMultiDayTask,
+  DEFAULT_MIN_CHUNK_HOURS,
+  DEFAULT_MAX_CHUNK_HOURS,
+  calculateChunkPlan,
+} from './taskChunker.js';
+
+export {
+  isTaskChunkable,
+  scheduleMultiDayTask,
+  DEFAULT_MIN_CHUNK_HOURS,
+  DEFAULT_MAX_CHUNK_HOURS,
+  calculateChunkPlan,
+};
 
 export const DEFAULT_DAILY_CAPACITY_HOURS = 6.0;
 export const DEFAULT_HORIZON_DAYS = 14;
@@ -607,30 +622,35 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
     const meta = taskMeta.get(t.id);
 
     if (meta.effectiveHours > dailyCapacityHours) {
-      const originalDueDate = t.dueDate ? formatDateISO(t.dueDate) : null;
-      const conflictMsg = `Task effort (${meta.effectiveHours.toFixed(1)}h) exceeds daily capacity limit (${dailyCapacityHours}h/day). Manual task breakdown or capacity adjustment required.`;
+      if (isTaskChunkable(t, options)) {
+        // Multi-day chunkable task: allowed into ready queue!
+        schedulableCandidates.push(t);
+      } else {
+        const originalDueDate = t.dueDate ? formatDateISO(t.dueDate) : null;
+        const conflictMsg = `Task effort (${meta.effectiveHours.toFixed(1)}h) exceeds daily capacity limit (${dailyCapacityHours}h/day). Manual task breakdown or capacity adjustment required.`;
 
-      proposedPlacements.push({
-        taskId: t.id,
-        taskTitle: t.title,
-        taskPriority: t.priority || 'medium',
-        taskCategory: t.category || '',
-        originalDueDate,
-        proposedDate: null,
-        assignedDayIndex: -1,
-        effectiveHours: meta.effectiveHours,
-        durationSource: meta.durationSource,
-        appliedRatio: meta.appliedRatio,
-        isDateChanged: false,
-        status: 'oversized_exceeds_capacity',
-        placementStatus: 'oversized_exceeds_capacity',
-        placementReason: `Requires manual resolution: task effort (${meta.effectiveHours.toFixed(1)}h) exceeds daily working hours (${dailyCapacityHours}h/day)`,
-        explanation: `Requires manual resolution: task effort (${meta.effectiveHours.toFixed(1)}h) exceeds daily working hours (${dailyCapacityHours}h/day)`,
-        conflicts: [conflictMsg],
-      });
+        proposedPlacements.push({
+          taskId: t.id,
+          taskTitle: t.title,
+          taskPriority: t.priority || 'medium',
+          taskCategory: t.category || '',
+          originalDueDate,
+          proposedDate: null,
+          assignedDayIndex: -1,
+          effectiveHours: meta.effectiveHours,
+          durationSource: meta.durationSource,
+          appliedRatio: meta.appliedRatio,
+          isDateChanged: false,
+          status: 'oversized_exceeds_capacity',
+          placementStatus: 'oversized_exceeds_capacity',
+          placementReason: `Requires manual resolution: task effort (${meta.effectiveHours.toFixed(1)}h) exceeds daily working hours (${dailyCapacityHours}h/day)`,
+          explanation: `Requires manual resolution: task effort (${meta.effectiveHours.toFixed(1)}h) exceeds daily working hours (${dailyCapacityHours}h/day)`,
+          conflicts: [conflictMsg],
+        });
 
-      unscheduledTaskIds.add(t.id);
-      warnings.push(`Task "${t.title}" requires ${meta.effectiveHours.toFixed(1)}h, exceeding daily capacity (${dailyCapacityHours}h/day). Marked for manual resolution.`);
+        unscheduledTaskIds.add(t.id);
+        warnings.push(`Task "${t.title}" requires ${meta.effectiveHours.toFixed(1)}h, exceeding daily capacity (${dailyCapacityHours}h/day). Marked for manual resolution.`);
+      }
     } else {
       schedulableCandidates.push(t);
     }
@@ -712,6 +732,46 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
       if (taskAssignedSlotIndex.has(pId)) {
         minSlotIndex = Math.max(minSlotIndex, taskAssignedSlotIndex.get(pId));
       }
+    }
+
+    // If task exceeds daily capacity and is chunkable, schedule as multi-day chunks
+    if (meta.effectiveHours > dailyCapacityHours && isTaskChunkable(currentTask, options)) {
+      const chunkResult = scheduleMultiDayTask(
+        currentTask,
+        meta.effectiveHours,
+        calendarSlots,
+        minSlotIndex,
+        {
+          dailyCapacityHours,
+          minChunkHours: options.minChunkHours || DEFAULT_MIN_CHUNK_HOURS,
+          startDateStr,
+          durationSource: meta.durationSource,
+          appliedRatio: meta.appliedRatio,
+        }
+      );
+
+      for (const p of chunkResult.placements) {
+        proposedPlacements.push(p);
+      }
+
+      if (chunkResult.finalSlotIndex >= 0) {
+        taskAssignedSlotIndex.set(currentTask.id, chunkResult.finalSlotIndex);
+      } else {
+        unscheduledTaskIds.add(currentTask.id);
+      }
+
+      // Update inDegree of downstream dependents (cannot begin until FINAL segment completes)
+      const dependents = dependentsMap.get(currentTask.id) || [];
+      for (const depId of dependents) {
+        if (!remainingSchedulable.has(depId)) continue;
+        const curDeg = inDegree.get(depId) - 1;
+        inDegree.set(depId, curDeg);
+        if (curDeg === 0) {
+          const depTaskObj = schedulableCandidates.find((c) => c.id === depId);
+          if (depTaskObj) readyQueue.push(depTaskObj);
+        }
+      }
+      continue;
     }
 
     // Search for first working slot on or after minSlotIndex with sufficient remaining hours
@@ -911,23 +971,74 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
 
   // Step 7: Build Summary & Feasibility Status
   const totalEligibleTasks = eligibleTasks.length;
-  const scheduledCount = proposedPlacements.filter(
-    (p) => p.status === 'on_time' || p.status === 'deadline_missed' || p.status === 'overdue_at_start'
+
+  const scheduledTaskIds = new Set(
+    proposedPlacements
+      .filter((p) => p.status === 'on_time' || p.status === 'deadline_missed' || p.status === 'overdue_at_start')
+      .map((p) => p.taskId)
+  );
+  const scheduledCount = scheduledTaskIds.size;
+
+  const partiallyScheduledTaskIds = new Set(
+    proposedPlacements
+      .filter((p) => p.status === 'partially_allocated')
+      .map((p) => p.taskId)
+  );
+  const partiallyScheduledCount = partiallyScheduledTaskIds.size;
+
+  const unscheduledTaskIdsSet = new Set(
+    proposedPlacements
+      .filter((p) => p.status === 'unscheduled')
+      .map((p) => p.taskId)
+  );
+  const unscheduledCount = unscheduledTaskIdsSet.size;
+
+  const blockedTaskIdsSet = new Set(
+    proposedPlacements
+      .filter((p) => p.status === 'blocked_by_dependency')
+      .map((p) => p.taskId)
+  );
+  const blockedCount = blockedTaskIdsSet.size;
+
+  const oversizedTaskIdsSet = new Set(
+    proposedPlacements
+      .filter((p) => p.status === 'oversized_exceeds_capacity')
+      .map((p) => p.taskId)
+  );
+  const oversizedCount = oversizedTaskIdsSet.size;
+
+  const onTimeCount = new Set(
+    proposedPlacements
+      .filter((p) => p.status === 'on_time')
+      .map((p) => p.taskId)
+  ).size;
+
+  const missedDeadlineCount = new Set(
+    proposedPlacements
+      .filter((p) => p.status === 'deadline_missed')
+      .map((p) => p.taskId)
+  ).size;
+
+  const overdueAtStartCount = new Set(
+    proposedPlacements
+      .filter((p) => p.status === 'overdue_at_start')
+      .map((p) => p.taskId)
+  ).size;
+
+  const totalChunksScheduled = proposedPlacements.filter(
+    (p) => p.proposedDate !== null && (p.isChunk || p.chunkIndex !== undefined)
   ).length;
-  const unscheduledCount = proposedPlacements.filter((p) => p.status === 'unscheduled').length;
-  const blockedCount = proposedPlacements.filter((p) => p.status === 'blocked_by_dependency').length;
-  const oversizedCount = proposedPlacements.filter((p) => p.status === 'oversized_exceeds_capacity').length;
-  const onTimeCount = proposedPlacements.filter((p) => p.status === 'on_time').length;
-  const missedDeadlineCount = proposedPlacements.filter((p) => p.status === 'deadline_missed').length;
-  const overdueAtStartCount = proposedPlacements.filter((p) => p.status === 'overdue_at_start').length;
-  const dateChangesCount = proposedPlacements.filter(
-    (p) => p.isDateChanged && p.proposedDate !== null
-  ).length;
+
+  const dateChangesCount = new Set(
+    proposedPlacements
+      .filter((p) => p.isDateChanged && p.proposedDate !== null)
+      .map((p) => p.taskId)
+  ).size;
 
   let feasibilityStatus = 'feasible';
   if (cycles.length > 0 || blockedCount > 0) {
     feasibilityStatus = 'dependency_cycle';
-  } else if (oversizedCount > 0 || unscheduledCount > 0) {
+  } else if (oversizedCount > 0 || unscheduledCount > 0 || partiallyScheduledCount > 0) {
     feasibilityStatus = 'capacity_exceeded';
   } else if (missedDeadlineCount > 0 || overdueAtStartCount > 0) {
     feasibilityStatus = 'infeasible_deadlines';
@@ -940,6 +1051,8 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
     totalTasksEvaluated: totalEligibleTasks,
     scheduledCount,
     scheduledTasksCount: scheduledCount,
+    totalChunksScheduled,
+    partiallyScheduledCount,
     unscheduledCount,
     blockedCount,
     oversizedCount,

@@ -20,6 +20,7 @@ export default function AdaptiveScheduleModal({
   const [dailyCapacityHours, setDailyCapacityHours] = useState(6.0);
   const [horizonDays, setHorizonDays] = useState(14);
   const [usePersonalModel, setUsePersonalModel] = useState(true);
+  const [enableChunking, setEnableChunking] = useState(true);
   const [todayStr] = useState(() => formatDateISO(new Date()));
 
   const hasAppliedRef = useRef(false);
@@ -65,6 +66,7 @@ export default function AdaptiveScheduleModal({
       guardedPredictionsMap,
       startDate: todayStr,
       strategy: 'adaptive',
+      enableChunking,
     });
   }, [
     tasks,
@@ -75,6 +77,7 @@ export default function AdaptiveScheduleModal({
     dailyCapacityHours,
     horizonDays,
     usePersonalModel,
+    enableChunking,
     todayStr,
   ]);
 
@@ -348,6 +351,20 @@ export default function AdaptiveScheduleModal({
                   {usePersonalModel ? '✓ Learned Personal Duration' : '○ Original Estimates'}
                 </button>
               </div>
+
+              <div style={styles.configItem}>
+                <button
+                  type="button"
+                  onClick={() => setEnableChunking(!enableChunking)}
+                  style={{
+                    ...styles.toggleBtn,
+                    ...(enableChunking ? styles.toggleBtnActive : styles.toggleBtnInactive),
+                  }}
+                  title="Partition tasks exceeding daily capacity across multiple scheduled work sessions"
+                >
+                  {enableChunking ? '✓ Multi-Day Chunking' : '○ Single Session Only'}
+                </button>
+              </div>
             </div>
 
             {/* Metrics Ribbon */}
@@ -432,14 +449,19 @@ export default function AdaptiveScheduleModal({
                     } else if (isOverdueAtStart) {
                       statusLabel = 'Was Overdue';
                       statusPillStyle = { backgroundColor: '#FFF3C4', color: '#92400E' };
+                    } else if (p.allocationStatus === 'partially_allocated') {
+                      statusLabel = 'Partial Session';
+                      statusPillStyle = { backgroundColor: '#FFF3C4', color: '#92400E' };
                     } else if (p.status === 'unscheduled') {
                       statusLabel = 'Unscheduled';
                       statusPillStyle = { backgroundColor: '#F4F4F5', color: '#71717A' };
                     }
 
+                    const rowKey = p.placementId || (p.isChunk ? `${p.taskId}_seg_${p.chunkIndex}` : p.taskId);
+
                     return (
                       <div
-                        key={p.taskId}
+                        key={rowKey}
                         style={{
                           ...styles.taskRow,
                           ...(isShifted ? styles.taskRowShifted : {}),
@@ -450,6 +472,22 @@ export default function AdaptiveScheduleModal({
                           <div style={styles.taskTitleRow}>
                             <span style={styles.priorityIndicator(p.taskPriority)} />
                             <span style={styles.taskTitle}>{p.taskTitle}</span>
+                            {p.isChunk && (
+                              <span
+                                style={{
+                                  fontSize: '10px',
+                                  fontWeight: '700',
+                                  backgroundColor: '#EEF2FF',
+                                  color: '#4338CA',
+                                  border: '1px solid #C7D2FE',
+                                  borderRadius: '4px',
+                                  padding: '1px 6px',
+                                  marginLeft: '4px',
+                                }}
+                              >
+                                Session {p.chunkIndex + 1} of {p.totalChunks}
+                              </span>
+                            )}
                             {p.taskCategory && (
                               <span style={styles.categoryTag}>{p.taskCategory}</span>
                             )}
@@ -479,10 +517,15 @@ export default function AdaptiveScheduleModal({
                         </div>
 
                         <div style={{ flex: 1.2 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
                             <span style={styles.effortBadge(p.durationSource)}>
                               {p.effectiveHours.toFixed(1)}h
                             </span>
+                            {p.isChunk && typeof p.parentTotalEffort === 'number' && (
+                              <span style={{ fontSize: '10px', color: '#71717A' }} title={`Parent total effort: ${p.parentTotalEffort}h`}>
+                                ({p.parentTotalEffort.toFixed(1)}h total)
+                              </span>
+                            )}
                             {p.appliedRatio !== 1.0 && p.durationSource === 'personalized' && (
                               <span style={{ fontSize: '10px', color: '#5B44BA', fontWeight: '700' }}>
                                 ({(p.appliedRatio).toFixed(2)}x)

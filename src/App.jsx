@@ -664,7 +664,15 @@ export default function App() {
       return;
     }
 
-    const changedMap = new Map(changedPlacements.map((p) => [p.taskId, p.proposedDate]));
+    // Group by distinct parent task ID, setting parent dueDate to latest scheduled chunk date
+    const changedMap = new Map();
+    for (const p of changedPlacements) {
+      const existing = changedMap.get(p.taskId);
+      if (!existing || p.proposedDate > existing) {
+        changedMap.set(p.taskId, p.proposedDate);
+      }
+    }
+
     setTasks((prev) =>
       prev.map((t) => {
         if (changedMap.has(t.id)) {
@@ -674,12 +682,14 @@ export default function App() {
       })
     );
 
-    for (const p of changedPlacements) {
-      await telemetry.recordTaskRescheduled(p.taskId, p.originalDueDate, p.proposedDate, 'adaptive_scheduler');
+    for (const [taskId, newDueDate] of changedMap.entries()) {
+      const originalPlacement = placements.find((p) => p.taskId === taskId);
+      await telemetry.recordTaskRescheduled(taskId, originalPlacement?.originalDueDate || null, newDueDate, 'adaptive_scheduler');
     }
 
     await telemetry.recordRecommendationAction('adaptive_schedule', proposal.summary?.scheduleId || 'proposal', true, {
-      changesCount: changedPlacements.length,
+      changesCount: changedMap.size,
+      totalChunksApplied: changedPlacements.length,
       feasibility: proposal.summary?.feasibilityStatus || proposal.summary?.feasibility,
     });
 
@@ -687,7 +697,7 @@ export default function App() {
 
     setFeedback({
       type: 'success',
-      message: `Applied adaptive schedule: ${changedPlacements.length} task deadline${changedPlacements.length === 1 ? '' : 's'} updated.`,
+      message: `Applied adaptive schedule: ${changedMap.size} task deadline${changedMap.size === 1 ? '' : 's'} updated (${changedPlacements.length} session${changedPlacements.length === 1 ? '' : 's'} scheduled).`,
     });
   };
 

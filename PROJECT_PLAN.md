@@ -20,7 +20,7 @@ This document tracks the phased evolution of VoxPlan from a static task tracker 
 | **Phase 4, Stage 5** | Local Schedule Feedback & Outcome Tracking | **COMPLETED** | Versioned privacy-preserving telemetry schema (`SCHEMA_VERSION = 2`) recording proposal generation, acceptance, and discard actions; single-action deduplication; subsequent manual override detection (postponed vs advanced shifts); unaltered completion outcome matching; pure feedback analytics module (`scheduleFeedback.js`); modal feedback tab with explicit denominators and insufficient-data guards (< 3 observations); strict cautious learning boundary; and 110 automated tests across 27 suites. |
 | **Phase 4, Stage 6** | Schedule Feedback Integrity & Attribution Audit | **COMPLETED** | Stable session-scoped proposal identities; durable deduplication surviving page reloads without backend dependency (hydrating index from cached IndexedDB events on `telemetry.init()`); multi-proposal interval-based outcome attribution (`[acceptedAt, supersededAt)`); task lifecycle hardening (excluding reopened incomplete tasks & active backlog tasks); isolation of conflicting proposal decisions; standardized unique task denominators; privacy-preserving observability diagnostics; and 115 automated tests across 30 suites. |
 | **Phase 5** | Conversational Planning, Multi-Turn Dialog & Voice Experience | **IN PROGRESS (Stages 5.1 & 5.2 Completed)** | Multi-turn planning state machine, clarification dialog, natural language batch rescheduling & negotiation, conversational schedule debriefing, accessible Web Speech voice synthesis and typed fallback symmetry. |
-| **Phase 6** | Calendar-Aware Time-Blocking & Multi-Day Workload Modeling | **PLANNED** | Multi-day task chunking for oversized work, calendar focus time-blocking, meeting buffer constraints, interactive proposal canvas editing, and local RFC 5545 iCalendar (.ics) export (4 stages). |
+| **Phase 6** | Calendar-Aware Time-Blocking & Multi-Day Workload Modeling | **IN PROGRESS (Stage 6.1 Completed)** | Multi-day task chunking for oversized work, calendar focus time-blocking, meeting buffer constraints, interactive proposal canvas editing, and local RFC 5545 iCalendar (.ics) export (4 stages). |
 | **Phase 7** | Evidence-Gated Schedule Adaptation & Preference Learning | **PLANNED** | Longitudinal feedback maturity gate (20+ decisions, 15+ outcomes), empirical friction analysis, bounded heuristic weight tuning ($\pm 20\%$) with Bayesian shrinkage, simulation sandbox, and one-click rollback (4 stages). |
 | **Phase 8** | Production Hardening, Accessibility, Security & Release Readiness | **PLANNED** | Full WCAG 2.1 AA accessibility compliance, keyboard navigation, schema-versioned data lifecycle & encrypted backup, bundle code-splitting, PWA offline resilience, and CI/CD release verification (4 stages). |
 
@@ -1919,24 +1919,61 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
 
 ---
 
-### Phase 6: Calendar-Aware Time-Blocking & Multi-Day Workload Modeling (PLANNED)
+### Phase 6: Calendar-Aware Time-Blocking & Multi-Day Workload Modeling (IN PROGRESS)
 
 **User-Facing Objective**: Allow users to schedule long-running tasks across multiple consecutive days, allocate focused intra-day time blocks (morning deep work, afternoon admin), avoid meeting collisions, and export schedule proposals to standard calendar software via `.ics`.
 
-#### Stage 6.1: Multi-Day Chunking & Segment Modeling for Oversized Tasks
+#### Stage 6.1: Multi-Day Chunking & Segment Modeling for Oversized Tasks (COMPLETED)
 - **Scope & Expected Deliverables**:
-  - Task chunking module (`src/scheduler/taskChunker.js`) allowing tasks exceeding daily working capacity (e.g. 14h task under 6h/day capacity) to be split into coherent daily segments across consecutive working weekdays.
-  - Configurable minimum chunk duration (default 2.0h) to prevent excessive micro-fragmentation.
-  - Segment tracking: each segment records `segmentIndex`, `totalSegments`, `allocatedHours`, and `scheduledDate`, linking back to master `taskId`.
-- **Dependencies**: Phase 4 `adaptiveScheduler.js`.
+  - Deterministic task chunking engine (`src/scheduler/taskChunker.js`) enabling tasks exceeding single-session or daily capacity (e.g. 8h or 14h tasks under 4h or 6h/day capacity) to be partitioned into coherent daily work sessions across eligible horizon days.
+  - Multi-session proposal representation: proposals represent multiple work sessions per parent task with stable placement and chunk IDs, per-session duration, parent total effort, and allocation status.
+  - Strict preservation of parent task identity: the parent task remains authoritative in task storage (zero duplicate tasks created in user task store).
+  - Conservative, configurable session constraints: minimum chunk duration (default 1.0h, max 2.0h or remaining effort) and maximum chunk duration (bounded by daily capacity).
+  - Precedence hierarchy: explicit task-level opt-in (`chunkable: true`) or opt-out (`atomic: true`, `chunkable: false`) takes precedence over global scheduler toggle (`enableChunking`). Tasks that fit in one session remain unsplit.
+  - Dynamic adaptive allocation with lookahead tail-smoothing: allocations respect varying daily capacities, non-working days, and strict deadline boundaries (allocation stops before deadline; unscheduled hours reported honestly with `partially_allocated` status).
+  - Topological dependency preservation: downstream tasks depending on a chunked task wait until the *final* chunk's slot index before becoming ready in Kahn's algorithm.
+  - Multi-session schedule stability evaluation: `evaluateScheduleStability` in `scheduleEvaluator.js` tracks placements by unique `placementId` to compare multi-chunk schedules without collapsing placements.
+  - Grounded conversational explanations: `scheduleDebrief.js` and `dialogueManager.js` support queries for `why_split`, `work_scheduled`, `work_unscheduled`, `why_not_fit_before_deadline`, and `session_count` with zero hallucinations and strictly read-only execution.
+  - UI integration: `AdaptiveScheduleModal.jsx` and `CommandBar.jsx` provide multi-session badges (`Session X of Y`), total effort display, chunking toggles, and partial allocation warning pills; `App.jsx` handles proposal application cleanly without task duplication or double telemetry emission.
+- **Dependencies**: Phase 4 `adaptiveScheduler.js`, Phase 5 `dialogueManager.js`.
 - **Acceptance Criteria**:
-  - Oversized tasks are no longer blocked with `oversized_exceeds_capacity` when sufficient multi-day horizon exists.
-  - Daily capacity constraints ($C_{max}$) remain strictly enforced across all days; segments never exceed remaining day capacity.
-  - Segment $k+1$ is strictly scheduled on or after the day of segment $k$.
-  - Completing or rescheduling a multi-day task updates its constituent segments consistently.
-- **Verification**:
-  - Unit tests evaluating tasks of 8h, 14h, and 30h across varying daily capacities (4h, 6h, 8h) verifying zero capacity overrun and strictly monotonic segment dates (`tests/task_chunker.test.js`).
-- **Safety & Invariants**: Total allocated segment hours strictly equal task total effort; DAG dependencies on multi-day tasks enforce that downstream tasks cannot begin until the *final* segment completes.
+  - [x] Oversized tasks split into valid work sessions across eligible days when chunking is enabled/supported.
+  - [x] Parent task remains authoritative with stable ID; no duplicate tasks created in the task list.
+  - [x] Daily capacity ($C_{max}$) is never exceeded on any scheduled day.
+  - [x] Sum of proposed chunk durations equals total allocated effort (within floating precision).
+  - [x] Strictly monotonic progression: session $k+1$ is scheduled on or after session $k$.
+  - [x] Downstream dependents wait for final chunk completion.
+  - [x] Feasible small tasks fitting in one session remain unsplit.
+  - [x] Hard deadlines strictly respected; tasks unable to fit before deadline report partial allocation honestly without pushing work beyond deadline.
+  - [x] Proposal comparison and stability metrics handle multiple placements per parent task without collapsing.
+  - [x] Acceptance and rejection workflows operate idempotently; application updates parent due date to final chunk date without task duplication.
+  - [x] Conversational dialogue answers chunking questions using grounded schedule evidence.
+  - [x] 100% backward compatibility: single-placement proposals and legacy tasks remain unaffected.
+- **Verification & Test Results**:
+  - Automated unit, integration, and regression test suite: **342 passed across 69 suites** (`npm test`), including 26 dedicated tests in `tests/task_chunker.test.js`.
+  - Backend test suite: **27 passed** (`python -m pytest backend/tests/ -q`).
+  - Code hygiene: **0 warnings, 0 errors** across 48 files (`npm run lint` / `oxlint`).
+  - Production build: **Vite build completed successfully** in 342ms (`npm run build`).
+  - Browser verification: Verified in local browser (`http://localhost:5173/#command`) using `browser_subagent`. Verified Adaptive Sprint Planner opens, Multi-Day Chunking toggle is responsive, multi-day chunked sessions render with `Session X of Y` badges, and parent total effort is displayed accurately.
+- **Files Added / Modified**:
+  - `src/scheduler/taskChunker.js` (NEW): Core chunking logic, feasibility checks, chunk planning, and multi-day calendar slot allocation.
+  - `tests/task_chunker.test.js` (NEW): 26 automated unit and integration tests covering chunking invariants, capacity enforcement, deadlines, proposal comparison, debriefing, and backward compatibility.
+  - `src/scheduler/adaptiveScheduler.js`: Integrated multi-day chunk allocation into Kahn's topological scheduler, final-chunk dependent unblocking, and multi-session proposal summary.
+  - `src/scheduler/scheduleEvaluator.js`: Updated stability evaluation to track placements by unique placement identity rather than taskId alone.
+  - `src/conversation/scheduleDebrief.js`: Enriched `explainScheduleDecision` with grounded explanations for split reasons, scheduled/unscheduled effort, deadline constraints, and session counts.
+  - `src/conversation/dialogueManager.js`: Added natural-language pattern matching for chunking queries in both pending proposal and idle debrief states.
+  - `src/components/AdaptiveScheduleModal.jsx`: Added Multi-Day Chunking toggle, session badges, total parent effort indicators, and partial allocation warning badges.
+  - `src/components/CommandBar.jsx`: Updated schedule proposal preview list to display session badges and effort breakdown with unique placement keys.
+  - `src/App.jsx`: Updated schedule application logic to aggregate chunks by parent task and update due dates without creating duplicate tasks.
+  - `PROJECT_PLAN.md`: Updated authoritative project plan with Phase 6.1 completion record and roadmap status.
+- **Git Commits & Push Verification**:
+  - Implementation Commit: `feat(phase-6): add multi-day task chunking foundation`
+  - Push status: Verified pushed to `origin main` at `https://github.com/kanwal-vyas/VoxPlan`.
+- **Status**: **COMPLETED**.
+- **Remaining Limitations & Deferred Work**:
+  - Intra-day focus windows and calendar blackout constraints deferred to Stage 6.2.
+  - Interactive proposal drag-and-drop editing canvas deferred to Stage 6.3.
+  - Standard RFC 5545 iCalendar (`.ics`) export deferred to Stage 6.4.
 
 #### Stage 6.2: Intra-Day Time-Blocking & Focus Window Constraints
 - **Scope & Expected Deliverables**:

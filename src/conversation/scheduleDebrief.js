@@ -70,6 +70,7 @@ function formatDayOffset(diff) {
 export function explainScheduleDecision({
   targetTask,
   targetDateQuery = null,
+  inquiryType = null,
   tasks = [],
   activeProposal = null,
   proposalHistory = [],
@@ -90,14 +91,16 @@ export function explainScheduleDecision({
   const now = new Date(clock());
   const todayISO = formatISODate(now);
 
-  // 1. Locate relevant placement:
+  // 1. Locate relevant placement(s):
   // First check active proposal, then proposalHistory in reverse order (accepted first, then any)
   let placement = null;
   let sourceProposal = null;
+  let allPlacements = [];
 
   if (activeProposal && Array.isArray(activeProposal.proposedPlacements || activeProposal.placements)) {
     const list = activeProposal.proposedPlacements || activeProposal.placements;
-    placement = list.find((p) => (p.taskId || p.task_id) === targetTask.id) || null;
+    allPlacements = list.filter((p) => (p.taskId || p.task_id) === targetTask.id);
+    placement = allPlacements[0] || null;
     if (placement) sourceProposal = activeProposal;
   }
 
@@ -107,9 +110,9 @@ export function explainScheduleDecision({
       const prop = proposalHistory[i];
       if (prop.status === 'accepted') {
         const list = prop.proposedPlacements || prop.placements || [];
-        const found = list.find((p) => (p.taskId || p.task_id) === targetTask.id);
-        if (found) {
-          placement = found;
+        allPlacements = list.filter((p) => (p.taskId || p.task_id) === targetTask.id);
+        if (allPlacements.length > 0) {
+          placement = allPlacements[0];
           sourceProposal = prop;
           break;
         }
@@ -121,9 +124,9 @@ export function explainScheduleDecision({
       for (let i = proposalHistory.length - 1; i >= 0; i--) {
         const prop = proposalHistory[i];
         const list = prop.proposedPlacements || prop.placements || [];
-        const found = list.find((p) => (p.taskId || p.task_id) === targetTask.id);
-        if (found) {
-          placement = found;
+        allPlacements = list.filter((p) => (p.taskId || p.task_id) === targetTask.id);
+        if (allPlacements.length > 0) {
+          placement = allPlacements[0];
           sourceProposal = prop;
           break;
         }
@@ -136,12 +139,187 @@ export function explainScheduleDecision({
   const taskPriority = String(targetTask.priority || 'medium').toLowerCase();
   const estimatedHours = typeof targetTask.estimatedEffort === 'number' && targetTask.estimatedEffort > 0
     ? targetTask.estimatedEffort
-    : placement?.effectiveHours || DEFAULT_TASK_FALLBACK_HOURS;
+    : (placement?.parentTotalEffort || placement?.effectiveHours || DEFAULT_TASK_FALLBACK_HOURS);
+
+  const isChunked = allPlacements.length > 1 || placement?.isChunk === true;
+  const totalScheduledHours = allPlacements.length > 0
+    ? allPlacements.reduce((sum, p) => sum + (p.chunkDuration || p.effectiveHours || 0), 0)
+    : 0;
+  const unscheduledHours = typeof placement?.unscheduledHours === 'number'
+    ? placement.unscheduledHours
+    : Math.max(0, estimatedHours - totalScheduledHours);
 
   // Prerequisites analysis
   const prereqIds = Array.isArray(targetTask.dependencies) ? targetTask.dependencies : [];
   const prereqTasks = tasks.filter((t) => prereqIds.includes(t.id));
   const uncompletedPrereqs = prereqTasks.filter((t) => !t.completed);
+
+  // SPECIAL INQUIRY 1: Why was task split?
+  if (inquiryType === 'why_split') {
+    const isAccepted = sourceProposal?.status === 'accepted';
+    if (isChunked) {
+      const daysCount = new Set(allPlacements.map((p) => p.proposedDate || p.proposed_date)).size;
+      const sessionsList = allPlacements.map((p) => `${p.proposedDate || p.proposed_date} (${(p.chunkDuration || p.effectiveHours || 0)}h)`).join(', ');
+      const responseText = `Task "${taskTitle}" requires ${estimatedHours}h of estimated effort, which exceeds your daily working capacity of ${dailyCapacityHours}h/day. To respect daily capacity limits and existing commitments, it was split across ${daysCount} separate day(s) into ${allPlacements.length} work session(s): ${sessionsList}.`;
+      const spokenSummary = `Task "${taskTitle}" was split across ${daysCount} days because its ${estimatedHours}-hour effort exceeds your daily capacity of ${dailyCapacityHours} hours.`;
+      return {
+        success: true,
+        taskId: targetTask.id,
+        taskTitle,
+        decisionType: isAccepted ? 'accepted_schedule' : 'proposed_placement',
+        status: placement?.status || 'on_time',
+        responseText,
+        spokenSummary,
+        evidence: {
+          reasonCode: 'task_chunked_exceeds_daily_capacity',
+          totalEffort: estimatedHours,
+          dailyCapacityHours,
+          sessionCount: allPlacements.length,
+          sessions: allPlacements.map((p) => ({
+            date: p.proposedDate || p.proposed_date,
+            duration: p.chunkDuration || p.effectiveHours,
+          })),
+        },
+      };
+    } else {
+      const responseText = `Task "${taskTitle}" was not split because its estimated effort (${estimatedHours}h) fits within your daily working capacity (${dailyCapacityHours}h/day) in a single session.`;
+      const spokenSummary = `"${taskTitle}" was not split as it fits within daily capacity in one session.`;
+      return {
+        success: true,
+        taskId: targetTask.id,
+        taskTitle,
+        decisionType: isAccepted ? 'accepted_schedule' : 'proposed_placement',
+        status: placement?.status || 'on_time',
+        responseText,
+        spokenSummary,
+        evidence: {
+          reasonCode: 'task_not_chunked_fits_capacity',
+          totalEffort: estimatedHours,
+          dailyCapacityHours,
+        },
+      };
+    }
+  }
+
+  // SPECIAL INQUIRY 2: How much work is scheduled for this task?
+  if (inquiryType === 'work_scheduled') {
+    const isAccepted = sourceProposal?.status === 'accepted';
+    const responseText = allPlacements.length > 0
+      ? `A total of ${totalScheduledHours}h of work is scheduled for task "${taskTitle}" across ${allPlacements.length} session(s)${unscheduledHours > 0 ? ` (${unscheduledHours}h remains unscheduled)` : ''}.`
+      : `There is currently 0h of work scheduled for task "${taskTitle}".`;
+    const spokenSummary = `${totalScheduledHours} hours of work are scheduled for "${taskTitle}".`;
+    return {
+      success: true,
+      taskId: targetTask.id,
+      taskTitle,
+      decisionType: isAccepted ? 'accepted_schedule' : 'proposed_placement',
+      status: placement?.status || (allPlacements.length > 0 ? 'on_time' : 'unscheduled'),
+      responseText,
+      spokenSummary,
+      evidence: {
+        reasonCode: 'work_scheduled_query',
+        scheduledHours: totalScheduledHours,
+        totalEffort: estimatedHours,
+        unscheduledHours,
+        sessionCount: allPlacements.length,
+      },
+    };
+  }
+
+  // SPECIAL INQUIRY 3: How much of this task remains unscheduled?
+  if (inquiryType === 'work_unscheduled') {
+    const isAccepted = sourceProposal?.status === 'accepted';
+    const responseText = unscheduledHours > 0
+      ? `Task "${taskTitle}" has ${unscheduledHours}h of unscheduled work remaining out of ${estimatedHours}h total estimated effort.`
+      : `Task "${taskTitle}" has 0h of unscheduled work remaining; all required effort is fully scheduled.`;
+    const spokenSummary = unscheduledHours > 0
+      ? `${unscheduledHours} hours remain unscheduled for "${taskTitle}".`
+      : `"${taskTitle}" has zero unscheduled hours.`;
+    return {
+      success: true,
+      taskId: targetTask.id,
+      taskTitle,
+      decisionType: isAccepted ? 'accepted_schedule' : 'proposed_placement',
+      status: placement?.status || 'on_time',
+      responseText,
+      spokenSummary,
+      evidence: {
+        reasonCode: 'work_unscheduled_query',
+        unscheduledHours,
+        totalEffort: estimatedHours,
+        scheduledHours: totalScheduledHours,
+      },
+    };
+  }
+
+  // SPECIAL INQUIRY 4: Why couldn't you fit the whole task before its deadline?
+  if (inquiryType === 'why_not_fit_before_deadline') {
+    const isAccepted = sourceProposal?.status === 'accepted';
+    const deadlineLabel = originalDueDate || 'its deadline';
+    if (unscheduledHours > 0) {
+      const responseText = `Task "${taskTitle}" could not be fully fitted before its deadline (${deadlineLabel}) because available daily capacity across eligible working days was insufficient to accommodate the full ${estimatedHours}h effort (${unscheduledHours}h unscheduled). Under scheduling invariants, work is never scheduled past the deadline.`;
+      const spokenSummary = `Insufficient daily capacity before ${deadlineLabel} prevented scheduling the full effort for "${taskTitle}".`;
+      return {
+        success: true,
+        taskId: targetTask.id,
+        taskTitle,
+        decisionType: isAccepted ? 'accepted_schedule' : 'proposed_placement',
+        status: 'partially_allocated',
+        responseText,
+        spokenSummary,
+        evidence: {
+          reasonCode: 'deadline_capacity_deficit',
+          deadline: originalDueDate,
+          totalEffort: estimatedHours,
+          scheduledHours: totalScheduledHours,
+          unscheduledHours,
+        },
+      };
+    } else {
+      const responseText = `Task "${taskTitle}" was successfully fitted before its deadline (${deadlineLabel}), with all ${totalScheduledHours}h scheduled across ${allPlacements.length} session(s).`;
+      const spokenSummary = `"${taskTitle}" was fully scheduled before its deadline.`;
+      return {
+        success: true,
+        taskId: targetTask.id,
+        taskTitle,
+        decisionType: isAccepted ? 'accepted_schedule' : 'proposed_placement',
+        status: 'on_time',
+        responseText,
+        spokenSummary,
+        evidence: {
+          reasonCode: 'deadline_satisfied',
+          deadline: originalDueDate,
+          scheduledHours: totalScheduledHours,
+        },
+      };
+    }
+  }
+
+  // SPECIAL INQUIRY 5: How many sessions did you propose for this task?
+  if (inquiryType === 'session_count') {
+    const isAccepted = sourceProposal?.status === 'accepted';
+    const sessionCount = allPlacements.length;
+    const daysCount = new Set(allPlacements.map((p) => p.proposedDate || p.proposed_date)).size;
+    const responseText = sessionCount > 0
+      ? `VoxPlan proposed ${sessionCount} work session(s) for task "${taskTitle}", totaling ${totalScheduledHours}h across ${daysCount} day(s).`
+      : `No sessions are proposed for task "${taskTitle}".`;
+    const spokenSummary = `${sessionCount} session${sessionCount === 1 ? '' : 's'} proposed for "${taskTitle}".`;
+    return {
+      success: true,
+      taskId: targetTask.id,
+      taskTitle,
+      decisionType: isAccepted ? 'accepted_schedule' : 'proposed_placement',
+      status: placement?.status || 'on_time',
+      responseText,
+      spokenSummary,
+      evidence: {
+        reasonCode: 'session_count_query',
+        sessionCount,
+        daysCount,
+        scheduledHours: totalScheduledHours,
+      },
+    };
+  }
 
   // CASE 1: Placement Found in Proposal
   if (placement) {
@@ -302,6 +480,34 @@ export function explainScheduleDecision({
     }
 
     // 1e. Standard explanation: Why was it placed on proposedDate?
+    if (isChunked && !targetDateQuery) {
+      const daysCount = new Set(allPlacements.map((p) => p.proposedDate || p.proposed_date)).size;
+      const sessionsList = allPlacements.map((p) => `${p.proposedDate || p.proposed_date} (${(p.chunkDuration || p.effectiveHours || 0)}h)`).join(', ');
+      const responseText = `In ${proposalLabel}, "${taskTitle}" was partitioned into ${allPlacements.length} work sessions across ${daysCount} days (${sessionsList}), totaling ${totalScheduledHours}h, to fit within your ${dailyCapacityHours}h/day capacity limit.${unscheduledHours > 0 ? ` Note: ${unscheduledHours}h remains unscheduled due to deadline and capacity limits.` : ''}`;
+      const spokenSummary = `"${taskTitle}" was scheduled across ${allPlacements.length} sessions totaling ${totalScheduledHours} hours.`;
+      return {
+        success: true,
+        taskId: targetTask.id,
+        taskTitle,
+        decisionType: isAccepted ? 'accepted_schedule' : 'proposed_placement',
+        scheduledDate: proposedDate,
+        status,
+        responseText,
+        spokenSummary,
+        evidence: {
+          reasonCode: 'task_chunked',
+          totalEffort: estimatedHours,
+          scheduledHours: totalScheduledHours,
+          unscheduledHours,
+          sessionCount: allPlacements.length,
+          sessions: allPlacements.map((p) => ({
+            date: p.proposedDate || p.proposed_date,
+            duration: p.chunkDuration || p.effectiveHours,
+          })),
+        },
+      };
+    }
+
     const reasons = [];
 
     if (originalDueDate) {

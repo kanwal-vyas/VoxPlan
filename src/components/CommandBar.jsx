@@ -441,44 +441,63 @@ export default function CommandBar({
 
               {/* Placements Diff List */}
               <div style={styles.placementsList}>
-                {(activeProposal.proposedPlacements || activeProposal.placements || []).map((p) => (
-                  <div key={p.taskId} style={styles.placementItem}>
-                    <div style={styles.placementLeft}>
-                      <span style={styles.placementTitle}>{p.taskTitle || p.taskId}</span>
-                      <span style={styles.placementDates}>
-                        <span style={styles.origDate}>{p.originalDueDate || 'No deadline'}</span>
-                        <span style={styles.arrowIcon}> ➜ </span>
-                        <strong style={styles.propDate}>{p.proposedDate || 'Unscheduled'}</strong>
-                      </span>
+                {(activeProposal.proposedPlacements || activeProposal.placements || []).map((p) => {
+                  const itemKey = p.placementId || (p.isChunk ? `${p.taskId}_seg_${p.chunkIndex}` : p.taskId);
+                  return (
+                    <div key={itemKey} style={styles.placementItem}>
+                      <div style={styles.placementLeft}>
+                        <span style={styles.placementTitle}>
+                          {p.taskTitle || p.taskId}
+                          {p.isChunk && (
+                            <span style={{ fontSize: '11px', color: '#4338CA', marginLeft: '6px', fontWeight: '700' }}>
+                              [Session {p.chunkIndex + 1}/{p.totalChunks}]
+                            </span>
+                          )}
+                        </span>
+                        <span style={styles.placementDates}>
+                          <span style={styles.origDate}>{p.originalDueDate || 'No deadline'}</span>
+                          <span style={styles.arrowIcon}> ➜ </span>
+                          <strong style={styles.propDate}>{p.proposedDate || 'Unscheduled'}</strong>
+                        </span>
+                      </div>
+                      <div style={styles.placementRight}>
+                        <span style={styles.effortTag}>
+                          {(p.chunkDuration || p.effectiveHours || 2.0).toFixed(1)}h
+                          {p.isChunk && p.parentTotalEffort && ` of ${p.parentTotalEffort.toFixed(1)}h`}
+                        </span>
+                        <span
+                          style={{
+                            ...styles.statusTag,
+                            backgroundColor:
+                              p.status === 'blocked_by_dependency'
+                                ? '#FFE8E5'
+                                : p.allocationStatus === 'partially_allocated'
+                                ? '#FEF3C7'
+                                : p.status === 'capacity_warning'
+                                ? '#FFF4E5'
+                                : '#EBF8F1',
+                            color:
+                              p.status === 'blocked_by_dependency'
+                                ? '#991B1B'
+                                : p.allocationStatus === 'partially_allocated'
+                                ? '#92400E'
+                                : p.status === 'capacity_warning'
+                                ? '#B45309'
+                                : '#166534',
+                          }}
+                        >
+                          {p.status === 'blocked_by_dependency'
+                            ? 'Blocked'
+                            : p.allocationStatus === 'partially_allocated'
+                            ? 'Partial'
+                            : p.status === 'capacity_warning'
+                            ? 'Over Capacity'
+                            : 'On Time'}
+                        </span>
+                      </div>
                     </div>
-                    <div style={styles.placementRight}>
-                      <span style={styles.effortTag}>{p.effectiveHours || 2.0}h</span>
-                      <span
-                        style={{
-                          ...styles.statusTag,
-                          backgroundColor:
-                            p.status === 'blocked_by_dependency'
-                              ? '#FFE8E5'
-                              : p.status === 'capacity_warning'
-                              ? '#FFF4E5'
-                              : '#EBF8F1',
-                          color:
-                            p.status === 'blocked_by_dependency'
-                              ? '#991B1B'
-                              : p.status === 'capacity_warning'
-                              ? '#B45309'
-                              : '#166534',
-                        }}
-                      >
-                        {p.status === 'blocked_by_dependency'
-                          ? 'Blocked'
-                          : p.status === 'capacity_warning'
-                          ? 'Over Capacity'
-                          : 'On Time'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Action Buttons */}
