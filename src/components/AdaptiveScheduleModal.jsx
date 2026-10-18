@@ -9,19 +9,26 @@ import {
   applyPlacementEdit,
   validateFullProposal,
 } from '../scheduler/proposalEditor';
+import {
+  generateIcsCalendar,
+  downloadIcsFile,
+  extractExportableSessions,
+} from '../scheduler/icalExporter';
 
 export default function AdaptiveScheduleModal({
   tasks = [],
   events = [],
   personalDurationModel = null,
   guardedPredictionsMap = {},
+  acceptedSchedule = null,
+  onExportSchedule = null,
   isOpen = false,
   onClose,
   onApplySchedule,
   onProposalGenerated,
   onDiscardSchedule,
 }) {
-  const [activeTab, setActiveTab] = useState('proposal'); // 'proposal' | 'benchmark' | 'feedback'
+  const [activeTab, setActiveTab] = useState('proposal'); // 'proposal' | 'benchmark' | 'feedback' | 'export'
   const [selectedScenarioKey, setSelectedScenarioKey] = useState('current');
   const [dailyCapacityHours, setDailyCapacityHours] = useState(6.0);
   const [horizonDays, setHorizonDays] = useState(14);
@@ -220,6 +227,56 @@ export default function AdaptiveScheduleModal({
       }
     }
   }, [isOpen, proposal, onProposalGenerated]);
+
+  // Phase 6.4: RFC 5545 Calendar Export State
+  const [exportFeedback, setExportFeedback] = useState(null);
+  const [includeTzid, setIncludeTzid] = useState(false);
+
+  const acceptedExportInfo = useMemo(() => {
+    if (!acceptedSchedule) return null;
+    return extractExportableSessions(acceptedSchedule, tasks);
+  }, [acceptedSchedule, tasks]);
+
+  const handleDownloadIcs = () => {
+    if (!acceptedSchedule) {
+      setExportFeedback({
+        type: 'error',
+        message: 'No accepted schedule to export. Please review and apply an adaptive schedule first.',
+      });
+      return;
+    }
+
+    try {
+      const detectedTz = typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : null;
+      const options = {
+        tasks,
+        tzid: includeTzid && detectedTz ? detectedTz : undefined,
+      };
+      const result = generateIcsCalendar(acceptedSchedule, options);
+      if (result.sessionCount === 0) {
+        setExportFeedback({
+          type: 'warning',
+          message: 'The accepted schedule contains 0 timed sessions to export.',
+        });
+        return;
+      }
+
+      const downloadResult = downloadIcsFile(result.ics);
+      setExportFeedback({
+        type: 'success',
+        message: `Successfully exported ${result.sessionCount} focus session(s) to ${downloadResult.filename}.${result.omittedCount > 0 ? ` (${result.omittedCount} unscheduled/blocked items omitted)` : ''}`,
+      });
+
+      if (onExportSchedule) {
+        onExportSchedule(acceptedSchedule);
+      }
+    } catch (err) {
+      setExportFeedback({
+        type: 'error',
+        message: `Calendar export failed: ${err.message}`,
+      });
+    }
+  };
 
   const handleStartEdit = (p) => {
     setEditingPlacementId(p.placementId);
@@ -450,6 +507,19 @@ export default function AdaptiveScheduleModal({
             }}
           >
             📈 Schedule Feedback & Outcomes
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('export');
+              setExportFeedback(null);
+            }}
+            style={{
+              ...styles.navTabBtn,
+              ...(activeTab === 'export' ? styles.navTabBtnActive : styles.navTabBtnInactive),
+            }}
+          >
+            📅 Export Calendar (.ics)
           </button>
         </div>
 
@@ -931,6 +1001,19 @@ export default function AdaptiveScheduleModal({
                 🔒 <strong>Safe Proposal:</strong> VoxPlan will not alter any saved task until you click "Apply Schedule".
               </div>
               <div style={styles.btnRow}>
+                {acceptedSchedule && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('export');
+                      setExportFeedback(null);
+                    }}
+                    style={styles.exportQuickBtn}
+                    title="Export accepted schedule to .ics calendar file"
+                  >
+                    📅 Export Calendar (.ics)
+                  </button>
+                )}
                 <button type="button" onClick={() => handleDiscard('user_discard')} style={styles.discardBtn}>
                   Discard Proposal
                 </button>
@@ -1321,6 +1404,207 @@ export default function AdaptiveScheduleModal({
             </div>
 
             {/* Feedback Footer */}
+            <div style={styles.footer}>
+              <button
+                type="button"
+                onClick={() => setActiveTab('proposal')}
+                style={styles.discardBtn}
+              >
+                ← Return to Schedule Proposal
+              </button>
+              <button type="button" onClick={onClose} style={styles.discardBtn}>
+                Close Modal
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: CALENDAR EXPORT (RFC 5545 .ICS) */}
+        {activeTab === 'export' && (
+          <div style={styles.exportContainer}>
+            <div style={styles.exportHeaderCard}>
+              <div style={styles.exportTitleRow}>
+                <div>
+                  <div style={styles.exportTag}>PHASE 6.4 EXPORTER</div>
+                  <h3 style={styles.exportTitle}>Export Accepted Schedule (.ics)</h3>
+                </div>
+                {acceptedSchedule && (
+                  <span style={styles.exportStatusBadge}>
+                    ✓ Ready to Export ({acceptedExportInfo?.validSessions?.length || 0} sessions)
+                  </span>
+                )}
+              </div>
+              <p style={styles.exportDescription}>
+                Download a standards-compliant RFC 5545 iCalendar (<code>.ics</code>) file of your accepted sprint schedule.
+                Compatible with Google Calendar, Apple Calendar, Microsoft Outlook, and any standard calendar software.
+              </p>
+            </div>
+
+            {/* Disclaimer & Constraints Callout */}
+            <div style={styles.exportNoticeGrid}>
+              <div style={styles.exportNoticeBox}>
+                <div style={styles.exportNoticeTitle}>🔒 One-Time Snapshot Notice</div>
+                <div style={styles.exportNoticeText}>
+                  This export generates a static calendar snapshot at the moment of download.
+                  VoxPlan is local-first and does <strong>not</strong> establish continuous background synchronization or request access to external calendar accounts.
+                </div>
+              </div>
+              <div style={styles.exportNoticeBox}>
+                <div style={styles.exportNoticeTitle}>🕒 Local Time-Blocking (Floating Time)</div>
+                <div style={styles.exportNoticeText}>
+                  Sessions are exported in RFC 5545 local wall-clock floating time (<code>FORM #1</code>), preserving your exact local work hours and avoiding timezone offset drift.
+                </div>
+              </div>
+            </div>
+
+            {acceptedSchedule ? (
+              <div style={styles.acceptedScheduleBox}>
+                {/* Metrics ribbon */}
+                <div style={styles.acceptedMetricsRow}>
+                  <div style={styles.acceptedMetricItem}>
+                    <span style={styles.acceptedMetricLabel}>Accepted Schedule ID:</span>
+                    <span style={styles.acceptedMetricVal}><code>{acceptedSchedule.summary?.scheduleId || 'accepted'}</code></span>
+                  </div>
+                  <div style={styles.acceptedMetricItem}>
+                    <span style={styles.acceptedMetricLabel}>Accepted Timestamp:</span>
+                    <span style={styles.acceptedMetricVal}>
+                      {acceptedSchedule.acceptedAt ? new Date(acceptedSchedule.acceptedAt).toLocaleString() : 'Recent Session'}
+                    </span>
+                  </div>
+                  <div style={styles.acceptedMetricItem}>
+                    <span style={styles.acceptedMetricLabel}>Valid Sessions:</span>
+                    <span style={{ ...styles.acceptedMetricVal, color: '#1B5E3C', fontWeight: '800' }}>
+                      {acceptedExportInfo?.validSessions?.length || 0}
+                    </span>
+                  </div>
+                  {acceptedExportInfo && acceptedExportInfo.omittedSessions.length > 0 && (
+                    <div style={styles.acceptedMetricItem}>
+                      <span style={styles.acceptedMetricLabel}>Omitted Items:</span>
+                      <span style={{ ...styles.acceptedMetricVal, color: '#92400E', fontWeight: '800' }}>
+                        {acceptedExportInfo.omittedSessions.length} (unscheduled/blocked)
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Optional Timezone Control */}
+                <div style={styles.tzOptionRow}>
+                  <label style={styles.tzOptionLabel}>
+                    <input
+                      type="checkbox"
+                      checked={includeTzid}
+                      onChange={(e) => setIncludeTzid(e.target.checked)}
+                      style={{ marginRight: '8px', cursor: 'pointer' }}
+                    />
+                    <span>
+                      Attach local timezone parameter (<code>TZID={typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'local'}</code>)
+                    </span>
+                  </label>
+                  <span style={styles.tzOptionHint}>
+                    {includeTzid
+                      ? 'Exports events with explicit TZID parameters.'
+                      : 'Exports floating wall-clock time (safest for most calendar clients).'}
+                  </span>
+                </div>
+
+                {/* Feedback Banner */}
+                {exportFeedback && (
+                  <div
+                    style={{
+                      ...styles.exportAlert,
+                      ...(exportFeedback.type === 'success'
+                        ? styles.exportAlertSuccess
+                        : exportFeedback.type === 'warning'
+                        ? styles.exportAlertWarning
+                        : styles.exportAlertError),
+                    }}
+                    role="alert"
+                    aria-live="polite"
+                  >
+                    {exportFeedback.type === 'success' ? '✓ ' : exportFeedback.type === 'warning' ? '⚠️ ' : '✕ '}
+                    {exportFeedback.message}
+                  </div>
+                )}
+
+                {/* Download Button */}
+                <div style={styles.exportActionRow}>
+                  <button
+                    type="button"
+                    onClick={handleDownloadIcs}
+                    style={styles.downloadIcsBtn}
+                    aria-label="Download accepted schedule as .ics file"
+                  >
+                    <span>📅</span>
+                    <span>Download Calendar (.ics)</span>
+                  </button>
+                  <span style={{ fontSize: '11px', color: '#71717A' }}>
+                    File: <code>voxplan-schedule-{todayStr}.ics</code> (text/calendar)
+                  </span>
+                </div>
+
+                {/* Sessions Preview Table */}
+                <div style={styles.previewSection}>
+                  <div style={styles.previewTitle}>
+                    Exportable Focus Sessions ({acceptedExportInfo?.validSessions?.length || 0})
+                  </div>
+                  <div style={styles.previewTableWrapper}>
+                    <table style={styles.previewTable}>
+                      <thead>
+                        <tr>
+                          <th style={styles.previewTh}>Date</th>
+                          <th style={styles.previewTh}>Time Slot</th>
+                          <th style={styles.previewTh}>Session / Task</th>
+                          <th style={styles.previewTh}>Category</th>
+                          <th style={styles.previewTh}>Duration</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {acceptedExportInfo?.validSessions?.map((s, sIdx) => (
+                          <tr key={s.uid || sIdx} style={styles.previewTr}>
+                            <td style={styles.previewTdDate}><code>{s.date}</code></td>
+                            <td style={styles.previewTdTime}>
+                              <span style={styles.timePill}>🕒 {s.startTime} – {s.endTime}</span>
+                            </td>
+                            <td style={styles.previewTdTitle}>
+                              <strong>{s.summary}</strong>
+                            </td>
+                            <td style={styles.previewTdCat}>
+                              <span style={styles.catPill}>{s.category || 'General'}</span>
+                            </td>
+                            <td style={styles.previewTdHours}>
+                              {s.hours ? `${s.hours}h` : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={styles.noAcceptedBox}>
+                <div style={styles.noAcceptedIcon}>📅</div>
+                <div style={styles.noAcceptedTitle}>No Accepted Schedule Available</div>
+                <div style={styles.noAcceptedText}>
+                  Calendar export generates files strictly from an <strong>accepted</strong> schedule.
+                  Unaccepted proposals or in-progress draft edits cannot be exported.
+                </div>
+                <div style={styles.noAcceptedStepList}>
+                  <div>1. Review proposed sprint allocations on the <strong>Schedule Proposal</strong> tab.</div>
+                  <div>2. Make any adjustments needed or accept as proposed.</div>
+                  <div>3. Click <strong>Apply Schedule</strong> to accept.</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('proposal')}
+                  style={styles.reviewProposalBtn}
+                >
+                  ← Return to Schedule Proposal
+                </button>
+              </div>
+            )}
+
+            {/* Footer */}
             <div style={styles.footer}>
               <button
                 type="button"
@@ -2286,5 +2570,297 @@ const styles = {
     borderRadius: '6px',
     fontSize: '11px',
     color: '#9E2A2B',
+  },
+  exportContainer: {
+    padding: '24px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '18px',
+  },
+  exportHeaderCard: {
+    backgroundColor: '#FFFDF9',
+    border: '2px solid #25242A',
+    borderRadius: '12px',
+    padding: '18px 20px',
+    boxShadow: '3px 3px 0px #25242A',
+  },
+  exportTitleRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: '8px',
+  },
+  exportTag: {
+    fontSize: '10px',
+    fontWeight: '800',
+    letterSpacing: '0.08em',
+    color: '#8B5CF6',
+    textTransform: 'uppercase',
+  },
+  exportTitle: {
+    fontSize: '18px',
+    fontWeight: '800',
+    color: '#25242A',
+    margin: '2px 0 0 0',
+  },
+  exportStatusBadge: {
+    backgroundColor: '#D4F0E2',
+    color: '#1B5E3C',
+    border: '1.5px solid #27754E',
+    borderRadius: '20px',
+    padding: '4px 10px',
+    fontSize: '11px',
+    fontWeight: '700',
+  },
+  exportDescription: {
+    fontSize: '12px',
+    color: '#52525B',
+    lineHeight: 1.5,
+    margin: 0,
+  },
+  exportNoticeGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '12px',
+  },
+  exportNoticeBox: {
+    backgroundColor: '#FFFFFF',
+    border: '1.5px solid #E4E4E7',
+    borderRadius: '10px',
+    padding: '12px 14px',
+    boxShadow: '2px 2px 0px rgba(37,36,42,0.06)',
+  },
+  exportNoticeTitle: {
+    fontSize: '11px',
+    fontWeight: '800',
+    color: '#25242A',
+    marginBottom: '4px',
+  },
+  exportNoticeText: {
+    fontSize: '11px',
+    color: '#52525B',
+    lineHeight: 1.4,
+  },
+  acceptedScheduleBox: {
+    backgroundColor: '#FFFFFF',
+    border: '2px solid #25242A',
+    borderRadius: '12px',
+    padding: '20px',
+    boxShadow: '4px 4px 0px #25242A',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+  },
+  acceptedMetricsRow: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '16px',
+    backgroundColor: '#FBFBFD',
+    border: '1px solid #E4E4E7',
+    borderRadius: '8px',
+    padding: '10px 14px',
+  },
+  acceptedMetricItem: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  },
+  acceptedMetricLabel: {
+    fontSize: '10px',
+    color: '#71717A',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  acceptedMetricVal: {
+    fontSize: '12px',
+    fontWeight: '700',
+    color: '#25242A',
+  },
+  tzOptionRow: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    fontSize: '11px',
+    color: '#3F3F46',
+  },
+  tzOptionLabel: {
+    display: 'flex',
+    alignItems: 'center',
+    fontWeight: '600',
+    cursor: 'pointer',
+  },
+  tzOptionHint: {
+    fontSize: '10px',
+    color: '#71717A',
+    marginLeft: '24px',
+  },
+  exportAlert: {
+    padding: '10px 14px',
+    borderRadius: '8px',
+    fontSize: '12px',
+    fontWeight: '600',
+    lineHeight: 1.4,
+  },
+  exportAlertSuccess: {
+    backgroundColor: '#D4F0E2',
+    color: '#1B5E3C',
+    border: '1.5px solid #27754E',
+  },
+  exportAlertWarning: {
+    backgroundColor: '#FFF3C4',
+    color: '#92400E',
+    border: '1.5px solid #F59E0B',
+  },
+  exportAlertError: {
+    backgroundColor: '#FFE5E0',
+    color: '#9E2A2B',
+    border: '1.5px solid #FF8F82',
+  },
+  exportActionRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+  },
+  downloadIcsBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    backgroundColor: '#25242A',
+    color: '#FFFFFF',
+    border: '2px solid #25242A',
+    borderRadius: '10px',
+    padding: '10px 20px',
+    fontSize: '13px',
+    fontWeight: '800',
+    cursor: 'pointer',
+    boxShadow: '3px 3px 0px #FF8F82',
+    fontFamily: 'inherit',
+    transition: 'transform 0.1s ease',
+  },
+  previewSection: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  previewTitle: {
+    fontSize: '12px',
+    fontWeight: '800',
+    color: '#25242A',
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+  },
+  previewTableWrapper: {
+    maxHeight: '260px',
+    overflowY: 'auto',
+    border: '1.5px solid #E4E4E7',
+    borderRadius: '8px',
+  },
+  previewTable: {
+    width: '100%',
+    borderCollapse: 'collapse',
+    fontSize: '11px',
+    textAlign: 'left',
+  },
+  previewTh: {
+    backgroundColor: '#F4F4F5',
+    padding: '8px 10px',
+    fontWeight: '800',
+    color: '#3F3F46',
+    borderBottom: '1.5px solid #E4E4E7',
+    position: 'sticky',
+    top: 0,
+    zIndex: 1,
+  },
+  previewTr: {
+    borderBottom: '1px solid #F4F4F5',
+  },
+  previewTdDate: {
+    padding: '6px 10px',
+    fontWeight: '600',
+    whiteSpace: 'nowrap',
+  },
+  previewTdTime: {
+    padding: '6px 10px',
+    whiteSpace: 'nowrap',
+  },
+  previewTdTitle: {
+    padding: '6px 10px',
+    color: '#25242A',
+  },
+  previewTdCat: {
+    padding: '6px 10px',
+  },
+  previewTdHours: {
+    padding: '6px 10px',
+    fontWeight: '700',
+    color: '#52525B',
+  },
+  catPill: {
+    display: 'inline-block',
+    padding: '2px 6px',
+    backgroundColor: '#F3EEFF',
+    color: '#5B44BA',
+    borderRadius: '4px',
+    fontSize: '10px',
+    fontWeight: '700',
+  },
+  noAcceptedBox: {
+    backgroundColor: '#FFFDF9',
+    border: '2px dashed #D4D4D8',
+    borderRadius: '12px',
+    padding: '36px 24px',
+    textAlign: 'center',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '12px',
+  },
+  noAcceptedIcon: {
+    fontSize: '36px',
+  },
+  noAcceptedTitle: {
+    fontSize: '16px',
+    fontWeight: '800',
+    color: '#25242A',
+  },
+  noAcceptedText: {
+    fontSize: '12px',
+    color: '#52525B',
+    maxWidth: '460px',
+    lineHeight: 1.5,
+  },
+  noAcceptedStepList: {
+    fontSize: '11px',
+    color: '#71717A',
+    textAlign: 'left',
+    lineHeight: 1.6,
+    margin: '6px 0',
+  },
+  reviewProposalBtn: {
+    backgroundColor: '#25242A',
+    color: '#FFFFFF',
+    border: '2px solid #25242A',
+    borderRadius: '8px',
+    padding: '8px 16px',
+    fontSize: '12px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    boxShadow: '2px 2px 0px #FFE58A',
+  },
+  exportQuickBtn: {
+    backgroundColor: '#FFFDF9',
+    color: '#25242A',
+    border: '2px solid #25242A',
+    borderRadius: '8px',
+    padding: '8px 14px',
+    fontSize: '12px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    boxShadow: '2px 2px 0px #C9B6FF',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
   },
 };

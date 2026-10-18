@@ -36,6 +36,12 @@ import {
   RECOGNITION_STATES,
 } from './conversation/speechEngine';
 import { formatISODate } from './conversation/compoundCommandParser';
+import {
+  saveAcceptedSchedule,
+  loadAcceptedSchedule,
+  generateIcsCalendar,
+  downloadIcsFile,
+} from './scheduler/icalExporter';
 
 const STORAGE_KEY = 'voxplan_tasks';
 
@@ -196,6 +202,7 @@ export default function App() {
   const [conversationState, setConversationState] = useState(CONVERSATION_STATES.IDLE);
   const [activeSubjectTaskId, setActiveSubjectTaskId] = useState(null);
   const [activeProposal, setActiveProposal] = useState(null);
+  const [acceptedSchedule, setAcceptedSchedule] = useState(() => loadAcceptedSchedule());
   const [pendingClarification, setPendingClarification] = useState(null);
 
   const voiceRecognitionRef = useRef(null);
@@ -695,10 +702,51 @@ export default function App() {
 
     await telemetry.recordScheduleProposalAccepted(proposal, changedPlacements);
 
+    const acceptedWithMetadata = {
+      ...proposal,
+      status: 'accepted',
+      acceptedAt: new Date().toISOString(),
+    };
+    setAcceptedSchedule(acceptedWithMetadata);
+    saveAcceptedSchedule(acceptedWithMetadata);
+
     setFeedback({
       type: 'success',
       message: `Applied adaptive schedule: ${changedMap.size} task deadline${changedMap.size === 1 ? '' : 's'} updated (${changedPlacements.length} session${changedPlacements.length === 1 ? '' : 's'} scheduled).`,
     });
+  };
+
+  const handleExportCalendar = (scheduleToExport) => {
+    const target = scheduleToExport || acceptedSchedule;
+    if (!target) {
+      setFeedback({
+        type: 'warning',
+        message: 'No accepted schedule to export. Please review and apply an adaptive schedule first.',
+      });
+      return { success: false, reason: 'no_accepted_schedule' };
+    }
+    try {
+      const result = generateIcsCalendar(target, { tasks });
+      if (result.sessionCount === 0) {
+        setFeedback({
+          type: 'warning',
+          message: 'The accepted schedule contains 0 timed sessions to export.',
+        });
+        return { success: false, reason: 'zero_sessions', details: result };
+      }
+      const downloadResult = downloadIcsFile(result.ics);
+      setFeedback({
+        type: 'success',
+        message: `Exported ${result.sessionCount} session(s) to ${downloadResult.filename} (calendar snapshot).${result.omittedCount > 0 ? ` (${result.omittedCount} unscheduled/blocked items omitted)` : ''}`,
+      });
+      return { success: true, ...result, ...downloadResult };
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        message: `Calendar export failed: ${err.message}`,
+      });
+      return { success: false, error: err.message };
+    }
   };
 
   const handleProposalGenerated = useCallback(async (proposal) => {
@@ -775,6 +823,12 @@ export default function App() {
 
   // Comprehensive Natural Language & Voice Command Parser powered by DialogueManager
   const executeCommand = async (rawText) => {
+    const cleanCmd = String(rawText || '').trim().toLowerCase();
+    if (/^(?:export|download)\s+(?:the\s+)?(?:calendar|schedule)(?:\s+file|\s+\.ics)?$/i.test(cleanCmd)) {
+      handleExportCalendar();
+      return;
+    }
+
     const result = dialogueManager.processInput(rawText, {
       tasks,
       riskStats,
@@ -1285,6 +1339,8 @@ export default function App() {
         events={telemetryEvents}
         personalDurationModel={personalDurationModel}
         guardedPredictionsMap={guardedPredictionsMap}
+        acceptedSchedule={acceptedSchedule}
+        onExportSchedule={handleExportCalendar}
         onClose={() => setIsScheduleModalOpen(false)}
         onApplySchedule={handleApplySchedule}
         onProposalGenerated={handleProposalGenerated}
