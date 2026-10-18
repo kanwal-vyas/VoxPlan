@@ -1843,6 +1843,80 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
 - **Remaining Browser-Specific Limitations**:
   - Browser-native speech recognition (`webkitSpeechRecognition`) processing depends on vendor/browser implementation; silence debouncing (1200ms) serves as an effective local fallback when `onspeechend` is delayed by the browser engine.
 
+#### Critical Clarification UI & Contextual Resolution Fix (COMPLETED)
+- **Objective & Problem Statement**:
+  - Address two reproducible failures and an additional date-label inconsistency discovered during user manual testing of conversation continuity:
+    1. **Failure A**: Clarification candidate cards in `#clarification-card` appeared interactive (hover styling, cursor pointer), but clicking a card failed to select the candidate or resolve the pending clarification.
+    2. **Failure B**: Explicit task deadlines failed to narrow the candidate set. Given tasks `English assignment` (no deadline), `English` (due today), and `English` (due tomorrow), saying *"Complete the English task for today"* triggered ambiguity clarification instead of resolving the unique candidate matching both title and today's deadline.
+    3. **Date-Label Inconsistency**: Clarification candidate cards, dialogue prompts, and task cards displayed equivalent deadlines inconsistently (e.g. `Due 2026-10-18` vs `due today` vs `No deadline set` vs `No deadline`), and UTC serialization caused date shifts in positive timezones.
+- **Root Cause Analysis**:
+  - **Failure A (Candidate Card Click Failure)**:
+    - In `src/App.jsx`, `onSelectClarificationCandidate` dispatched `executeCommand(candidate.title || candidate.id)`. When the user clicked candidate `English` (due today), it passed `"English"`. In `_handleAwaitingClarification`, `"English"` matched all candidate tasks (`English` due today, `English` due tomorrow, `English assignment`), producing `RESOLUTION_STATUS.AMBIGUOUS`. The dialogue manager generated the exact same clarification prompt again, giving the user the impression that clicking the card was completely non-functional.
+    - Furthermore, `resolveTaskReference` in `src/conversation/dialogueManager.js` only checked task titles and ordinals; it never checked task `id`s directly. Passing `candidate.id` resulted in `NOT_FOUND`.
+  - **Failure B (Deadline Qualifier Loss & Filtering Failure)**:
+    - In `src/App.jsx`, line 118 used `rawStr.slice(0, 10)` on ISO timestamp strings. For timestamps with timezones (like `+05:30`), UTC serialization shifted the date back by 1 day (e.g. `2026-10-17` instead of `2026-10-18`), causing target deadline comparison `t.dueDate === todayISO` to evaluate as false.
+    - In `resolveTaskReference`, `forDatePattern` only matched simple words `(today|tomorrow|yesterday)`. It did not match trailing date qualifiers like `"English task today"` or explicit date phrases like `"for October 18"`, and did not narrow `candidatePool` during clarification if multiple tasks matched today.
+  - **Date-Label Inconsistency**:
+    - `TaskCard.jsx` had a custom `formatDueDate`, `CommandBar.jsx` hardcoded raw ISO strings `Due ${candidate.dueDate}`, and `dialogueManager.js` generated lowercase labels (`due today`, `due tomorrow`, `due ${t.dueDate}`). There was no single source of truth for human-friendly deadline formatting relative to an injected clock.
+- **Architectural Solutions & Changes Made**:
+  - **1. Unified Candidate Card Selection Pathway**:
+    - Updated `src/App.jsx`: `onSelectClarificationCandidate` now passes `candidate.id || candidate.title` to `executeCommand`.
+    - Updated `src/conversation/dialogueManager.js`:
+      - Added Step 1 to `resolveTaskReference`: Direct stable task ID match against `candidatePool` (revalidated against `tasks`) and against `tasks`, resolving with `RESOLUTION_STATUS.RESOLVED` and `isContextual: true`.
+      - Revalidation safeguard: If a candidate was removed from the store before the click event arrives, selection safely aborts with `Referenced task is no longer available. Action cancelled.`, preventing mutation of deleted records.
+      - Rapid repeated click protection: Once resolved, dialogue transitions to `IDLE`. A subsequent accidental click on the same ID without an action verb produces no action.
+      - Propagated `dialogueClock={dialogueManager.clock}` to `CommandBar`.
+    - Updated `src/components/CommandBar.jsx`:
+      - Candidate cards are rendered as semantic `<button id="clarification-candidate-${candidate.id || idx}">` with full keyboard support (`Enter` / `Space`), visible focus outlines, and `e.preventDefault()` / `e.stopPropagation()`.
+      - Candidate deadlines display unified pills using `formatTaskDueDate(candidate.dueDate, dialogueClock ? dialogueClock() : undefined)`.
+  - **2. Contextual Deadline Disambiguation**:
+    - Expanded attribute extraction regexes in `resolveTaskReference`:
+      - Matched `forDatePattern` with explicit date qualifiers (relative and absolute).
+      - Added `trailingDatePattern` (`task today`, `English today`).
+    - Applied explicit deadline as a hard candidate filter. If exactly one candidate matches both title and deadline, it resolves immediately with `RESOLUTION_STATUS.RESOLVED`.
+    - If multiple tasks match the same deadline, clarification is prompted showing only the surviving candidates.
+    - If an explicit deadline has no matching task, VoxPlan returns `task_not_found` rather than silently mutating an unrelated task.
+  - **3. Unified Date-Label Consistency**:
+    - Created and exported `formatTaskDueDate(dueDateStr, referenceDate)` in `src/conversation/compoundCommandParser.js`. Formats dates consistently across all components (`Due today`, `Due tomorrow`, `Due Oct 19`, `Overdue by 1 day`, `No deadline`) using local calendar coordinates without UTC drift.
+    - Updated `src/components/TaskCard.jsx` to delegate to `formatTaskDueDate`.
+    - Updated `src/components/CommandBar.jsx` to use `formatTaskDueDate`.
+    - Updated candidate label generation in `src/conversation/dialogueManager.js` (`_handleAwaitingClarification` and `_resolveAndDispatch`) to use `formatTaskDueDate`.
+    - Fixed ISO date normalization in `src/App.jsx` to eliminate UTC slicing shifts.
+- **Verification & Exact Results**:
+  - Node unit & integration tests: 316 passing, 0 failing across 64 test suites (`npm test` including 14 new tests in `tests/task_matching.test.js`).
+    - Validated candidate card click resolution via stable task ID for candidate 1 and candidate 2.
+    - Validated stale candidate deletion prevention and rapid double-click idempotency.
+    - Validated independent cancellation (`never mind`, `cancel`) resetting state to IDLE.
+    - Validated deterministic reference date October 18, 2026:
+      - `"Complete the English task for today"` resolves unique match `English` due Oct 18.
+      - `"Complete the English task today"` resolves unique match `English` due Oct 18.
+      - `"Complete the English task for tomorrow"` resolves `English` due Oct 19.
+      - `"Complete English"` without deadline prompts clarification across all 3 candidates.
+      - Two English tasks due today remain ambiguous and prompt clarification.
+      - Nonexistent deadline does not silently substitute an unscheduled task.
+    - Validated date label consistency and timezone stability across start/end of day.
+  - Linter: 0 warnings, 0 errors across 46 files (`npm run lint` / `oxlint`).
+  - Production build: `vite build` completed cleanly in 1.72s (`npm run build`).
+  - Backend tests: 27 passed in 36.71s (`python -m pytest backend/tests/ -v`).
+  - Browser Verification:
+    - Executed in browser on `http://localhost:5173/#command` recording WebP session `clarification_fix_test_1792312003639.webp`.
+    - Verified Failure B: Typed *"Complete the English task for today"* with `English` (due today), `English` (due tomorrow), and `English assignment` (no deadline); verified task was resolved and marked complete directly without clarification prompt. (Screenshot: `test_failure_b_resolved_1792312118057.png`).
+    - Verified Failure A: Created ambiguous tasks *"Physics quiz due tomorrow"* and *"Physics quiz due next week"*, typed *"Complete Physics quiz"*, verified clarification card appeared with clickable candidate buttons, clicked candidate 2 button, and confirmed the task was completed and the clarification UI cleared immediately. (Screenshot: `test_failure_a_candidate_card_resolved_1792312227942.png`).
+- **Files Modified**:
+  - `src/conversation/compoundCommandParser.js` (unified `formatTaskDueDate`)
+  - `src/App.jsx` (stable task ID candidate selection, date normalization fix, dialogueClock prop)
+  - `src/components/CommandBar.jsx` (semantic candidate buttons, click & keyboard handlers, unified date badges)
+  - `src/components/TaskCard.jsx` (unified date formatting via `formatTaskDueDate`)
+  - `src/conversation/dialogueManager.js` (stable ID resolution, expanded date attribute regexes, candidatePool relative date disambiguation, unified candidate labels)
+  - `tests/task_matching.test.js` (comprehensive regression suites for card selection, Oct 18 deterministic contextual resolution, and date consistency)
+  - `PROJECT_PLAN.md` (authoritative documentation)
+- **Git Commits & Push Verification**:
+  - Implementation Commit: `02e0a7b` (`fix(phase-5): fix clarification selection and deadline disambiguation`).
+  - Push status: Verified pushed to `origin main` at `https://github.com/kanwal-vyas/VoxPlan.git`.
+- **Status**: **COMPLETED**.
+- **Remaining Limitations**:
+  - Tasks without any due date or priority remain strictly ambiguous when multiple identically titled tasks exist until the user selects via candidate card click or ordinal/token clarification.
+
 ---
 
 ### Phase 6: Calendar-Aware Time-Blocking & Multi-Day Workload Modeling (PLANNED)
