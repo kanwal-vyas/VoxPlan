@@ -2319,7 +2319,94 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
   - `tests/adaptive_weight_tuner.test.js`: Comprehensive 19-test automated suite.
   - `PROJECT_PLAN.md`: Updated living project plan.
 - **Remaining Roadmap Stages**:
+  - Stage 7.3 Audit & Hardening: Completed below.
   - Stage 7.4: User Control Dashboard, Schedule Simulation & One-Click Rollback (active deployment, user toggle, rollback controls).
+
+#### Stage 7.3 Audit & Hardening: Mathematical Validity and Shadow-Safety Verification (COMPLETED)
+- **Status**: **COMPLETED**.
+- **Implementation Commit**: `8bca91c8ee81d822e89987151429d05b327f4183` (`fix(phase-7): harden adaptation sandbox validity`)
+- **Documentation Commit**: `docs(phase-7): document adaptation safety audit`
+- **Scope Boundary & Production Invariance Enforcement**:
+  - **STRICT AUDIT & HARDENING ONLY**: No Phase 7.4 functionality was introduced.
+  - `FACTORY_SCHEDULER_WEIGHTS` remains frozen and immutable (`Object.freeze`).
+  - Production schedule generation is 100% invariant before, during, and after adapter execution, shadow evaluation, and sandbox UI interactions.
+  - `isAdaptationUnlocked: false` and `productionApplied: false` are permanently enforced.
+  - Zero candidate values are injected into production arguments, module state, localStorage, sessionStorage, or URL query parameters.
+  - Phase 7.4 activation switches, persistence of adapted parameters, and live scoring modifications remain strictly unimplemented.
+
+- **Audit A — Bayesian Shrinkage Model & Estimator Honesty**:
+  - **Estimator Classification**: The formula $\hat{w} = \frac{K_{\text{prior}} w_0 + N w_{\text{empirical}}}{K_{\text{prior}} + N}$ is an empirical pseudo-count shrinkage heuristic, not a full Bayesian likelihood model.
+  - **Sampling Unit & Observation Meaning**: Real user behavioral telemetry records discrete proposal decisions (accept/modify/discard) and task lifecycle events (reopening/completion). These frequencies do not possess a likelihood function mapping directly into scheduler heuristic score points (e.g., $50$ pts due-date proximity, $100$ pts tier spacing).
+  - **Interpretation of $K_{\text{prior}} = 10$**: Represents an effective prior weight equivalent to 10 pseudo-observations anchoring the candidate estimate to the baseline $w_0$.
+  - **Evidence Honesty**: Because the current telemetry signals lack a sound likelihood model to generate $w_{\text{empirical}}$, real user candidates are not manufactured. When real evidence is evaluated, all candidate weights strictly return the factory baseline ($w = w_0$) with complete audit provenance.
+
+- **Audit B — Signal-to-Weight Mapping Direction & Disabling of Postponement Mapping**:
+  - **Defect Discovered**: The previous draft attempted to map `task_postponement_friction` to a lower `priorityWeight` under the rationale that postponed high-priority tasks need a smaller priority boost.
+  - **Mathematical & Behavioral Inconsistency**: Lowering `priorityWeight` decreases the ready-queue score of high-priority tasks, causing them to be scheduled *later* relative to medium/low priority tasks. Users postpone high-priority tasks due to cognitive load, ambiguity, or missing subtasks—not because they want them delayed further. Reducing priority weight paradoxically worsens deadline misses and backlog friction.
+  - **Hardened Correction**: Completely disabled `task_postponement_friction -> priorityWeight`. The mapping is marked `supported: false` with explicit reason `unsupported_signal_direction` and moved to `unsupportedMappings`. All four scheduler coefficients (`urgencyWeight`, `priorityWeight`, `unblockWeight`, `riskWeight`) remain at factory baselines.
+
+- **Audit C — Relative Parameter Bounds & Coefficient Domains**:
+  - **Domain Hardening**: Hardened `clampWeightDelta` in `src/scheduler/boundedWeightAdapter.js` against degenerate inputs:
+    - Zero baseline ($w_0 = 0$): Safely returns $0$ with clamped bounds $[0, 0]$ rather than throwing division errors.
+    - Negative baseline ($w_0 < 0$): Inverts bounds to $[1.2 \cdot w_0, 0.8 \cdot w_0]$ to preserve numerical ordering (e.g., $[-120, -80]$).
+    - Non-finite inputs (`NaN`, $\pm\infty$): Safely guarded and reverted to baseline $w_0$.
+    - Exact boundary values: Respects inclusive boundary comparisons $[w_{\min}, w_{\max}]$.
+
+- **Audit D — Shadow Evaluator Correctness & Churn Tracking**:
+  - **Paired Input Isolation**: Inputs (`tasks`, `options`) are deep-cloned via `JSON.parse(JSON.stringify(...))` before passing to baseline and candidate runs, ensuring zero state mutation leakage.
+  - **Chunk-Safe Churn Tracking**: Keyed placements map by `placement.placementId || `${taskId}_${chunkIndex}`` rather than plain `taskId`, eliminating a critical bug where multi-day task chunk placements overwrote previous chunks during churn analysis.
+  - **Infeasible Placement Detection**: Explicitly tracks unscheduled placements (`unscheduledPlacementsCount`) and counts them towards `infeasiblePlacementsCount`.
+  - **Throughput Regression Gate**: Added lost coverage check (`candidateMetrics.scheduledTasks < baselineMetrics.scheduledTasks`) to prevent candidates with fewer scheduled tasks from passing.
+  - **Empty Backlog Handling**: Safely returns `not_evaluable_empty_task_set` when provided an empty task list.
+
+- **Audit E — Synthetic Demonstration Isolation & Disclosures**:
+  - **In-Memory Isolation**: The "Simulating Synthetic Mature Telemetry" toggle in `src/components/AdaptationSandboxCard.jsx` operates purely in memory on isolated mock fixtures. It never writes to IndexedDB, never triggers telemetry ingestion, and never alters real user history counts.
+  - **High-Visibility Disclosure**: Added an unmistakable amber warning banner whenever the toggle is active:
+    `⚠️ Synthetic Demonstration — Not Your History (In-memory diagnostic simulation fixture. Real user telemetry remains locked.)`
+  - **Distinct UI States**: Clearly separates factory production weights (Active), real evidence candidates (Baseline defaults), and synthetic demo candidates (Diagnostic sandbox).
+
+- **Audit F — Readiness & Evidence Eligibility Recomputation**:
+  - Recomputed real-user readiness metrics from actual repository telemetry:
+    - Decided proposals: **7 / 20** (Threshold: 20)
+    - Verified task completions: **0 / 15** (Threshold: 15)
+    - Qualifying categories: **0 / 3** (Threshold: 3)
+    - Active telemetry days: **2 / 14** (Threshold: 14)
+  - **Authoritative Gate Enforced**: Real-user adaptation remains strictly locked (`isAdaptationUnlocked: false`, `isEvaluated: false`).
+
+- **Audit G — UI & Disclosures Integrity**:
+  - Replaced misleading "Ready" or green success badges with truthful state labels: "🔒 Locked — Insufficient Longitudinal History".
+  - Tab header clarified to: `⚖️ Weight Candidates (Synthetic Demo / Factory Baseline)`.
+  - Discloses exact evidence counts and displays unsupported mappings list explaining why coefficients remain at baseline.
+
+- **Automated Regression Suite Expansion**:
+  - Expanded `tests/adaptive_weight_tuner.test.js` from 19 to **26 comprehensive tests**:
+    - Zero, negative, and non-finite baseline clamping invariants.
+    - Strict boundary value preservation.
+    - Explicit rejection and reason recording for `task_postponement_friction`.
+    - Deep-cloned paired input mutation isolation.
+    - Chunk-safe `placementId` churn computation.
+    - Unscheduled placement infeasibility and throughput regression gates.
+    - In-memory diagnostic candidate simulation.
+    - Complete production schedule invariance across multiple runs.
+
+- **Verification Results**:
+  - **Frontend Tests**: **499 passed, 0 failed across 103 test suites** (`npm test`).
+  - **Backend Tests**: **27 passed in 4.96s** (`python -m pytest backend/tests/ -q`).
+  - **Linter**: **0 errors, 0 warnings** across 64 files (`npm run lint` / `oxlint`).
+  - **Production Build**: Clean bundle in 937ms (`npm run build`).
+  - **Browser Verification**: Headless browser subagent verified locked readiness state, factory baseline candidates, unsupported mapping disclosures, synthetic banner visibility on toggle, and smooth recovery on `http://localhost:5173/#personal-model`.
+
+- **Delivered / Hardened Files**:
+  - `src/scheduler/boundedWeightAdapter.js`: Hardened shrinkage math, clamped bounds, zero/negative handling, and disabled postponement mapping.
+  - `src/scheduler/shadowSchedulerEvaluator.js`: Hardened deep-cloned inputs, chunk-safe placement tracking, unscheduled infeasibility detection, and throughput regression gates.
+  - `src/components/AdaptationSandboxCard.jsx`: Added synthetic warning banner, honest status text, and diagnostic simulation mode.
+  - `tests/adaptive_weight_tuner.test.js`: 26 automated unit and regression tests.
+  - `PROJECT_PLAN.md`: Living audit and hardening record.
+
+- **Known Limitations & Remaining Roadmap Stages**:
+  - No continuous likelihood model exists yet to map discrete task postponement into scheduler heuristic points. Heuristic weights will remain at factory baselines until an empirical inverse reinforcement learning or ranking loss model is developed.
+  - Real user telemetry is cold-start locked (0/15 completions).
+  - Stage 7.4 (User Control Dashboard, Schedule Simulation & One-Click Rollback) remains strictly unimplemented.
 
 #### Stage 7.4: User Control Dashboard, Schedule Simulation & One-Click Rollback
 - **Scope & Expected Deliverables**:
