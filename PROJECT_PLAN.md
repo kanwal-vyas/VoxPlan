@@ -1967,7 +1967,7 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
   - `src/App.jsx`: Updated schedule application logic to aggregate chunks by parent task and update due dates without creating duplicate tasks.
   - `PROJECT_PLAN.md`: Updated authoritative project plan with Phase 6.1 completion record and roadmap status.
 - **Git Commits & Push Verification**:
-  - Implementation Commit: `feat(phase-6): add multi-day task chunking foundation`
+  - Implementation Commit: `1fc5774` (`feat(phase-6): add multi-day task chunking foundation`)
   - Push status: Verified pushed to `origin main` at `https://github.com/kanwal-vyas/VoxPlan`.
 - **Status**: **COMPLETED**.
 - **Remaining Limitations & Deferred Work**:
