@@ -1,0 +1,326 @@
+/**
+ * VoxPlan Offline Ranking-Evaluation Pipeline (Phase 7.3 Follow-up).
+ *
+ * Implements a pure, deterministic offline evaluation module that tests whether
+ * explicit pairwise preferences can support a future ranking model.
+ *
+ * Scope & Safety Governance:
+ * 1. Offline & Shadow Only: Evaluates candidate and baseline ranking functions purely in memory.
+ *    Never activates or mutates production scheduler weights.
+ * 2. Unbiased Baseline Comparison: Always compares candidate ranking performance against
+ *    the unmodified factory baseline scoring objective.
+ * 3. Hard-Constraint Decoupling: A ranking model NEVER receives credit for a preference match
+ *    that requires an invalid or constraint-violating schedule.
+ * 4. Honest Sample & Uncertainty Reporting: Reports exact numerators and denominators.
+ *    Small-sample point estimates are clearly flagged with statistical uncertainty disclaimers.
+ * 5. Leakage Prevention: When sample volume permits (N >= 15), uses a grouped split strategy
+ *    (grouped by scenario or context identifier) to prevent correlated leakage between train/test partitions.
+ */
+
+import { FACTORY_SCHEDULER_WEIGHTS } from './adaptiveScheduler.js';
+
+export const MIN_EVALUATION_SAMPLE = 5;
+export const MIN_HOLDOUT_SAMPLE = 15;
+export const MIN_SCENARIO_GROUPS = 3;
+
+export const RANKING_EVALUATION_STATUS = Object.freeze({
+  EVALUATED: 'evaluated',
+  INSUFFICIENT_EVIDENCE: 'insufficient_evidence',
+});
+
+/**
+ * Default factory objective scoring function for a schedule proposal alternative.
+ * Evaluates schedule quality across timeliness, delay minimization, capacity utilization,
+ * and schedule churn.
+ *
+ * @param {Object} alternative - A schedule proposal or strategy metrics object.
+ * @returns {number} Continuous objective score (higher is better).
+ */
+export function computeScheduleObjectiveScore(alternative) {
+  if (!alternative || typeof alternative !== 'object') {
+    return -Infinity;
+  }
+
+  // Extract metrics from standard summary or strategy object
+  const metrics = alternative.metrics || alternative.summary || alternative;
+
+  const totalTasks = Number(metrics.totalTasks ?? metrics.scheduledTasksCount ?? metrics.totalEligibleTasks ?? 0);
+  const onTimeTasks = Number(metrics.onTimeTasksCount ?? metrics.onTimeCount ?? 0);
+  const delayedTasks = Number(metrics.delayedTasksCount ?? metrics.delayedCount ?? 0);
+  const totalDelayDays = Number(metrics.totalDelayDays ?? 0);
+  const capacityUtilPct = Number(metrics.capacityUtilizationPct ?? metrics.capacityUtilization ?? 50.0);
+  const churnRate = Number(metrics.churnRate ?? 0.0);
+
+  // Feasibility penalty
+  const hasCycle = Boolean(metrics.cycleDetected || alternative.cycleDetected);
+  const infeasibleCount = Number(metrics.infeasiblePlacementsCount ?? alternative.infeasiblePlacementsCount ?? 0);
+  if (hasCycle || infeasibleCount > 0) {
+    return -10000 - (infeasibleCount * 100);
+  }
+
+  const onTimeRate = totalTasks > 0 ? (onTimeTasks / totalTasks) : 1.0;
+  const avgDelayDays = delayedTasks > 0 ? (totalDelayDays / delayedTasks) : 0.0;
+  const utilFraction = Math.max(0, Math.min(1.0, capacityUtilPct / 100.0));
+
+  // Balanced schedule objective utility
+  // +100 for on-time rate, -15 per avg delay day, +10 for balanced utilization, -20 for churn
+  const score = (100.0 * onTimeRate) - (15.0 * avgDelayDays) + (10.0 * utilFraction) - (20.0 * churnRate);
+
+  return isFinite(score) ? score : -Infinity;
+}
+
+/**
+ * Checks concordance between an explicitly preferred alternative and a non-preferred alternative
+ * under a given scoring function.
+ *
+ * @param {Object} preferredAlt - The alternative the user explicitly chose.
+ * @param {Object} nonPreferredAlt - The alternative the user did not choose.
+ * @param {Function} [scoringFn=computeScheduleObjectiveScore] - Scoring function.
+ * @returns {Object} Pair evaluation result.
+ */
+export function evaluatePairwiseConcordance(preferredAlt, nonPreferredAlt, scoringFn = computeScheduleObjectiveScore) {
+  // Hard-constraint gate: preferred alternative must not violate hard constraints
+  const isPCompliant = preferredAlt?.isConstraintCompliant !== false &&
+    !preferredAlt?.cycleDetected &&
+    (preferredAlt?.infeasiblePlacementsCount ?? 0) === 0;
+
+  if (!isPCompliant) {
+    return {
+      isConcordant: false,
+      isTied: false,
+      disqualified: true,
+      disqualificationReason: 'preferred_alternative_violates_hard_constraints',
+      scorePreferred: null,
+      scoreNonPreferred: null,
+    };
+  }
+
+  const scoreP = scoringFn(preferredAlt);
+  const scoreQ = scoringFn(nonPreferredAlt);
+
+  if (!isFinite(scoreP) || !isFinite(scoreQ)) {
+    return {
+      isConcordant: false,
+      isTied: false,
+      disqualified: true,
+      disqualificationReason: 'non_finite_scoring_evaluation',
+      scorePreferred: scoreP,
+      scoreNonPreferred: scoreQ,
+    };
+  }
+
+  if (scoreP === scoreQ) {
+    return {
+      isConcordant: false,
+      isTied: true,
+      disqualified: false,
+      disqualificationReason: null,
+      scorePreferred: scoreP,
+      scoreNonPreferred: scoreQ,
+    };
+  }
+
+  return {
+    isConcordant: scoreP > scoreQ,
+    isTied: false,
+    disqualified: false,
+    disqualificationReason: null,
+    scorePreferred: scoreP,
+    scoreNonPreferred: scoreQ,
+  };
+}
+
+/**
+ * Evaluates pairwise ranking accuracy of a scoring function over an array of eligible comparisons.
+ *
+ * @param {Array<Object>} comparisons - Eligible comparison records.
+ * @param {Function} scoringFn - Scoring function.
+ * @returns {Object} Concordance metrics.
+ */
+function evaluatePairsAccuracy(comparisons = [], scoringFn = computeScheduleObjectiveScore) {
+  let concordantCount = 0;
+  let discordantCount = 0;
+  let tiedCount = 0;
+  let disqualifiedCount = 0;
+
+  for (const cmp of comparisons) {
+    const res = evaluatePairwiseConcordance(cmp.preferredAlternative, cmp.nonPreferredAlternative, scoringFn);
+    if (res.disqualified) {
+      disqualifiedCount++;
+    } else if (res.isConcordant) {
+      concordantCount++;
+    } else if (res.isTied) {
+      tiedCount++;
+    } else {
+      discordantCount++;
+    }
+  }
+
+  const totalEvaluated = comparisons.length;
+  const accuracy = totalEvaluated > 0 ? (concordantCount / totalEvaluated) : 0.0;
+  const accuracyPct = Math.round(accuracy * 1000) / 10;
+
+  return {
+    concordantCount,
+    discordantCount,
+    tiedCount,
+    disqualifiedCount,
+    totalEvaluated,
+    accuracy,
+    accuracyPct,
+  };
+}
+
+/**
+ * Evaluates offline ranking performance on a dataset of explicit preference comparisons.
+ *
+ * @param {Object} params
+ * @param {Array<Object>} [params.eligibleComparisons=[]] - Cleaned eligible comparisons from preferenceEvidence.
+ * @param {Function} [params.baselineScoringFn=computeScheduleObjectiveScore] - Baseline scoring function.
+ * @param {Function} [params.candidateScoringFn=null] - Candidate scoring function.
+ * @param {Object} [params.evidenceCounts=null] - Precomputed evidence counts.
+ * @returns {Object} Comprehensive offline ranking evaluation report.
+ */
+export function evaluateOfflineRanking({
+  eligibleComparisons = [],
+  baselineScoringFn = computeScheduleObjectiveScore,
+  candidateScoringFn = null,
+  evidenceCounts = null,
+} = {}) {
+  const comparisons = Array.isArray(eligibleComparisons) ? eligibleComparisons : [];
+  const sampleSize = comparisons.length;
+
+  const baseSummary = evidenceCounts || {
+    totalObserved: sampleSize,
+    eligibleCount: sampleSize,
+    excludedCount: 0,
+    byReason: {},
+  };
+
+  // 1. Check sample sufficiency
+  if (sampleSize < MIN_EVALUATION_SAMPLE) {
+    return {
+      status: RANKING_EVALUATION_STATUS.INSUFFICIENT_EVIDENCE,
+      reason: 'insufficient_sample_size',
+      message: `Eligible explicit comparisons (${sampleSize}) are below the minimum threshold of ${MIN_EVALUATION_SAMPLE} required for statistical evaluation.`,
+      evidenceSummary: baseSummary,
+      baselineMetrics: null,
+      candidateMetrics: null,
+      delta: null,
+      uncertainty: {
+        sampleSize,
+        minRequired: MIN_EVALUATION_SAMPLE,
+        isSmallSample: true,
+        marginOfErrorPct: null,
+        disclaimer: 'Point estimates cannot be reliably derived from sparse explicit comparisons (< 5).',
+      },
+      splitValidation: {
+        isSplitDefensible: false,
+        splitStrategy: 'none_insufficient_sample',
+        distinctGroupsCount: 0,
+        trainMetrics: null,
+        testMetrics: null,
+      },
+      productionInvariance: {
+        isAdaptationUnlocked: false,
+        productionApplied: false,
+        factoryWeightsUnchanged: true,
+        activeWeights: FACTORY_SCHEDULER_WEIGHTS,
+        notice: 'Production scheduling remains strictly invariant. Evaluation is offline only.',
+      },
+    };
+  }
+
+  // 2. Evaluate Baseline Pairwise Accuracy
+  const baselineMetrics = evaluatePairsAccuracy(comparisons, baselineScoringFn);
+
+  // 3. Evaluate Candidate Pairwise Accuracy (if candidate scoring function provided)
+  let candidateMetrics = null;
+  let delta = null;
+
+  if (typeof candidateScoringFn === 'function') {
+    candidateMetrics = evaluatePairsAccuracy(comparisons, candidateScoringFn);
+    delta = Math.round((candidateMetrics.accuracy - baselineMetrics.accuracy) * 1000) / 1000;
+  }
+
+  // 4. Uncertainty Estimation (Wald interval / small-sample margin of error)
+  const p = baselineMetrics.accuracy;
+  const marginOfError = sampleSize > 0
+    ? Math.min(1.0, 1.96 * Math.sqrt((p * (1 - p)) / sampleSize))
+    : 1.0;
+  const marginOfErrorPct = Math.round(marginOfError * 1000) / 10;
+
+  // 5. Grouped Cross-Validation / Holdout Split (Leakage Prevention)
+  const groupsMap = new Map();
+  for (const cmp of comparisons) {
+    const groupKey = cmp.context?.scenario_name || cmp.context?.scenario_id || cmp.pairKey || 'default_group';
+    if (!groupsMap.has(groupKey)) {
+      groupsMap.set(groupKey, []);
+    }
+    groupsMap.get(groupKey).push(cmp);
+  }
+
+  const distinctGroups = Array.from(groupsMap.keys());
+  let splitValidation = {
+    isSplitDefensible: false,
+    splitStrategy: 'none_insufficient_sample',
+    distinctGroupsCount: distinctGroups.length,
+    trainMetrics: null,
+    testMetrics: null,
+  };
+
+  if (sampleSize >= MIN_HOLDOUT_SAMPLE && distinctGroups.length >= MIN_SCENARIO_GROUPS) {
+    // Deterministic 60/40 grouped split
+    const sortedGroups = [...distinctGroups].sort();
+    const trainGroupCount = Math.max(1, Math.floor(sortedGroups.length * 0.6));
+    const trainGroupKeys = new Set(sortedGroups.slice(0, trainGroupCount));
+
+    const trainPairs = [];
+    const testPairs = [];
+
+    for (const [key, pairs] of groupsMap.entries()) {
+      if (trainGroupKeys.has(key)) {
+        trainPairs.push(...pairs);
+      } else {
+        testPairs.push(...pairs);
+      }
+    }
+
+    if (trainPairs.length > 0 && testPairs.length > 0) {
+      splitValidation = {
+        isSplitDefensible: true,
+        splitStrategy: 'grouped_by_scenario_60_40',
+        distinctGroupsCount: distinctGroups.length,
+        trainMetrics: evaluatePairsAccuracy(trainPairs, candidateScoringFn || baselineScoringFn),
+        testMetrics: evaluatePairsAccuracy(testPairs, candidateScoringFn || baselineScoringFn),
+      };
+    }
+  }
+
+  return {
+    status: RANKING_EVALUATION_STATUS.EVALUATED,
+    reason: null,
+    message: `Successfully evaluated ${sampleSize} eligible pairwise comparisons against baseline objective scoring.`,
+    evidenceSummary: baseSummary,
+    baselineMetrics,
+    candidateMetrics,
+    delta,
+    uncertainty: {
+      sampleSize,
+      minRequired: MIN_EVALUATION_SAMPLE,
+      isSmallSample: sampleSize < MIN_HOLDOUT_SAMPLE,
+      marginOfErrorPct,
+      disclaimer: sampleSize < MIN_HOLDOUT_SAMPLE
+        ? `Preliminary sample size (N = ${sampleSize}). Statistical margin of error is ±${marginOfErrorPct}%; holdout partitioning requires N >= ${MIN_HOLDOUT_SAMPLE}.`
+        : `Defensible sample size (N = ${sampleSize}). Estimated margin of error: ±${marginOfErrorPct}%.`,
+    },
+    splitValidation,
+    productionInvariance: {
+      isAdaptationUnlocked: false,
+      productionApplied: false,
+      factoryWeightsUnchanged: true,
+      activeWeights: FACTORY_SCHEDULER_WEIGHTS,
+      notice: 'Production scheduling remains strictly invariant. Evaluation is offline only.',
+    },
+  };
+}

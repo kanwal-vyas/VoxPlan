@@ -20,6 +20,7 @@ export const EVENT_TYPES = Object.freeze([
   'schedule_proposal_generated',
   'schedule_proposal_accepted',
   'schedule_proposal_discarded',
+  'schedule_preference_expressed',
 ]);
 
 /**
@@ -79,7 +80,8 @@ export function validateEvent(event) {
     event.event_type === 'recommendation_rejected' ||
     event.event_type === 'schedule_proposal_generated' ||
     event.event_type === 'schedule_proposal_accepted' ||
-    event.event_type === 'schedule_proposal_discarded';
+    event.event_type === 'schedule_proposal_discarded' ||
+    event.event_type === 'schedule_preference_expressed';
   if (!isGlobalEvent) {
     if (typeof event.task_id !== 'string' || !event.task_id.trim()) {
       errors.push('task_id must be a non-empty string.');
@@ -193,6 +195,24 @@ export function validateEvent(event) {
     case 'schedule_proposal_discarded':
       if (typeof p.schedule_id !== 'string' || !p.schedule_id.trim()) {
         errors.push('schedule_proposal_discarded payload must contain schedule_id.');
+      }
+      break;
+
+    case 'schedule_preference_expressed':
+      if (typeof p.comparison_id !== 'string' || !p.comparison_id.trim()) {
+        errors.push('schedule_preference_expressed payload must contain comparison_id.');
+      }
+      if (typeof p.source !== 'string' || !p.source.trim()) {
+        errors.push('schedule_preference_expressed payload must contain source.');
+      }
+      if (!p.alternative_a || typeof p.alternative_a !== 'object' || Array.isArray(p.alternative_a)) {
+        errors.push('schedule_preference_expressed payload must contain alternative_a object.');
+      }
+      if (!p.alternative_b || typeof p.alternative_b !== 'object' || Array.isArray(p.alternative_b)) {
+        errors.push('schedule_preference_expressed payload must contain alternative_b object.');
+      }
+      if (!['alternative_a', 'alternative_b', 'neutral', 'both_unacceptable'].includes(p.selected)) {
+        errors.push("schedule_preference_expressed selected must be 'alternative_a', 'alternative_b', 'neutral', or 'both_unacceptable'.");
       }
       break;
 

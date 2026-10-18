@@ -73,6 +73,12 @@ class TelemetryManager {
         this.recordedProposalActions.add(`acc_${scheduleId}`);
       } else if (ev.event_type === 'schedule_proposal_discarded') {
         this.recordedProposalActions.add(`disc_${scheduleId}`);
+      } else if (ev.event_type === 'schedule_preference_expressed') {
+        const compId = ev.payload.comparison_id;
+        const sel = ev.payload.selected;
+        if (compId && sel) {
+          this.recordedProposalActions.add(`pref_${compId}_${sel}`);
+        }
       }
     }
   }
@@ -310,6 +316,45 @@ class TelemetryManager {
       strategy: summary.strategy || 'adaptive',
       reason,
       changes_count: summary.dateChangesCount || 0,
+    });
+  }
+
+  async recordSchedulePreference({
+    comparisonId,
+    alternativeA,
+    alternativeB,
+    selected,
+    comparisonContext = {},
+    source = 'explicit_user_choice',
+    taskId = null,
+  }) {
+    if (!comparisonId || !alternativeA || !alternativeB || !selected) {
+      return null;
+    }
+
+    const dedupeKey = `pref_${comparisonId}_${selected}`;
+    if (this.recordedProposalActions.has(dedupeKey)) return null;
+
+    const alreadyLogged = this.eventsCache.some(
+      (e) =>
+        e.event_type === 'schedule_preference_expressed' &&
+        e.payload?.comparison_id === comparisonId &&
+        e.payload?.selected === selected
+    );
+    if (alreadyLogged) {
+      this.recordedProposalActions.add(dedupeKey);
+      return null;
+    }
+
+    this.recordedProposalActions.add(dedupeKey);
+
+    return this.record('schedule_preference_expressed', taskId, {
+      comparison_id: comparisonId,
+      source,
+      alternative_a: alternativeA,
+      alternative_b: alternativeB,
+      selected,
+      comparison_context: comparisonContext,
     });
   }
 

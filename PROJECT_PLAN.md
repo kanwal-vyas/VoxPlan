@@ -2406,7 +2406,67 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
 - **Known Limitations & Remaining Roadmap Stages**:
   - No continuous likelihood model exists yet to map discrete task postponement into scheduler heuristic points. Heuristic weights will remain at factory baselines until an empirical inverse reinforcement learning or ranking loss model is developed.
   - Real user telemetry is cold-start locked (0/15 completions).
+  - Stage 7.3 Follow-up (Explicit Preference Evidence & Offline Ranking Evaluation) completed below.
   - Stage 7.4 (User Control Dashboard, Schedule Simulation & One-Click Rollback) remains strictly unimplemented.
+
+#### Stage 7.3 Follow-up: Explicit Preference Evidence & Offline Ranking Evaluation (COMPLETED)
+- **Status**: **COMPLETED**.
+- **Scope & Mission**:
+  - Establishes an explicit preference-evidence foundation and an offline ranking-evaluation pipeline to determine whether future scheduler personalization is mathematically and behaviorally justified.
+  - **STRICT EVIDENCE COLLECTION & SHADOW EVALUATION ONLY**: Production learning remains completely disabled. Zero model activation or automatic weight updating.
+  - `FACTORY_SCHEDULER_WEIGHTS` remains frozen and immutable (`urgencyWeight: 50.0`, `priorityWeight: 100.0`, `unblockWeight: 15.0`, `riskWeight: 25.0`).
+  - `isAdaptationUnlocked: false` and `productionApplied: false` permanently enforced.
+  - Zero external cloud services, telemetry uploads, or remote APIs. Local-first IndexedDB storage only.
+
+- **Explicit Preference Evidence Contract & Provenance Rules**:
+  - **Validated Event Type**: Added `schedule_preference_expressed` to versioned telemetry schema (`src/telemetry/eventSchema.js`).
+  - **Explicit User Selection**: Requires two valid alternatives (`alternative_a`, `alternative_b`), unambiguous user selection (`selected: 'alternative_a' | 'alternative_b'`), stable `comparison_id`, and comparison context.
+  - **Inferred Behavior Quarantined**: Actions like accepting or discarding proposals, or completing tasks, are strictly quarantined (`inferred_rejected`). Accepting a proposal does not imply preferring every task placement within it.
+  - **Hard-Constraint Decoupling**: Alternatives that violate hard constraints (Kahn DAG cycles, daily capacity overruns, infeasible placements) cannot earn preference credit and are rejected (`constraint_violation`).
+  - **Contradiction Quarantine**: Conflicting selections for the same comparison pair are quarantined (`contradictory`) without silently favoring the latest event. Provenance is preserved in telemetry.
+  - **Idempotency & Deduplication**: Repeated identical selections for the same comparison pair are deduplicated (`duplicate`) to prevent sample inflation.
+  - **Implementation**: Pure evidence extraction module in `src/scheduler/preferenceEvidence.js`.
+
+- **Offline Ranking-Evaluation Pipeline & Methodology**:
+  - **Pure & Deterministic**: Pure evaluation engine in `src/scheduler/rankingEvaluator.js`.
+  - **Baseline Scoring Function**: Evaluates balanced schedule utility across timeliness ($100 \cdot \text{onTimeRate}$), delay penalty ($-15 \cdot \text{avgDelayDays}$), capacity balance ($+10 \cdot \text{util}$), and stability ($-20 \cdot \text{churn}$).
+  - **Pairwise Concordance**: Evaluates whether the scoring function scores the explicitly preferred alternative higher than the non-preferred alternative. Ties and non-finite scores receive zero concordance credit.
+  - **Hard Constraint Safety Gate**: If the preferred alternative violates hard constraints, the ranking model is disqualified from receiving concordance credit.
+  - **Sample Maturity & Uncertainty Disclosures**:
+    - $N < 5$: Reports `insufficient_evidence` with statistical disclaimer (point estimates not reliable on sparse data).
+    - $5 \le N < 15$: Reports baseline accuracy with exact numerators/denominators and margin of error ($\pm MOE\%$), noting that holdout partitioning is not yet defensible.
+    - $N \ge 15$: Enforces grouped holdout / cross-validation (grouped by scenario or context) with minimum 3 distinct scenario groups to prevent correlated task leakage.
+
+- **UI Integration in Adaptive Planner & Adaptation Sandbox**:
+  - **Explicit Strategy Choice**: In `src/components/AdaptiveScheduleModal.jsx` (Strategy Benchmark & Quality tab), users can explicitly choose between competing schedule strategies (Adaptive vs EDF vs Priority-First) for their active backlog.
+  - **Sandbox Ranking Tab**: In `src/components/AdaptationSandboxCard.jsx`, added a 5th tab `🎯 Preference Ranking (Offline)` rendering total observed comparisons, eligible pairs, excluded breakdown (duplicates, contradictions, inferred rejected), baseline pairwise accuracy, uncertainty margin of error, and methodology governance notes.
+  - **Synthetic Simulation Isolation**: Synthetic mature fixture in sandbox displays 6 eligible comparisons (83.3% accuracy) under the clear `⚠️ Synthetic Demonstration — Not Your History` warning banner.
+
+- **Verification Results**:
+  - **Frontend Test Suite**: **522 passed, 0 failed across 108 test suites** (`npm test`).
+    - Added 23 comprehensive tests in `tests/preference_ranking_evaluation.test.js`.
+  - **Backend Pytest Suite**: **27 passed in 5.47s** (`pytest backend/tests/ -q`).
+  - **Linter**: **0 errors, 0 warnings** across 67 files (`npm run lint` / `oxlint`).
+  - **Production Build**: Clean bundle in 498ms (`npm run build`).
+  - **Browser Verification**: Subagent session (`ranking_eval_verification_1792347730085.webp`) verified:
+    1. Insufficient evidence state (N < 5) on `#personal-model`.
+    2. Synthetic mature demonstration toggle with warning banner and 83.3% accuracy.
+    3. Pairwise preference recording in `#command` benchmark tab ("Prefer Adaptive over EDF") with real-time feedback toast.
+
+- **Delivered Files**:
+  - `src/telemetry/eventSchema.js`: Added `schedule_preference_expressed` event type and schema validation.
+  - `src/telemetry/telemetryManager.js`: Added `recordSchedulePreference` with reload-safe deduplication.
+  - `src/scheduler/preferenceEvidence.js`: Pure preference evidence normalization, deduplication, and contradiction quarantine.
+  - `src/scheduler/rankingEvaluator.js`: Pure offline pairwise ranking evaluator with baseline objective scoring, concordance checks, and grouped validation.
+  - `src/components/AdaptiveScheduleModal.jsx`: Added explicit pairwise preference selection to Strategy Benchmark tab.
+  - `src/components/AdaptationSandboxCard.jsx`: Added `🎯 Preference Ranking (Offline)` tab and diagnostic simulation.
+  - `tests/preference_ranking_evaluation.test.js`: Comprehensive 23-test automated suite.
+  - `PROJECT_PLAN.md`: Updated living project plan.
+
+- **Known Limitations & Next Roadmap Stage**:
+  - The offline ranking evaluation foundation is established; no model weights have been deployed to production.
+  - Real user longitudinal telemetry remains cold-start locked.
+  - Next planned stage: Stage 7.4 (User Control Dashboard, Schedule Simulation & One-Click Rollback).
 
 #### Stage 7.4: User Control Dashboard, Schedule Simulation & One-Click Rollback
 - **Scope & Expected Deliverables**:

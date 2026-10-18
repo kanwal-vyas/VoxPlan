@@ -14,6 +14,7 @@ import {
   downloadIcsFile,
   extractExportableSessions,
 } from '../scheduler/icalExporter';
+import { telemetry } from '../telemetry/telemetryManager';
 
 export default function AdaptiveScheduleModal({
   tasks = [],
@@ -35,6 +36,7 @@ export default function AdaptiveScheduleModal({
   const [usePersonalModel, setUsePersonalModel] = useState(true);
   const [enableChunking, setEnableChunking] = useState(true);
   const [todayStr] = useState(() => formatDateISO(new Date()));
+  const [preferenceFeedback, setPreferenceFeedback] = useState(null);
 
   // Phase 6.2: Intraday focus windows and working hours state
   const [timeBlockConfig] = useState(() => loadTimeBlockSettings());
@@ -1114,6 +1116,144 @@ export default function AdaptiveScheduleModal({
                   {renderStrategyMetrics(benchmarkComparison.strategies.priority_first)}
                 </div>
               </div>
+            </div>
+
+            {/* Explicit Strategy Preference Comparison Section */}
+            <div style={styles.pairwisePreferenceBox}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontWeight: '800', fontSize: '13px', color: '#1E293B' }}>
+                  🎯 Explicit Schedule Preference (Offline Ranking Evidence)
+                </span>
+                <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>
+                  Local Evidence Collection Only
+                </span>
+              </div>
+              <p style={{ margin: '0 0 10px 0', fontSize: '12px', color: '#475569', lineHeight: 1.5 }}>
+                Which schedule balance better fits your real-world workflow for <strong>{benchmarkComparison.scenario}</strong>? Explicit choices are recorded locally to evaluate ranking models offline.
+              </p>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const stratPref = benchmarkComparison.strategies.adaptive;
+                    const stratAlt = benchmarkComparison.strategies.edf;
+                    if (!stratPref || !stratAlt) return;
+                    const scenarioKey = selectedScenarioKey || 'current';
+                    telemetry.recordSchedulePreference({
+                      comparisonId: `cmp_${scenarioKey}_adaptive_vs_edf`,
+                      alternativeA: { id: 'adaptive', strategy: 'adaptive', metrics: stratPref, isConstraintCompliant: stratPref.infeasiblePlacementsCount === 0 && !stratPref.cycleDetected },
+                      alternativeB: { id: 'edf', strategy: 'edf', metrics: stratAlt, isConstraintCompliant: stratAlt.infeasiblePlacementsCount === 0 && !stratAlt.cycleDetected },
+                      selected: 'alternative_a',
+                      comparisonContext: {
+                        scenario_name: benchmarkComparison.scenario,
+                        scenario_key: scenarioKey,
+                        task_count: benchmarkComparison.inputTaskCount,
+                        daily_capacity_hours: Number(dailyCapacityHours) || 6.0,
+                        horizon_days: Number(horizonDays) || 14,
+                        is_constraint_compliant: stratPref.infeasiblePlacementsCount === 0 && stratAlt.infeasiblePlacementsCount === 0,
+                      },
+                      source: 'explicit_user_choice',
+                    });
+                    setPreferenceFeedback(`✓ Explicit preference recorded: Adaptive Engine preferred over Earliest Deadline (EDF) for "${benchmarkComparison.scenario}".`);
+                  }}
+                  style={styles.preferenceBtn}
+                  aria-label="Prefer Adaptive Engine over Earliest Deadline First"
+                >
+                  Prefer Adaptive over EDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const stratPref = benchmarkComparison.strategies.adaptive;
+                    const stratAlt = benchmarkComparison.strategies.priority_first;
+                    if (!stratPref || !stratAlt) return;
+                    const scenarioKey = selectedScenarioKey || 'current';
+                    telemetry.recordSchedulePreference({
+                      comparisonId: `cmp_${scenarioKey}_adaptive_vs_priority_first`,
+                      alternativeA: { id: 'adaptive', strategy: 'adaptive', metrics: stratPref, isConstraintCompliant: stratPref.infeasiblePlacementsCount === 0 && !stratPref.cycleDetected },
+                      alternativeB: { id: 'priority_first', strategy: 'priority_first', metrics: stratAlt, isConstraintCompliant: stratAlt.infeasiblePlacementsCount === 0 && !stratAlt.cycleDetected },
+                      selected: 'alternative_a',
+                      comparisonContext: {
+                        scenario_name: benchmarkComparison.scenario,
+                        scenario_key: scenarioKey,
+                        task_count: benchmarkComparison.inputTaskCount,
+                        daily_capacity_hours: Number(dailyCapacityHours) || 6.0,
+                        horizon_days: Number(horizonDays) || 14,
+                        is_constraint_compliant: stratPref.infeasiblePlacementsCount === 0 && stratAlt.infeasiblePlacementsCount === 0,
+                      },
+                      source: 'explicit_user_choice',
+                    });
+                    setPreferenceFeedback(`✓ Explicit preference recorded: Adaptive Engine preferred over Priority-First for "${benchmarkComparison.scenario}".`);
+                  }}
+                  style={styles.preferenceBtn}
+                  aria-label="Prefer Adaptive Engine over Priority-First"
+                >
+                  Prefer Adaptive over Priority-First
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const stratPref = benchmarkComparison.strategies.edf;
+                    const stratAlt = benchmarkComparison.strategies.adaptive;
+                    if (!stratPref || !stratAlt) return;
+                    const scenarioKey = selectedScenarioKey || 'current';
+                    telemetry.recordSchedulePreference({
+                      comparisonId: `cmp_${scenarioKey}_adaptive_vs_edf`,
+                      alternativeA: { id: 'adaptive', strategy: 'adaptive', metrics: stratAlt, isConstraintCompliant: stratAlt.infeasiblePlacementsCount === 0 && !stratAlt.cycleDetected },
+                      alternativeB: { id: 'edf', strategy: 'edf', metrics: stratPref, isConstraintCompliant: stratPref.infeasiblePlacementsCount === 0 && !stratPref.cycleDetected },
+                      selected: 'alternative_b',
+                      comparisonContext: {
+                        scenario_name: benchmarkComparison.scenario,
+                        scenario_key: scenarioKey,
+                        task_count: benchmarkComparison.inputTaskCount,
+                        daily_capacity_hours: Number(dailyCapacityHours) || 6.0,
+                        horizon_days: Number(horizonDays) || 14,
+                        is_constraint_compliant: stratPref.infeasiblePlacementsCount === 0 && stratAlt.infeasiblePlacementsCount === 0,
+                      },
+                      source: 'explicit_user_choice',
+                    });
+                    setPreferenceFeedback(`✓ Explicit preference recorded: Earliest Deadline (EDF) preferred over Adaptive Engine for "${benchmarkComparison.scenario}".`);
+                  }}
+                  style={styles.preferenceBtn}
+                  aria-label="Prefer Earliest Deadline First over Adaptive Engine"
+                >
+                  Prefer EDF over Adaptive
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const stratPref = benchmarkComparison.strategies.priority_first;
+                    const stratAlt = benchmarkComparison.strategies.adaptive;
+                    if (!stratPref || !stratAlt) return;
+                    const scenarioKey = selectedScenarioKey || 'current';
+                    telemetry.recordSchedulePreference({
+                      comparisonId: `cmp_${scenarioKey}_adaptive_vs_priority_first`,
+                      alternativeA: { id: 'adaptive', strategy: 'adaptive', metrics: stratAlt, isConstraintCompliant: stratAlt.infeasiblePlacementsCount === 0 && !stratAlt.cycleDetected },
+                      alternativeB: { id: 'priority_first', strategy: 'priority_first', metrics: stratPref, isConstraintCompliant: stratPref.infeasiblePlacementsCount === 0 && !stratPref.cycleDetected },
+                      selected: 'alternative_b',
+                      comparisonContext: {
+                        scenario_name: benchmarkComparison.scenario,
+                        scenario_key: scenarioKey,
+                        task_count: benchmarkComparison.inputTaskCount,
+                        daily_capacity_hours: Number(dailyCapacityHours) || 6.0,
+                        horizon_days: Number(horizonDays) || 14,
+                        is_constraint_compliant: stratPref.infeasiblePlacementsCount === 0 && stratAlt.infeasiblePlacementsCount === 0,
+                      },
+                      source: 'explicit_user_choice',
+                    });
+                    setPreferenceFeedback(`✓ Explicit preference recorded: Priority-First preferred over Adaptive Engine for "${benchmarkComparison.scenario}".`);
+                  }}
+                  style={styles.preferenceBtn}
+                  aria-label="Prefer Priority-First over Adaptive Engine"
+                >
+                  Prefer Priority-First over Adaptive
+                </button>
+              </div>
+              {preferenceFeedback && (
+                <div style={styles.preferenceFeedbackBanner} role="status">
+                  {preferenceFeedback}
+                </div>
+              )}
             </div>
 
             {/* Trade-Off & Algorithmic Divergence Analysis */}
@@ -2875,5 +3015,35 @@ const styles = {
     fontSize: '12px',
     color: '#92400E',
     lineHeight: 1.5,
+  },
+  pairwisePreferenceBox: {
+    backgroundColor: '#F8FAFC',
+    border: '2px solid #CBD5E1',
+    borderRadius: '10px',
+    padding: '12px 16px',
+    marginTop: '12px',
+    marginBottom: '12px',
+  },
+  preferenceBtn: {
+    backgroundColor: '#FFFFFF',
+    color: '#1E293B',
+    border: '1.5px solid #94A3B8',
+    borderRadius: '6px',
+    padding: '6px 12px',
+    fontSize: '11px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'all 0.15s ease',
+  },
+  preferenceFeedbackBanner: {
+    marginTop: '8px',
+    padding: '6px 10px',
+    backgroundColor: '#E0F2FE',
+    border: '1px solid #7DD3FC',
+    borderRadius: '6px',
+    fontSize: '11px',
+    color: '#0369A1',
+    fontWeight: '600',
   },
 };

@@ -7,11 +7,11 @@ import {
 import {
   evaluateShadowSchedule,
 } from '../scheduler/shadowSchedulerEvaluator';
-import {
-  FACTORY_SCHEDULER_WEIGHTS,
-} from '../scheduler/adaptiveScheduler';
+import { FACTORY_SCHEDULER_WEIGHTS } from '../scheduler/adaptiveScheduler';
 import { analyzePreferenceSignals } from '../scheduler/preferenceAnalyzer';
 import { evaluateLearningReadiness } from '../scheduler/learningReadinessGate';
+import { extractEligiblePreferenceEvidence } from '../scheduler/preferenceEvidence';
+import { evaluateOfflineRanking, MIN_EVALUATION_SAMPLE, MIN_HOLDOUT_SAMPLE } from '../scheduler/rankingEvaluator';
 
 /**
  * AdaptationSandboxCard (Phase 7.3)
@@ -52,11 +52,19 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
       verifiedCompletionsCount: readiness.gates?.verifiedCompletions?.current || 0,
     });
 
+    const preferenceEvidence = extractEligiblePreferenceEvidence(events);
+    const rankingEvaluation = evaluateOfflineRanking({
+      eligibleComparisons: preferenceEvidence.eligible,
+      evidenceCounts: preferenceEvidence.counts,
+    });
+
     return {
       readiness,
       preferenceReport,
       adapterResult,
       shadowEvaluation,
+      preferenceEvidence,
+      rankingEvaluation,
     };
   }, [events, tasks]);
 
@@ -104,9 +112,78 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
       verifiedCompletionsCount: 22,
     });
 
+    const syntheticComparisons = [
+      {
+        comparisonId: 'synth_cmp_1',
+        pairKey: 'adaptive___vs___edf',
+        preferredId: 'adaptive',
+        nonPreferredId: 'edf',
+        preferredAlternative: { id: 'adaptive', strategy: 'adaptive', metrics: { onTimeTasksCount: 4, totalTasks: 4, capacityUtilizationPct: 85, cycleDetected: false, infeasiblePlacementsCount: 0 }, isConstraintCompliant: true },
+        nonPreferredAlternative: { id: 'edf', strategy: 'edf', metrics: { onTimeTasksCount: 3, totalTasks: 4, totalDelayDays: 2, capacityUtilizationPct: 70, cycleDetected: false, infeasiblePlacementsCount: 0 }, isConstraintCompliant: true },
+        context: { scenario_name: 'Backlog Priority vs Urgency' },
+      },
+      {
+        comparisonId: 'synth_cmp_2',
+        pairKey: 'adaptive___vs___priority_first',
+        preferredId: 'adaptive',
+        nonPreferredId: 'priority_first',
+        preferredAlternative: { id: 'adaptive', strategy: 'adaptive', metrics: { onTimeTasksCount: 4, totalTasks: 4, capacityUtilizationPct: 85, cycleDetected: false, infeasiblePlacementsCount: 0 }, isConstraintCompliant: true },
+        nonPreferredAlternative: { id: 'priority_first', strategy: 'priority_first', metrics: { onTimeTasksCount: 2, totalTasks: 4, totalDelayDays: 4, capacityUtilizationPct: 60, cycleDetected: false, infeasiblePlacementsCount: 0 }, isConstraintCompliant: true },
+        context: { scenario_name: 'Dependency Chain Contention' },
+      },
+      {
+        comparisonId: 'synth_cmp_3',
+        pairKey: 'adaptive___vs___edf_2',
+        preferredId: 'adaptive',
+        nonPreferredId: 'edf',
+        preferredAlternative: { id: 'adaptive', strategy: 'adaptive', metrics: { onTimeTasksCount: 5, totalTasks: 5, capacityUtilizationPct: 90, cycleDetected: false, infeasiblePlacementsCount: 0 }, isConstraintCompliant: true },
+        nonPreferredAlternative: { id: 'edf', strategy: 'edf', metrics: { onTimeTasksCount: 4, totalTasks: 5, totalDelayDays: 1, capacityUtilizationPct: 80, cycleDetected: false, infeasiblePlacementsCount: 0 }, isConstraintCompliant: true },
+        context: { scenario_name: 'Shared Deadline Contention' },
+      },
+      {
+        comparisonId: 'synth_cmp_4',
+        pairKey: 'adaptive___vs___priority_first_2',
+        preferredId: 'adaptive',
+        nonPreferredId: 'priority_first',
+        preferredAlternative: { id: 'adaptive', strategy: 'adaptive', metrics: { onTimeTasksCount: 6, totalTasks: 6, capacityUtilizationPct: 88, cycleDetected: false, infeasiblePlacementsCount: 0 }, isConstraintCompliant: true },
+        nonPreferredAlternative: { id: 'priority_first', strategy: 'priority_first', metrics: { onTimeTasksCount: 4, totalTasks: 6, totalDelayDays: 3, capacityUtilizationPct: 65, cycleDetected: false, infeasiblePlacementsCount: 0 }, isConstraintCompliant: true },
+        context: { scenario_name: 'Heuristic Risk Nudge Backlog' },
+      },
+      {
+        comparisonId: 'synth_cmp_5',
+        pairKey: 'adaptive___vs___edf_3',
+        preferredId: 'adaptive',
+        nonPreferredId: 'edf',
+        preferredAlternative: { id: 'adaptive', strategy: 'adaptive', metrics: { onTimeTasksCount: 4, totalTasks: 4, capacityUtilizationPct: 82, cycleDetected: false, infeasiblePlacementsCount: 0 }, isConstraintCompliant: true },
+        nonPreferredAlternative: { id: 'edf', strategy: 'edf', metrics: { onTimeTasksCount: 4, totalTasks: 4, capacityUtilizationPct: 75, cycleDetected: false, infeasiblePlacementsCount: 0 }, isConstraintCompliant: true },
+        context: { scenario_name: 'Normal Mixed Backlog' },
+      },
+      {
+        comparisonId: 'synth_cmp_6',
+        pairKey: 'priority_first___vs___edf',
+        preferredId: 'priority_first',
+        nonPreferredId: 'edf',
+        preferredAlternative: { id: 'priority_first', strategy: 'priority_first', metrics: { onTimeTasksCount: 3, totalTasks: 4, totalDelayDays: 1, capacityUtilizationPct: 78, cycleDetected: false, infeasiblePlacementsCount: 0 }, isConstraintCompliant: true },
+        nonPreferredAlternative: { id: 'edf', strategy: 'edf', metrics: { onTimeTasksCount: 2, totalTasks: 4, totalDelayDays: 3, capacityUtilizationPct: 65, cycleDetected: false, infeasiblePlacementsCount: 0 }, isConstraintCompliant: true },
+        context: { scenario_name: 'Priority vs Deadline Tension' },
+      },
+    ];
+
+    const syntheticRanking = evaluateOfflineRanking({
+      eligibleComparisons: syntheticComparisons,
+      evidenceCounts: {
+        totalObserved: 7,
+        eligibleCount: 6,
+        excludedCount: 1,
+        byReason: { duplicate: 1, contradictory: 0, inferred_rejected: 0, incomplete: 0, ambiguous: 0, constraint_violation: 0 },
+      },
+    });
+
     return {
       adapterResult,
       shadowEvaluation,
+      preferenceEvidence: { eligible: syntheticComparisons, counts: syntheticRanking.evidenceSummary },
+      rankingEvaluation: syntheticRanking,
     };
   }, [showSyntheticDemo]);
 
@@ -117,6 +194,10 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
   const activeShadow = showSyntheticDemo && syntheticDemo
     ? syntheticDemo.shadowEvaluation
     : realAnalysis.shadowEvaluation;
+
+  const activeRanking = showSyntheticDemo && syntheticDemo
+    ? syntheticDemo.rankingEvaluation
+    : realAnalysis.rankingEvaluation;
 
   const isRealReadinessMet = realAnalysis.readiness?.status === 'ready';
   const weightKeys = ['urgencyWeight', 'priorityWeight', 'unblockWeight', 'riskWeight'];
@@ -235,6 +316,15 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
           style={activeTab === 'shadow' ? styles.tabButtonActive : styles.tabButton}
         >
           🔬 Shadow Evaluation & Regression Gates
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'ranking'}
+          onClick={() => setActiveTab('ranking')}
+          style={activeTab === 'ranking' ? styles.tabButtonActive : styles.tabButton}
+        >
+          🎯 Preference Ranking (Offline)
         </button>
         <button
           type="button"
@@ -455,6 +545,130 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                 <div style={styles.unsupportedExplanation}>{item.explanation}</div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Tab 5: Preference Ranking & Offline Evaluation */}
+      {activeTab === 'ranking' && (
+        <div style={styles.tabContent}>
+          <div style={styles.rankingHeaderBanner}>
+            <div style={styles.rankingHeaderTitle}>
+              🎯 Explicit Preference Evidence & Offline Ranking Pipeline
+            </div>
+            <div style={styles.rankingHeaderDesc}>
+              Evaluates whether explicit pairwise user preferences can support future scheduler personalization.
+              All evaluations run strictly offline in memory; production scheduler weights remain 100% frozen.
+            </div>
+          </div>
+
+          {/* Evidence Metrics Summary Cards */}
+          <div style={styles.rankingStatsGrid}>
+            <div style={styles.rankingStatCard}>
+              <span style={styles.rankingStatLabel}>Total Observed Comparisons</span>
+              <span style={styles.rankingStatValue}>{activeRanking.evidenceSummary?.totalObserved ?? 0}</span>
+              <span style={styles.rankingStatSub}>Explicit + Inferred Filtered</span>
+            </div>
+            <div style={styles.rankingStatCard}>
+              <span style={styles.rankingStatLabel}>Eligible Comparisons</span>
+              <span style={{ ...styles.rankingStatValue, color: '#1B5E3C' }}>{activeRanking.evidenceSummary?.eligibleCount ?? 0}</span>
+              <span style={styles.rankingStatSub}>Clean, unambiguous pairs</span>
+            </div>
+            <div style={styles.rankingStatCard}>
+              <span style={styles.rankingStatLabel}>Excluded Comparisons</span>
+              <span style={{ ...styles.rankingStatValue, color: (activeRanking.evidenceSummary?.excludedCount ?? 0) > 0 ? '#92400E' : '#4B5563' }}>
+                {activeRanking.evidenceSummary?.excludedCount ?? 0}
+              </span>
+              <span style={styles.rankingStatSub}>Duplicates / Contradictions</span>
+            </div>
+          </div>
+
+          {/* Exclusions Breakdown if any */}
+          {(activeRanking.evidenceSummary?.excludedCount ?? 0) > 0 && (
+            <div style={styles.exclusionsBox}>
+              <span style={{ fontWeight: '700', fontSize: '12px', color: '#92400E' }}>
+                🔍 Excluded Evidence Audit:
+              </span>
+              <div style={styles.exclusionsPillWrap}>
+                {Object.entries(activeRanking.evidenceSummary?.byReason || {}).map(([reason, count]) => {
+                  if (count === 0) return null;
+                  return (
+                    <span key={reason} style={styles.exclusionPill}>
+                      {reason}: {count}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Evaluation Outcome Panel */}
+          {activeRanking.status === 'insufficient_evidence' ? (
+            <div style={styles.insufficientEvidenceCard}>
+              <div style={styles.insufficientBadge}>🔒 INSUFFICIENT EVIDENCE FOR RANKING EVALUATION</div>
+              <h4 style={{ margin: '8px 0 4px 0', fontSize: '14px', color: '#92400E' }}>
+                Sample Below Minimum Statistical Threshold (N &lt; {MIN_EVALUATION_SAMPLE})
+              </h4>
+              <p style={{ margin: 0, fontSize: '12px', color: '#78350F', lineHeight: 1.5 }}>
+                {activeRanking.message}
+              </p>
+              <div style={{ marginTop: '10px', fontSize: '12px', color: '#4B5563', lineHeight: 1.5 }}>
+                To record explicit preference evidence, open the <strong>Adaptive Sprint Planner</strong> modal, navigate to the <strong>⚖ Strategy Benchmark & Quality</strong> tab, and select which strategy schedule balance you prefer for your task backlog.
+              </div>
+            </div>
+          ) : (
+            <div style={styles.evaluatedRankingCard}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                <div>
+                  <span style={styles.evaluatedBadge}>OFFLINE EVALUATED</span>
+                  <h4 style={{ margin: '4px 0 0 0', fontSize: '15px', color: '#111827' }}>
+                    Baseline Factory Pairwise Accuracy: {activeRanking.baselineMetrics?.accuracyPct}%
+                  </h4>
+                </div>
+                <div style={styles.concordancePill}>
+                  {activeRanking.baselineMetrics?.concordantCount} / {activeRanking.baselineMetrics?.totalEvaluated} Concordant Pairs
+                </div>
+              </div>
+
+              <div style={styles.rankingBreakdownGrid}>
+                <div style={styles.rankingBreakdownCol}>
+                  <span style={styles.breakdownLabel}>Concordant Pairs (+1):</span>
+                  <span style={{ fontWeight: '700', color: '#1B5E3C' }}>{activeRanking.baselineMetrics?.concordantCount}</span>
+                </div>
+                <div style={styles.rankingBreakdownCol}>
+                  <span style={styles.breakdownLabel}>Discordant Inversions (0):</span>
+                  <span style={{ fontWeight: '700', color: '#9E2A2B' }}>{activeRanking.baselineMetrics?.discordantCount}</span>
+                </div>
+                <div style={styles.rankingBreakdownCol}>
+                  <span style={styles.breakdownLabel}>Tied Score Evaluations:</span>
+                  <span style={{ fontWeight: '700', color: '#4B5563' }}>{activeRanking.baselineMetrics?.tiedCount}</span>
+                </div>
+                <div style={styles.rankingBreakdownCol}>
+                  <span style={styles.breakdownLabel}>Statistical Margin of Error:</span>
+                  <span style={{ fontWeight: '700', color: '#1E40AF' }}>±{activeRanking.uncertainty?.marginOfErrorPct}%</span>
+                </div>
+              </div>
+
+              {/* Uncertainty and Split Validation Notice */}
+              <div style={styles.uncertaintyNote}>
+                <strong>⚠️ Statistical Limitation & Data Maturity:</strong> {activeRanking.uncertainty?.disclaimer}
+                <div style={{ marginTop: '4px' }}>
+                  <strong>Grouped Partitioning Strategy:</strong> {activeRanking.splitValidation?.isSplitDefensible ? 'Active (60/40 grouped holdout)' : `Inactive (${activeRanking.evidenceSummary?.eligibleCount} / ${MIN_HOLDOUT_SAMPLE} required)`}.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Model Methodology & Decoupling Governance */}
+          <div style={styles.methodologyBox}>
+            <div style={{ fontWeight: '700', fontSize: '12px', color: '#374151', marginBottom: '4px' }}>
+              🔬 Ranking Methodology & Governance Rules:
+            </div>
+            <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '11px', color: '#4B5563', lineHeight: 1.6 }}>
+              <li><strong>Pairwise Loss:</strong> Uses strict binary concordance over explicit user choices. Ties and non-finite scores receive zero concordance credit.</li>
+              <li><strong>Hard Constraint Decoupling:</strong> Alternatives violating Kahn topological order or working hour capacities cannot earn concordance credit.</li>
+              <li><strong>Zero Automatic Model Promotion:</strong> Offline ranking evaluation strictly measures candidate viability; it does not deploy weights to production.</li>
+            </ul>
           </div>
         </div>
       )}
@@ -957,5 +1171,150 @@ const styles = {
     color: '#4B5563',
     padding: '2px 6px',
     borderRadius: '4px',
+  },
+  rankingHeaderBanner: {
+    backgroundColor: '#F0FDF4',
+    border: '1px solid #BBF7D0',
+    borderRadius: '8px',
+    padding: '12px 16px',
+    marginBottom: '16px',
+  },
+  rankingHeaderTitle: {
+    fontSize: '14px',
+    fontWeight: 700,
+    color: '#166534',
+    marginBottom: '4px',
+  },
+  rankingHeaderDesc: {
+    fontSize: '12px',
+    color: '#15803D',
+    lineHeight: 1.4,
+  },
+  rankingStatsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+    gap: '12px',
+    marginBottom: '16px',
+  },
+  rankingStatCard: {
+    backgroundColor: '#F9FAFB',
+    border: '1px solid #E5E7EB',
+    borderRadius: '8px',
+    padding: '12px 14px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  rankingStatLabel: {
+    fontSize: '11px',
+    color: '#6B7280',
+    fontWeight: 600,
+  },
+  rankingStatValue: {
+    fontSize: '20px',
+    fontWeight: 800,
+    color: '#111827',
+  },
+  rankingStatSub: {
+    fontSize: '11px',
+    color: '#9CA3AF',
+  },
+  exclusionsBox: {
+    backgroundColor: '#FFFBEB',
+    border: '1px solid #FDE68A',
+    borderRadius: '8px',
+    padding: '10px 14px',
+    marginBottom: '16px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    flexWrap: 'wrap',
+  },
+  exclusionsPillWrap: {
+    display: 'flex',
+    gap: '6px',
+    flexWrap: 'wrap',
+  },
+  exclusionPill: {
+    fontSize: '11px',
+    fontWeight: 700,
+    backgroundColor: '#FEF3C7',
+    color: '#92400E',
+    padding: '2px 8px',
+    borderRadius: '4px',
+    border: '1px solid #FCD34D',
+  },
+  insufficientEvidenceCard: {
+    backgroundColor: '#FEF3C7',
+    border: '1px solid #F59E0B',
+    borderRadius: '8px',
+    padding: '16px',
+    marginBottom: '16px',
+  },
+  insufficientBadge: {
+    fontSize: '11px',
+    fontWeight: 700,
+    color: '#92400E',
+    letterSpacing: '0.04em',
+  },
+  evaluatedRankingCard: {
+    backgroundColor: '#FFFFFF',
+    border: '1px solid #E5E7EB',
+    borderRadius: '8px',
+    padding: '16px',
+    marginBottom: '16px',
+    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
+  },
+  evaluatedBadge: {
+    fontSize: '10px',
+    fontWeight: 700,
+    backgroundColor: '#DCFCE7',
+    color: '#166534',
+    padding: '2px 8px',
+    borderRadius: '4px',
+    border: '1px solid #86EFAC',
+    letterSpacing: '0.04em',
+  },
+  concordancePill: {
+    fontSize: '12px',
+    fontWeight: 700,
+    backgroundColor: '#F3F4F6',
+    color: '#1F2937',
+    padding: '4px 10px',
+    borderRadius: '6px',
+    border: '1px solid #D1D5DB',
+  },
+  rankingBreakdownGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+    gap: '12px',
+    padding: '12px',
+    backgroundColor: '#F9FAFB',
+    borderRadius: '6px',
+    marginBottom: '12px',
+  },
+  rankingBreakdownCol: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+    fontSize: '12px',
+  },
+  breakdownLabel: {
+    fontSize: '11px',
+    color: '#6B7280',
+  },
+  uncertaintyNote: {
+    fontSize: '11px',
+    color: '#4B5563',
+    backgroundColor: '#F3F4F6',
+    padding: '8px 12px',
+    borderRadius: '6px',
+    lineHeight: 1.4,
+  },
+  methodologyBox: {
+    backgroundColor: '#F9FAFB',
+    border: '1px solid #E5E7EB',
+    borderRadius: '8px',
+    padding: '12px 16px',
   },
 };
