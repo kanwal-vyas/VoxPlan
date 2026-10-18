@@ -6,6 +6,7 @@ import {
   CONVERSATION_INTENTS,
   RESOLUTION_STATUS,
 } from '../src/conversation/dialogueManager.js';
+import { formatTaskDueDate } from '../src/conversation/compoundCommandParser.js';
 
 // Fixed reference date: Saturday, October 17, 2026
 const FIXED_REFERENCE_TIME = new Date('2026-10-17T12:00:00.000Z').getTime();
@@ -602,5 +603,241 @@ describe('Critical Correctness Regression — Ambiguous Task Mutation Prevention
       assert.equal(res.candidateTasks.length, 2);
     });
   });
+
+  describe('Candidate-Card Interaction & Clarification Resolution Pathway', () => {
+    test('Clicking candidate 1 by stable ID resolves candidate 1 through the existing pathway', () => {
+      const dm = new DialogueManager({ clock: () => FIXED_REFERENCE_TIME });
+      const tasks = createExactFourTaskScenario();
+
+      // Step 1: Prompt clarification
+      const clar = dm.processInput('Complete English', { tasks });
+      assert.equal(clar.state, CONVERSATION_STATES.AWAITING_CLARIFICATION);
+      assert.equal(clar.candidateTasks.length, 4);
+
+      const candidate1 = clar.candidateTasks[0]; // e.g. task-eng-today
+      // Step 2: User clicks candidate card 1, which sends candidate.id to executeCommand
+      const res = dm.processInput(candidate1.id, { tasks });
+      assert.equal(res.state, CONVERSATION_STATES.IDLE);
+      assert.equal(res.isAuthorized, true);
+      assert.equal(res.targetTask.id, candidate1.id);
+      assert.equal(res.action.type, CONVERSATION_INTENTS.COMPLETE_TASK);
+      assert.equal(res.action.taskId, candidate1.id);
+
+      // Verify only selected task would be mutated
+      const mutated = tasks.map((t) => (t.id === res.action.taskId ? { ...t, completed: true } : t));
+      assert.equal(mutated.find((t) => t.id === candidate1.id).completed, true);
+      assert.ok(mutated.filter((t) => t.id !== candidate1.id).every((t) => !t.completed));
+    });
+
+    test('Clicking candidate 2 by stable ID resolves candidate 2 through the existing pathway', () => {
+      const dm = new DialogueManager({ clock: () => FIXED_REFERENCE_TIME });
+      const tasks = createExactFourTaskScenario();
+
+      const clar = dm.processInput('Complete English', { tasks });
+      assert.equal(clar.state, CONVERSATION_STATES.AWAITING_CLARIFICATION);
+
+      const candidate2 = clar.candidateTasks[1]; // e.g. task-eng-tomorrow
+      const res = dm.processInput(candidate2.id, { tasks });
+      assert.equal(res.state, CONVERSATION_STATES.IDLE);
+      assert.equal(res.isAuthorized, true);
+      assert.equal(res.targetTask.id, candidate2.id);
+      assert.equal(res.action.type, CONVERSATION_INTENTS.COMPLETE_TASK);
+      assert.equal(res.action.taskId, candidate2.id);
+    });
+
+    test('Selected candidate cannot be resolved if removed from store before click', () => {
+      const dm = new DialogueManager({ clock: () => FIXED_REFERENCE_TIME });
+      const tasks = createExactFourTaskScenario();
+
+      const clar = dm.processInput('Complete English', { tasks });
+      assert.equal(clar.state, CONVERSATION_STATES.AWAITING_CLARIFICATION);
+
+      const candidate1 = clar.candidateTasks[0];
+      // Simulate task removed before user clicks card
+      const tasksWithoutCandidate1 = tasks.filter((t) => t.id !== candidate1.id);
+
+      const res = dm.processInput(candidate1.id, { tasks: tasksWithoutCandidate1 });
+      assert.equal(res.state, CONVERSATION_STATES.IDLE);
+      assert.equal(res.isAuthorized, false);
+      assert.equal(res.action, null);
+      assert.ok(res.responseText.includes('no longer available') || res.responseText.includes('no longer found') || res.responseText.includes('no longer exists'));
+    });
+
+    test('Rapid repeated click does not execute the action twice', () => {
+      const dm = new DialogueManager({ clock: () => FIXED_REFERENCE_TIME });
+      const tasks = createExactFourTaskScenario();
+
+      const clar = dm.processInput('Complete English', { tasks });
+      assert.equal(clar.state, CONVERSATION_STATES.AWAITING_CLARIFICATION);
+
+      const candidate1 = clar.candidateTasks[0];
+      // First click: resolves and returns to IDLE
+      const firstClick = dm.processInput(candidate1.id, { tasks });
+      assert.equal(firstClick.state, CONVERSATION_STATES.IDLE);
+      assert.equal(firstClick.isAuthorized, true);
+
+      // Simulate mutation happened on task store
+      const updatedTasks = tasks.map((t) => (t.id === candidate1.id ? { ...t, completed: true } : t));
+
+      // Second rapid click on same ID while now in IDLE state
+      const secondClick = dm.processInput(candidate1.id, { tasks: updatedTasks });
+      // In IDLE state, passing an ID without an action verb does not execute completion again
+      assert.equal(secondClick.isAuthorized, false);
+      assert.equal(secondClick.action, null);
+    });
+
+    test('Cancellation remains independent of card selection', () => {
+      const dm = new DialogueManager({ clock: () => FIXED_REFERENCE_TIME });
+      const tasks = createExactFourTaskScenario();
+
+      dm.processInput('Complete English', { tasks });
+      assert.equal(dm.state, CONVERSATION_STATES.AWAITING_CLARIFICATION);
+
+      const cancelRes = dm.processInput('never mind', { tasks });
+      assert.equal(cancelRes.state, CONVERSATION_STATES.IDLE);
+      assert.equal(cancelRes.isAuthorized, false);
+      assert.equal(cancelRes.action, null);
+      assert.equal(dm.pendingClarification, null);
+    });
+
+    test('Clarification remains visible and active if an invalid answer is provided', () => {
+      const dm = new DialogueManager({ clock: () => FIXED_REFERENCE_TIME });
+      const tasks = createExactFourTaskScenario();
+
+      dm.processInput('Complete English', { tasks });
+      assert.equal(dm.state, CONVERSATION_STATES.AWAITING_CLARIFICATION);
+
+      const invalidRes = dm.processInput('something completely unrelated', { tasks });
+      assert.equal(invalidRes.state, CONVERSATION_STATES.AWAITING_CLARIFICATION);
+      assert.equal(invalidRes.isAuthorized, false);
+      assert.equal(invalidRes.action, null);
+      assert.ok(dm.pendingClarification !== null);
+    });
+  });
+
+  describe('Contextual Resolution with Deterministic October 18, 2026 Reference Date', () => {
+    // Reference date: Sunday, October 18, 2026
+    const OCT_18_2026 = new Date('2026-10-18T10:00:00.000Z').getTime();
+
+    function createOct18Scenario() {
+      return [
+        {
+          id: 'task-eng-assign',
+          title: 'English assignment',
+          dueDate: null, // no deadline
+          completed: false,
+        },
+        {
+          id: 'task-eng-today',
+          title: 'English',
+          dueDate: '2026-10-18', // due today
+          completed: false,
+        },
+        {
+          id: 'task-eng-tomorrow',
+          title: 'English',
+          dueDate: '2026-10-19', // due tomorrow
+          completed: false,
+        },
+      ];
+    }
+
+    test('"Complete the English task for today" resolves unique match (English due Oct 18)', () => {
+      const dm = new DialogueManager({ clock: () => OCT_18_2026 });
+      const tasks = createOct18Scenario();
+
+      const res = dm.processInput('Complete the English task for today', { tasks });
+      assert.equal(res.state, CONVERSATION_STATES.IDLE);
+      assert.equal(res.isAuthorized, true);
+      assert.equal(res.targetTask.id, 'task-eng-today');
+      assert.equal(res.action.type, CONVERSATION_INTENTS.COMPLETE_TASK);
+      assert.equal(res.action.taskId, 'task-eng-today');
+    });
+
+    test('"Complete the English task today" (trailing qualifier) resolves unique match', () => {
+      const dm = new DialogueManager({ clock: () => OCT_18_2026 });
+      const tasks = createOct18Scenario();
+
+      const res = dm.processInput('Complete the English task today', { tasks });
+      assert.equal(res.state, CONVERSATION_STATES.IDLE);
+      assert.equal(res.isAuthorized, true);
+      assert.equal(res.targetTask.id, 'task-eng-today');
+    });
+
+    test('"Complete the English task for tomorrow" resolves English due Oct 19', () => {
+      const dm = new DialogueManager({ clock: () => OCT_18_2026 });
+      const tasks = createOct18Scenario();
+
+      const res = dm.processInput('Complete the English task for tomorrow', { tasks });
+      assert.equal(res.state, CONVERSATION_STATES.IDLE);
+      assert.equal(res.isAuthorized, true);
+      assert.equal(res.targetTask.id, 'task-eng-tomorrow');
+    });
+
+    test('"Complete English" without deadline qualifier asks for clarification across all candidates', () => {
+      const dm = new DialogueManager({ clock: () => OCT_18_2026 });
+      const tasks = createOct18Scenario();
+
+      const res = dm.processInput('Complete English', { tasks });
+      assert.equal(res.state, CONVERSATION_STATES.AWAITING_CLARIFICATION);
+      assert.equal(res.isAuthorized, false);
+      assert.equal(res.candidateTasks.length, 3);
+    });
+
+    test('Two English tasks due today remain ambiguous and ask for clarification', () => {
+      const dm = new DialogueManager({ clock: () => OCT_18_2026 });
+      const twoTodayTasks = [
+        { id: 'eng-today-1', title: 'English', dueDate: '2026-10-18', completed: false },
+        { id: 'eng-today-2', title: 'English', dueDate: '2026-10-18', completed: false },
+        { id: 'eng-tomorrow', title: 'English', dueDate: '2026-10-19', completed: false },
+      ];
+
+      const res = dm.processInput('Complete the English task for today', { tasks: twoTodayTasks });
+      assert.equal(res.state, CONVERSATION_STATES.AWAITING_CLARIFICATION);
+      assert.equal(res.isAuthorized, false);
+      assert.equal(res.action, null);
+      assert.equal(res.candidateTasks.length, 2);
+      assert.ok(res.candidateTasks.every((t) => t.dueDate === '2026-10-18'));
+    });
+
+    test('Nonexistent deadline does not silently substitute an unscheduled task', () => {
+      const dm = new DialogueManager({ clock: () => OCT_18_2026 });
+      const tasks = createOct18Scenario();
+
+      const res = dm.processInput('Complete the English task for yesterday', { tasks });
+      assert.equal(res.state, CONVERSATION_STATES.IDLE);
+      assert.equal(res.isAuthorized, false);
+      assert.equal(res.action, null);
+      assert.equal(res.error, 'task_not_found');
+      assert.ok(tasks.every((t) => !t.completed));
+    });
+  });
+
+  describe('Date-Label Consistency & Timezone Stability', () => {
+    const OCT_18_2026 = new Date('2026-10-18T12:00:00.000Z');
+
+    test('formatTaskDueDate produces consistent labels relative to reference date', () => {
+      assert.equal(formatTaskDueDate('2026-10-18', OCT_18_2026), 'Due today');
+      assert.equal(formatTaskDueDate('2026-10-19', OCT_18_2026), 'Due tomorrow');
+      assert.equal(formatTaskDueDate('2026-10-17', OCT_18_2026), 'Overdue by 1 day');
+      assert.equal(formatTaskDueDate('2026-10-16', OCT_18_2026), 'Overdue by 2 days');
+      assert.equal(formatTaskDueDate('2026-10-25', OCT_18_2026), 'Due Oct 25');
+      assert.equal(formatTaskDueDate(null, OCT_18_2026), 'No deadline');
+      assert.equal(formatTaskDueDate('', OCT_18_2026), 'No deadline');
+      assert.equal(formatTaskDueDate(undefined, OCT_18_2026), 'No deadline');
+    });
+
+    test('Calendar date strings YYYY-MM-DD are immune to timezone offset drift', () => {
+      // Test start of local day and end of local day without date shifting
+      const morningRef = new Date(2026, 9, 18, 0, 1, 0);
+      const nightRef = new Date(2026, 9, 18, 23, 59, 0);
+
+      assert.equal(formatTaskDueDate('2026-10-18', morningRef), 'Due today');
+      assert.equal(formatTaskDueDate('2026-10-18', nightRef), 'Due today');
+      assert.equal(formatTaskDueDate('2026-10-19', morningRef), 'Due tomorrow');
+      assert.equal(formatTaskDueDate('2026-10-19', nightRef), 'Due tomorrow');
+    });
+  });
 });
+
 

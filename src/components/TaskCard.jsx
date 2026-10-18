@@ -1,27 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { formatTaskDueDate } from '../conversation/compoundCommandParser';
 
-function formatDueDate(dueDateStr) {
-  if (!dueDateStr) return 'No deadline set';
-  const parts = dueDateStr.split('-');
-  if (parts.length === 3) {
-    const year = parseInt(parts[0], 10);
-    const month = parseInt(parts[1], 10) - 1;
-    const day = parseInt(parts[2], 10);
-    const d = new Date(year, month, day);
-    if (!isNaN(d.getTime())) {
-      const today = new Date();
-      const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      const diffTime = d.getTime() - todayDate.getTime();
-      const diffDays = Math.round(diffTime / (1000 * 3600 * 24));
-      if (diffDays === 0) return 'Due today';
-      if (diffDays === 1) return 'Due tomorrow';
-      if (diffDays === -1) return 'Overdue by 1 day';
-      if (diffDays < -1) return `Overdue by ${Math.abs(diffDays)} days`;
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      return `Due ${monthNames[month]} ${day}`;
-    }
-  }
-  return `Due ${dueDateStr}`;
+function formatDueDate(dueDateStr, referenceDate) {
+  return formatTaskDueDate(dueDateStr, referenceDate);
 }
 
 function formatDuration(seconds) {

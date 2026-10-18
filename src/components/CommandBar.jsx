@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { formatTaskDueDate } from '../conversation/compoundCommandParser';
 
 export default function CommandBar({
   onExecuteCommand,
@@ -20,6 +21,7 @@ export default function CommandBar({
   onAcceptProposal,
   onDiscardProposal,
   pendingClarification = null,
+  dialogueClock = null,
   onSelectClarificationCandidate,
   onCancelClarification,
 }) {
@@ -535,50 +537,69 @@ export default function CommandBar({
 
               {pendingClarification.candidates && pendingClarification.candidates.length > 0 && (
                 <div style={styles.candidatesGrid}>
-                  {pendingClarification.candidates.map((candidate, idx) => (
-                    <button
-                      key={candidate.id || idx}
-                      type="button"
-                      className="clarification-candidate-btn"
-                      onClick={() => onSelectClarificationCandidate && onSelectClarificationCandidate(candidate)}
-                      style={styles.candidateCard}
-                      aria-label={`Select candidate ${idx + 1}: ${candidate.title}${candidate.dueDate ? ` due ${candidate.dueDate}` : ''}`}
-                    >
-                      <div style={styles.candidateHeader}>
-                        <span style={styles.candidateIndex}>#{idx + 1}</span>
-                        <span style={styles.candidateTitle}>{candidate.title}</span>
-                      </div>
-                      <div style={styles.candidateMetaRow}>
-                        <span
-                          style={{
-                            ...styles.candidateMetaBadge,
-                            backgroundColor: candidate.dueDate ? '#EBF8F1' : '#F1F5F9',
-                            color: candidate.dueDate ? '#166534' : '#64748B',
-                            borderColor: candidate.dueDate ? '#BFE8D0' : '#E2E8F0',
-                          }}
-                        >
-                          📅 {candidate.dueDate ? `Due ${candidate.dueDate}` : 'No deadline'}
-                        </span>
-                        {candidate.priority && (
+                  {pendingClarification.candidates.map((candidate, idx) => {
+                    const formattedDue = formatTaskDueDate(candidate.dueDate, dialogueClock ? dialogueClock() : undefined);
+                    return (
+                      <button
+                        key={candidate.id || idx}
+                        id={`clarification-candidate-${candidate.id || idx}`}
+                        type="button"
+                        className="clarification-candidate-btn"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (onSelectClarificationCandidate) {
+                            onSelectClarificationCandidate(candidate);
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (onSelectClarificationCandidate) {
+                              onSelectClarificationCandidate(candidate);
+                            }
+                          }
+                        }}
+                        style={styles.candidateCard}
+                        aria-label={`Select candidate ${idx + 1}: ${candidate.title} (${formattedDue})`}
+                      >
+                        <div style={styles.candidateHeader}>
+                          <span style={styles.candidateIndex}>#{idx + 1}</span>
+                          <span style={styles.candidateTitle}>{candidate.title}</span>
+                        </div>
+                        <div style={styles.candidateMetaRow}>
                           <span
                             style={{
                               ...styles.candidateMetaBadge,
-                              backgroundColor: candidate.priority === 'high' ? '#FFE8E5' : candidate.priority === 'low' ? '#F1F5F9' : '#FFF4E5',
-                              color: candidate.priority === 'high' ? '#991B1B' : candidate.priority === 'low' ? '#64748B' : '#B45309',
-                              borderColor: candidate.priority === 'high' ? '#FFB5A7' : candidate.priority === 'low' ? '#E2E8F0' : '#FFE0B2',
+                              backgroundColor: candidate.dueDate ? '#EBF8F1' : '#F1F5F9',
+                              color: candidate.dueDate ? '#166534' : '#64748B',
+                              borderColor: candidate.dueDate ? '#BFE8D0' : '#E2E8F0',
                             }}
                           >
-                            ⚡ {candidate.priority.toUpperCase()}
+                            📅 {formattedDue}
                           </span>
-                        )}
-                        {candidate.category && candidate.category !== 'General' && (
-                          <span style={styles.candidateCategoryBadge}>
-                            🏷️ {candidate.category}
-                          </span>
-                        )}
-                      </div>
-                    </button>
-                  ))}
+                          {candidate.priority && (
+                            <span
+                              style={{
+                                ...styles.candidateMetaBadge,
+                                backgroundColor: candidate.priority === 'high' ? '#FFE8E5' : candidate.priority === 'low' ? '#F1F5F9' : '#FFF4E5',
+                                color: candidate.priority === 'high' ? '#991B1B' : candidate.priority === 'low' ? '#64748B' : '#B45309',
+                                borderColor: candidate.priority === 'high' ? '#FFB5A7' : candidate.priority === 'low' ? '#E2E8F0' : '#FFE0B2',
+                              }}
+                            >
+                              ⚡ {candidate.priority.toUpperCase()}
+                            </span>
+                          )}
+                          {candidate.category && candidate.category !== 'General' && (
+                            <span style={styles.candidateCategoryBadge}>
+                              🏷️ {candidate.category}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
 

@@ -20,6 +20,7 @@ import {
   splitCompoundCommands,
   parseEnhancedDate,
   formatISODate,
+  formatTaskDueDate,
 } from './compoundCommandParser.js';
 import {
   explainScheduleDecision,
@@ -253,7 +254,30 @@ export class DialogueManager {
     const cleanRaw = query.trim();
     const cleanLower = cleanRaw.toLowerCase();
 
-    // 1. Check for pronoun or contextual reference
+    const candidatePool = Array.isArray(options.candidateTasks) && options.candidateTasks.length > 0
+      ? options.candidateTasks
+      : (this.pendingClarification?.matches || this.pendingClarification?.candidateTasks || null);
+
+    // 1. Direct stable task ID match (e.g. from UI candidate card click or exact ID input)
+    if (candidatePool && candidatePool.length > 0) {
+      const idMatchInPool = candidatePool.find(
+        (t) => t.id === cleanRaw || (typeof t.id === 'string' && t.id.toLowerCase() === cleanLower)
+      );
+      if (idMatchInPool) {
+        const verified = tasks.find((t) => t.id === idMatchInPool.id);
+        if (verified) return { status: RESOLUTION_STATUS.RESOLVED, task: verified, isContextual: true };
+        return { status: RESOLUTION_STATUS.NOT_FOUND, reason: 'task_deleted' };
+      }
+    }
+
+    const idMatchInTasks = tasks.find(
+      (t) => t.id === cleanRaw || (typeof t.id === 'string' && t.id.toLowerCase() === cleanLower)
+    );
+    if (idMatchInTasks) {
+      return { status: RESOLUTION_STATUS.RESOLVED, task: idMatchInTasks, isContextual: false };
+    }
+
+    // 2. Check for pronoun or contextual reference
     const isPronoun = /^(?:it|this|that|this\s+task|that\s+task|the\s+task|my\s+task)$/i.test(cleanLower);
     if (isPronoun) {
       if (!this.activeSubjectTaskId) {
@@ -267,19 +291,15 @@ export class DialogueManager {
       return { status: RESOLUTION_STATUS.RESOLVED, task: contextualTask, isContextual: true };
     }
 
-    const candidatePool = Array.isArray(options.candidateTasks) && options.candidateTasks.length > 0
-      ? options.candidateTasks
-      : (this.pendingClarification?.matches || this.pendingClarification?.candidateTasks || null);
-
     const now = new Date(this.clock());
     const todayISO = formatISODate(now);
     const tomorrowD = new Date(this.clock());
     tomorrowD.setDate(tomorrowD.getDate() + 1);
     const tomorrowISO = formatISODate(tomorrowD);
 
-    // 2. If answering clarification, evaluate against candidates in pool FIRST
+    // 3. If answering clarification, evaluate against candidates in pool FIRST
     if (candidatePool && candidatePool.length > 0) {
-      // 2a. Ordinal / position selection against stable displayed ordering
+      // 3a. Ordinal / position selection against stable displayed ordering
       if (/^(?:the\s+)?(?:first(?:\s+one|\s+task)?|1st|number\s+1|1)$/i.test(cleanLower)) {
         const candidate = candidatePool[0];
         const verified = tasks.find((t) => t.id === candidate.id);
@@ -325,10 +345,10 @@ export class DialogueManager {
         }
       }
 
-      // 2b. Relative deadline disambiguation ("the one due tomorrow", "due tomorrow", "tomorrow", "due today", "today", "the one with no deadline")
-      const isTomorrow = /\b(?:due\s+)?tomorrow\b/i.test(cleanLower);
-      const isToday = /\b(?:due\s+)?today\b/i.test(cleanLower);
-      const isNoDeadline = /\b(?:no\s+deadline|without\s+(?:a\s+)?deadline|unscheduled)\b/i.test(cleanLower);
+      // 3b. Relative deadline disambiguation ("the one due tomorrow", "due tomorrow", "tomorrow", "due today", "today", "the one with no deadline")
+      const isTomorrow = /\b(?:(?:due|for|on)\s+)?tomorrow\b/i.test(cleanLower);
+      const isToday = /\b(?:(?:due|for|on)\s+)?today\b/i.test(cleanLower);
+      const isNoDeadline = /\b(?:with\s+)?(?:no\s+deadline|without\s+(?:a\s+)?deadline|unscheduled)\b/i.test(cleanLower);
 
       if (isTomorrow) {
         const tomorrowMatches = candidatePool.filter((t) => t.dueDate === tomorrowISO);
@@ -338,7 +358,15 @@ export class DialogueManager {
           return { status: RESOLUTION_STATUS.NOT_FOUND, reason: 'task_deleted' };
         }
         if (tomorrowMatches.length > 1) {
-          return { status: RESOLUTION_STATUS.AMBIGUOUS, matches: tomorrowMatches };
+          const titleFiltered = tomorrowMatches.filter((t) => {
+            const strippedTitle = t.title.toLowerCase();
+            return cleanLower.includes(strippedTitle) || strippedTitle.includes(cleanLower.replace(/\b(?:the|my|a|an|task|for|due|on|tomorrow)\b/gi, '').trim());
+          });
+          if (titleFiltered.length === 1) {
+            const verified = tasks.find((t) => t.id === titleFiltered[0].id);
+            if (verified) return { status: RESOLUTION_STATUS.RESOLVED, task: verified, isContextual: true };
+          }
+          return { status: RESOLUTION_STATUS.AMBIGUOUS, matches: titleFiltered.length > 0 ? titleFiltered : tomorrowMatches };
         }
       }
 
@@ -350,7 +378,15 @@ export class DialogueManager {
           return { status: RESOLUTION_STATUS.NOT_FOUND, reason: 'task_deleted' };
         }
         if (todayMatches.length > 1) {
-          return { status: RESOLUTION_STATUS.AMBIGUOUS, matches: todayMatches };
+          const titleFiltered = todayMatches.filter((t) => {
+            const strippedTitle = t.title.toLowerCase();
+            return cleanLower.includes(strippedTitle) || strippedTitle.includes(cleanLower.replace(/\b(?:the|my|a|an|task|for|due|on|today)\b/gi, '').trim());
+          });
+          if (titleFiltered.length === 1) {
+            const verified = tasks.find((t) => t.id === titleFiltered[0].id);
+            if (verified) return { status: RESOLUTION_STATUS.RESOLVED, task: verified, isContextual: true };
+          }
+          return { status: RESOLUTION_STATUS.AMBIGUOUS, matches: titleFiltered.length > 0 ? titleFiltered : todayMatches };
         }
       }
 
@@ -362,11 +398,19 @@ export class DialogueManager {
           return { status: RESOLUTION_STATUS.NOT_FOUND, reason: 'task_deleted' };
         }
         if (noDeadlineMatches.length > 1) {
-          return { status: RESOLUTION_STATUS.AMBIGUOUS, matches: noDeadlineMatches };
+          const titleFiltered = noDeadlineMatches.filter((t) => {
+            const strippedTitle = t.title.toLowerCase();
+            return cleanLower.includes(strippedTitle) || strippedTitle.includes(cleanLower.replace(/\b(?:the|my|a|an|task|no|without|a|deadline|unscheduled)\b/gi, '').trim());
+          });
+          if (titleFiltered.length === 1) {
+            const verified = tasks.find((t) => t.id === titleFiltered[0].id);
+            if (verified) return { status: RESOLUTION_STATUS.RESOLVED, task: verified, isContextual: true };
+          }
+          return { status: RESOLUTION_STATUS.AMBIGUOUS, matches: titleFiltered.length > 0 ? titleFiltered : noDeadlineMatches };
         }
       }
 
-      // 2c. Substring / Distinctive token matching inside candidatePool
+      // 3c. Substring / Distinctive token matching inside candidatePool
       const poolStripped = cleanLower
         .replace(/^(?:the|my|a|an)\s+/i, '')
         .replace(/^(?:task\s+(?:about|for|called|named)\s+)/i, '')
@@ -391,7 +435,7 @@ export class DialogueManager {
       }
     }
 
-    // 3. Contrast reference: "the other [X] task" or "what about the other [X] task"
+    // 4. Contrast reference: "the other [X] task" or "what about the other [X] task"
     const otherMatch = cleanLower.match(/^(?:what\s+about\s+)?(?:the\s+)?other\s+(.+?)(?:\s+task)?$/i);
     if (otherMatch) {
       const topic = otherMatch[1].trim();
@@ -404,21 +448,22 @@ export class DialogueManager {
       }
     }
 
-    // 4. Extract identifying attributes from query (explicit deadlines, relative dates, "no deadline")
+    // 5. Extract identifying attributes from query (explicit deadlines, relative dates, "no deadline")
     let targetDeadlineISO = undefined; // undefined = not specified; null = explicitly unscheduled (no deadline); string = specific ISO date
     let queryWithoutAttr = cleanLower;
 
-    // 4a. Check for "no deadline" / "unscheduled"
+    // 5a. Check for "no deadline" / "unscheduled"
     const noDeadlineRegex = /\b(?:with\s+)?(?:no\s+deadline|without\s+(?:a\s+)?deadline|unscheduled)\b/i;
     if (noDeadlineRegex.test(cleanLower)) {
       targetDeadlineISO = null;
       queryWithoutAttr = queryWithoutAttr.replace(noDeadlineRegex, ' ').trim();
     } else {
-      // 4b. Check for explicit deadline / date attributes
-      // e.g.: "due today", "due tomorrow", "due on Friday", "due 2026-10-19", "for today", "for tomorrow", "today's"
+      // 5b. Check for explicit deadline / date attributes
+      // e.g.: "due today", "for today", "on today", "due tomorrow", "for tomorrow", "today's", "tomorrow's", "due 2026-10-18", "for 18th October", "on Friday", "due Friday"
       const duePattern = /\b(?:due\s+(?:on\s+|by\s+|at\s+)?|scheduled\s+(?:for|on)\s+)(today|tomorrow|yesterday|\d{4}-\d{2}-\d{2}|next\s+\w+|\w+\s+\d{1,2}(?:st|nd|rd|th)?|\d{1,2}(?:st|nd|rd|th)?(?:\s+of)?\s+\w+)\b/i;
-      const forDatePattern = /\bfor\s+(today|tomorrow|yesterday)\b/i;
+      const forDatePattern = /\b(?:for|on)\s+(today|tomorrow|yesterday|\d{4}-\d{2}-\d{2}|next\s+\w+|\w+\s+\d{1,2}(?:st|nd|rd|th)?|\d{1,2}(?:st|nd|rd|th)?(?:\s+of)?\s+\w+)\b/i;
       const possessiveDatePattern = /\b(today|tomorrow|yesterday)'s\b/i;
+      const trailingDatePattern = /\b(?:task\s+)?(today|tomorrow|yesterday)$/i;
 
       let dateMatch = queryWithoutAttr.match(duePattern);
       let matchedPhrase = dateMatch ? dateMatch[0] : null;
@@ -434,6 +479,14 @@ export class DialogueManager {
 
       if (!dateMatch) {
         dateMatch = queryWithoutAttr.match(possessiveDatePattern);
+        if (dateMatch) {
+          matchedPhrase = dateMatch[0];
+          matchedDateStr = dateMatch[1];
+        }
+      }
+
+      if (!dateMatch) {
+        dateMatch = queryWithoutAttr.match(trailingDatePattern);
         if (dateMatch) {
           matchedPhrase = dateMatch[0];
           matchedDateStr = dateMatch[1];
@@ -749,7 +802,7 @@ export class DialogueManager {
     }
 
     // Explicit cancellation check
-    const isNegative = /^(?:no|n|cancel|stop|abort|nevermind|don't|do\s+not)$/i.test(text);
+    const isNegative = /^(?:no|n|cancel|stop|abort|never\s*mind|don't|do\s+not)$/i.test(text);
     if (isNegative) {
       this.pendingAction = null;
       this.state = CONVERSATION_STATES.IDLE;
@@ -789,7 +842,7 @@ export class DialogueManager {
     const pendingIntent = this.pendingIntent;
 
     // Check for explicit cancellation
-    if (/^(?:cancel|stop|abort|nevermind|exit)$/i.test(text)) {
+    if (/^(?:cancel|stop|abort|never\s*mind|exit)$/i.test(text)) {
       this.state = CONVERSATION_STATES.IDLE;
       this.pendingClarification = null;
       this.pendingIntent = null;
@@ -880,19 +933,16 @@ export class DialogueManager {
           : 'modify';
 
         const now = new Date(this.clock());
-        const todayISO = formatISODate(now);
-        const tomorrowD = new Date(this.clock());
-        tomorrowD.setDate(tomorrowD.getDate() + 1);
-        const tomorrowISO = formatISODate(tomorrowD);
 
         const formattedCandidates = resolution.matches.map((t, idx) => {
           const meta = [];
           if (t.dueDate) {
-            if (t.dueDate === todayISO) meta.push('due today');
-            else if (t.dueDate === tomorrowISO) meta.push('due tomorrow');
-            else meta.push(`due ${t.dueDate}`);
+            meta.push(formatTaskDueDate(t.dueDate, now).toLowerCase());
           } else {
             meta.push('no deadline');
+          }
+          if (t.category && t.category !== 'General') {
+            meta.push(t.category);
           }
           const metaStr = meta.length > 0 ? ` (${meta.join(', ')})` : '';
           return `${idx + 1}. "${t.title}"${metaStr}`;
@@ -1044,7 +1094,7 @@ export class DialogueManager {
     const activeProp = this.activeProposal;
 
     // 1. Explicit Cancellation
-    if (/^(?:cancel|nevermind|exit|stop)$/i.test(text)) {
+    if (/^(?:cancel|never\s*mind|exit|stop)$/i.test(text)) {
       const discarded = activeProp ? {
         ...activeProp,
         status: 'discarded',
@@ -2181,10 +2231,6 @@ export class DialogueManager {
       };
 
       const now = new Date(this.clock());
-      const todayISO = formatISODate(now);
-      const tomorrowD = new Date(this.clock());
-      tomorrowD.setDate(tomorrowD.getDate() + 1);
-      const tomorrowISO = formatISODate(tomorrowD);
 
       const count = resolution.matches.length;
       const countWord = count === 2 ? 'two' : count === 3 ? 'three' : count === 4 ? 'four' : `${count}`;
@@ -2210,13 +2256,7 @@ export class DialogueManager {
       const formattedCandidates = resolution.matches.map((t, idx) => {
         const meta = [];
         if (t.dueDate) {
-          if (t.dueDate === todayISO) {
-            meta.push('due today');
-          } else if (t.dueDate === tomorrowISO) {
-            meta.push('due tomorrow');
-          } else {
-            meta.push(`due ${t.dueDate}`);
-          }
+          meta.push(formatTaskDueDate(t.dueDate, now).toLowerCase());
         } else {
           meta.push('no deadline');
         }

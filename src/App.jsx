@@ -114,8 +114,8 @@ const normalizeTask = (t) => {
   const rawDue = t.dueDate || t.due_date;
   if (rawDue) {
     const rawStr = String(rawDue).trim();
-    if (/^\d{4}-\d{2}-\d{2}/.test(rawStr)) {
-      dueDate = rawStr.slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(rawStr)) {
+      dueDate = rawStr;
     } else {
       // Legacy "October 5" format migration
       const legacyMatch = rawStr.match(/oct(?:ober)?\s*(\d{1,2})/i);
@@ -1249,9 +1249,11 @@ export default function App() {
           onAcceptProposal={handleAcceptProposal}
           onDiscardProposal={handleDiscardProposal}
           pendingClarification={pendingClarification}
+          dialogueClock={dialogueManager.clock}
           onSelectClarificationCandidate={(candidate) => {
-            const query = candidate.title || candidate.id;
-            executeCommand(query);
+            if (!candidate) return;
+            const targetId = candidate.id || candidate.title;
+            executeCommand(targetId);
           }}
           onCancelClarification={() => executeCommand('cancel')}
         />

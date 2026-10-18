@@ -43,6 +43,49 @@ export function formatISODate(d) {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * Formats a task due date string (YYYY-MM-DD) consistently across all UI and conversation surfaces.
+ * Respects local calendar date without UTC drift.
+ *
+ * @param {string|null|undefined} dueDateStr ISO date string (YYYY-MM-DD)
+ * @param {Date|number} [referenceDate] Injected local date or timestamp (defaults to current local Date)
+ * @returns {string} Human-friendly formatted deadline (e.g. "Due today", "Due tomorrow", "Due Oct 19", "Overdue by 1 day", "No deadline")
+ */
+export function formatTaskDueDate(dueDateStr, referenceDate = new Date()) {
+  if (!dueDateStr) return 'No deadline';
+  const cleanStr = String(dueDateStr).trim();
+  const dateMatch = cleanStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!dateMatch) return `Due ${cleanStr}`;
+
+  const year = parseInt(dateMatch[1], 10);
+  const month = parseInt(dateMatch[2], 10) - 1;
+  const day = parseInt(dateMatch[3], 10);
+
+  const ref = referenceDate instanceof Date && !isNaN(referenceDate.getTime())
+    ? new Date(referenceDate)
+    : typeof referenceDate === 'number'
+    ? new Date(referenceDate)
+    : new Date();
+
+  const targetDate = new Date(year, month, day);
+  const refDate = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate());
+
+  const diffTime = targetDate.getTime() - refDate.getTime();
+  const diffDays = Math.round(diffTime / (1000 * 3600 * 24));
+
+  if (diffDays === 0) return 'Due today';
+  if (diffDays === 1) return 'Due tomorrow';
+  if (diffDays === -1) return 'Overdue by 1 day';
+  if (diffDays < -1) return `Overdue by ${Math.abs(diffDays)} days`;
+
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const monthName = monthNames[month] || '';
+  if (year === ref.getFullYear()) {
+    return `Due ${monthName} ${day}`;
+  }
+  return `Due ${monthName} ${day}, ${year}`;
+}
+
 const MONTH_MAP = Object.freeze({
   january: 0, jan: 0,
   february: 1, feb: 1,
