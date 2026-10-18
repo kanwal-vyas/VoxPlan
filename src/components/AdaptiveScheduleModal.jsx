@@ -3,6 +3,7 @@ import { generateAdaptiveSchedule, formatDateISO } from '../scheduler/adaptiveSc
 import { compareScheduleStrategies } from '../scheduler/scheduleEvaluator';
 import { BENCHMARK_SCENARIOS, runStabilityBenchmark } from '../scheduler/scheduleBenchmarks';
 import { computeScheduleFeedback } from '../scheduler/scheduleFeedback';
+import { loadTimeBlockSettings, saveTimeBlockSettings } from '../scheduler/timeBlockScheduler';
 
 export default function AdaptiveScheduleModal({
   tasks = [],
@@ -22,6 +23,40 @@ export default function AdaptiveScheduleModal({
   const [usePersonalModel, setUsePersonalModel] = useState(true);
   const [enableChunking, setEnableChunking] = useState(true);
   const [todayStr] = useState(() => formatDateISO(new Date()));
+
+  // Phase 6.2: Intraday focus windows and working hours state
+  const [timeBlockConfig] = useState(() => loadTimeBlockSettings());
+  const [enableIntraday, setEnableIntraday] = useState(() => timeBlockConfig.enableIntraday ?? true);
+  const [workStart, setWorkStart] = useState(() => timeBlockConfig.workingHours?.start || '09:00');
+  const [workEnd, setWorkEnd] = useState(() => timeBlockConfig.workingHours?.end || '17:00');
+
+  const handleToggleIntraday = () => {
+    const nextVal = !enableIntraday;
+    setEnableIntraday(nextVal);
+    saveTimeBlockSettings({
+      ...timeBlockConfig,
+      enableIntraday: nextVal,
+      workingHours: { start: workStart, end: workEnd },
+    });
+  };
+
+  const handleWorkStartChange = (val) => {
+    setWorkStart(val);
+    saveTimeBlockSettings({
+      ...timeBlockConfig,
+      enableIntraday,
+      workingHours: { start: val, end: workEnd },
+    });
+  };
+
+  const handleWorkEndChange = (val) => {
+    setWorkEnd(val);
+    saveTimeBlockSettings({
+      ...timeBlockConfig,
+      enableIntraday,
+      workingHours: { start: workStart, end: val },
+    });
+  };
 
   const hasAppliedRef = useRef(false);
   const recordedProposalIdRef = useRef(null);
@@ -67,6 +102,10 @@ export default function AdaptiveScheduleModal({
       startDate: todayStr,
       strategy: 'adaptive',
       enableChunking,
+      enableIntraday,
+      workingHours: { start: workStart, end: workEnd },
+      blackouts: timeBlockConfig.blackouts || [],
+      focusWindows: timeBlockConfig.focusWindows || [],
     });
   }, [
     tasks,
@@ -78,6 +117,10 @@ export default function AdaptiveScheduleModal({
     horizonDays,
     usePersonalModel,
     enableChunking,
+    enableIntraday,
+    workStart,
+    workEnd,
+    timeBlockConfig,
     todayStr,
   ]);
 
@@ -365,6 +408,43 @@ export default function AdaptiveScheduleModal({
                   {enableChunking ? '✓ Multi-Day Chunking' : '○ Single Session Only'}
                 </button>
               </div>
+
+              <div style={styles.configItem}>
+                <button
+                  type="button"
+                  onClick={handleToggleIntraday}
+                  style={{
+                    ...styles.toggleBtn,
+                    ...(enableIntraday ? styles.toggleBtnActive : styles.toggleBtnInactive),
+                  }}
+                  title="Schedule sessions within intraday available windows and respect meeting blackouts"
+                >
+                  {enableIntraday ? '✓ Intraday Windows' : '○ Daily Block Only'}
+                </button>
+              </div>
+
+              {enableIntraday && (
+                <div style={{ ...styles.configItem, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <label style={{ ...styles.configLabel, marginBottom: 0 }}>Hours:</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <input
+                      type="time"
+                      value={workStart}
+                      onChange={(e) => handleWorkStartChange(e.target.value)}
+                      style={{ ...styles.numInput, width: '70px', padding: '3px 4px', fontSize: '12px' }}
+                      title="Working hours start"
+                    />
+                    <span style={{ fontSize: '11px', color: '#71717A' }}>–</span>
+                    <input
+                      type="time"
+                      value={workEnd}
+                      onChange={(e) => handleWorkEndChange(e.target.value)}
+                      style={{ ...styles.numInput, width: '70px', padding: '3px 4px', fontSize: '12px' }}
+                      title="Working hours end"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Metrics Ribbon */}
@@ -488,6 +568,23 @@ export default function AdaptiveScheduleModal({
                                 Session {p.chunkIndex + 1} of {p.totalChunks}
                               </span>
                             )}
+                            {p.inFocusWindow && (
+                              <span
+                                style={{
+                                  fontSize: '10px',
+                                  fontWeight: '700',
+                                  backgroundColor: '#FEF3C7',
+                                  color: '#92400E',
+                                  border: '1px solid #FCD34D',
+                                  borderRadius: '4px',
+                                  padding: '1px 6px',
+                                  marginLeft: '4px',
+                                }}
+                                title={`Scheduled in ${p.focusWindowLabel || 'Focus Window'}`}
+                              >
+                                🎯 {p.focusWindowLabel || 'Focus'}
+                              </span>
+                            )}
                             {p.taskCategory && (
                               <span style={styles.categoryTag}>{p.taskCategory}</span>
                             )}
@@ -506,11 +603,18 @@ export default function AdaptiveScheduleModal({
 
                         <div style={{ flex: 1.5, fontSize: '12px', fontWeight: '700' }}>
                           {p.proposedDate ? (
-                            isShifted ? (
-                              <span style={styles.shiftedDateBadge}>{p.proposedDate}</span>
-                            ) : (
-                              <span>{p.proposedDate}</span>
-                            )
+                            <div>
+                              {isShifted ? (
+                                <span style={styles.shiftedDateBadge}>{p.proposedDate}</span>
+                              ) : (
+                                <span>{p.proposedDate}</span>
+                              )}
+                              {p.startTime && p.endTime && (
+                                <div style={{ fontSize: '11px', color: '#4F46E5', fontWeight: '600', marginTop: '2px' }}>
+                                  🕒 {p.startTime} – {p.endTime}
+                                </div>
+                              )}
+                            </div>
                           ) : (
                             <span style={{ color: '#9E2A2B', fontStyle: 'italic' }}>Unscheduled</span>
                           )}

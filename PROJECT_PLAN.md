@@ -1975,18 +1975,35 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
   - Interactive proposal drag-and-drop editing canvas deferred to Stage 6.3.
   - Standard RFC 5545 iCalendar (`.ics`) export deferred to Stage 6.4.
 
-#### Stage 6.2: Intra-Day Time-Blocking & Focus Window Constraints
+#### Stage 6.2: Intra-Day Time-Blocking & Focus Window Constraints (COMPLETED)
 - **Scope & Expected Deliverables**:
-  - Time-block allocator (`src/scheduler/timeBlockScheduler.js`) mapping daily task allocations to explicit hourly time slots (e.g. 09:00–12:00 Deep Work, 13:00–15:00 Collaboration).
-  - Blackout interval support: user-configured non-working windows and fixed recurring meeting slots that the scheduler treats as hard zero-capacity zones.
-  - Configurable transition buffers (e.g. 15-minute rest buffers between consecutive focus blocks).
+  - Time-block allocator (`src/scheduler/timeBlockScheduler.js`) mapping daily task allocations to explicit hourly time slots with half-open intervals `[start, end)`.
+  - Blackout interval support: user-configured non-working windows, meeting intervals, and recurring blackouts that the scheduler treats as hard zero-capacity zones.
+  - Focus window scoring: configurable deep work preferences (e.g. 09:00–12:00 Deep Work) that are prioritized during window selection.
+  - Intraday capacity clamping: daily capacity strictly equals $\min(\text{dailyCapacityHours}, \sum \text{available window hours})$; blackouts outside working hours do not reduce capacity.
+  - Multi-day task chunking integration: multi-day chunks and atomic tasks are placed into continuous available windows without crossing blackouts.
+  - Grounded conversational debriefing: `why_at_time` inquiry explaining exact start/end times, focus badges, and blackouts avoided.
+  - Natural-language commands: `SET_WORKING_HOURS`, `ADD_BLACKOUT`, `SET_FOCUS_WINDOW`, and available capacity queries handled in `DialogueManager`.
+  - UI enhancements: `AdaptiveScheduleModal.jsx` and `CommandBar.jsx` controls for intraday toggle, working hours editor, `startTime – endTime` labels, and focus window badges.
+  - Local-first persistence: safe localStorage storage with memory fallback for non-browser runtimes.
 - **Dependencies**: Stage 6.1.
 - **Acceptance Criteria**:
   - Tasks are placed exclusively within valid focus windows; meeting blackout slots are never double-booked.
   - Daily capacity is dynamically computed as the sum of available focus window hours minus meeting blackouts.
+  - Continuous window constraint: atomic tasks exceeding single-window duration defer to a day with continuous capacity.
+  - Backward compatibility: legacy date-only proposals continue working when intraday is disabled/unspecified (`enableIntraday: false`).
 - **Verification**:
-  - Automated collision-detection tests verifying zero overlap between scheduled tasks and blackout intervals (`tests/time_block_scheduler.test.js`).
-- **Privacy**: Meeting titles and calendar blackout reasons stored locally; no external calendar credentials required.
+  - Automated unit and integration test suite (`tests/time_block_scheduler.test.js`) with 19 comprehensive tests covering interval math, working hours normalization, blackout subtraction, intraday chunking, focus scoring, conversational debriefing, dialogue commands, and storage persistence.
+  - Full test suite: 364 passing tests across 76 suites (0 failures).
+  - Code hygiene: `oxlint` passes with 0 errors and 0 warnings.
+  - Production build: `vite build` passes cleanly.
+  - Backend ML tests: 27 passing tests (`python -m pytest backend/tests/ -q`).
+  - Browser verification: End-to-end browser subagent verified modal toggle, hours controls, intraday time labels (`🕒 09:00 – 12:30`), focus badges, and natural language command execution.
+- **Privacy & Local-First**: All working hours, blackouts, and focus preferences are stored locally in the browser/client; zero external calendar APIs or remote LLMs.
+- **Status**: **COMPLETED**.
+- **Remaining Limitations & Deferred Work**:
+  - Interactive proposal drag-and-drop canvas deferred to Stage 6.3.
+  - Standard RFC 5545 iCalendar (`.ics`) export deferred to Stage 6.4.
 
 #### Stage 6.3: Interactive Proposal Editing & Visual Override Canvas
 - **Scope & Expected Deliverables**:

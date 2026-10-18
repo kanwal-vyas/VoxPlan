@@ -27,6 +27,15 @@ import {
   explainScheduleChanges,
   generatePlanDebrief,
 } from './scheduleDebrief.js';
+import {
+  parseTimeToMinutes,
+  minutesToTimeString,
+  formatTimeAmPm,
+  computeAvailableWindowsForDate,
+  loadTimeBlockSettings,
+  saveTimeBlockSettings,
+} from '../scheduler/timeBlockScheduler.js';
+import { parseDateISO } from '../scheduler/adaptiveScheduler.js';
 
 export const CONVERSATION_STATES = Object.freeze({
   IDLE: 'IDLE',
@@ -62,6 +71,9 @@ export const CONVERSATION_INTENTS = Object.freeze({
   DISCARD_PROPOSAL: 'DISCARD_PROPOSAL',
   SIMULATE_SCHEDULE: 'SIMULATE_SCHEDULE',
   QUERY_CAPACITY: 'QUERY_CAPACITY',
+  SET_WORKING_HOURS: 'SET_WORKING_HOURS',
+  ADD_BLACKOUT: 'ADD_BLACKOUT',
+  SET_FOCUS_WINDOW: 'SET_FOCUS_WINDOW',
   CONFIRM: 'CONFIRM',
   CANCEL: 'CANCEL',
   HELP: 'HELP',
@@ -1593,6 +1605,39 @@ export class DialogueManager {
       }
     }
 
+    const explainTimeInProp = text.match(
+      /^(?:why\s+(?:was|is)\s+(?:the\s+task\s+|my\s+task\s+)?(.+?)\s+(?:scheduled\s+at|at)\s+(.+?)\??|why\s+(?:at\s+|scheduled\s+at\s+)(.+?)\??)$/i
+    );
+    if (explainTimeInProp) {
+      const taskQuery = (explainTimeInProp[1] || '').trim();
+      const resolution = this.resolveTaskReference(taskQuery, tasks);
+      if (resolution.status === RESOLUTION_STATUS.RESOLVED || resolution.status === 'exact') {
+        const explRes = explainScheduleDecision({
+          targetTask: resolution.task,
+          inquiryType: 'why_at_time',
+          tasks,
+          activeProposal: activeProp,
+          proposalHistory: this.proposalHistory,
+          telemetryEvents: context.telemetryEvents || [],
+          clock: this.clock,
+        });
+        return {
+          state: CONVERSATION_STATES.AWAITING_PROPOSAL_DECISION,
+          intent: CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION,
+          targetTask: resolution.task,
+          proposal: activeProp,
+          responseText: explRes.responseText,
+          spokenSummary: explRes.spokenSummary,
+          evidence: explRes.evidence,
+          feedbackType: 'info',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: null,
+          error: null,
+        };
+      }
+    }
+
     // 5. Unrelated command entered: supersede active proposal cleanly, reset, and execute
     if (activeProp) {
       const superseded = {
@@ -2047,6 +2092,270 @@ export class DialogueManager {
         inquiryType: 'session_count',
         telemetryEvents: context.telemetryEvents || [],
       }, tasks);
+    }
+
+    // Pattern 10: Why was [task] scheduled at [time]?
+    const explainTimeMatch = text.match(
+      /^(?:why\s+(?:was|is)\s+(?:the\s+task\s+|my\s+task\s+)?(.+?)\s+(?:scheduled\s+at|at)\s+(.+?)\??|why\s+(?:at\s+|scheduled\s+at\s+)(.+?)\??)$/i
+    );
+    if (explainTimeMatch) {
+      const taskQuery = (explainTimeMatch[1] || '').trim();
+      return this._resolveAndDispatch(CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION, taskQuery, {
+        inquiryType: 'why_at_time',
+        telemetryEvents: context.telemetryEvents || [],
+      }, tasks);
+    }
+
+    // Command: Set working hours (e.g. "set my working hours to 9 AM to 5 PM", "set work hours 09:00 - 17:00")
+    const workHoursMatch = text.match(
+      /^(?:set\s+(?:my\s+)?(?:working|work)\s+hours\s+(?:to|from)\s+|my\s+(?:working|work)\s+hours\s+are\s+)(.+?)(?:\s+to\s+|\s*-\s*|\s+until\s+)(.+?)$/i
+    );
+    if (workHoursMatch) {
+      const startM = parseTimeToMinutes(workHoursMatch[1]);
+      const endM = parseTimeToMinutes(workHoursMatch[2]);
+      if (startM !== null && endM !== null && startM < endM) {
+        const startStr = minutesToTimeString(startM);
+        const endStr = minutesToTimeString(endM);
+        const currentSettings = loadTimeBlockSettings();
+        saveTimeBlockSettings({
+          ...currentSettings,
+          workingHours: { start: startStr, end: endStr },
+        });
+        const resp = `Your working hours have been set to ${startStr} (${formatTimeAmPm(startM)}) – ${endStr} (${formatTimeAmPm(endM)}).`;
+        return {
+          state: CONVERSATION_STATES.IDLE,
+          intent: CONVERSATION_INTENTS.SET_WORKING_HOURS,
+          action: {
+            type: 'SET_WORKING_HOURS',
+            payload: { start: startStr, end: endStr },
+          },
+          responseText: resp,
+          spokenSummary: `Working hours set to ${formatTimeAmPm(startM)} to ${formatTimeAmPm(endM)}.`,
+          feedbackType: 'success',
+          requiresConfirmation: false,
+          isAuthorized: true,
+          error: null,
+        };
+      } else {
+        return {
+          state: CONVERSATION_STATES.IDLE,
+          intent: CONVERSATION_INTENTS.SET_WORKING_HOURS,
+          action: null,
+          responseText: `Invalid working hours range: "${workHoursMatch[1]}" to "${workHoursMatch[2]}". Please provide a valid start and end time (e.g. "9 AM to 5 PM").`,
+          spokenSummary: 'Invalid working hours range.',
+          feedbackType: 'error',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          error: 'invalid_time_range',
+        };
+      }
+    }
+
+    // Command: Add meeting / blackout event
+    const addMeetingMatch = text.match(
+      /^(?:add\s+(?:meeting|blackout|event)\s+(.+?)\s+from\s+(.+?)(?:\s+to\s+|\s*-\s*)(.+?)(?:\s+on\s+(.+?))?|block\s+(?:time\s+for\s+)?(.+?)\s+from\s+(.+?)(?:\s+to\s+|\s*-\s*)(.+?)(?:\s+on\s+(.+?))?)$/i
+    );
+    if (addMeetingMatch) {
+      const rawLabel = (addMeetingMatch[1] || addMeetingMatch[5] || 'Meeting').trim();
+      const rawStart = (addMeetingMatch[2] || addMeetingMatch[6] || '').trim();
+      const rawEnd = (addMeetingMatch[3] || addMeetingMatch[7] || '').trim();
+      const rawDate = (addMeetingMatch[4] || addMeetingMatch[8] || '').trim();
+
+      const startM = parseTimeToMinutes(rawStart);
+      const endM = parseTimeToMinutes(rawEnd);
+
+      if (startM !== null && endM !== null && startM < endM) {
+        const startStr = minutesToTimeString(startM);
+        const endStr = minutesToTimeString(endM);
+        const label = rawLabel;
+        const currentSettings = loadTimeBlockSettings();
+        const newBlackout = {
+          id: `bo_${Date.now()}`,
+          title: label,
+          label,
+          start: startStr,
+          end: endStr,
+          startTime: startStr,
+          endTime: endStr,
+          date: rawDate || undefined,
+          recurring: !rawDate ? 'daily' : undefined,
+        };
+        saveTimeBlockSettings({
+          ...currentSettings,
+          blackouts: [...currentSettings.blackouts, newBlackout],
+        });
+        const resp = `Marked ${label} (${startStr} to ${endStr}${rawDate ? ` on ${rawDate}` : ''}) as a blackout interval. VoxPlan will not schedule work during this time.`;
+        return {
+          state: CONVERSATION_STATES.IDLE,
+          intent: CONVERSATION_INTENTS.ADD_BLACKOUT,
+          action: {
+            type: 'ADD_BLACKOUT',
+            payload: newBlackout,
+          },
+          responseText: resp,
+          spokenSummary: `Added blackout for ${label} from ${formatTimeAmPm(startM)} to ${formatTimeAmPm(endM)}.`,
+          feedbackType: 'success',
+          requiresConfirmation: false,
+          isAuthorized: true,
+          error: null,
+        };
+      }
+    }
+
+    // Command: Add blackout (e.g. "keep 1 PM to 2 PM free for lunch", "block 10 AM to 11 AM", "keep 13:00 to 14:00 free")
+    const blackoutMatch = text.match(
+      /^(?:keep\s+(.+?)(?:\s+to\s+|\s*-\s*)(.+?)\s+free(?:\s+for\s+(.+?))?|block\s+(.+?)(?:\s+to\s+|\s*-\s*)(.+?)(?:\s+for\s+(.+?))?|don't\s+schedule\s+(?:work\s+)?(?:from\s+)?(.+?)(?:\s+to\s+|\s*-\s*)(.+?)(?:\s+for\s+(.+?))?|add\s+blackout\s+(.+?)(?:\s+to\s+|\s*-\s*)(.+?)(?:\s+for\s+(.+?))?)$/i
+    );
+    if (blackoutMatch) {
+      const rawStart = blackoutMatch[1] || blackoutMatch[4] || blackoutMatch[7] || blackoutMatch[10];
+      const rawEnd = blackoutMatch[2] || blackoutMatch[5] || blackoutMatch[8] || blackoutMatch[11];
+      const rawLabel = blackoutMatch[3] || blackoutMatch[6] || blackoutMatch[9] || blackoutMatch[12] || 'Unavailable';
+
+      const startM = parseTimeToMinutes(rawStart);
+      const endM = parseTimeToMinutes(rawEnd);
+
+      if (startM !== null && endM !== null && startM < endM) {
+        const startStr = minutesToTimeString(startM);
+        const endStr = minutesToTimeString(endM);
+        const label = rawLabel.trim();
+        const currentSettings = loadTimeBlockSettings();
+        const newBlackout = {
+          id: `bo_${Date.now()}`,
+          title: label,
+          label,
+          start: startStr,
+          end: endStr,
+          startTime: startStr,
+          endTime: endStr,
+          recurring: 'daily',
+        };
+        saveTimeBlockSettings({
+          ...currentSettings,
+          blackouts: [...currentSettings.blackouts, newBlackout],
+        });
+        const resp = `Marked ${startStr} – ${endStr} (${formatTimeAmPm(startM)} – ${formatTimeAmPm(endM)}) as unavailable (${label}). VoxPlan will not schedule work during this interval.`;
+        return {
+          state: CONVERSATION_STATES.IDLE,
+          intent: CONVERSATION_INTENTS.ADD_BLACKOUT,
+          action: {
+            type: 'ADD_BLACKOUT',
+            payload: newBlackout,
+          },
+          responseText: resp,
+          spokenSummary: `Marked ${formatTimeAmPm(startM)} to ${formatTimeAmPm(endM)} as unavailable for ${label}.`,
+          feedbackType: 'success',
+          requiresConfirmation: false,
+          isAuthorized: true,
+          error: null,
+        };
+      } else {
+        return {
+          state: CONVERSATION_STATES.IDLE,
+          intent: CONVERSATION_INTENTS.ADD_BLACKOUT,
+          action: null,
+          responseText: `Invalid blackout interval: "${rawStart}" to "${rawEnd}". Please provide valid start and end times (e.g. "keep 1 PM to 2 PM free for lunch").`,
+          spokenSummary: 'Invalid blackout interval.',
+          feedbackType: 'error',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          error: 'invalid_interval',
+        };
+      }
+    }
+
+    // Command: Set focus window (e.g. "prefer focused work in the morning", "prefer morning focus", "set focus window 9 AM to 12 PM")
+    const focusMatch = text.match(
+      /^(?:prefer\s+(?:focused\s+work\s+in\s+the\s+|focus\s+in\s+the\s+|morning\s+focus|afternoon\s+focus)(.+)?|set\s+focus\s+window\s+(?:(.+?)\s+from\s+|from\s+)?(.+?)(?:\s+to\s+|\s*-\s*)(.+?)|prefer\s+focus\s+(?:(.+?)\s+from\s+|from\s+)?(.+?)(?:\s+to\s+|\s*-\s*)(.+?))$/i
+    );
+    if (focusMatch || /prefer\s+morning\s+focus|prefer\s+focused\s+work\s+in\s+the\s+morning/i.test(text)) {
+      let startStr = '09:00';
+      let endStr = '12:00';
+      let label = 'Morning Deep Work';
+
+      if (/afternoon/i.test(text)) {
+        startStr = '13:00';
+        endStr = '16:00';
+        label = 'Afternoon Focus';
+      } else if (focusMatch && (focusMatch[3] || focusMatch[6])) {
+        const titleCandidate = (focusMatch[2] || focusMatch[5] || '').trim();
+        if (titleCandidate) label = titleCandidate;
+        const s = parseTimeToMinutes(focusMatch[3] || focusMatch[6]);
+        const e = parseTimeToMinutes(focusMatch[4] || focusMatch[7]);
+        if (s !== null && e !== null && s < e) {
+          startStr = minutesToTimeString(s);
+          endStr = minutesToTimeString(e);
+        }
+      }
+
+      const currentSettings = loadTimeBlockSettings();
+      const newFw = {
+        id: `fw_${Date.now()}`,
+        title: label,
+        label,
+        start: startStr,
+        end: endStr,
+        startTime: startStr,
+        endTime: endStr,
+        preferred: true,
+      };
+      saveTimeBlockSettings({
+        ...currentSettings,
+        focusWindows: [...currentSettings.focusWindows, newFw],
+      });
+
+      const resp = `Focus preference set: VoxPlan will prioritize scheduling tasks during ${startStr} to ${endStr} (${formatTimeAmPm(startStr)} – ${formatTimeAmPm(endStr)}) (${label}).`;
+      return {
+        state: CONVERSATION_STATES.IDLE,
+        intent: CONVERSATION_INTENTS.SET_FOCUS_WINDOW,
+        action: {
+          type: 'SET_FOCUS_WINDOW',
+          payload: newFw,
+        },
+        responseText: resp,
+        spokenSummary: `Focus window set for ${formatTimeAmPm(startStr)} to ${formatTimeAmPm(endStr)}.`,
+        feedbackType: 'success',
+        requiresConfirmation: false,
+        isAuthorized: true,
+        error: null,
+      };
+    }
+
+    // Command: Query available time on a day (e.g. "how much time is available on Tuesday?", "how much time do I have tomorrow?")
+    const capacityQueryMatch = text.match(
+      /^(?:how\s+much\s+(?:available\s+)?(?:time|capacity|hours?)\s+(?:is\s+available\s+|do\s+I\s+have\s+)?(?:on|for)\s+(.+?)\??)$/i
+    );
+    if (capacityQueryMatch) {
+      const dateText = capacityQueryMatch[1].trim();
+      const parsedDate = parseEnhancedDate(dateText, new Date(this.clock()));
+      if (parsedDate) {
+        const targetDate = parseDateISO(parsedDate);
+        const dayOfWeek = targetDate ? targetDate.getDay() : 1;
+        const timeSettings = context.timeBlockSettings || null;
+        const avail = computeAvailableWindowsForDate(parsedDate, dayOfWeek, {
+          workingHours: timeSettings?.workingHours,
+          blackouts: timeSettings?.blackouts,
+          dailyCapacityHours: context.dailyCapacityHours || 6.0,
+        });
+
+        const resp = `On ${parsedDate}, you have ${avail.totalAvailableHours.toFixed(1)}h of available working time across ${avail.availableWindows.length} window(s) (scheduled capacity limit: ${avail.schedulableCapacityHours.toFixed(1)}h/day)${avail.blackoutsApplied.length > 0 ? ` after ${avail.blackoutsApplied.length} blackout(s)` : ''}.`;
+        return {
+          state: CONVERSATION_STATES.IDLE,
+          intent: CONVERSATION_INTENTS.QUERY_CAPACITY,
+          responseText: resp,
+          spokenSummary: `You have ${avail.totalAvailableHours.toFixed(1)} hours of available time on ${parsedDate}.`,
+          evidence: {
+            date: parsedDate,
+            availableHours: avail.totalAvailableHours,
+            schedulableCapacityHours: avail.schedulableCapacityHours,
+            windowsCount: avail.availableWindows.length,
+          },
+          feedbackType: 'info',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: null,
+          error: null,
+        };
+      }
     }
 
     // 1. ML Command: Train/Retrain model

@@ -321,6 +321,61 @@ export function explainScheduleDecision({
     };
   }
 
+  // SPECIAL INQUIRY 6: Why was this task scheduled at this specific time / 10 AM?
+  if (inquiryType === 'why_at_time') {
+    const isAccepted = sourceProposal?.status === 'accepted';
+    if (placement?.startTime && placement?.endTime) {
+      const timeWindow = `${placement.startTime} – ${placement.endTime}`;
+      const focusText = placement.inFocusWindow
+        ? ` and aligns with your ${placement.focusWindowLabel || 'focus window'}`
+        : '';
+      const dayAlloc = Array.isArray(sourceProposal?.dayAllocations)
+        ? sourceProposal.dayAllocations.find((d) => d.date === placement.proposedDate)
+        : null;
+      const blackoutsOnDay = dayAlloc?.blackoutsApplied || [];
+      const blackoutNames = blackoutsOnDay.map((b) => b.title || b.label).filter(Boolean);
+      const blackoutText = blackoutNames.length > 0
+        ? ` avoiding blackouts (${blackoutNames.join(', ')})`
+        : ' avoiding meeting blackouts';
+
+      const responseText = `Task "${taskTitle}" was scheduled from ${timeWindow} on ${placement.proposedDate} because this interval was available within your configured working hours,${blackoutText}${focusText}.`;
+      const spokenSummary = `"${taskTitle}" was scheduled from ${timeWindow} on ${placement.proposedDate} in an open focus window.`;
+      return {
+        success: true,
+        taskId: targetTask.id,
+        taskTitle,
+        decisionType: isAccepted ? 'accepted_schedule' : 'proposed_placement',
+        status: placement?.status || 'on_time',
+        responseText,
+        spokenSummary,
+        evidence: {
+          reasonCode: 'intraday_window_allocated',
+          startTime: placement.startTime,
+          endTime: placement.endTime,
+          date: placement.proposedDate,
+          inFocusWindow: Boolean(placement.inFocusWindow),
+          focusWindowLabel: placement.focusWindowLabel || null,
+        },
+      };
+    } else {
+      const responseText = `Task "${taskTitle}" is scheduled for ${placement?.proposedDate || 'an unassigned date'} at the daily level. Specific intraday start and end times have not been assigned.`;
+      const spokenSummary = `"${taskTitle}" is scheduled at the day level without a specific start time.`;
+      return {
+        success: true,
+        taskId: targetTask.id,
+        taskTitle,
+        decisionType: isAccepted ? 'accepted_schedule' : 'proposed_placement',
+        status: placement?.status || 'on_time',
+        responseText,
+        spokenSummary,
+        evidence: {
+          reasonCode: 'no_intraday_timestamps',
+          date: placement?.proposedDate || null,
+        },
+      };
+    }
+  }
+
   // CASE 1: Placement Found in Proposal
   if (placement) {
     const proposedDate = placement.proposedDate || placement.proposed_date || null;

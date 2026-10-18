@@ -453,11 +453,31 @@ export default function CommandBar({
                               [Session {p.chunkIndex + 1}/{p.totalChunks}]
                             </span>
                           )}
+                          {p.inFocusWindow && (
+                            <span
+                              style={{
+                                fontSize: '10px',
+                                color: '#92400E',
+                                backgroundColor: '#FEF3C7',
+                                padding: '1px 5px',
+                                borderRadius: '4px',
+                                marginLeft: '6px',
+                                fontWeight: '700',
+                              }}
+                            >
+                              🎯 {p.focusWindowLabel || 'Focus'}
+                            </span>
+                          )}
                         </span>
                         <span style={styles.placementDates}>
                           <span style={styles.origDate}>{p.originalDueDate || 'No deadline'}</span>
                           <span style={styles.arrowIcon}> ➜ </span>
                           <strong style={styles.propDate}>{p.proposedDate || 'Unscheduled'}</strong>
+                          {p.startTime && p.endTime && (
+                            <span style={{ marginLeft: '6px', fontSize: '11px', color: '#4F46E5', fontWeight: '600' }}>
+                              ({p.startTime} – {p.endTime})
+                            </span>
+                          )}
                         </span>
                       </div>
                       <div style={styles.placementRight}>

@@ -17,6 +17,7 @@
  */
 
 import { formatDateISO, parseDateISO } from './adaptiveScheduler.js';
+import { allocateIntradaySession } from './timeBlockScheduler.js';
 
 export const DEFAULT_MIN_CHUNK_HOURS = 1.0;
 export const DEFAULT_MAX_CHUNK_HOURS = 24.0;
@@ -193,7 +194,7 @@ export function scheduleMultiDayTask(task, totalEffort, calendarSlots, minSlotIn
   const conflicts = [];
   const maxChunkHours = options.maxChunkHours || dailyCapacityHours;
 
-  // 2. Iterate through slots and allocate chunks dynamically (at most 1 chunk per day)
+  // 2. Iterate through slots and allocate chunks dynamically
   while (remainingEffort > 0.05 && currentSlotIdx < calendarSlots.length) {
     const slot = calendarSlots[currentSlotIdx];
 
@@ -207,65 +208,149 @@ export function scheduleMultiDayTask(task, totalEffort, calendarSlots, minSlotIn
       break;
     }
 
-    const availableHours = slot.remainingHours;
-    if (availableHours >= minChunkHours) {
-      let sessionHours = Math.min(availableHours, remainingEffort, maxChunkHours);
-      sessionHours = Math.round(sessionHours * 10) / 10;
+    const isIntraday = Boolean(options.enableIntraday && Array.isArray(slot.availableWindows));
 
-      // Lookahead tail-smoothing: if what's left after this session would be positive but smaller than minChunkHours,
-      // adjust this session so the tail is viable
-      const tail = Math.round((remainingEffort - sessionHours) * 10) / 10;
-      if (tail > 0 && tail < minChunkHours && (sessionHours - (minChunkHours - tail)) >= minChunkHours) {
-        sessionHours = Math.round((sessionHours - (minChunkHours - tail)) * 10) / 10;
+    if (isIntraday) {
+      while (
+        remainingEffort > 0.05 &&
+        slot.remainingHours >= minChunkHours &&
+        Array.isArray(slot.availableWindows) &&
+        slot.availableWindows.length > 0
+      ) {
+        // Find window that fits at least minChunkHours
+        const viableWindow = slot.availableWindows.find((w) => w.durationHours >= minChunkHours);
+        if (!viableWindow) break;
+
+        let sessionHours = Math.min(viableWindow.durationHours, slot.remainingHours, remainingEffort, maxChunkHours);
+        sessionHours = Math.round(sessionHours * 10) / 10;
+        if (sessionHours < minChunkHours) break;
+
+        // Lookahead tail-smoothing
+        const tail = Math.round((remainingEffort - sessionHours) * 10) / 10;
+        if (tail > 0 && tail < minChunkHours && (sessionHours - (minChunkHours - tail)) >= minChunkHours) {
+          sessionHours = Math.round((sessionHours - (minChunkHours - tail)) * 10) / 10;
+        }
+
+        const intradayAlloc = allocateIntradaySession(slot, sessionHours, options);
+        if (!intradayAlloc || !intradayAlloc.allocated) break;
+
+        const chunkIdx = placements.length;
+        const placementId = `chunk_${task.id}_seg_${chunkIdx}`;
+        const proposedDate = slot.date;
+
+        slot.assignedTasks.push({
+          taskId: task.id,
+          taskTitle: task.title,
+          hours: sessionHours,
+          chunkIndex: chunkIdx,
+          totalChunks: 0,
+          isChunk: true,
+          startTime: intradayAlloc.startTime,
+          endTime: intradayAlloc.endTime,
+        });
+
+        slot.remainingHours = Math.round(Math.max(0, slot.remainingHours - sessionHours) * 10) / 10;
+        totalAllocatedHours = Math.round((totalAllocatedHours + sessionHours) * 10) / 10;
+        remainingEffort = Math.round(Math.max(0, remainingEffort - sessionHours) * 10) / 10;
+
+        placements.push({
+          placementId,
+          chunkId: placementId,
+          taskId: task.id,
+          taskTitle: task.title,
+          taskPriority: task.priority || 'medium',
+          taskCategory: task.category || '',
+          originalDueDate,
+          proposedDate,
+          assignedDayIndex: currentSlotIdx,
+          effectiveHours: sessionHours,
+          chunkDuration: sessionHours,
+          chunkIndex: chunkIdx,
+          totalChunks: 0,
+          parentTotalEffort: roundedEffort,
+          isChunk: true,
+          allocationStatus: 'in_progress',
+          durationSource: options.durationSource || 'original_estimate',
+          appliedRatio: options.appliedRatio || 1.0,
+          isDateChanged: originalDueDate !== proposedDate,
+          status: 'on_time',
+          placementStatus: 'on_time',
+          placementReason: '',
+          explanation: '',
+          conflicts: [],
+          startTime: intradayAlloc.startTime,
+          endTime: intradayAlloc.endTime,
+          startDateTime: `${proposedDate}T${intradayAlloc.startTime}`,
+          endDateTime: `${proposedDate}T${intradayAlloc.endTime}`,
+          inFocusWindow: intradayAlloc.inFocusWindow,
+          focusWindowLabel: intradayAlloc.focusWindowLabel,
+        });
+
+        if (options.maxChunksPerDay === 1) break;
       }
-
-      const chunkIdx = placements.length;
-      const placementId = `chunk_${task.id}_seg_${chunkIdx}`;
-      const proposedDate = slot.date;
-
-      slot.assignedTasks.push({
-        taskId: task.id,
-        taskTitle: task.title,
-        hours: sessionHours,
-        chunkIndex: chunkIdx,
-        totalChunks: 0, // finalized after loop
-        isChunk: true,
-      });
-
-      slot.remainingHours = Math.round(Math.max(0, slot.remainingHours - sessionHours) * 10) / 10;
-      totalAllocatedHours = Math.round((totalAllocatedHours + sessionHours) * 10) / 10;
-      remainingEffort = Math.round(Math.max(0, remainingEffort - sessionHours) * 10) / 10;
-
-      placements.push({
-        placementId,
-        chunkId: placementId,
-        taskId: task.id,
-        taskTitle: task.title,
-        taskPriority: task.priority || 'medium',
-        taskCategory: task.category || '',
-        originalDueDate,
-        proposedDate,
-        assignedDayIndex: currentSlotIdx,
-        effectiveHours: sessionHours,
-        chunkDuration: sessionHours,
-        chunkIndex: chunkIdx,
-        totalChunks: 0, // finalized after loop
-        parentTotalEffort: roundedEffort,
-        isChunk: true,
-        allocationStatus: 'in_progress', // updated below
-        durationSource: options.durationSource || 'original_estimate',
-        appliedRatio: options.appliedRatio || 1.0,
-        isDateChanged: originalDueDate !== proposedDate,
-        status: 'on_time', // updated below
-        placementStatus: 'on_time',
-        placementReason: '',
-        explanation: '',
-        conflicts: [],
-      });
 
       currentSlotIdx++;
     } else {
-      currentSlotIdx++;
+      const availableHours = slot.remainingHours;
+      if (availableHours >= minChunkHours) {
+        let sessionHours = Math.min(availableHours, remainingEffort, maxChunkHours);
+        sessionHours = Math.round(sessionHours * 10) / 10;
+
+        // Lookahead tail-smoothing: if what's left after this session would be positive but smaller than minChunkHours,
+        // adjust this session so the tail is viable
+        const tail = Math.round((remainingEffort - sessionHours) * 10) / 10;
+        if (tail > 0 && tail < minChunkHours && (sessionHours - (minChunkHours - tail)) >= minChunkHours) {
+          sessionHours = Math.round((sessionHours - (minChunkHours - tail)) * 10) / 10;
+        }
+
+        const chunkIdx = placements.length;
+        const placementId = `chunk_${task.id}_seg_${chunkIdx}`;
+        const proposedDate = slot.date;
+
+        slot.assignedTasks.push({
+          taskId: task.id,
+          taskTitle: task.title,
+          hours: sessionHours,
+          chunkIndex: chunkIdx,
+          totalChunks: 0, // finalized after loop
+          isChunk: true,
+        });
+
+        slot.remainingHours = Math.round(Math.max(0, slot.remainingHours - sessionHours) * 10) / 10;
+        totalAllocatedHours = Math.round((totalAllocatedHours + sessionHours) * 10) / 10;
+        remainingEffort = Math.round(Math.max(0, remainingEffort - sessionHours) * 10) / 10;
+
+        placements.push({
+          placementId,
+          chunkId: placementId,
+          taskId: task.id,
+          taskTitle: task.title,
+          taskPriority: task.priority || 'medium',
+          taskCategory: task.category || '',
+          originalDueDate,
+          proposedDate,
+          assignedDayIndex: currentSlotIdx,
+          effectiveHours: sessionHours,
+          chunkDuration: sessionHours,
+          chunkIndex: chunkIdx,
+          totalChunks: 0, // finalized after loop
+          parentTotalEffort: roundedEffort,
+          isChunk: true,
+          allocationStatus: 'in_progress', // updated below
+          durationSource: options.durationSource || 'original_estimate',
+          appliedRatio: options.appliedRatio || 1.0,
+          isDateChanged: originalDueDate !== proposedDate,
+          status: 'on_time', // updated below
+          placementStatus: 'on_time',
+          placementReason: '',
+          explanation: '',
+          conflicts: [],
+        });
+
+        currentSlotIdx++;
+      } else {
+        currentSlotIdx++;
+      }
     }
   }
 
@@ -338,6 +423,12 @@ export function scheduleMultiDayTask(task, totalEffort, calendarSlots, minSlotIn
       : `${p.effectiveHours.toFixed(1)}h`;
 
     const explanationParts = [`Scheduled ${sessionLabel} on ${p.proposedDate}`];
+    if (p.startTime && p.endTime) {
+      explanationParts.push(`Time: ${p.startTime} – ${p.endTime}`);
+    }
+    if (p.inFocusWindow) {
+      explanationParts.push(`Scheduled within ${p.focusWindowLabel || 'focus window'}`);
+    }
     if (totalChunks > 1) {
       explanationParts.push(`Part of ${roundedEffort.toFixed(1)}h multi-day task split across ${placements.length} working days`);
     }
@@ -387,6 +478,12 @@ export function scheduleMultiDayTask(task, totalEffort, calendarSlots, minSlotIn
       placementReason: reason,
       explanation: reason,
       conflicts: [...conflicts],
+      startTime: null,
+      endTime: null,
+      startDateTime: null,
+      endDateTime: null,
+      inFocusWindow: false,
+      focusWindowLabel: null,
     });
   }
 

@@ -36,6 +36,11 @@ export {
   calculateChunkPlan,
 };
 
+import {
+  computeAvailableWindowsForDate,
+  allocateIntradaySession,
+} from './timeBlockScheduler.js';
+
 export const DEFAULT_DAILY_CAPACITY_HOURS = 6.0;
 export const DEFAULT_HORIZON_DAYS = 14;
 export const DEFAULT_WORKING_DAYS = [1, 2, 3, 4, 5]; // Mon - Fri (0 = Sun, 6 = Sat)
@@ -308,7 +313,8 @@ export function buildCalendarSlots(
   startDateStr,
   horizonDays = DEFAULT_HORIZON_DAYS,
   dailyCapacityHours = DEFAULT_DAILY_CAPACITY_HOURS,
-  workingDays = DEFAULT_WORKING_DAYS
+  workingDays = DEFAULT_WORKING_DAYS,
+  options = {}
 ) {
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const slots = [];
@@ -321,15 +327,32 @@ export function buildCalendarSlots(
     const dayOfWeek = cur.getDay();
     const active = workingDays.includes(dayOfWeek);
 
+    let capacityHours = active ? dailyCapacityHours : 0.0;
+    let availableWindows = null;
+    let blackoutsApplied = [];
+
+    if (active && options.enableIntraday) {
+      const intraday = computeAvailableWindowsForDate(dateStr, dayOfWeek, {
+        workingHours: options.workingHours,
+        blackouts: options.blackouts,
+        dailyCapacityHours,
+      });
+      availableWindows = intraday.availableWindows.map((w) => ({ ...w }));
+      capacityHours = intraday.schedulableCapacityHours;
+      blackoutsApplied = intraday.blackoutsApplied;
+    }
+
     slots.push({
       date: dateStr,
       dayIndex: i,
       dayOfWeek,
       dayName: dayNames[dayOfWeek],
       isWorkingDay: active,
-      capacityHours: active ? dailyCapacityHours : 0.0,
-      remainingHours: active ? dailyCapacityHours : 0.0,
+      capacityHours,
+      remainingHours: capacityHours,
       assignedTasks: [],
+      availableWindows,
+      blackoutsApplied,
     });
   }
 
@@ -507,7 +530,8 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
     startDateStr,
     horizonDays,
     dailyCapacityHours,
-    workingDays
+    workingDays,
+    options
   );
 
   // Step 3: Analyze dependencies, cycles, self-dependencies, and missing prerequisites
@@ -734,8 +758,18 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
       }
     }
 
-    // If task exceeds daily capacity and is chunkable, schedule as multi-day chunks
-    if (meta.effectiveHours > dailyCapacityHours && isTaskChunkable(currentTask, options)) {
+    // If task exceeds daily capacity (or continuous window) and is chunkable, schedule as multi-day chunks
+    const isChunkable = isTaskChunkable(currentTask, options);
+    const exceedsCapacity = meta.effectiveHours > dailyCapacityHours;
+    let cannotFitSingleWindow = false;
+    if (options.enableIntraday && isChunkable && !exceedsCapacity) {
+      cannotFitSingleWindow = calendarSlots.slice(minSlotIndex).every((s) => {
+        if (!s.isWorkingDay || !Array.isArray(s.availableWindows)) return true;
+        return !s.availableWindows.some((w) => w.durationHours >= meta.effectiveHours);
+      });
+    }
+
+    if ((exceedsCapacity || cannotFitSingleWindow) && isChunkable) {
       const chunkResult = scheduleMultiDayTask(
         currentTask,
         meta.effectiveHours,
@@ -747,6 +781,10 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
           startDateStr,
           durationSource: meta.durationSource,
           appliedRatio: meta.appliedRatio,
+          enableIntraday: options.enableIntraday,
+          focusWindows: options.focusWindows,
+          workingHours: options.workingHours,
+          blackouts: options.blackouts,
         }
       );
 
@@ -783,6 +821,10 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
       if (!slot.isWorkingDay) continue;
 
       if (slot.remainingHours >= requiredHours) {
+        if (options.enableIntraday && Array.isArray(slot.availableWindows)) {
+          const hasWindow = slot.availableWindows.some((w) => w.durationHours >= requiredHours);
+          if (!hasWindow) continue;
+        }
         placedSlot = slot;
         placedSlotIdx = sIdx;
         break;
@@ -790,13 +832,27 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
     }
 
     if (placedSlot) {
+      let intradayAlloc = null;
+      if (options.enableIntraday && Array.isArray(placedSlot.availableWindows)) {
+        intradayAlloc = allocateIntradaySession(placedSlot, requiredHours, options);
+      }
+
+      const startTime = intradayAlloc?.startTime || null;
+      const endTime = intradayAlloc?.endTime || null;
+      const startDateTime = startTime ? `${placedSlot.date}T${startTime}` : null;
+      const endDateTime = endTime ? `${placedSlot.date}T${endTime}` : null;
+      const inFocusWindow = Boolean(intradayAlloc?.inFocusWindow);
+      const focusWindowLabel = intradayAlloc?.focusWindowLabel || null;
+
       // Successfully allocate task
       placedSlot.assignedTasks.push({
         taskId: currentTask.id,
         taskTitle: currentTask.title,
         hours: requiredHours,
+        startTime,
+        endTime,
       });
-      placedSlot.remainingHours = Math.max(0, placedSlot.remainingHours - requiredHours);
+      placedSlot.remainingHours = Math.max(0, Math.round((placedSlot.remainingHours - requiredHours) * 10) / 10);
       taskAssignedSlotIndex.set(currentTask.id, placedSlotIdx);
 
       const proposedDate = placedSlot.date;
@@ -805,6 +861,13 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
       const durationLabel = `${requiredHours.toFixed(1)}h via ${meta.durationSource}${meta.appliedRatio !== 1.0 ? ` at ${(meta.appliedRatio).toFixed(2)}x` : ''}`;
       const unblockCount = unblockCounts ? (unblockCounts.get(currentTask.id) || 0) : 0;
       const explanationParts = [`Scheduled on ${placedSlot.dayName} ${placedSlot.date} (${durationLabel})`];
+
+      if (startTime && endTime) {
+        explanationParts.push(`Time: ${startTime} – ${endTime}`);
+      }
+      if (inFocusWindow) {
+        explanationParts.push(`Scheduled within ${focusWindowLabel || 'focus window'}`);
+      }
 
       if (directPrereqs.length > 0) {
         explanationParts.push(`Prerequisite constraint satisfied`);
@@ -862,6 +925,12 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
         placementReason,
         explanation,
         conflicts: taskConflicts,
+        startTime,
+        endTime,
+        startDateTime,
+        endDateTime,
+        inFocusWindow,
+        focusWindowLabel,
       });
 
       // Update inDegree of downstream dependents
@@ -951,6 +1020,8 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
       remainingHours: Math.round(slot.remainingHours * 10) / 10,
       utilizationPercent,
       tasks: [...slot.assignedTasks],
+      availableWindows: slot.availableWindows ? slot.availableWindows.map((w) => ({ ...w })) : null,
+      blackoutsApplied: slot.blackoutsApplied || [],
     };
   });
 
@@ -1047,6 +1118,7 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
   const summary = {
     strategy,
     startDate: startDateStr,
+    enableIntraday: Boolean(options.enableIntraday),
     totalEligibleTasks,
     totalTasksEvaluated: totalEligibleTasks,
     scheduledCount,
