@@ -2088,6 +2088,16 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
   - Natural language command execution in `CommandBar.jsx` (`"export calendar"`, `"export schedule"`).
   - Browser Blob generation (`text/calendar;charset=utf-8`) with automatic `URL.revokeObjectURL` cleanup.
   - Meaningful feedback on exported session counts and clear explanations for unaccepted / empty states.
+- **Phase 6.4 Hardening & Reliability Pass**:
+  - **Audit Scope & Findings**:
+    - *Timezone Parameter Injection Guard*: Previously accepted raw `tzid` string without validation. Hardened with `validateIanaTimeZone` using `Intl.DateTimeFormat` and strict identifier regex to safely reject malformed, unknown, or injection strings, falling back safely to floating time with clear warnings.
+    - *RFC 5545 VTIMEZONE Generation*: Implemented `generateVtimezoneComponent`, `getTimezoneOffsetMinutes`, and `formatIcsOffset`. Generates full RFC 5545 compliant `VTIMEZONE` blocks with `STANDARD` and `DAYLIGHT` components based on reference year transitions for maximum calendar client interoperability.
+    - *Stable Event Identity Invariance*: Hardened `generateStableSessionUid` fallback to eliminate transient date/time dependencies. Re-exporting an edited session with date or time changes preserves 100% identical event UIDs.
+    - *Description Escaping Completeness*: Sanitized full task descriptions with `escapeIcsText`, ensuring commas, semicolons, and newlines in task notes cannot inject calendar properties.
+    - *Modal Export Download Deduplication*: Eliminated redundant `onExportSchedule` invocation in `AdaptiveScheduleModal.jsx` that previously triggered duplicate file downloads.
+    - *Draft Isolation Feedback*: Added prominent `exportDraftWarning` banner in Tab 4 when unapplied draft edits exist in Tab 1, explaining that drafts must be applied before export.
+  - **Regression Testing & RFC 5545 Parser Validation**:
+    - Expanded test suite from 21 to **37 tests** in `tests/ical_exporter.test.js`, covering timezone validation, VTIMEZONE generation for DST and non-DST zones, near-midnight boundary safety, reversed session rejection, stable UID preservation across date/time edits, chunk reordering, schedule regeneration, and full round-trip parsing with a custom RFC 5545 parser.
 - **Acceptance Criteria & Phase 6 Exit Criteria**:
   - [x] RFC 5545 compliant `.ics` calendar generation without external dependencies.
   - [x] Export restricted strictly to accepted schedule snapshots.
@@ -2100,26 +2110,28 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
   - [x] Clean browser file download with memory cleanup.
   - [x] All Phase 6 exit criteria met: multi-day task chunking, intraday focus windows, interactive proposal editing, and standard calendar export.
 - **Verification & Test Results**:
-  - Unit & Integration Test Suite: **407 passed across 78 suites** (`npm test`), including 21 dedicated tests in `tests/ical_exporter.test.js` covering zero-event calendars, single session, multi-day chunked tasks with no duplicate parent, partial allocations, blocked/oversized task exclusion, identical task titles, DTEND > DTSTART, local floating time vs UTC drift, optional TZID, missing timing omission, stable UIDs across repeated exports, escaping, injection protection, octet folding with Japanese/emojis, CRLF endings, adaptive scheduler integration, and localStorage persistence.
+  - Unit & Integration Test Suite: **423 passed across 78 suites** (`npm test`), including 37 dedicated tests in `tests/ical_exporter.test.js` (all 37 passed).
   - Linter: **0 errors** across all 54 files (`npm run lint` / `oxlint`).
-  - Production Build: **Vite build completed successfully** in 372ms (`npm run build`).
+  - Production Build: **Vite build completed successfully** in 276ms (`npm run build`).
   - Backend ML Tests: **27 passed** (`python -m pytest backend/tests/ -q`).
-  - Browser Verification: End-to-end browser subagent verified modal export tab, empty state when no schedule is accepted, acceptance flow, accepted schedule preview, timezone toggle, download trigger, and command bar integration.
+  - Browser Verification: Verified modal export tab, empty state when no schedule is accepted, acceptance flow, accepted schedule preview, timezone toggle, download trigger, unapplied draft notice, and command bar integration.
 - **Files Added / Modified**:
-  - `src/scheduler/icalExporter.js` (NEW): RFC 5545 calendar export generator, text escaping, octet folding, session extraction, and local download utilities.
-  - `tests/ical_exporter.test.js` (NEW): 21 automated unit and integration tests for RFC 5545 compliance, date/time safety, and chunk handling.
-  - `src/App.jsx`: Added `acceptedSchedule` state, persistence to `localStorage`, export handlers, and command-bar calendar export integration.
-  - `src/components/AdaptiveScheduleModal.jsx`: Added 4th Tab `📅 Export Calendar (.ics)`, quick export button in Tab 1, snapshot notice, sessions preview table, and empty/unaccepted states.
-  - `PROJECT_PLAN.md`: Updated authoritative project plan with Stage 6.4 completion and Phase 6 milestone sign-off.
+  - `src/scheduler/icalExporter.js`: RFC 5545 calendar export generator, IANA timezone validation, dynamic VTIMEZONE component generation, date/time independent stable UID fallback, text escaping, and octet folding.
+  - `tests/ical_exporter.test.js`: 37 automated tests including timezone validation, VTIMEZONE components, UID stability across edits, mutation prevention, and RFC 5545 round-trip parser.
+  - `src/App.jsx`: Added `acceptedSchedule` state, persistence, export handler with options forwarding, and command bar integration.
+  - `src/components/AdaptiveScheduleModal.jsx`: Added 4th Tab `📅 Export Calendar (.ics)`, Tab 1 quick-export button, preview table, timezone toggle, snapshot notice, unapplied draft alert banner, and deduplicated download handler.
+  - `PROJECT_PLAN.md`: Updated authoritative project plan with Stage 6.4 hardening record and Phase 6 milestone sign-off.
 - **Git Commits & Push Verification**:
-  - Implementation Commit: `93d9d3f` (`feat(phase-6): add RFC 5545 calendar export`)
-  - Documentation Commit: `docs(phase-6): record Phase 6.4 completion and commit hash`
+  - Initial Implementation Commit: `93d9d3f` (`feat(phase-6): add RFC 5545 calendar export`)
+  - Initial Documentation Commit: `e427e59` (`docs(phase-6): record Phase 6.4 completion and commit hash`)
+  - Hardening Implementation Commit: `ae1239f` (`fix(phase-6): harden calendar time zones and event identity`)
+  - Hardening Documentation Commit: `docs(phase-6): document calendar export hardening`
   - Push status: Verified pushed to `origin main` at `https://github.com/kanwal-vyas/VoxPlan.git`.
 - **Status**: **COMPLETED**.
 - **Known Limitations & Next Roadmap Stage**:
   - Calendar export is a local snapshot; external calendar apps will not auto-sync subsequent VoxPlan changes without re-exporting and re-importing.
   - Floating local time assumes user remains in their local timezone for schedule execution unless an explicit TZID is selected.
-  - Phase 6 is 100% complete. Phase 7 (Evidence-Gated Schedule Adaptation & Preference Learning) remains planned as the next milestone.
+  - Phase 6 is 100% complete and hardened. Phase 7 (Evidence-Gated Schedule Adaptation & Preference Learning) remains planned as the next milestone.
 
 ---
 
