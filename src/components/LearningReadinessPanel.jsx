@@ -4,6 +4,7 @@ import {
   READINESS_THRESHOLDS,
   READINESS_STATUS,
 } from '../scheduler/learningReadinessGate';
+import PreferenceSignalsCard from './PreferenceSignalsCard';
 
 /**
  * LearningReadinessPanel (Phase 7.1)
@@ -329,6 +330,9 @@ export default function LearningReadinessPanel({ events = [], tasks = [] }) {
           </ul>
         </div>
       )}
+
+      {/* Phase 7.2: Empirical Preference Signal Derivation & Friction Profiling */}
+      <PreferenceSignalsCard events={events} tasks={tasks} />
 
       {/* Governance & Privacy Disclosure Footer */}
       <div style={styles.governanceFooter}>
