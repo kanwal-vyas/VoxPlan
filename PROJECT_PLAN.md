@@ -2044,7 +2044,7 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
   - `src/components/AdaptiveScheduleModal.jsx`: Added draft state isolation, inline editing controls, draft ribbon, undo/revert actions, and atomic pre-acceptance validation.
   - `PROJECT_PLAN.md`: Updated authoritative project plan with Stage 6.3 completion record.
 - **Git Commits & Push Verification**:
-  - Implementation Commit: `3d19652` (`feat(phase-6): add interactive schedule proposal editing`)
+  - Implementation Commit: `953957e` (`feat(phase-6): add interactive schedule proposal editing`)
   - Push status: Verified pushed to `origin main` at `https://github.com/kanwal-vyas/VoxPlan.git`.
 - **Status**: **COMPLETED**.
 - **Remaining Limitations & Deferred Work**:
