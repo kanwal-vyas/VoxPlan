@@ -2171,19 +2171,35 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
   - Read-only diagnostics and gating evaluation only. No scheduler weights adapted, no models trained, no heuristics tuned, and no preferences learned. Factory baseline weights remain fully active.
 
 #### Stage 7.2: Empirical Preference Signal Derivation & Friction Profiling
-- **Scope & Expected Deliverables**:
-  - Preference signal analyzer (`src/scheduler/preferenceAnalyzer.js`) extracting statistically significant behavioral friction patterns from telemetry:
-    - **Category Effort Underestimation**: Categories with consistent completion duration overruns ($r_{cat} > 1.2$).
-    - **Postponement Friction Tendencies**: Priority tiers or categories disproportionately shifted forward in manual overrides.
-    - **Day-of-Week Focus Realism**: Empirical completion velocity by weekday (e.g. consistently lower task completion on Fridays).
+- **Status**: **COMPLETED**.
+- **Implementation Commit**: `a41583cd17d99e9da833166ad560fc9c60362e77`
+- **Scope & Delivered Artifacts**:
+  - Deterministic preference signal analyzer (`src/scheduler/preferenceAnalyzer.js`) extracting behavioral friction patterns from telemetry with strict sample maturity gating and statistical restraint:
+    - **Category Effort Underestimation**: Detects categories with consistent completion duration overruns ($r_{cat} = \text{median}(A/E) > 1.2$, $N \ge 3$).
+    - **Postponement Friction Tendencies**: Identifies priority tiers or categories disproportionately shifted forward in manual overrides ($\ge 60\%$ postponed, $N \ge 3$).
+    - **Day-of-Week Focus Realism**: Evaluates empirical completion velocity by weekday, identifying low-velocity friction days.
+    - **Proposal Decision Friction**: Tracks deduplicated proposal discard rates ($D / (A + D)$), exposing adoption friction.
+    - **Intraday Time-Window Friction**: Explicitly marked as unavailable (`missing_intraday_window_provenance`) due to telemetry schema omitting original-vs-shifted intraday time-block identifiers.
+  - Interactive, accessible UI card (`src/components/PreferenceSignalsCard.jsx`) embedded in Section 05 (`PersonalModelDashboard.jsx` / `LearningReadinessPanel.jsx`):
+    - Status pill displaying gating state (`● MATURE TELEMETRY — CANDIDATE SIGNALS DERIVED` vs `🔒 ADAPTATION LOCKED — PRELIMINARY AGGREGATES ONLY`).
+    - Descriptive friction overview: Proposal Discard Rate, Forward Postponement Tendency, and Paired Effort Overrun with exact numerators and denominators.
+    - Candidate signal cards with evidence level pills, observed behavior, supporting sample size, observation span, status statement, and collapsible confounders list.
+    - Telemetry schema gaps & unavailable signals disclosure explaining missing intraday window provenance.
+    - Local-first privacy and governance notice stating that all analysis is on-device, descriptive only, and weights remain unmodified.
 - **Dependencies**: Stage 7.1.
-- **Acceptance Criteria**:
-  - Preference signals require at least 3 independent observations per category/weekday; sparse segments are ignored.
-  - Statistical significance tests (bootstrap confidence intervals) ensure signals reflect genuine habits rather than transient anomalies.
-  - Derived signals are transparently listed in the UI with observation counts and confidence bounds.
-- **Verification**:
-  - Unit tests using synthetic multi-week behavioral profiles verifying accurate extraction of known intentional friction patterns (`tests/preference_analyzer.test.js`).
-- **Privacy**: Profiling runs entirely on the client device inside IndexedDB.
+- **Statistical Restraint & Evidence Levels**:
+  - Machine-readable evidence levels: `INSUFFICIENT_EVIDENCE`, `PRELIMINARY`, `REPEATED_OBSERVATION`, `ELIGIBLE_FOR_LATER_EVALUATION`, `UNAVAILABLE`.
+  - When Phase 7.1 readiness is unmet, signals are strictly marked as preliminary / exploratory; no definitive personalized preferences are claimed.
+  - Slices with $< 3$ observations are excluded from signal derivation.
+- **Verification & Test Suite**:
+  - 12 focused unit and regression tests in `tests/preference_analyzer.test.js`: readiness gating integration, candidate derivation under mature fixture, category underestimation, postponement friction, discard friction, weekday velocity dip, reopened task exclusion, explicit unavailable signal handling, immutability, and schedule-generation invariance.
+  - Full frontend suite: 456 passing tests across 91 test suites with 0 failures (`npm test`).
+  - Backend suite: 27 passing tests (`python -m pytest backend/tests/ -q`).
+  - Linter: 0 errors across 60 files (`npm run lint`).
+  - Production build: Clean bundle build in 358ms (`npm run build`).
+  - Browser verification: Headless subagent verified accurate rendering of Section 05 friction profiling, status pill, descriptive metrics with exact counts, preliminary observation banner, and telemetry gap disclosures.
+- **Scope Boundary Enforcement**:
+  - Read-only analysis and diagnostics only. No scheduler weights adapted, no models trained, no heuristics tuned, and schedule generation remains 100% invariant. Factory baseline weights remain fully active.
 
 #### Stage 7.3: Bounded Heuristic Weight Adaptation & Bayesian Shrinkage
 - **Scope & Expected Deliverables**:
