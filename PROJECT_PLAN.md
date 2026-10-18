@@ -1837,7 +1837,7 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
   - `tests/voice_interaction.test.js` (turn boundary and single-dispatch test suite)
   - `PROJECT_PLAN.md` (authoritative documentation of Phase 5.4 Hardening)
 - **Git Commit & Push**:
-  - Commit: `[PENDING_COMMIT_HASH]` (`fix(phase-5): improve conversation continuity and voice turn handling`).
+  - Commit: `27c27b4` (`fix(phase-5): improve conversation continuity and voice turn handling`).
   - Push status: Verified pushed to `origin main` at `https://github.com/kanwal-vyas/VoxPlan.git`.
 - **Status**: **COMPLETED**.
 - **Remaining Browser-Specific Limitations**:
