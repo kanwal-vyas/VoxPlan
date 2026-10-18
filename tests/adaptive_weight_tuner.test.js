@@ -1,6 +1,6 @@
 /**
  * Comprehensive Automated Tests for VoxPlan Bounded Heuristic Weight Adaptation
- * & Bayesian Shrinkage (Phase 7, Stage 3).
+ * & Bayesian Shrinkage (Phase 7, Stage 3 Audit & Hardening).
  */
 
 import { describe, it } from 'node:test';
@@ -108,7 +108,7 @@ describe('Phase 7.3: Bounded Heuristic Weight Adaptation & Bayesian Shrinkage', 
     });
   });
 
-  describe('2. Strict ±20% Parameter Safety Clamping', () => {
+  describe('2. Strict Parameter Safety Bounds & Coefficient Domains', () => {
     it('clamps values exceeding +20% to exactly 1.20 * baseline', () => {
       const w0 = 100.0;
       const clamp = clampWeightDelta({
@@ -148,6 +148,45 @@ describe('Phase 7.3: Bounded Heuristic Weight Adaptation & Bayesian Shrinkage', 
       assert.equal(clamp.postClampValue, 92.5);
       assert.equal(clamp.isClamped, false);
       assert.equal(clamp.relativeDeltaPct, -7.5);
+    });
+
+    it('handles exact boundary values without false clamping', () => {
+      const w0 = 50.0;
+      const lowerBound = clampWeightDelta({ candidateWeight: 40.0, baselineWeight: w0, maxRelativeDelta: 0.20 });
+      assert.equal(lowerBound.postClampValue, 40.0);
+      assert.equal(lowerBound.isClamped, false);
+
+      const upperBound = clampWeightDelta({ candidateWeight: 60.0, baselineWeight: w0, maxRelativeDelta: 0.20 });
+      assert.equal(upperBound.postClampValue, 60.0);
+      assert.equal(upperBound.isClamped, false);
+    });
+
+    it('safely handles zero baseline by returning zero without crashing', () => {
+      const clamp = clampWeightDelta({ candidateWeight: 10.0, baselineWeight: 0 });
+      assert.equal(clamp.postClampValue, 0);
+      assert.equal(clamp.isClamped, false);
+      assert.equal(clamp.minBound, 0);
+      assert.equal(clamp.maxBound, 0);
+      assert.equal(clamp.relativeDeltaPct, 0.0);
+    });
+
+    it('safely handles negative baseline with mathematically correct bounds', () => {
+      const clamp = clampWeightDelta({ candidateWeight: -20.0, baselineWeight: -10.0, maxRelativeDelta: 0.20 });
+      // Bounds for -10 at 20%: [-12.0, -8.0]
+      assert.equal(clamp.minBound, -12.0);
+      assert.equal(clamp.maxBound, -8.0);
+      assert.equal(clamp.postClampValue, -12.0);
+      assert.equal(clamp.isClamped, true);
+    });
+
+    it('safely handles non-finite candidate weights (NaN, Infinity) by falling back to baseline', () => {
+      const w0 = 25.0;
+      const nanClamp = clampWeightDelta({ candidateWeight: NaN, baselineWeight: w0 });
+      assert.equal(nanClamp.postClampValue, w0);
+      assert.equal(nanClamp.isClamped, false);
+
+      const infClamp = clampWeightDelta({ candidateWeight: Infinity, baselineWeight: w0 });
+      assert.equal(infClamp.postClampValue, w0);
     });
   });
 
@@ -208,7 +247,7 @@ describe('Phase 7.3: Bounded Heuristic Weight Adaptation & Bayesian Shrinkage', 
   });
 
   describe('4. Evidence-to-Weight Mapping & Conflict Resolution', () => {
-    it('adapts priorityWeight when eligible high-priority postponement friction exists', () => {
+    it('rejects postponement friction from adapting priorityWeight due to unsupported signal direction', () => {
       const metReadiness = { status: 'ready', gates: {} };
       const preferenceReport = {
         candidateSignals: [
@@ -218,7 +257,7 @@ describe('Phase 7.3: Bounded Heuristic Weight Adaptation & Bayesian Shrinkage', 
             evidenceLevel: EVIDENCE_LEVELS.ELIGIBLE_FOR_LATER_EVALUATION,
             isPreliminary: false,
             supportingEvidenceCount: 8,
-            denominator: 10, // 80% postponed
+            denominator: 10,
           },
         ],
       };
@@ -230,10 +269,11 @@ describe('Phase 7.3: Bounded Heuristic Weight Adaptation & Bayesian Shrinkage', 
       });
 
       const prioDiag = result.weightDiagnostics.priorityWeight;
-      assert.equal(prioDiag.supported, true);
-      assert.ok(prioDiag.postClamp < FACTORY_SCHEDULER_WEIGHTS.priorityWeight);
-      assert.ok(prioDiag.postClamp >= 80.0, 'Must stay within -20% clamp');
-      assert.equal(result.candidateWeights.priorityWeight, prioDiag.postClamp);
+      assert.equal(prioDiag.supported, false);
+      assert.equal(prioDiag.reason, 'unsupported_signal_direction');
+      assert.equal(prioDiag.postClamp, FACTORY_SCHEDULER_WEIGHTS.priorityWeight);
+      assert.equal(result.candidateWeights.priorityWeight, FACTORY_SCHEDULER_WEIGHTS.priorityWeight);
+      assert.ok(result.unsupportedMappings.some((u) => u.signalFamily === 'task_postponement_friction'));
     });
 
     it('quarantines priorityWeight to factory baseline when conflicting postponement signals exist', () => {
@@ -292,6 +332,28 @@ describe('Phase 7.3: Bounded Heuristic Weight Adaptation & Bayesian Shrinkage', 
       // Proposal discard does not adjust priority or urgency weights
       assert.deepEqual(result.candidateWeights, FACTORY_SCHEDULER_WEIGHTS);
       assert.ok(result.unsupportedMappings.some((u) => u.signalFamily === 'proposal_decision_friction'));
+      assert.ok(result.unsupportedMappings.some((u) => u.signalFamily === 'category_effort_underestimation'));
+      assert.ok(result.unsupportedMappings.some((u) => u.signalFamily === 'day_of_week_focus_realism'));
+      assert.ok(result.unsupportedMappings.some((u) => u.signalFamily === 'intraday_window_friction'));
+    });
+
+    it('computes diagnostic candidate weights via explicit diagnostic simulation parameters in test sandbox', () => {
+      const result = computeBoundedCandidateWeights({
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        preferenceReport: null,
+        readiness: { status: 'ready' },
+        isTestSandbox: true,
+        diagnosticCandidateWeights: {
+          priorityWeight: { empiricalWeight: 85.0, observationCount: 15 },
+        },
+      });
+
+      const prioDiag = result.weightDiagnostics.priorityWeight;
+      assert.equal(prioDiag.supported, true);
+      assert.equal(prioDiag.isDiagnosticSimulation, true);
+      // Posterior: (10 * 100 + 15 * 85) / 25 = 2275 / 25 = 91.0
+      assert.equal(prioDiag.postClamp, 91.0);
+      assert.equal(result.candidateWeights.priorityWeight, 91.0);
     });
   });
 
@@ -318,6 +380,17 @@ describe('Phase 7.3: Bounded Heuristic Weight Adaptation & Bayesian Shrinkage', 
       assert.equal(report.evaluationOutcome, 'not_evaluable_insufficient_real_evidence');
     });
 
+    it('returns not_evaluable_empty_task_set when task backlog is empty', () => {
+      const report = evaluateShadowSchedule({
+        tasks: [],
+        options: { startDate: '2026-10-18' },
+        candidateWeights: FACTORY_SCHEDULER_WEIGHTS,
+      });
+
+      assert.equal(report.evaluationOutcome, 'not_evaluable_empty_task_set');
+      assert.equal(report.regressionGate.passed, true);
+    });
+
     it('detects and flags candidate schedule regressions (e.g. cycle failure or delay regression)', () => {
       const tasks = [
         { id: 't1', title: 'Task 1', estimatedEffort: 2.0, dueDate: '2026-10-19', priority: 'low', completed: false },
@@ -335,6 +408,21 @@ describe('Phase 7.3: Bounded Heuristic Weight Adaptation & Bayesian Shrinkage', 
 
       assert.ok(report.baselineMetrics.scheduledTasks > 0);
       assert.ok(report.candidateMetrics.scheduledTasks > 0);
+    });
+
+    it('guarantees input tasks are not mutated during shadow evaluation', () => {
+      const originalTasks = [
+        { id: 't1', title: 'Original Task', estimatedEffort: 3.0, dueDate: '2026-10-22', priority: 'high', dependencies: ['d1'] },
+      ];
+      const snapshot = JSON.stringify(originalTasks);
+
+      evaluateShadowSchedule({
+        tasks: originalTasks,
+        options: { startDate: '2026-10-18' },
+        candidateWeights: { urgencyWeight: 45.0, priorityWeight: 110.0, unblockWeight: 15.0, riskWeight: 25.0 },
+      });
+
+      assert.equal(JSON.stringify(originalTasks), snapshot);
     });
   });
 

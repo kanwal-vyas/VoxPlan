@@ -74,27 +74,19 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
       },
     };
 
-    const syntheticPreferenceReport = {
-      candidateSignals: [
-        {
-          id: 'postponement_high_priority_friction',
-          family: 'task_postponement_friction',
-          direction: 'deprioritize_high_friction_tasks',
-          eligibleSampleCount: 12,
-          evidenceLevel: 'MODERATE_EVIDENCE',
-          isEligible: true,
-          consequences: 'User repeatedly defers high-priority commitments due to cognitive friction; empirical signal suggests moderating priorityWeight by ~15%.',
-        },
-      ],
+    // Diagnostic simulation parameters: purely in-memory test fixture for illustrating math
+    const diagnosticCandidateWeights = {
+      priorityWeight: { empiricalWeight: 85.0, observationCount: 15 },
     };
 
     const adapterResult = computeBoundedCandidateWeights({
       baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
-      preferenceReport: syntheticPreferenceReport,
+      preferenceReport: null,
       readiness: syntheticReadiness,
       kPrior: DEFAULT_K_PRIOR,
       maxRelativeDelta: MAX_RELATIVE_WEIGHT_DELTA,
       isTestSandbox: true,
+      diagnosticCandidateWeights,
     });
 
     const syntheticTasks = [
@@ -189,6 +181,16 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
         </div>
       </div>
 
+      {/* Synthetic Demonstration Warning Banner */}
+      {showSyntheticDemo && (
+        <div style={styles.syntheticWarningBanner} role="alert">
+          <span style={styles.syntheticWarningIcon}>⚠️</span>
+          <div style={styles.syntheticWarningText}>
+            <strong>Synthetic Demonstration — Not Your History:</strong> This simulation evaluates in-memory diagnostic fixtures with simulated maturity. It never modifies your real IndexedDB telemetry, never alters readiness gates, and cannot activate production adaptation.
+          </div>
+        </div>
+      )}
+
       {/* Production Safety Banner */}
       <div style={styles.safetyCallout}>
         <span style={styles.safetyIcon}>🛡️</span>
@@ -199,7 +201,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
             Candidate weights are evaluated strictly in-memory (
             <code>isAdaptationUnlocked: false</code>, <code>productionApplied: false</code>).
             {!isRealReadinessMet && !showSyntheticDemo && (
-              <> Real-user verified completions ({realAnalysis.readiness.gates?.verifiedCompletions?.current || 0}/15) remain below Phase 7.1 thresholds, keeping personal adaptation conservatively locked.</>
+              <> Real-user verified completions ({realAnalysis.readiness.gates?.verifiedCompletions?.current || 0}/15) remain below Phase 7.1 thresholds, keeping personal adaptation conservatively locked. All 4 candidate weights remain identical to factory baseline defaults.</>
             )}
           </span>
         </div>
@@ -214,7 +216,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
           onClick={() => setActiveTab('weights')}
           style={activeTab === 'weights' ? styles.tabButtonActive : styles.tabButton}
         >
-          ⚖️ Weight Candidates ({showSyntheticDemo ? 'Simulated' : 'Factory Baseline'})
+          ⚖️ Weight Candidates ({showSyntheticDemo ? 'Synthetic Demo' : 'Factory Baseline'})
         </button>
         <button
           type="button"
@@ -577,6 +579,26 @@ const styles = {
     fontSize: '11px',
     color: '#6B7280',
     lineHeight: 1.3,
+  },
+  syntheticWarningBanner: {
+    marginTop: '16px',
+    backgroundColor: '#FEF2F2',
+    border: '2px solid #F87171',
+    borderRadius: '8px',
+    padding: '12px 16px',
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '12px',
+  },
+  syntheticWarningIcon: {
+    fontSize: '18px',
+    lineHeight: 1,
+    marginTop: '1px',
+  },
+  syntheticWarningText: {
+    fontSize: '12px',
+    color: '#991B1B',
+    lineHeight: 1.5,
   },
   safetyCallout: {
     marginTop: '16px',

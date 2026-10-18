@@ -123,14 +123,56 @@ export function clampWeightDelta({
   baselineWeight,
   maxRelativeDelta = MAX_RELATIVE_WEIGHT_DELTA,
 }) {
-  if (typeof baselineWeight !== 'number' || !isFinite(baselineWeight) || baselineWeight <= 0) {
-    throw new Error(`Invalid baseline weight: ${baselineWeight}. Must be a finite positive number.`);
+  if (typeof baselineWeight !== 'number' || !isFinite(baselineWeight)) {
+    throw new Error(`Invalid baseline weight: ${baselineWeight}. Must be a finite number.`);
+  }
+
+  // Handle zero baseline: relative bounds on zero remain exactly zero
+  if (baselineWeight === 0) {
+    return {
+      postClampValue: 0,
+      isClamped: false,
+      isClampedBelow: false,
+      isClampedAbove: false,
+      minBound: 0,
+      maxBound: 0,
+      relativeDeltaPct: 0.0,
+    };
   }
 
   const delta = typeof maxRelativeDelta === 'number' && isFinite(maxRelativeDelta) && maxRelativeDelta > 0
     ? maxRelativeDelta
     : MAX_RELATIVE_WEIGHT_DELTA;
 
+  // Handle negative baseline: bounds are [1.2 * w0, 0.8 * w0]
+  if (baselineWeight < 0) {
+    const minBound = Math.round(baselineWeight * (1.0 + delta) * 100) / 100;
+    const maxBound = Math.round(baselineWeight * (1.0 - delta) * 100) / 100;
+
+    const rawCandidate = typeof candidateWeight === 'number' && isFinite(candidateWeight)
+      ? candidateWeight
+      : baselineWeight;
+
+    const isClampedBelow = rawCandidate < minBound;
+    const isClampedAbove = rawCandidate > maxBound;
+    const isClamped = isClampedBelow || isClampedAbove;
+
+    const clamped = Math.min(maxBound, Math.max(minBound, rawCandidate));
+    const postClampValue = Math.round(clamped * 100) / 100;
+    const relativeDeltaPct = Math.round(((postClampValue - baselineWeight) / Math.abs(baselineWeight)) * 1000) / 10;
+
+    return {
+      postClampValue,
+      isClamped,
+      isClampedBelow,
+      isClampedAbove,
+      minBound,
+      maxBound,
+      relativeDeltaPct,
+    };
+  }
+
+  // Standard positive baseline handling
   const minBound = Math.round(baselineWeight * (1.0 - delta) * 100) / 100;
   const maxBound = Math.round(baselineWeight * (1.0 + delta) * 100) / 100;
 
@@ -168,6 +210,7 @@ export function clampWeightDelta({
  * @param {number} [params.kPrior=DEFAULT_K_PRIOR] - Bayesian shrinkage prior constant.
  * @param {number} [params.maxRelativeDelta=MAX_RELATIVE_WEIGHT_DELTA] - Safety clamp bound.
  * @param {boolean} [params.isTestSandbox=false] - When true, computes diagnostic candidate in isolation even if readiness is unmet.
+ * @param {Object} [params.diagnosticCandidateWeights=null] - Explicit in-memory diagnostic weights for mathematical invariant testing only.
  * @returns {Object} Structured shadow-evaluation candidate report.
  */
 export function computeBoundedCandidateWeights({
@@ -177,6 +220,7 @@ export function computeBoundedCandidateWeights({
   kPrior = DEFAULT_K_PRIOR,
   maxRelativeDelta = MAX_RELATIVE_WEIGHT_DELTA,
   isTestSandbox = false,
+  diagnosticCandidateWeights = null,
 } = {}) {
   const evaluationTimestamp = new Date().toISOString();
 
@@ -223,6 +267,12 @@ export function computeBoundedCandidateWeights({
       reason: 'missing_intraday_window_provenance',
       explanation: 'Intraday provenance is absent in event store schema; signal is unavailable.',
     },
+    {
+      signalFamily: 'task_postponement_friction',
+      name: 'Task Postponement Friction',
+      reason: 'unsupported_signal_direction',
+      explanation: 'Postponing high-priority tasks indicates task-level execution friction, dauntedness, or external blockages, not a preference for demoting high-priority tasks in the ready queue. Lowering priority boost would paradoxically schedule deferred important commitments even later. Direction is unverified; weight remains at factory baseline.',
+    },
   ];
 
   const conflictingSignals = [];
@@ -251,8 +301,8 @@ export function computeBoundedCandidateWeights({
       isClamped: false,
       relativeChangePct: 0.0,
       supported: false,
-      reason: 'awaiting_eligible_postponement_friction',
-      rationale: 'Priority tier weight remains at factory baseline.',
+      reason: 'unsupported_signal_direction',
+      rationale: 'Priority tier weight remains at factory baseline. Postponement friction lacks causal justification for reducing global priority ordering boost.',
       sampleSize: 0,
       minBound: Math.round(base.priorityWeight * (1 - maxRelativeDelta) * 100) / 100,
       maxBound: Math.round(base.priorityWeight * (1 + maxRelativeDelta) * 100) / 100,
@@ -343,46 +393,56 @@ export function computeBoundedCandidateWeights({
       weightDiagnostics.priorityWeight.reason = 'conflict_quarantine';
       weightDiagnostics.priorityWeight.rationale = 'Conflicting postponement signals across both High and Low priority tiers. Priority weight quarantined to factory baseline.';
     } else if (highPostponed) {
-      // High priority tasks are repeatedly postponed: indicates priority tier spacing is too aggressive
-      // relative to calendar urgency/feasibility. Implied empirical downward adjustment:
-      const N = highPostponed.supportingEvidenceCount || highPostponed.denominator || 3;
-      const postponedRate = highPostponed.denominator > 0
-        ? (highPostponed.supportingEvidenceCount / highPostponed.denominator)
-        : 0.60;
-
-      // Implied empirical weight scales down proportionally to excess postponement:
-      // w_empirical = w_0 * (1.0 - (postponedRate - 0.50))
-      // e.g. for 70% postponed, factor = 0.80 -> empirical = 80.0
-      const empiricalFactor = Math.max(0.70, 1.0 - (postponedRate - 0.50));
-      const empiricalWeight = base.priorityWeight * empiricalFactor;
-
-      const preClamp = computeBayesianPosteriorWeight({
-        baselineWeight: base.priorityWeight,
-        empiricalWeight,
-        observationCount: N,
-        kPrior,
-      });
-
-      const clampResult = clampWeightDelta({
-        candidateWeight: preClamp,
-        baselineWeight: base.priorityWeight,
-        maxRelativeDelta,
-      });
-
+      // High priority postponement observed: causal direction is unverified and rejected
       weightDiagnostics.priorityWeight = {
         coefficient: 'priorityWeight',
         baseline: base.priorityWeight,
-        preClamp: Math.round(preClamp * 100) / 100,
-        postClamp: clampResult.postClampValue,
-        isClamped: clampResult.isClamped,
-        relativeChangePct: clampResult.relativeDeltaPct,
-        supported: true,
+        preClamp: base.priorityWeight,
+        postClamp: base.priorityWeight,
+        isClamped: false,
+        relativeChangePct: 0.0,
+        supported: false,
+        reason: 'unsupported_signal_direction',
         signalId: highPostponed.id,
-        sampleSize: N,
-        rationale: `Derived from ${N} high-priority forward postponements. Bayesian shrinkage (K=${kPrior}) moderated empirical ${empiricalWeight.toFixed(1)} to candidate ${clampResult.postClampValue}.`,
-        minBound: clampResult.minBound,
-        maxBound: clampResult.maxBound,
+        sampleSize: highPostponed.supportingEvidenceCount || highPostponed.denominator || 0,
+        rationale: 'High-priority postponement friction observed, but reducing global priority weight is rejected: lowering priority boost would schedule deferred important commitments even later. Weight remains at factory baseline.',
+        minBound: Math.round(base.priorityWeight * (1 - maxRelativeDelta) * 100) / 100,
+        maxBound: Math.round(base.priorityWeight * (1 + maxRelativeDelta) * 100) / 100,
       };
+    }
+  }
+
+  // Diagnostic simulation support: purely in-memory test calculation for evaluating math invariants
+  if (isTestSandbox && diagnosticCandidateWeights && typeof diagnosticCandidateWeights === 'object') {
+    for (const [wKey, diagConfig] of Object.entries(diagnosticCandidateWeights)) {
+      if (base[wKey] !== undefined && diagConfig && typeof diagConfig.empiricalWeight === 'number') {
+        const obsCount = diagConfig.observationCount || 10;
+        const pre = computeBayesianPosteriorWeight({
+          baselineWeight: base[wKey],
+          empiricalWeight: diagConfig.empiricalWeight,
+          observationCount: obsCount,
+          kPrior,
+        });
+        const clamp = clampWeightDelta({
+          candidateWeight: pre,
+          baselineWeight: base[wKey],
+          maxRelativeDelta,
+        });
+        weightDiagnostics[wKey] = {
+          coefficient: wKey,
+          baseline: base[wKey],
+          preClamp: Math.round(pre * 100) / 100,
+          postClamp: clamp.postClampValue,
+          isClamped: clamp.isClamped,
+          relativeChangePct: clamp.relativeDeltaPct,
+          supported: true,
+          isDiagnosticSimulation: true,
+          rationale: `Diagnostic simulation fixture (K=${kPrior}, N=${obsCount}, empirical=${diagConfig.empiricalWeight}). Shrunk candidate: ${clamp.postClampValue}. Purely in-memory calculation.`,
+          minBound: clamp.minBound,
+          maxBound: clamp.maxBound,
+          sampleSize: obsCount,
+        };
+      }
     }
   }
 

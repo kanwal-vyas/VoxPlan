@@ -43,10 +43,19 @@ function extractScheduleMetrics(scheduleResult) {
   let delayedTasksCount = 0;
   let totalDelayDays = 0;
   let infeasiblePlacementsCount = 0;
+  let unscheduledPlacementsCount = 0;
 
   for (const pl of placements) {
-    if (pl.status === 'blocked_by_dependency' || pl.status === 'oversized_exceeds_capacity') {
+    if (
+      pl.status === 'blocked_by_dependency' ||
+      pl.status === 'oversized_exceeds_capacity' ||
+      pl.status === 'unscheduled' ||
+      !pl.proposedDate
+    ) {
       infeasiblePlacementsCount++;
+      if (pl.status === 'unscheduled' || !pl.proposedDate) {
+        unscheduledPlacementsCount++;
+      }
       continue;
     }
 
@@ -81,11 +90,12 @@ function extractScheduleMetrics(scheduleResult) {
     scheduledTasks: summary.scheduledTasksCount ?? summary.scheduledCount ?? summary.totalTasksScheduled ?? 0,
     cycleDetected: Boolean(scheduleResult?.cycleDetected),
     infeasiblePlacementsCount,
+    unscheduledPlacementsCount,
     onTimeTasksCount,
     delayedTasksCount,
     totalDelayDays,
     capacityUtilizationPct,
-    placementsMap: new Map(placements.map((p) => [p.taskId, p.proposedDate])),
+    placementsMap: new Map(placements.map((p) => [p.placementId || `${p.taskId}_${p.chunkIndex ?? 0}`, p.proposedDate])),
   };
 }
 
@@ -109,8 +119,35 @@ export function evaluateShadowSchedule({
 } = {}) {
   const evaluationTimestamp = new Date().toISOString();
 
+  // Guard against empty backlog
+  if (!Array.isArray(tasks) || tasks.length === 0) {
+    return {
+      schemaVersion: '1.0.0',
+      evaluationTimestamp,
+      isShadowOnly: true,
+      productionApplied: false,
+      evaluationOutcome: 'not_evaluable_empty_task_set',
+      isRealEvidenceSufficient: false,
+      disclaimer: 'Task backlog is empty. No schedule can be evaluated.',
+      regressionGate: { passed: true, violations: [] },
+      baselineMetrics: null,
+      candidateMetrics: null,
+      comparison: null,
+    };
+  }
+
+  // Deep clone tasks to guarantee paired-input isolation between baseline and candidate runs
+  const clonedBaselineTasks = tasks.map((t) => ({
+    ...t,
+    dependencies: Array.isArray(t.dependencies) ? [...t.dependencies] : [],
+  }));
+  const clonedCandidateTasks = tasks.map((t) => ({
+    ...t,
+    dependencies: Array.isArray(t.dependencies) ? [...t.dependencies] : [],
+  }));
+
   // 1. Run Baseline Schedule (Factory Defaults)
-  const baselineSchedule = generateAdaptiveSchedule(tasks, {
+  const baselineSchedule = generateAdaptiveSchedule(clonedBaselineTasks, {
     ...options,
     weights: baselineWeights,
   });
@@ -118,7 +155,7 @@ export function evaluateShadowSchedule({
 
   // 2. Run Candidate Schedule in Isolated Shadow Path
   const effectiveCandidateWeights = candidateWeights || baselineWeights;
-  const candidateSchedule = generateAdaptiveSchedule(tasks, {
+  const candidateSchedule = generateAdaptiveSchedule(clonedCandidateTasks, {
     ...options,
     weights: effectiveCandidateWeights,
   });
@@ -128,11 +165,11 @@ export function evaluateShadowSchedule({
   let scheduleChurnCount = 0;
   const shiftedTaskIds = [];
 
-  for (const [taskId, baseDate] of baselineMetrics.placementsMap.entries()) {
-    const candDate = candidateMetrics.placementsMap.get(taskId);
+  for (const [placementKey, baseDate] of baselineMetrics.placementsMap.entries()) {
+    const candDate = candidateMetrics.placementsMap.get(placementKey);
     if (baseDate !== candDate) {
       scheduleChurnCount++;
-      shiftedTaskIds.push(taskId);
+      shiftedTaskIds.push(placementKey);
     }
   }
 
@@ -147,11 +184,20 @@ export function evaluateShadowSchedule({
     violations.push(`regression_infeasible_placements: Infeasible placements increased from ${baselineMetrics.infeasiblePlacementsCount} to ${candidateMetrics.infeasiblePlacementsCount}.`);
   }
 
+  if (candidateMetrics.unscheduledPlacementsCount > baselineMetrics.unscheduledPlacementsCount) {
+    violations.push(`regression_unscheduled_tasks: Unscheduled placements increased from ${baselineMetrics.unscheduledPlacementsCount} to ${candidateMetrics.unscheduledPlacementsCount}.`);
+  }
+
   if (
     candidateMetrics.delayedTasksCount > baselineMetrics.delayedTasksCount &&
     candidateMetrics.totalDelayDays > baselineMetrics.totalDelayDays
   ) {
     violations.push(`regression_delayed_tasks: Delayed tasks increased from ${baselineMetrics.delayedTasksCount} to ${candidateMetrics.delayedTasksCount} (+${candidateMetrics.totalDelayDays - baselineMetrics.totalDelayDays} delay days).`);
+  }
+
+  // Lost coverage check: scheduled tasks dropped
+  if (candidateMetrics.scheduledTasks < baselineMetrics.scheduledTasks) {
+    violations.push(`regression_lost_coverage: Scheduled task throughput dropped from ${baselineMetrics.scheduledTasks} to ${candidateMetrics.scheduledTasks}.`);
   }
 
   const regressionGatePassed = violations.length === 0;
