@@ -47,6 +47,24 @@ export const DEFAULT_WORKING_DAYS = [1, 2, 3, 4, 5]; // Mon - Fri (0 = Sun, 6 = 
 export const DEFAULT_TASK_FALLBACK_HOURS = 1.0;
 
 /**
+ * Factory Baseline Heuristic Weights for Adaptive Scheduling.
+ *
+ * Scoring Components:
+ * - urgencyWeight: Multiplier (pts/day) for remaining calendar window to deadline within 30 days (default: 50.0).
+ * - priorityWeight: Inter-tier spacing (pts) for explicit priority tiers (Low: 1x, Med: 2x, High: 3x; default: 100.0).
+ * - unblockWeight: Critical path reward (pts) per downstream dependent, clamped at 3 * unblockWeight (default: 15.0).
+ * - riskWeight: Secondary guarded risk urgency boost for ML delay risk (Med: 1x, High: 2.4x; default: 25.0).
+ *
+ * Invariant: These factory weights are active by default in all production scheduling paths.
+ */
+export const FACTORY_SCHEDULER_WEIGHTS = Object.freeze({
+  urgencyWeight: 50.0,
+  priorityWeight: 100.0,
+  unblockWeight: 15.0,
+  riskWeight: 25.0,
+});
+
+/**
  * Normalizes a date into YYYY-MM-DD string.
  * @param {string|Date|number} dateInput
  * @returns {string}
@@ -384,7 +402,8 @@ export function calculateTaskPriorityScore(
   asOfDateStr,
   unblockInfo,
   predictionsMap = {},
-  strategy = 'adaptive'
+  strategy = 'adaptive',
+  weights = FACTORY_SCHEDULER_WEIGHTS
 ) {
   // Strategy: Earliest Deadline First (EDF)
   // Ranks ready tasks solely by calendar deadline urgency, ignoring priority and risk
@@ -415,10 +434,24 @@ export function calculateTaskPriorityScore(
   }
 
   // Strategy: Adaptive (Default Multi-Objective)
+  const activeWeights = weights || FACTORY_SCHEDULER_WEIGHTS;
+  const urgencyW = typeof activeWeights.urgencyWeight === 'number'
+    ? activeWeights.urgencyWeight
+    : FACTORY_SCHEDULER_WEIGHTS.urgencyWeight;
+  const priorityW = typeof activeWeights.priorityWeight === 'number'
+    ? activeWeights.priorityWeight
+    : FACTORY_SCHEDULER_WEIGHTS.priorityWeight;
+  const unblockW = typeof activeWeights.unblockWeight === 'number'
+    ? activeWeights.unblockWeight
+    : FACTORY_SCHEDULER_WEIGHTS.unblockWeight;
+  const riskW = typeof activeWeights.riskWeight === 'number'
+    ? activeWeights.riskWeight
+    : FACTORY_SCHEDULER_WEIGHTS.riskWeight;
+
   let score = 0;
 
   // 1. Critical path & unblocking bonus (favoring tasks that unlock downstream work)
-  // Bounded bonus: +15 pts per downstream dependent, clamped to max +45 pts.
+  // Bounded bonus: unblockW pts per downstream dependent, clamped to max 3 * unblockW pts.
   // Note: Kahn's DAG algorithm already guarantees prerequisites schedule before dependents.
   // We award a positive unblocking bonus to critical path tasks without penalizing ready dependents.
   let unblockCount = 0;
@@ -429,7 +462,7 @@ export function calculateTaskPriorityScore(
   } else if (task && task.unblockCount) {
     unblockCount = task.unblockCount;
   }
-  score += Math.min(45, unblockCount * 15);
+  score += Math.min(unblockW * 3, unblockCount * unblockW);
 
   // 2. Deadline Urgency (EDF)
   if (task.dueDate) {
@@ -443,7 +476,7 @@ export function calculateTaskPriorityScore(
         score += 5000 + Math.min(1000, Math.abs(daysDiff) * 100);
       } else {
         // Upcoming deadline: fewer days remaining -> higher score (clamped up to 30 days)
-        const urgency = Math.max(0, 30 - daysDiff) * 50;
+        const urgency = Math.max(0, 30 - daysDiff) * urgencyW;
         score += urgency;
       }
     }
@@ -455,20 +488,20 @@ export function calculateTaskPriorityScore(
   // 3. Task Priority Weight
   const priority = String(task.priority || '').toLowerCase();
   if (priority === 'high') {
-    score += 300;
+    score += priorityW * 3;
   } else if (priority === 'low') {
-    score += 100;
+    score += priorityW * 1;
   } else {
-    score += 200; // Medium
+    score += priorityW * 2; // Medium
   }
 
   // 4. Secondary Guarded Risk Urgency Boost (Bounded Heuristic)
   const riskPred = predictionsMap[task.id];
   if (riskPred) {
     if (riskPred.risk === 'HIGH') {
-      score += 60;
+      score += Math.round(riskW * 2.4);
     } else if (riskPred.risk === 'MEDIUM') {
-      score += 25;
+      score += riskW;
     }
   }
 
@@ -486,6 +519,7 @@ export function calculateTaskPriorityScore(
  * @param {number[]} [options.workingDays=[1,2,3,4,5]] Working weekdays
  * @param {object|null} [options.personalDurationModel=null] Duration model for personalized effort estimates
  * @param {object} [options.predictionsMap={}] Risk predictions mapping (taskId -> pred)
+ * @param {object} [options.weights=FACTORY_SCHEDULER_WEIGHTS] Heuristic scoring weights
  * @returns {{
  *   proposedPlacements: Array<object>,
  *   placements: Array<object>,
@@ -514,6 +548,7 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
   const personalDurationModel = options.personalDurationModel || null;
   const predictionsMap = options.predictionsMap || {};
   const strategy = options.strategy || 'adaptive';
+  const weights = options.weights || FACTORY_SCHEDULER_WEIGHTS;
 
   // Step 1: Filter eligible tasks (open, uncompleted tasks)
   const eligibleTasks = [];
@@ -592,7 +627,8 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
       startDateStr,
       unblockCounts,
       predictionsMap,
-      strategy
+      strategy,
+      weights
     );
 
     taskMeta.set(t.id, {
