@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 
 import {
   analyzePreferenceSignals,
+  classifySignalEvidenceLevel,
   EVIDENCE_LEVELS,
   MIN_OBSERVATIONS_PER_SEGMENT,
 } from '../src/scheduler/preferenceAnalyzer.js';
@@ -366,6 +367,369 @@ describe('Phase 7.2: Empirical Preference Signal Derivation & Friction Profiling
       // Must be completely identical down to placements and scheduled dates
       assert.deepEqual(schedBefore.placements, schedAfter.placements);
       assert.deepEqual(schedBefore.summary, schedAfter.summary);
+    });
+  });
+
+  describe('7. Evidence-Level Classification Contract & Boundary Hierarchy (Audit C)', () => {
+    it('classifies unavailable provenance as UNAVAILABLE with highest precedence', () => {
+      const level = classifySignalEvidenceLevel({
+        observationCount: 10,
+        isReadinessMet: true,
+        isProvenanceAvailable: false,
+      });
+      assert.equal(level, EVIDENCE_LEVELS.UNAVAILABLE);
+    });
+
+    it('classifies sample counts 0, 1, 2 as INSUFFICIENT_EVIDENCE regardless of readiness', () => {
+      for (const count of [0, 1, 2]) {
+        assert.equal(
+          classifySignalEvidenceLevel({ observationCount: count, isReadinessMet: false }),
+          EVIDENCE_LEVELS.INSUFFICIENT_EVIDENCE,
+          `count ${count} with unmet readiness must be INSUFFICIENT_EVIDENCE`
+        );
+        assert.equal(
+          classifySignalEvidenceLevel({ observationCount: count, isReadinessMet: true }),
+          EVIDENCE_LEVELS.INSUFFICIENT_EVIDENCE,
+          `count ${count} with met readiness must be INSUFFICIENT_EVIDENCE`
+        );
+      }
+    });
+
+    it('classifies sample counts 3 and 4 as PRELIMINARY when readiness is unmet', () => {
+      for (const count of [3, 4]) {
+        assert.equal(
+          classifySignalEvidenceLevel({ observationCount: count, isReadinessMet: false }),
+          EVIDENCE_LEVELS.PRELIMINARY,
+          `count ${count} with unmet readiness must be PRELIMINARY`
+        );
+      }
+    });
+
+    it('classifies sample counts 3 and 4 as REPEATED_OBSERVATION when readiness is met', () => {
+      for (const count of [3, 4]) {
+        assert.equal(
+          classifySignalEvidenceLevel({ observationCount: count, isReadinessMet: true }),
+          EVIDENCE_LEVELS.REPEATED_OBSERVATION,
+          `count ${count} with met readiness must be REPEATED_OBSERVATION`
+        );
+      }
+    });
+
+    it('strictly bounds count >= 5 to PRELIMINARY when global readiness is unmet', () => {
+      assert.equal(
+        classifySignalEvidenceLevel({ observationCount: 5, isReadinessMet: false }),
+        EVIDENCE_LEVELS.PRELIMINARY,
+        'Global readiness unmet must override local sample count of 5'
+      );
+      assert.equal(
+        classifySignalEvidenceLevel({ observationCount: 20, isReadinessMet: false }),
+        EVIDENCE_LEVELS.PRELIMINARY,
+        'Global readiness unmet must override local sample count of 20'
+      );
+    });
+
+    it('classifies count >= 5 as ELIGIBLE_FOR_LATER_EVALUATION when global readiness is met', () => {
+      assert.equal(
+        classifySignalEvidenceLevel({ observationCount: 5, isReadinessMet: true }),
+        EVIDENCE_LEVELS.ELIGIBLE_FOR_LATER_EVALUATION
+      );
+      assert.equal(
+        classifySignalEvidenceLevel({ observationCount: 12, isReadinessMet: true }),
+        EVIDENCE_LEVELS.ELIGIBLE_FOR_LATER_EVALUATION
+      );
+    });
+
+    it('classifies inconsistent, contradictory, or clustered data as INSUFFICIENT_EVIDENCE', () => {
+      assert.equal(
+        classifySignalEvidenceLevel({ observationCount: 6, isReadinessMet: true, isConsistent: false }),
+        EVIDENCE_LEVELS.INSUFFICIENT_EVIDENCE
+      );
+      assert.equal(
+        classifySignalEvidenceLevel({ observationCount: 6, isReadinessMet: true, hasContradictions: true }),
+        EVIDENCE_LEVELS.INSUFFICIENT_EVIDENCE
+      );
+      assert.equal(
+        classifySignalEvidenceLevel({ observationCount: 6, isReadinessMet: true, hasTaskClustering: true }),
+        EVIDENCE_LEVELS.INSUFFICIENT_EVIDENCE
+      );
+    });
+  });
+
+  describe('8. Proposal Decision Provenance, Deduplication & Denominator Integrity (Audit A & B)', () => {
+    it('does not inflate decidedCount or discardRate upon duplicate delivery of the same decision', () => {
+      const scheduleId = 'sched_dedup_test';
+      const events = [
+        {
+          event_id: 'e_gen_1',
+          event_type: 'schedule_proposal_generated',
+          timestamp: daysAgo(5),
+          payload: { schedule_id: scheduleId },
+        },
+        {
+          event_id: 'e_disc_1',
+          event_type: 'schedule_proposal_discarded',
+          timestamp: daysAgo(4),
+          payload: { schedule_id: scheduleId },
+        },
+        // Duplicate delivery with identical schedule_id
+        {
+          event_id: 'e_disc_2',
+          event_type: 'schedule_proposal_discarded',
+          timestamp: daysAgo(4, 11),
+          payload: { schedule_id: scheduleId },
+        },
+      ];
+
+      const result = analyzePreferenceSignals({ events, tasks: [], now: BASE_TIME });
+      assert.equal(result.frictionProfile.proposals.decidedCount, 1, 'Duplicate discard must not inflate decidedCount');
+      assert.equal(result.frictionProfile.proposals.discardedCount, 1, 'Duplicate discard must not inflate discardedCount');
+      assert.equal(result.frictionProfile.proposals.discardRate, 1.0);
+    });
+
+    it('isolates and excludes conflicting decisions (accepted AND discarded) from decided count', () => {
+      const scheduleId = 'sched_conflict_test';
+      const events = [
+        {
+          event_id: 'e_gen',
+          event_type: 'schedule_proposal_generated',
+          timestamp: daysAgo(6),
+          payload: { schedule_id: scheduleId },
+        },
+        {
+          event_id: 'e_acc',
+          event_type: 'schedule_proposal_accepted',
+          timestamp: daysAgo(5),
+          payload: { schedule_id: scheduleId, applied_placements: [] },
+        },
+        {
+          event_id: 'e_disc',
+          event_type: 'schedule_proposal_discarded',
+          timestamp: daysAgo(4),
+          payload: { schedule_id: scheduleId },
+        },
+      ];
+
+      const result = analyzePreferenceSignals({ events, tasks: [], now: BASE_TIME });
+      assert.equal(result.frictionProfile.proposals.decidedCount, 0, 'Conflicting proposal must be excluded from decided count');
+      assert.equal(result.frictionProfile.proposals.acceptedCount, 0);
+      assert.equal(result.frictionProfile.proposals.discardedCount, 0);
+      assert.equal(result.frictionProfile.proposals.discardRate, null);
+    });
+
+    it('excludes pending drafts and generated proposals from the decided denominator', () => {
+      const events = [
+        {
+          event_id: 'e_gen_1',
+          event_type: 'schedule_proposal_generated',
+          timestamp: daysAgo(3),
+          payload: { schedule_id: 'sched_pending_1' },
+        },
+        {
+          event_id: 'e_gen_2',
+          event_type: 'schedule_proposal_generated',
+          timestamp: daysAgo(2),
+          payload: { schedule_id: 'sched_pending_2' },
+        },
+        {
+          event_id: 'e_acc_1',
+          event_type: 'schedule_proposal_accepted',
+          timestamp: daysAgo(1),
+          payload: { schedule_id: 'sched_decided_1', applied_placements: [] },
+        },
+      ];
+
+      const result = analyzePreferenceSignals({ events, tasks: [], now: BASE_TIME });
+      // Total generated is 3, but decided count is strictly 1
+      assert.equal(result.frictionProfile.proposals.decidedCount, 1);
+      assert.equal(result.frictionProfile.proposals.acceptedCount, 1);
+      assert.equal(result.frictionProfile.proposals.acceptanceRate, 1.0);
+    });
+
+    it('safely excludes events missing schedule_id without crashing or distorting metrics', () => {
+      const events = [
+        {
+          event_id: 'e_malformed_1',
+          event_type: 'schedule_proposal_accepted',
+          timestamp: daysAgo(2),
+          payload: {}, // Missing schedule_id
+        },
+        {
+          event_id: 'e_malformed_2',
+          event_type: 'schedule_proposal_discarded',
+          timestamp: daysAgo(1),
+          payload: { schedule_id: '' }, // Blank schedule_id
+        },
+      ];
+
+      const result = analyzePreferenceSignals({ events, tasks: [], now: BASE_TIME });
+      assert.equal(result.frictionProfile.proposals.decidedCount, 0);
+      assert.equal(result.frictionProfile.proposals.discardRate, null);
+    });
+  });
+
+  describe('9. Multi-Task Independence & Clustering Safeguards (Audit E)', () => {
+    it('blocks postponement friction signal when 4 overrides cluster on a single task (< 3 distinct tasks)', () => {
+      const events = [];
+      const singleTaskId = 'single_clustered_task';
+      const scheduleId = 'sched_clustered_test';
+
+      // Accepted proposal placing singleTaskId on 2026-10-10
+      events.push({
+        event_id: 'e_gen',
+        event_type: 'schedule_proposal_generated',
+        timestamp: daysAgo(15),
+        payload: { schedule_id: scheduleId },
+      });
+      events.push({
+        event_id: 'e_acc',
+        event_type: 'schedule_proposal_accepted',
+        timestamp: daysAgo(14),
+        payload: {
+          schedule_id: scheduleId,
+          applied_placements: [{ task_id: singleTaskId, proposed_date: '2026-10-10' }],
+        },
+      });
+
+      // 4 manual date postponements all on the SAME task
+      for (let i = 1; i <= 4; i++) {
+        events.push({
+          event_id: `e_resched_${i}`,
+          task_id: singleTaskId,
+          event_type: 'task_rescheduled',
+          timestamp: daysAgo(10 - i),
+          payload: {
+            previous_due_date: `2026-10-${10 + i}`,
+            new_due_date: `2026-10-${12 + i}`, // postponed forward
+            reason: 'manual_override',
+          },
+        });
+      }
+
+      const tasks = [{ id: singleTaskId, title: 'Single Task', priority: 'high', category: 'General' }];
+      const result = analyzePreferenceSignals({ events, tasks, now: BASE_TIME });
+
+      // Overrides count shows 4, but unique tasks count is 1
+      assert.equal(result.frictionProfile.overrides.totalOverridesCount, 4);
+      assert.equal(result.frictionProfile.overrides.uniqueTasksOverriddenCount, 1);
+
+      // Must NOT form a candidate signal due to task clustering
+      const postSignal = result.candidateSignals.find((s) => s.family === 'postponement_friction');
+      assert.equal(postSignal, undefined, 'Must not emit postponement candidate signal when clustered on < 3 tasks');
+    });
+
+    it('deduplicates multiple task_completed events for the same task in effort overruns', () => {
+      const taskId = 't_multi_comp';
+      const events = [
+        {
+          event_id: 'e_create',
+          task_id: taskId,
+          event_type: 'task_created',
+          timestamp: daysAgo(5),
+          payload: { category: 'Engineering', estimated_effort: 2.0 },
+        },
+        // Duplicate/repeated completion events for the same task
+        {
+          event_id: 'e_comp_1',
+          task_id: taskId,
+          event_type: 'task_completed',
+          timestamp: daysAgo(4),
+          payload: { tracked_duration_seconds: 14400 }, // 4h
+        },
+        {
+          event_id: 'e_comp_2',
+          task_id: taskId,
+          event_type: 'task_completed',
+          timestamp: daysAgo(3),
+          payload: { tracked_duration_seconds: 14400 }, // 4h
+        },
+      ];
+
+      const tasks = [{ id: taskId, category: 'Engineering', estimatedEffort: 2.0, completed: true }];
+      const result = analyzePreferenceSignals({ events, tasks, now: BASE_TIME });
+
+      // Paired tasks must count this task exactly ONCE
+      assert.equal(result.frictionProfile.effortAccuracy.totalPairedCount, 1);
+      assert.equal(result.frictionProfile.effortAccuracy.byCategory[0].count, 1);
+    });
+
+    it('excludes tasks currently marked open (completed: false) in active tasks backlog from paired effort', () => {
+      const taskId = 't_currently_open';
+      const events = [
+        {
+          event_id: 'e_comp',
+          task_id: taskId,
+          event_type: 'task_completed',
+          timestamp: daysAgo(2),
+          payload: { tracked_duration_seconds: 7200 },
+        },
+      ];
+
+      // Task exists in active backlog and is currently open
+      const tasks = [{ id: taskId, category: 'Engineering', estimatedEffort: 2.0, completed: false }];
+      const result = analyzePreferenceSignals({ events, tasks, now: BASE_TIME });
+
+      assert.equal(result.frictionProfile.effortAccuracy.totalPairedCount, 0, 'Open task in backlog must be excluded from paired effort');
+    });
+  });
+
+  describe('10. Working-Days Focus Realism & Weekend Handling (Audit E)', () => {
+    it('does not misdiagnose standard non-working weekend days (Sat/Sun) as velocity dips', () => {
+      const events = [];
+      const tasks = [];
+
+      // 8 completions spread across Monday to Friday (e.g. 2 each on Mon, Tue, Wed, Thu)
+      // Saturday and Sunday have 0 completions.
+      // Friday has 2 completions.
+      const dates = [
+        '2026-10-12', '2026-10-12', // Mon
+        '2026-10-13', '2026-10-13', // Tue
+        '2026-10-14', '2026-10-14', // Wed
+        '2026-10-15', '2026-10-15', // Thu
+      ];
+
+      dates.forEach((d, idx) => {
+        const id = `t_wkd_${idx}`;
+        tasks.push({ id, title: `Task ${idx}`, completed: true });
+        events.push({
+          event_id: `e_comp_${idx}`,
+          task_id: id,
+          event_type: 'task_completed',
+          timestamp: `${d}T15:00:00.000Z`,
+          payload: { tracked_duration_seconds: 3600 },
+        });
+      });
+
+      const result = analyzePreferenceSignals({ events, tasks, now: BASE_TIME });
+
+      // Lowest working day in this dataset is Friday (0 completions), NOT Saturday or Sunday
+      const dipSignal = result.candidateSignals.find((s) => s.family === 'day_of_week_focus_realism');
+      if (dipSignal) {
+        assert.ok(
+          !dipSignal.name.includes('Sat') && !dipSignal.name.includes('Sun'),
+          'Weekend days must not be diagnosed as weekday velocity dips'
+        );
+      }
+    });
+  });
+
+  describe('11. Evidence Clearing & Pure Determinism (Audit F)', () => {
+    it('returns empty profile with adaptation locked when telemetry events are cleared', () => {
+      const result = analyzePreferenceSignals({ events: [], tasks: [], now: BASE_TIME });
+      assert.equal(result.isAdaptationUnlocked, false);
+      assert.equal(result.frictionProfile.proposals.decidedCount, 0);
+      assert.equal(result.frictionProfile.overrides.totalOverridesCount, 0);
+      assert.equal(result.frictionProfile.effortAccuracy.totalPairedCount, 0);
+      assert.equal(result.candidateSignals.length, 0);
+    });
+
+    it('produces 100% deterministic results across multiple evaluations of the same evidence', () => {
+      const { events, tasks } = createFullyMatureFixture();
+      const res1 = analyzePreferenceSignals({ events, tasks, now: BASE_TIME });
+      const res2 = analyzePreferenceSignals({ events, tasks, now: BASE_TIME });
+
+      assert.deepEqual(res1.candidateSignals, res2.candidateSignals);
+      assert.deepEqual(res1.frictionProfile, res2.frictionProfile);
+      assert.equal(res1.analysisTimestamp, res2.analysisTimestamp);
     });
   });
 });

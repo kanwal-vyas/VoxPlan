@@ -76,7 +76,7 @@ export default function PreferenceSignalsCard({ events = [], tasks = [] }) {
             </>
           ) : (
             <>
-              <strong>Statistical Restraint Notice:</strong> Phase 7.1 maturity gates are still developing ({readiness?.gates?.decidedProposals?.current || 0}/20 proposals, {readiness?.gates?.verifiedCompletions?.current || 0}/15 completions). To avoid false precision or premature scheduler distortion, personalized preference signals are strictly locked. Raw aggregate metrics below represent exploratory observations only.
+              <strong>Statistical Restraint Notice:</strong> Phase 7.1 maturity gates are still developing ({readiness?.gates?.decidedProposals?.current || 0}/{readiness?.gates?.decidedProposals?.required || 20} proposals, {readiness?.gates?.verifiedCompletions?.current || 0}/{readiness?.gates?.verifiedCompletions?.required || 15} completions). To avoid false precision or premature scheduler distortion, personalized preference signals are strictly locked. Raw aggregate metrics below represent exploratory observations only.
             </>
           )}
         </p>
@@ -86,7 +86,7 @@ export default function PreferenceSignalsCard({ events = [], tasks = [] }) {
       <div style={styles.overviewGrid}>
         {/* Proposal Discard Frequency */}
         <div style={styles.overviewItem}>
-          <span style={styles.itemLabel}>Proposal Discard Rate</span>
+          <span style={styles.itemLabel}>Observed Discard Ratio (Exploratory)</span>
           <div style={styles.itemValueRow}>
             <span style={styles.itemValue}>
               {frictionProfile.proposals.discardRate != null
@@ -99,7 +99,7 @@ export default function PreferenceSignalsCard({ events = [], tasks = [] }) {
           </div>
           <span style={styles.itemCaption}>
             {frictionProfile.proposals.decidedCount >= 3
-              ? `${frictionProfile.proposals.acceptedCount} accepted proposals adopted`
+              ? `${frictionProfile.proposals.discardedCount} of ${frictionProfile.proposals.decidedCount} decided proposals were discards. Small sample; descriptive only.`
               : 'Awaiting 3+ decided proposals'}
           </span>
         </div>

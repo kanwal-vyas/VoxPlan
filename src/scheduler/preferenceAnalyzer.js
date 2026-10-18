@@ -32,6 +32,53 @@ export const EVIDENCE_LEVELS = Object.freeze({
 export const MIN_OBSERVATIONS_PER_SEGMENT = 3;
 
 /**
+ * Authoritative classification function for signal evidence level.
+ * Guarantees a deterministic, non-overlapping hierarchy:
+ * 1. Missing provenance/schema -> UNAVAILABLE
+ * 2. Fewer than MIN_OBSERVATIONS_PER_SEGMENT (3), unassessable, contradictory, or clustered -> INSUFFICIENT_EVIDENCE
+ * 3. Readiness gate unmet -> PRELIMINARY (local sample sufficiency NEVER overrides global readiness)
+ * 4. Readiness met & observationCount >= 5 -> ELIGIBLE_FOR_LATER_EVALUATION
+ * 5. Readiness met & observationCount >= 3 -> REPEATED_OBSERVATION
+ *
+ * @param {Object} params
+ * @param {number} [params.observationCount=0] - Number of independent qualifying observations.
+ * @param {boolean} [params.isReadinessMet=false] - Whether Phase 7.1 global readiness gate is met.
+ * @param {boolean} [params.isProvenanceAvailable=true] - Whether underlying schema provenance exists.
+ * @param {boolean} [params.isConsistent=true] - Whether observed behavior is directional and consistent.
+ * @param {boolean} [params.hasContradictions=false] - Whether data contains conflicting records.
+ * @param {boolean} [params.hasTaskClustering=false] - Whether observations cluster on < 3 distinct tasks.
+ * @returns {string} One of EVIDENCE_LEVELS.
+ */
+export function classifySignalEvidenceLevel({
+  observationCount = 0,
+  isReadinessMet = false,
+  isProvenanceAvailable = true,
+  isConsistent = true,
+  hasContradictions = false,
+  hasTaskClustering = false,
+} = {}) {
+  if (!isProvenanceAvailable) {
+    return EVIDENCE_LEVELS.UNAVAILABLE;
+  }
+  if (
+    hasContradictions ||
+    hasTaskClustering ||
+    !isConsistent ||
+    typeof observationCount !== 'number' ||
+    observationCount < MIN_OBSERVATIONS_PER_SEGMENT
+  ) {
+    return EVIDENCE_LEVELS.INSUFFICIENT_EVIDENCE;
+  }
+  if (!isReadinessMet) {
+    return EVIDENCE_LEVELS.PRELIMINARY;
+  }
+  if (observationCount >= 5) {
+    return EVIDENCE_LEVELS.ELIGIBLE_FOR_LATER_EVALUATION;
+  }
+  return EVIDENCE_LEVELS.REPEATED_OBSERVATION;
+}
+
+/**
  * Calculates the numerical median of an array of numbers.
  * Returns null if the array is empty.
  */
@@ -150,9 +197,9 @@ export function analyzePreferenceSignals({
   const sameDayCount = feedback.summary.sameDayOverridesCount || 0;
   const postponementRatio = totalOverridesCount > 0 ? postponedCount / totalOverridesCount : null;
 
-  // Segment overrides by priority tier
+  // Segment overrides by priority tier with distinct task tracking
   const overridesByPriorityMap = new Map();
-  // Segment overrides by category
+  // Segment overrides by category with distinct task tracking
   const overridesByCategoryMap = new Map();
 
   for (const ov of overrideDetails) {
@@ -161,18 +208,20 @@ export function analyzePreferenceSignals({
     const cat = meta.category || 'General';
 
     if (!overridesByPriorityMap.has(prio)) {
-      overridesByPriorityMap.set(prio, { total: 0, postponed: 0, advanced: 0 });
+      overridesByPriorityMap.set(prio, { total: 0, postponed: 0, advanced: 0, taskIds: new Set() });
     }
     const prioData = overridesByPriorityMap.get(prio);
     prioData.total++;
+    prioData.taskIds.add(ov.taskId);
     if (ov.shiftDirection === 'postponed') prioData.postponed++;
     else if (ov.shiftDirection === 'advanced') prioData.advanced++;
 
     if (!overridesByCategoryMap.has(cat)) {
-      overridesByCategoryMap.set(cat, { total: 0, postponed: 0, advanced: 0 });
+      overridesByCategoryMap.set(cat, { total: 0, postponed: 0, advanced: 0, taskIds: new Set() });
     }
     const catData = overridesByCategoryMap.get(cat);
     catData.total++;
+    catData.taskIds.add(ov.taskId);
     if (ov.shiftDirection === 'postponed') catData.postponed++;
     else if (ov.shiftDirection === 'advanced') catData.advanced++;
   }
@@ -180,6 +229,7 @@ export function analyzePreferenceSignals({
   const overridesByPriority = Array.from(overridesByPriorityMap.entries()).map(([priority, data]) => ({
     priority,
     total: data.total,
+    uniqueTasksCount: data.taskIds.size,
     postponed: data.postponed,
     postponedRate: data.total > 0 ? data.postponed / data.total : 0,
   }));
@@ -187,25 +237,39 @@ export function analyzePreferenceSignals({
   const overridesByCategory = Array.from(overridesByCategoryMap.entries()).map(([category, data]) => ({
     category,
     total: data.total,
+    uniqueTasksCount: data.taskIds.size,
     postponed: data.postponed,
     postponedRate: data.total > 0 ? data.postponed / data.total : 0,
   }));
 
   // C. Category Effort Accuracy & Duration Overruns
-  // Find completed tasks with paired estimated effort and observed duration
+  // Find completed tasks with paired estimated effort and observed duration, deduplicated by taskId
   const pairedTasks = [];
   const categoryRatiosMap = new Map();
 
-  // Inspect completed tasks from telemetry events and backlog
   const completedTaskEvents = events.filter((e) => e.event_type === 'task_completed');
   const reopenedTaskIds = new Set(
     events.filter((e) => e.event_type === 'task_reopened').map((e) => e.task_id)
   );
 
+  // Deduplicate completions by taskId, retaining the latest valid event per task
+  const latestCompletionByTaskId = new Map();
   for (const compEv of completedTaskEvents) {
     const taskId = compEv.task_id;
     if (!taskId || reopenedTaskIds.has(taskId)) continue;
 
+    // Exclude task if it is currently open in active tasks backlog
+    const activeTask = tasks.find((t) => t.id === taskId);
+    if (activeTask && activeTask.completed === false) continue;
+
+    const existing = latestCompletionByTaskId.get(taskId);
+    if (!existing || new Date(compEv.timestamp) > new Date(existing.timestamp)) {
+      latestCompletionByTaskId.set(taskId, compEv);
+    }
+  }
+
+  for (const compEv of latestCompletionByTaskId.values()) {
+    const taskId = compEv.task_id;
     const payload = compEv.payload || {};
     const trackedSec = payload.tracked_duration_seconds;
     const reportedSec = payload.self_reported_duration_seconds;
@@ -271,92 +335,141 @@ export function analyzePreferenceSignals({
 
   if (activeWeekdayEntries.length > 0) {
     highestDay = [...activeWeekdayEntries].sort((a, b) => b.count - a.count)[0];
-    // Lowest day among all 7 days
     lowestDay = [...weekdayDistributionWithPct].sort((a, b) => a.count - b.count)[0];
+  }
+
+  // Working day evaluation for velocity dip (excluding weekends to avoid misrepresenting standard non-working days)
+  const WORKING_WEEKDAYS = new Set(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']);
+  const workingDayEntries = weekdayDistributionWithPct.filter((w) => WORKING_WEEKDAYS.has(w.day));
+  let lowestWorkingDay = null;
+  if (workingDayEntries.length > 0) {
+    lowestWorkingDay = [...workingDayEntries].sort((a, b) => a.count - b.count)[0];
   }
 
   // 4. Derive Candidate Preference Signals
   const candidateSignals = [];
 
-  // Helper to determine evidence level
-  function determineEvidenceLevel(observationCount) {
-    if (!isReadinessMet) {
-      return observationCount >= MIN_OBSERVATIONS_PER_SEGMENT
-        ? EVIDENCE_LEVELS.PRELIMINARY
-        : EVIDENCE_LEVELS.INSUFFICIENT_EVIDENCE;
-    }
-    if (observationCount >= 5) {
-      return EVIDENCE_LEVELS.ELIGIBLE_FOR_LATER_EVALUATION;
-    }
-    if (observationCount >= MIN_OBSERVATIONS_PER_SEGMENT) {
-      return EVIDENCE_LEVELS.REPEATED_OBSERVATION;
-    }
-    return EVIDENCE_LEVELS.INSUFFICIENT_EVIDENCE;
-  }
-
   // Signal Family 1: Category Effort Underestimation
   for (const catEffort of effortByCategory) {
     if (catEffort.count >= MIN_OBSERVATIONS_PER_SEGMENT && catEffort.isUnderestimated) {
-      const level = determineEvidenceLevel(catEffort.count);
-      const isEligible = level === EVIDENCE_LEVELS.ELIGIBLE_FOR_LATER_EVALUATION;
-      const overrunPct = Math.round((catEffort.medianRatio - 1.0) * 100);
-
-      candidateSignals.push({
-        id: `cat_underestimation_${catEffort.category.toLowerCase()}`,
-        family: 'category_effort_underestimation',
-        name: `${catEffort.category} Category Effort Overrun`,
-        evidenceLevel: level,
-        isPreliminary: !isReadinessMet || level === EVIDENCE_LEVELS.PRELIMINARY,
-        isEligibleForLaterEvaluation: isEligible,
-        observedBehavior: `Completed ${catEffort.category} tasks consistently overrun estimates by median ${overrunPct}% (${catEffort.medianRatio.toFixed(2)}x duration ratio across ${catEffort.count} observed tasks).`,
-        supportingEvidenceCount: catEffort.count,
-        denominator: catEffort.count,
-        metricValue: `${catEffort.medianRatio.toFixed(2)}x`,
-        relevantTimeRange: {
-          earliest: readiness.summary.earliestActiveDate,
-          latest: readiness.summary.latestActiveDate,
-        },
-        confounders: [
-          'External interruptions or untracked stopwatch pauses.',
-          'Initial task descriptions may have been broad or exploratory.',
-          'Category contains heterogeneous task complexities.',
-        ],
-        potentialSchedulingRelevance: `In later Phase 7 stages, this candidate signal could justify a category-specific buffer multiplier (W_friction) to avoid schedule overbooking.`,
-        statusStatement: isReadinessMet
-          ? 'Candidate pattern observed. Stored for Stage 7.3 Bayesian adaptation review.'
-          : 'Preliminary observation. Adaptation gate remains unmet; no scheduler weights will change.',
+      const level = classifySignalEvidenceLevel({
+        observationCount: catEffort.count,
+        isReadinessMet,
+        isConsistent: true,
+        hasTaskClustering: false,
       });
+
+      if (level !== EVIDENCE_LEVELS.INSUFFICIENT_EVIDENCE) {
+        const isEligible = level === EVIDENCE_LEVELS.ELIGIBLE_FOR_LATER_EVALUATION;
+        const overrunPct = Math.round((catEffort.medianRatio - 1.0) * 100);
+
+        candidateSignals.push({
+          id: `cat_underestimation_${catEffort.category.toLowerCase()}`,
+          family: 'category_effort_underestimation',
+          name: `${catEffort.category} Category Effort Overrun`,
+          evidenceLevel: level,
+          isPreliminary: !isReadinessMet || level === EVIDENCE_LEVELS.PRELIMINARY,
+          isEligibleForLaterEvaluation: isEligible,
+          observedBehavior: `Completed ${catEffort.category} tasks consistently overrun estimates by median ${overrunPct}% (${catEffort.medianRatio.toFixed(2)}x duration ratio across ${catEffort.count} observed tasks).`,
+          supportingEvidenceCount: catEffort.count,
+          denominator: catEffort.count,
+          metricValue: `${catEffort.medianRatio.toFixed(2)}x`,
+          relevantTimeRange: {
+            earliest: readiness.summary.earliestActiveDate,
+            latest: readiness.summary.latestActiveDate,
+          },
+          confounders: [
+            'External interruptions or untracked stopwatch pauses.',
+            'Initial task descriptions may have been broad or exploratory.',
+            'Category contains heterogeneous task complexities.',
+          ],
+          potentialSchedulingRelevance: `In later Phase 7 stages, this candidate signal could justify a category-specific buffer multiplier (W_friction) to avoid schedule overbooking.`,
+          statusStatement: isReadinessMet
+            ? 'Candidate pattern observed. Stored for Stage 7.3 Bayesian adaptation review.'
+            : 'Preliminary observation. Adaptation gate remains unmet; no scheduler weights will change.',
+        });
+      }
     }
   }
 
   // Signal Family 2: Postponement Friction Tendencies (Priority or Category)
   for (const prioOverride of overridesByPriority) {
     if (prioOverride.total >= MIN_OBSERVATIONS_PER_SEGMENT && prioOverride.postponedRate >= 0.6) {
-      const level = determineEvidenceLevel(prioOverride.total);
+      const hasTaskClustering = prioOverride.uniqueTasksCount < MIN_OBSERVATIONS_PER_SEGMENT;
+      const level = classifySignalEvidenceLevel({
+        observationCount: prioOverride.total,
+        isReadinessMet,
+        isConsistent: true,
+        hasTaskClustering,
+      });
+
+      if (level !== EVIDENCE_LEVELS.INSUFFICIENT_EVIDENCE) {
+        const isEligible = level === EVIDENCE_LEVELS.ELIGIBLE_FOR_LATER_EVALUATION;
+        const pct = Math.round(prioOverride.postponedRate * 100);
+
+        candidateSignals.push({
+          id: `postponement_priority_${prioOverride.priority.toLowerCase()}`,
+          family: 'postponement_friction',
+          name: `${prioOverride.priority.toUpperCase()} Priority Forward Postponement Friction`,
+          evidenceLevel: level,
+          isPreliminary: !isReadinessMet || level === EVIDENCE_LEVELS.PRELIMINARY,
+          isEligibleForLaterEvaluation: isEligible,
+          observedBehavior: `${prioOverride.priority.toUpperCase()} priority tasks were postponed forward in ${prioOverride.postponed} of ${prioOverride.total} manual overrides (${pct}% across ${prioOverride.uniqueTasksCount} distinct tasks).`,
+          supportingEvidenceCount: prioOverride.postponed,
+          denominator: prioOverride.total,
+          metricValue: `${pct}%`,
+          relevantTimeRange: {
+            earliest: readiness.summary.earliestActiveDate,
+            latest: readiness.summary.latestActiveDate,
+          },
+          confounders: [
+            'Urgent incoming unplanned work overriding scheduled items.',
+            'Prerequisite tasks or external stakeholder blockers.',
+            'Initial deadline was aspirational rather than binding.',
+          ],
+          potentialSchedulingRelevance: `In later Phase 7 stages, disproportionate postponement could justify an adjusted priority weight (W_priority) or dynamic deadline buffer.`,
+          statusStatement: isReadinessMet
+            ? 'Candidate pattern observed. Stored for Stage 7.3 Bayesian adaptation review.'
+            : 'Preliminary observation. Adaptation gate remains unmet; no scheduler weights will change.',
+        });
+      }
+    }
+  }
+
+  // Signal Family 3: Day-of-Week Focus Realism (Evaluating Working Weekdays)
+  if (totalCompleted >= 8 && lowestWorkingDay && lowestWorkingDay.count <= 1) {
+    const level = classifySignalEvidenceLevel({
+      observationCount: totalCompleted,
+      isReadinessMet,
+      isConsistent: true,
+      hasTaskClustering: false,
+    });
+
+    if (level !== EVIDENCE_LEVELS.INSUFFICIENT_EVIDENCE) {
       const isEligible = level === EVIDENCE_LEVELS.ELIGIBLE_FOR_LATER_EVALUATION;
-      const pct = Math.round(prioOverride.postponedRate * 100);
 
       candidateSignals.push({
-        id: `postponement_priority_${prioOverride.priority.toLowerCase()}`,
-        family: 'postponement_friction',
-        name: `${prioOverride.priority.toUpperCase()} Priority Forward Postponement Friction`,
+        id: `weekday_velocity_dip_${lowestWorkingDay.day.toLowerCase()}`,
+        family: 'day_of_week_focus_realism',
+        name: `${lowestWorkingDay.day} Completion Velocity Dip`,
         evidenceLevel: level,
         isPreliminary: !isReadinessMet || level === EVIDENCE_LEVELS.PRELIMINARY,
         isEligibleForLaterEvaluation: isEligible,
-        observedBehavior: `${prioOverride.priority.toUpperCase()} priority tasks were postponed forward in ${prioOverride.postponed} of ${prioOverride.total} manual overrides (${pct}%).`,
-        supportingEvidenceCount: prioOverride.postponed,
-        denominator: prioOverride.total,
-        metricValue: `${pct}%`,
+        observedBehavior: `Only ${lowestWorkingDay.count} of ${totalCompleted} completions (${lowestWorkingDay.percentage}%) occurred on ${lowestWorkingDay.day} (evaluated across working weekdays).`,
+        supportingEvidenceCount: lowestWorkingDay.count,
+        denominator: totalCompleted,
+        metricValue: `${lowestWorkingDay.percentage}%`,
         relevantTimeRange: {
           earliest: readiness.summary.earliestActiveDate,
           latest: readiness.summary.latestActiveDate,
         },
         confounders: [
-          'Urgent incoming unplanned work overriding scheduled items.',
-          'Prerequisite tasks or external stakeholder blockers.',
-          'Initial deadline was aspirational rather than binding.',
+          'User may have non-working periods, classes, or recurring team meetings on this working weekday.',
+          'Weekend boundary habits or sprint turnover cycles.',
+          'Tasks scheduled on this day may be long multi-day projects finishing on later days.',
+          'Weekends (Saturday/Sunday) are excluded from velocity dip evaluation as standard non-working days.',
         ],
-        potentialSchedulingRelevance: `In later Phase 7 stages, disproportionate postponement could justify an adjusted priority weight (W_priority) or dynamic deadline buffer.`,
+        potentialSchedulingRelevance: `In later Phase 7 stages, empirical weekday velocity could tune daily capacity limits without violating hard constraints.`,
         statusStatement: isReadinessMet
           ? 'Candidate pattern observed. Stored for Stage 7.3 Bayesian adaptation review.'
           : 'Preliminary observation. Adaptation gate remains unmet; no scheduler weights will change.',
@@ -364,69 +477,46 @@ export function analyzePreferenceSignals({
     }
   }
 
-  // Signal Family 3: Day-of-Week Focus Realism
-  if (totalCompleted >= 8 && lowestDay && lowestDay.count <= 1) {
-    const level = determineEvidenceLevel(totalCompleted);
-    const isEligible = level === EVIDENCE_LEVELS.ELIGIBLE_FOR_LATER_EVALUATION;
-
-    candidateSignals.push({
-      id: `weekday_velocity_dip_${lowestDay.day.toLowerCase()}`,
-      family: 'day_of_week_focus_realism',
-      name: `${lowestDay.day} Completion Velocity Dip`,
-      evidenceLevel: level,
-      isPreliminary: !isReadinessMet || level === EVIDENCE_LEVELS.PRELIMINARY,
-      isEligibleForLaterEvaluation: isEligible,
-      observedBehavior: `Only ${lowestDay.count} of ${totalCompleted} completions (${lowestDay.percentage}%) occurred on ${lowestDay.day}.`,
-      supportingEvidenceCount: lowestDay.count,
-      denominator: totalCompleted,
-      metricValue: `${lowestDay.percentage}%`,
-      relevantTimeRange: {
-        earliest: readiness.summary.earliestActiveDate,
-        latest: readiness.summary.latestActiveDate,
-      },
-      confounders: [
-        'User may have non-working days, classes, or recurring team meetings on this weekday.',
-        'Weekend boundary habits or sprint turnover cycles.',
-        'Tasks scheduled on this day may be long multi-day projects finishing on later days.',
-      ],
-      potentialSchedulingRelevance: `In later Phase 7 stages, empirical weekday velocity could tune daily capacity limits without violating hard constraints.`,
-      statusStatement: isReadinessMet
-        ? 'Candidate pattern observed. Stored for Stage 7.3 Bayesian adaptation review.'
-        : 'Preliminary observation. Adaptation gate remains unmet; no scheduler weights will change.',
-      });
-  }
-
   // Signal Family 4: Proposal Decision Friction (Discard Tendencies)
   if (decidedCount >= 5 && discardRate != null && discardRate >= 0.4) {
-    const level = determineEvidenceLevel(decidedCount);
-    const isEligible = level === EVIDENCE_LEVELS.ELIGIBLE_FOR_LATER_EVALUATION;
-    const discardPct = Math.round(discardRate * 100);
-
-    candidateSignals.push({
-      id: 'proposal_discard_friction',
-      family: 'proposal_decision_friction',
-      name: 'Elevated Proposal Discard Frequency',
-      evidenceLevel: level,
-      isPreliminary: !isReadinessMet || level === EVIDENCE_LEVELS.PRELIMINARY,
-      isEligibleForLaterEvaluation: isEligible,
-      observedBehavior: `${discardedCount} of ${decidedCount} proposal decisions (${discardPct}%) were discarded rather than accepted.`,
-      supportingEvidenceCount: discardedCount,
-      denominator: decidedCount,
-      metricValue: `${discardPct}%`,
-      relevantTimeRange: {
-        earliest: readiness.summary.earliestActiveDate,
-        latest: readiness.summary.latestActiveDate,
-      },
-      confounders: [
-        'User generated exploratory proposals to compare options without intent to adopt.',
-        'External changes or schedule changes occurred immediately after generation.',
-        'Proposals with tight daily capacities may require looser horizon assumptions.',
-      ],
-      potentialSchedulingRelevance: `Indicates friction in proposal adoption; does not infer which specific heuristic caused the discard without explicit feedback.`,
-      statusStatement: isReadinessMet
-        ? 'Candidate pattern observed. Diagnostic only.'
-        : 'Preliminary observation. Adaptation gate remains unmet; no scheduler weights will change.',
+    const level = classifySignalEvidenceLevel({
+      observationCount: decidedCount,
+      isReadinessMet,
+      isConsistent: true,
+      hasTaskClustering: false,
     });
+
+    if (level !== EVIDENCE_LEVELS.INSUFFICIENT_EVIDENCE) {
+      const isEligible = level === EVIDENCE_LEVELS.ELIGIBLE_FOR_LATER_EVALUATION;
+      const discardPct = Math.round(discardRate * 100);
+
+      candidateSignals.push({
+        id: 'proposal_discard_friction',
+        family: 'proposal_decision_friction',
+        name: 'Observed Proposal Discard Ratio (Small Sample)',
+        evidenceLevel: level,
+        isPreliminary: !isReadinessMet || level === EVIDENCE_LEVELS.PRELIMINARY,
+        isEligibleForLaterEvaluation: isEligible,
+        observedBehavior: `${discardedCount} of ${decidedCount} eligible proposal decisions (${discardPct}%) were discards rather than accepted. In small exploratory samples, this metric is descriptive and does not indicate user dissatisfaction, ineffective scheduling, or a stable personal preference.`,
+        supportingEvidenceCount: discardedCount,
+        denominator: decidedCount,
+        metricValue: `${discardPct}%`,
+        relevantTimeRange: {
+          earliest: readiness.summary.earliestActiveDate,
+          latest: readiness.summary.latestActiveDate,
+        },
+        confounders: [
+          'Small exploratory sample (n=5 decided proposals); descriptive observation only, does not establish user dissatisfaction or scheduler defect.',
+          'User generated exploratory proposals to compare options without intent to adopt.',
+          'External changes or schedule shifts occurred immediately after generation.',
+          'Proposals with tight daily capacities may require looser horizon assumptions.',
+        ],
+        potentialSchedulingRelevance: `Indicates friction in proposal adoption; does not infer which specific heuristic caused the discard without explicit feedback.`,
+        statusStatement: isReadinessMet
+          ? 'Candidate pattern observed. Diagnostic only.'
+          : 'Preliminary observation. Adaptation gate remains unmet; no scheduler weights will change.',
+      });
+    }
   }
 
   // Signal Family 5: Intraday Time-Window Placement Movement (Explicitly Unavailable)
@@ -475,6 +565,7 @@ export function analyzePreferenceSignals({
         distribution: weekdayDistributionWithPct,
         lowestDay,
         highestDay,
+        lowestWorkingDay,
       },
     },
     candidateSignals,
