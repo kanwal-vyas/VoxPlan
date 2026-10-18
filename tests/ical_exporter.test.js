@@ -10,6 +10,10 @@ import {
   generateStableSessionUid,
   extractExportableSessions,
   generateIcsCalendar,
+  validateIanaTimeZone,
+  getTimezoneOffsetMinutes,
+  formatIcsOffset,
+  generateVtimezoneComponent,
   saveAcceptedSchedule,
   loadAcceptedSchedule,
   clearAcceptedSchedule,
@@ -658,8 +662,12 @@ describe('Phase 6.4: RFC 5545 Calendar Export (.ics)', () => {
     const uidFromPlacement = generateStableSessionUid({ placementId: 'custom_id_123' });
     assert.equal(uidFromPlacement, 'custom_id_123@voxplan.local');
 
+    // Hardened fallback does not include transient date or time
     const uidFromFallback = generateStableSessionUid({ taskId: 't-1', proposedDate: '2026-10-19', startTime: '10:00' });
-    assert.equal(uidFromFallback, 'placement_t-1_20261019_1000@voxplan.local');
+    assert.equal(uidFromFallback, 'placement_t-1@voxplan.local');
+
+    const uidFromChunkFallback = generateStableSessionUid({ taskId: 't-1', isChunk: true, chunkIndex: 1 });
+    assert.equal(uidFromChunkFallback, 'chunk_t-1_seg_1@voxplan.local');
 
     // extractExportableSessions
     const extracted = extractExportableSessions({
@@ -677,5 +685,525 @@ describe('Phase 6.4: RFC 5545 Calendar Export (.ics)', () => {
     });
     assert.equal(extracted.validSessions.length, 1);
     assert.equal(extracted.omittedSessions.length, 0);
+  });
+
+  // --- 9. Time Zone Validation & VTIMEZONE Hardening ---
+
+  test('22. validateIanaTimeZone accurately accepts valid IANA zones and rejects invalid/injection strings', () => {
+    // Valid zones
+    assert.equal(validateIanaTimeZone('America/New_York'), true);
+    assert.equal(validateIanaTimeZone('Europe/London'), true);
+    assert.equal(validateIanaTimeZone('Asia/Kolkata'), true);
+    assert.equal(validateIanaTimeZone('Australia/Sydney'), true);
+    assert.equal(validateIanaTimeZone('UTC'), true);
+    assert.equal(validateIanaTimeZone('Etc/GMT+5'), true);
+
+    // Invalid zones & injection payloads
+    assert.equal(validateIanaTimeZone(''), false);
+    assert.equal(validateIanaTimeZone(null), false);
+    assert.equal(validateIanaTimeZone(undefined), false);
+    assert.equal(validateIanaTimeZone('Invalid/Unknown_Zone_12345'), false);
+    assert.equal(validateIanaTimeZone('America/New_York\nINJECT:TRUE'), false);
+    assert.equal(validateIanaTimeZone('America/New_York;DROP TABLE'), false);
+    assert.equal(validateIanaTimeZone('../../../etc/passwd'), false);
+
+    // Offset calculation and formatting
+    const dWinter = new Date('2026-01-15T12:00:00Z');
+    assert.equal(getTimezoneOffsetMinutes(dWinter, 'Asia/Kolkata'), 330);
+    assert.equal(formatIcsOffset(330), '+0530');
+    assert.equal(getTimezoneOffsetMinutes(dWinter, 'America/New_York'), -300);
+    assert.equal(formatIcsOffset(-300), '-0500');
+    assert.equal(formatIcsOffset(0), '+0000');
+  });
+
+  test('23. VTIMEZONE generation for non-DST zone emits STANDARD without DAYLIGHT', () => {
+    const lines = generateVtimezoneComponent('Asia/Kolkata', 2026);
+    assert.ok(lines.length > 0);
+    assert.equal(lines[0], 'BEGIN:VTIMEZONE');
+    assert.equal(lines[1], 'TZID:Asia/Kolkata');
+
+    const vtzText = lines.join('\n');
+    assert.ok(vtzText.includes('BEGIN:STANDARD'));
+    assert.ok(vtzText.includes('TZOFFSETFROM:+0530'));
+    assert.ok(vtzText.includes('TZOFFSETTO:+0530'));
+    assert.ok(!vtzText.includes('BEGIN:DAYLIGHT'));
+    assert.ok(vtzText.includes('END:VTIMEZONE'));
+  });
+
+  test('24. VTIMEZONE generation for DST zone emits both STANDARD and DAYLIGHT components', () => {
+    const lines = generateVtimezoneComponent('America/New_York', 2026);
+    assert.ok(lines.length > 0);
+    assert.equal(lines[0], 'BEGIN:VTIMEZONE');
+    assert.equal(lines[1], 'TZID:America/New_York');
+
+    const vtzText = lines.join('\n');
+    assert.ok(vtzText.includes('BEGIN:STANDARD'));
+    assert.ok(vtzText.includes('BEGIN:DAYLIGHT'));
+    assert.ok(vtzText.includes('TZOFFSETFROM:-0500') || vtzText.includes('TZOFFSETFROM:-0400'));
+    assert.ok(vtzText.includes('TZOFFSETTO:-0400') || vtzText.includes('TZOFFSETTO:-0500'));
+    assert.ok(vtzText.includes('END:VTIMEZONE'));
+  });
+
+  test('25. Invalid TZID parameter passed to generator falls back to floating time with warning', () => {
+    const schedule = {
+      proposedPlacements: [
+        {
+          placementId: 'placement_safe_tz',
+          taskId: 'task-safe',
+          taskTitle: 'Safe Session',
+          proposedDate: '2026-10-19',
+          startTime: '10:00',
+          endTime: '11:00',
+          status: 'on_time',
+        },
+      ],
+    };
+
+    const result = generateIcsCalendar(schedule, {
+      tzid: 'Malicious/Zone\nBEGIN:HACK',
+      exportTimestamp: fixedTimestamp,
+    });
+
+    assert.equal(result.sessionCount, 1);
+    assert.equal(result.tzidUsed, null);
+    assert.ok(result.warnings.length > 0);
+    assert.ok(result.warnings[0].includes('Invalid time zone identifier'));
+
+    // Verify it fell back safely to floating time without injection
+    const ics = result.ics;
+    assert.ok(!ics.includes('TZID=Malicious'));
+    assert.ok(!ics.includes('BEGIN:HACK'));
+    assert.ok(ics.includes(`DTSTART:20261019T100000${CRLF}`));
+    assert.ok(ics.includes(`DTEND:20261019T110000${CRLF}`));
+  });
+
+  test('26. Near-midnight sessions serialize accurately without shifting date', () => {
+    const schedule = {
+      proposedPlacements: [
+        {
+          placementId: 'p_early_morning',
+          taskId: 't_early',
+          taskTitle: 'Midnight Early Work',
+          proposedDate: '2026-10-19',
+          startTime: '00:00',
+          endTime: '01:00',
+          status: 'on_time',
+        },
+        {
+          placementId: 'p_late_night',
+          taskId: 't_late',
+          taskTitle: 'Midnight Late Work',
+          proposedDate: '2026-10-19',
+          startTime: '23:00',
+          endTime: '23:45',
+          status: 'on_time',
+        },
+      ],
+    };
+
+    const result = generateIcsCalendar(schedule, { exportTimestamp: fixedTimestamp });
+    assert.equal(result.sessionCount, 2);
+
+    const ics = result.ics;
+    assert.ok(ics.includes(`DTSTART:20261019T000000${CRLF}`));
+    assert.ok(ics.includes(`DTEND:20261019T010000${CRLF}`));
+    assert.ok(ics.includes(`DTSTART:20261019T230000${CRLF}`));
+    assert.ok(ics.includes(`DTEND:20261019T234500${CRLF}`));
+  });
+
+  test('27. Reversed local session (end before start) is omitted safely', () => {
+    const schedule = {
+      proposedPlacements: [
+        {
+          placementId: 'p_invalid_range',
+          taskId: 't_invalid',
+          taskTitle: 'Inverted Session',
+          proposedDate: '2026-10-19',
+          startTime: '15:00',
+          endTime: '13:00', // invalid
+          status: 'on_time',
+        },
+      ],
+    };
+
+    const result = generateIcsCalendar(schedule, { exportTimestamp: fixedTimestamp });
+    assert.equal(result.sessionCount, 0);
+    assert.equal(result.omittedCount, 1);
+    assert.equal(result.omittedSessions[0].reason, 'end_time_not_after_start_time');
+  });
+
+  // --- 10. Stable Event Identity Across Edits & Regeneration ---
+
+  test('28. Editing session date or start/end time preserves identical UID', () => {
+    const originalPlacement = {
+      placementId: 'placement_task-focus',
+      taskId: 'task-focus',
+      taskTitle: 'Focus Block',
+      proposedDate: '2026-10-19',
+      startTime: '09:00',
+      endTime: '11:00',
+      status: 'on_time',
+    };
+
+    const editedPlacement = {
+      ...originalPlacement,
+      proposedDate: '2026-10-22', // shifted 3 days
+      startTime: '14:00',        // shifted to afternoon
+      endTime: '16:00',
+    };
+
+    const uidOriginal = generateStableSessionUid(originalPlacement);
+    const uidEdited = generateStableSessionUid(editedPlacement);
+
+    assert.equal(uidOriginal, uidEdited);
+    assert.equal(uidOriginal, 'placement_task-focus@voxplan.local');
+  });
+
+  test('29. Reordering chunks in schedule array preserves each chunk\'s stable UID', () => {
+    const chunkA = {
+      placementId: 'chunk_task-m1_seg_0',
+      chunkId: 'chunk_task-m1_seg_0',
+      taskId: 'task-m1',
+      taskTitle: 'Multi-day Task',
+      isChunk: true,
+      chunkIndex: 0,
+      totalChunks: 2,
+      proposedDate: '2026-10-19',
+      startTime: '09:00',
+      endTime: '12:00',
+      status: 'on_time',
+    };
+
+    const chunkB = {
+      placementId: 'chunk_task-m1_seg_1',
+      chunkId: 'chunk_task-m1_seg_1',
+      taskId: 'task-m1',
+      taskTitle: 'Multi-day Task',
+      isChunk: true,
+      chunkIndex: 1,
+      totalChunks: 2,
+      proposedDate: '2026-10-20',
+      startTime: '09:00',
+      endTime: '12:00',
+      status: 'on_time',
+    };
+
+    // Forward order: [A, B]
+    const resForward = generateIcsCalendar({ proposedPlacements: [chunkA, chunkB] }, { exportTimestamp: fixedTimestamp });
+    // Reversed order in array: [B, A]
+    const resReversed = generateIcsCalendar({ proposedPlacements: [chunkB, chunkA] }, { exportTimestamp: fixedTimestamp });
+
+    assert.deepEqual(resForward.uids.sort(), resReversed.uids.sort());
+    assert.ok(resForward.uids.includes('chunk_task-m1_seg_0@voxplan.local'));
+    assert.ok(resForward.uids.includes('chunk_task-m1_seg_1@voxplan.local'));
+  });
+
+  test('30. Regenerating schedule with identical tasks preserves stable session UIDs', () => {
+    const tasks = [
+      {
+        id: 'task-regen-1',
+        title: 'Task Alpha',
+        estimatedEffort: 3.0,
+        priority: 'high',
+        dueDate: '2026-10-22',
+      },
+      {
+        id: 'task-regen-2',
+        title: 'Task Beta (Chunked)',
+        estimatedEffort: 8.0,
+        priority: 'medium',
+        dueDate: '2026-10-25',
+      },
+    ];
+
+    const proposal1 = generateAdaptiveSchedule(tasks, {
+      scheduleId: 'sched_run_1',
+      startDate: '2026-10-19',
+      dailyCapacityHours: 6.0,
+      enableChunking: true,
+      enableIntraday: true,
+    });
+
+    const proposal2 = generateAdaptiveSchedule(tasks, {
+      scheduleId: 'sched_run_2',
+      startDate: '2026-10-19',
+      dailyCapacityHours: 6.0,
+      enableChunking: true,
+      enableIntraday: true,
+    });
+
+    const export1 = generateIcsCalendar(proposal1, { tasks, exportTimestamp: fixedTimestamp });
+    const export2 = generateIcsCalendar(proposal2, { tasks, exportTimestamp: '2026-10-18T16:00:00Z' });
+
+    assert.equal(export1.sessionCount, export2.sessionCount);
+    assert.deepEqual(export1.uids, export2.uids);
+  });
+
+  test('31. Two sessions with identical task titles have distinct, non-colliding UIDs', () => {
+    const schedule = {
+      proposedPlacements: [
+        {
+          placementId: 'placement_task-dup-1',
+          taskId: 'task-dup-1',
+          taskTitle: 'Weekly Sync',
+          proposedDate: '2026-10-19',
+          startTime: '09:00',
+          endTime: '10:00',
+          status: 'on_time',
+        },
+        {
+          placementId: 'placement_task-dup-2',
+          taskId: 'task-dup-2',
+          taskTitle: 'Weekly Sync', // identical title
+          proposedDate: '2026-10-20',
+          startTime: '09:00',
+          endTime: '10:00',
+          status: 'on_time',
+        },
+      ],
+    };
+
+    const result = generateIcsCalendar(schedule, { exportTimestamp: fixedTimestamp });
+    assert.equal(result.sessionCount, 2);
+    assert.equal(result.uids.length, 2);
+    assert.notEqual(result.uids[0], result.uids[1]);
+    assert.equal(result.uids[0], 'placement_task-dup-1@voxplan.local');
+    assert.equal(result.uids[1], 'placement_task-dup-2@voxplan.local');
+  });
+
+  test('32. Distinct chunks of same parent task have distinct UIDs', () => {
+    const chunk0 = {
+      placementId: 'chunk_task-p1_seg_0',
+      taskId: 'task-p1',
+      taskTitle: 'Large Project',
+      isChunk: true,
+      chunkIndex: 0,
+      totalChunks: 3,
+      proposedDate: '2026-10-19',
+      startTime: '09:00',
+      endTime: '12:00',
+      status: 'on_time',
+    };
+    const chunk1 = {
+      placementId: 'chunk_task-p1_seg_1',
+      taskId: 'task-p1',
+      taskTitle: 'Large Project',
+      isChunk: true,
+      chunkIndex: 1,
+      totalChunks: 3,
+      proposedDate: '2026-10-20',
+      startTime: '09:00',
+      endTime: '12:00',
+      status: 'on_time',
+    };
+
+    const uid0 = generateStableSessionUid(chunk0);
+    const uid1 = generateStableSessionUid(chunk1);
+    assert.notEqual(uid0, uid1);
+    assert.equal(uid0, 'chunk_task-p1_seg_0@voxplan.local');
+    assert.equal(uid1, 'chunk_task-p1_seg_1@voxplan.local');
+  });
+
+  test('33. Deleted session followed by newly created session gets new distinct identity', () => {
+    const oldSession = { placementId: 'placement_task-old', taskId: 'task-old' };
+    const newSession = { placementId: 'placement_task-new', taskId: 'task-new' };
+
+    const oldUid = generateStableSessionUid(oldSession);
+    const newUid = generateStableSessionUid(newSession);
+
+    assert.notEqual(oldUid, newUid);
+    assert.equal(oldUid, 'placement_task-old@voxplan.local');
+    assert.equal(newUid, 'placement_task-new@voxplan.local');
+  });
+
+  test('34. Legacy placements lacking placement IDs receive stable, collision-free UIDs without date/time dependencies', () => {
+    const p1 = { taskId: 'task-legacy', proposedDate: '2026-10-19', startTime: '09:00', endTime: '10:00' };
+    const p1Edited = { taskId: 'task-legacy', proposedDate: '2026-10-21', startTime: '15:00', endTime: '16:00' };
+
+    const uid1 = generateStableSessionUid(p1);
+    const uid1Edited = generateStableSessionUid(p1Edited);
+
+    // UID must NOT change just because date or time changed
+    assert.equal(uid1, uid1Edited);
+    assert.equal(uid1, 'placement_task-legacy@voxplan.local');
+  });
+
+  // --- 11. Accepted Schedule Integrity & Mutation Prevention ---
+
+  test('35. Export never mutates input schedule, proposal, or task list', () => {
+    const originalPlacement = {
+      placementId: 'p_freeze_test',
+      taskId: 't_freeze',
+      taskTitle: 'Freeze Test',
+      proposedDate: '2026-10-19',
+      startTime: '09:00',
+      endTime: '11:00',
+      status: 'on_time',
+    };
+
+    const schedule = {
+      summary: { scheduleId: 'sched_immutable' },
+      proposedPlacements: [Object.freeze({ ...originalPlacement })],
+    };
+    Object.freeze(schedule);
+    Object.freeze(schedule.proposedPlacements);
+
+    const tasks = [Object.freeze({ id: 't_freeze', title: 'Freeze Test', priority: 'high' })];
+    Object.freeze(tasks);
+
+    // Must execute cleanly without attempting to mutate frozen objects
+    const result = generateIcsCalendar(schedule, { tasks, exportTimestamp: fixedTimestamp });
+    assert.equal(result.sessionCount, 1);
+    assert.equal(schedule.proposedPlacements[0].taskTitle, 'Freeze Test');
+  });
+
+  test('36. Safe handling of corrupted or malformed localStorage accepted schedule', () => {
+    const storageMap = new Map();
+    const mockLocalStorage = {
+      getItem: (key) => storageMap.get(key) || null,
+      setItem: (key, val) => storageMap.set(key, String(val)),
+      removeItem: (key) => storageMap.delete(key),
+    };
+
+    const originalLocalStorage = globalThis.localStorage;
+    globalThis.localStorage = mockLocalStorage;
+
+    try {
+      // 1. Invalid JSON
+      storageMap.set('voxplan_accepted_schedule', 'INVALID_JSON_CORRUPT{{');
+      const loaded1 = loadAcceptedSchedule();
+      assert.equal(loaded1, null);
+
+      // 2. Non-object string/number safely returns null
+      storageMap.set('voxplan_accepted_schedule', JSON.stringify(12345));
+      const loaded2 = loadAcceptedSchedule();
+      assert.equal(loaded2, null);
+      const res2 = generateIcsCalendar(loaded2);
+      assert.equal(res2.sessionCount, 0);
+
+      // 3. Object with non-array proposedPlacements
+      storageMap.set('voxplan_accepted_schedule', JSON.stringify({ proposedPlacements: 'not an array' }));
+      const loaded3 = loadAcceptedSchedule();
+      const res3 = generateIcsCalendar(loaded3);
+      assert.equal(res3.sessionCount, 0);
+    } finally {
+      globalThis.localStorage = originalLocalStorage;
+    }
+  });
+
+  // --- 12. RFC 5545 Round-Trip Parser Validation ---
+
+  test('37. Full RFC 5545 parser round-trip validation', () => {
+    /**
+     * Dedicated RFC 5545 Calendar Parser for test assertion
+     */
+    function parseIcsCalendar(icsContent) {
+      assert.ok(icsContent.includes('\r\n'), 'ICS must use CRLF endings');
+      const unfolded = unfoldIcsText(icsContent);
+      const rawLines = unfolded.split('\r\n').filter((l) => l.trim().length > 0);
+
+      const calendar = {
+        components: [],
+        properties: {},
+      };
+
+      const stack = [calendar];
+
+      for (const line of rawLines) {
+        if (line.startsWith('BEGIN:')) {
+          const type = line.slice(6);
+          const comp = { type, properties: {}, components: [] };
+          stack[stack.length - 1].components.push(comp);
+          stack.push(comp);
+        } else if (line.startsWith('END:')) {
+          const type = line.slice(4);
+          const top = stack.pop();
+          assert.equal(top.type, type, `Mismatched END:${type} in parser`);
+        } else {
+          const colonIdx = line.indexOf(':');
+          assert.ok(colonIdx > 0, `Invalid content line: ${line}`);
+          const propNameWithParams = line.slice(0, colonIdx);
+          const propValue = line.slice(colonIdx + 1);
+
+          const semiIdx = propNameWithParams.indexOf(';');
+          let propName = propNameWithParams;
+          let params = {};
+          if (semiIdx > 0) {
+            propName = propNameWithParams.slice(0, semiIdx);
+            const rawParams = propNameWithParams.slice(semiIdx + 1).split(';');
+            for (const rp of rawParams) {
+              const [k, v] = rp.split('=');
+              if (k && v) params[k.toUpperCase()] = v;
+            }
+          }
+
+          const target = stack[stack.length - 1];
+          if (!target.properties[propName]) {
+            target.properties[propName] = [];
+          }
+          target.properties[propName].push({ value: propValue, params });
+        }
+      }
+
+      assert.equal(stack.length, 1, 'Unbalanced calendar components');
+      return calendar.components[0];
+    }
+
+    const schedule = {
+      proposedPlacements: [
+        {
+          placementId: 'placement_parse_1',
+          taskId: 'task-parse-1',
+          taskTitle: 'Architecture Sync: Core & Plugins',
+          proposedDate: '2026-10-19',
+          startTime: '09:00',
+          endTime: '11:00',
+          status: 'on_time',
+          chunkDuration: 2.0,
+          taskCategory: 'Engineering',
+          taskPriority: 'high',
+        },
+      ],
+    };
+
+    const tasks = [
+      {
+        id: 'task-parse-1',
+        title: 'Architecture Sync: Core & Plugins',
+        description: 'Meeting notes, topics: DB; API; and schema\\models.',
+      },
+    ];
+
+    const result = generateIcsCalendar(schedule, {
+      tasks,
+      tzid: 'America/New_York',
+      exportTimestamp: fixedTimestamp,
+    });
+
+    const parsed = parseIcsCalendar(result.ics);
+    assert.equal(parsed.type, 'VCALENDAR');
+    assert.equal(parsed.properties['VERSION'][0].value, '2.0');
+    assert.equal(parsed.properties['PRODID'][0].value, '-//VoxPlan//VoxPlan Scheduler 1.0//EN');
+
+    // VTIMEZONE component present
+    const vtimezone = parsed.components.find((c) => c.type === 'VTIMEZONE');
+    assert.ok(vtimezone, 'VTIMEZONE component must be present when TZID is used');
+    assert.equal(vtimezone.properties['TZID'][0].value, 'America/New_York');
+
+    // VEVENT component present
+    const vevent = parsed.components.find((c) => c.type === 'VEVENT');
+    assert.ok(vevent, 'VEVENT component must be present');
+    assert.equal(vevent.properties['UID'][0].value, 'placement_parse_1@voxplan.local');
+    assert.equal(vevent.properties['DTSTAMP'][0].value, '20261018T103000Z');
+    assert.equal(vevent.properties['DTSTART'][0].value, '20261019T090000');
+    assert.equal(vevent.properties['DTSTART'][0].params['TZID'], 'America/New_York');
+    assert.equal(vevent.properties['DTEND'][0].value, '20261019T110000');
+    assert.equal(vevent.properties['DTEND'][0].params['TZID'], 'America/New_York');
+    assert.equal(vevent.properties['SUMMARY'][0].value, 'Architecture Sync: Core & Plugins');
+
+    // Escaped characters in description
+    const rawDesc = vevent.properties['DESCRIPTION'][0].value;
+    assert.ok(rawDesc.includes('DB\\; API\\; and schema\\\\models'));
+    assert.ok(rawDesc.includes('Meeting notes\\, topics:'));
   });
 });

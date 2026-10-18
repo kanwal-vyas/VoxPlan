@@ -716,7 +716,7 @@ export default function App() {
     });
   };
 
-  const handleExportCalendar = (scheduleToExport) => {
+  const handleExportCalendar = (scheduleToExport, options = {}) => {
     const target = scheduleToExport || acceptedSchedule;
     if (!target) {
       setFeedback({
@@ -726,7 +726,7 @@ export default function App() {
       return { success: false, reason: 'no_accepted_schedule' };
     }
     try {
-      const result = generateIcsCalendar(target, { tasks });
+      const result = generateIcsCalendar(target, { tasks, ...options });
       if (result.sessionCount === 0) {
         setFeedback({
           type: 'warning',

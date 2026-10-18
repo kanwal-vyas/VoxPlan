@@ -21,7 +21,7 @@ export default function AdaptiveScheduleModal({
   personalDurationModel = null,
   guardedPredictionsMap = {},
   acceptedSchedule = null,
-  onExportSchedule = null,
+  _onExportSchedule = null,
   isOpen = false,
   onClose,
   onApplySchedule,
@@ -266,10 +266,6 @@ export default function AdaptiveScheduleModal({
         type: 'success',
         message: `Successfully exported ${result.sessionCount} focus session(s) to ${downloadResult.filename}.${result.omittedCount > 0 ? ` (${result.omittedCount} unscheduled/blocked items omitted)` : ''}`,
       });
-
-      if (onExportSchedule) {
-        onExportSchedule(acceptedSchedule);
-      }
     } catch (err) {
       setExportFeedback({
         type: 'error',
@@ -1456,6 +1452,13 @@ export default function AdaptiveScheduleModal({
                 </div>
               </div>
             </div>
+
+            {/* Unapplied Draft Alert */}
+            {isDraftModified && (
+              <div style={styles.exportDraftWarning}>
+                ⚠️ <strong>Unapplied Draft in Progress:</strong> You have edited a draft in the Schedule Proposal tab. Calendar export strictly exports your previously accepted schedule snapshot. To export your new edits, return to the Proposal tab and click <strong>Apply Schedule</strong> first.
+              </div>
+            )}
 
             {acceptedSchedule ? (
               <div style={styles.acceptedScheduleBox}>
@@ -2862,5 +2865,15 @@ const styles = {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '6px',
+  },
+  exportDraftWarning: {
+    backgroundColor: '#FEF3C7',
+    border: '2px solid #F59E0B',
+    borderRadius: '10px',
+    padding: '12px 16px',
+    marginBottom: '16px',
+    fontSize: '12px',
+    color: '#92400E',
+    lineHeight: 1.5,
   },
 };

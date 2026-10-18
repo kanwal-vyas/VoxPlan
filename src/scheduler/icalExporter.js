@@ -151,11 +151,183 @@ export function formatIcsLocalDateTime(dateStr, timeStr) {
 }
 
 /**
+ * Validates whether a supplied time zone identifier is a valid IANA time zone.
+ * - Rejects arbitrary text, special injection characters, and unknown zones.
+ * - Confirms with Intl.DateTimeFormat in supported JS runtimes.
+ *
+ * @param {string} tzid
+ * @returns {boolean}
+ */
+export function validateIanaTimeZone(tzid) {
+  if (!tzid || typeof tzid !== 'string') return false;
+  const trimmed = tzid.trim();
+  // Safe IANA identifier: e.g. 'America/New_York', 'Europe/London', 'UTC', 'Etc/GMT+5'
+  if (!/^[A-Za-z0-9_+-]+(?:\/[A-Za-z0-9_+-]+)*$/.test(trimmed)) {
+    return false;
+  }
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: trimmed });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Computes the time zone offset in minutes from UTC for a specific date and IANA time zone.
+ * Positive for zones ahead of UTC (e.g. Asia/Kolkata = +330), negative behind UTC (e.g. America/New_York = -300).
+ *
+ * @param {Date} date
+ * @param {string} timeZone
+ * @returns {number} Offset in minutes
+ */
+export function getTimezoneOffsetMinutes(date, timeZone) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric',
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(date);
+  const get = (type) => parseInt(parts.find((p) => p.type === type).value, 10);
+  const targetUtc = Date.UTC(
+    get('year'),
+    get('month') - 1,
+    get('day'),
+    get('hour') === 24 ? 0 : get('hour'),
+    get('minute'),
+    get('second')
+  );
+  return Math.round((targetUtc - date.getTime()) / 60000);
+}
+
+/**
+ * Formats an offset in minutes to RFC 5545 format: [+|-]HHMM
+ *
+ * @param {number} offsetMinutes
+ * @returns {string} e.g. "-0500", "+0530", "+0000"
+ */
+export function formatIcsOffset(offsetMinutes) {
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  const abs = Math.abs(offsetMinutes);
+  const hours = String(Math.floor(abs / 60)).padStart(2, '0');
+  const mins = String(abs % 60).padStart(2, '0');
+  return `${sign}${hours}${mins}`;
+}
+
+/**
+ * Generates an RFC 5545 compliant VTIMEZONE component for a validated IANA time zone.
+ * Includes STANDARD and DAYLIGHT components when daylight saving time is observed.
+ *
+ * @param {string} tzid - Validated IANA time zone (e.g. 'America/New_York')
+ * @param {number} [referenceYear] - Year to evaluate transitions for (default: current year)
+ * @returns {Array<string>} VTIMEZONE content lines (without CRLF)
+ */
+export function generateVtimezoneComponent(tzid, referenceYear = new Date().getFullYear()) {
+  if (!validateIanaTimeZone(tzid)) return [];
+
+  // Sample January and July to check if DST exists
+  const janDate = new Date(Date.UTC(referenceYear, 0, 15, 12, 0, 0));
+  const julDate = new Date(Date.UTC(referenceYear, 6, 15, 12, 0, 0));
+
+  const janOffset = getTimezoneOffsetMinutes(janDate, tzid);
+  const julOffset = getTimezoneOffsetMinutes(julDate, tzid);
+
+  const lines = ['BEGIN:VTIMEZONE', `TZID:${tzid}`];
+
+  // If winter and summer offsets are identical, this zone does not observe DST (e.g. Asia/Kolkata, UTC)
+  if (janOffset === julOffset) {
+    const tzName = new Intl.DateTimeFormat('en-US', { timeZone: tzid, timeZoneName: 'short' })
+      .formatToParts(janDate)
+      .find((p) => p.type === 'timeZoneName')?.value || tzid;
+
+    lines.push('BEGIN:STANDARD');
+    lines.push('DTSTART:19700101T000000');
+    lines.push(`TZOFFSETFROM:${formatIcsOffset(janOffset)}`);
+    lines.push(`TZOFFSETTO:${formatIcsOffset(janOffset)}`);
+    lines.push(`TZNAME:${escapeIcsText(tzName)}`);
+    lines.push('END:STANDARD');
+    lines.push('END:VTIMEZONE');
+    return lines;
+  }
+
+  // Zone observes DST: find the transitions during the reference year
+  const transitions = [];
+  let prevOffset = getTimezoneOffsetMinutes(new Date(Date.UTC(referenceYear, 0, 1)), tzid);
+
+  for (let day = 1; day < 366; day++) {
+    const checkDate = new Date(Date.UTC(referenceYear, 0, day));
+    const offset = getTimezoneOffsetMinutes(checkDate, tzid);
+    if (offset !== prevOffset) {
+      let low = Date.UTC(referenceYear, 0, day - 1);
+      let high = Date.UTC(referenceYear, 0, day);
+      while (high - low > 3600000) {
+        const mid = Math.floor((low + high) / 2);
+        if (getTimezoneOffsetMinutes(new Date(mid), tzid) === prevOffset) {
+          low = mid;
+        } else {
+          high = mid;
+        }
+      }
+      transitions.push({
+        date: new Date(high),
+        fromOffset: prevOffset,
+        toOffset: offset,
+      });
+      prevOffset = offset;
+    }
+  }
+
+  const standardOffset = Math.min(janOffset, julOffset);
+
+  if (transitions.length >= 2) {
+    for (const tr of transitions) {
+      const isDaylight = tr.toOffset > standardOffset;
+      const subComp = isDaylight ? 'DAYLIGHT' : 'STANDARD';
+      const tzName = new Intl.DateTimeFormat('en-US', {
+        timeZone: tzid,
+        timeZoneName: 'short',
+      }).formatToParts(tr.date).find((p) => p.type === 'timeZoneName')?.value || (isDaylight ? 'DST' : 'STD');
+
+      const dtStart = formatIcsUtcTimestamp(tr.date).replace('Z', '');
+
+      lines.push(`BEGIN:${subComp}`);
+      lines.push(`DTSTART:${dtStart}`);
+      lines.push(`TZOFFSETFROM:${formatIcsOffset(tr.fromOffset)}`);
+      lines.push(`TZOFFSETTO:${formatIcsOffset(tr.toOffset)}`);
+      lines.push(`TZNAME:${escapeIcsText(tzName)}`);
+      lines.push(`END:${subComp}`);
+    }
+  } else {
+    // Fallback if transition search yielded < 2 transitions in this year
+    lines.push('BEGIN:STANDARD');
+    lines.push('DTSTART:19700101T000000');
+    lines.push(`TZOFFSETFROM:${formatIcsOffset(janOffset)}`);
+    lines.push(`TZOFFSETTO:${formatIcsOffset(janOffset)}`);
+    lines.push('END:STANDARD');
+    lines.push('BEGIN:DAYLIGHT');
+    lines.push('DTSTART:19700101T000000');
+    lines.push(`TZOFFSETFROM:${formatIcsOffset(janOffset)}`);
+    lines.push(`TZOFFSETTO:${formatIcsOffset(julOffset)}`);
+    lines.push('END:DAYLIGHT');
+  }
+
+  lines.push('END:VTIMEZONE');
+  return lines;
+}
+
+/**
  * Derives a stable, deterministic event UID for a scheduled session.
  *
  * Invariants:
- * - Distinguishes multi-day chunks cleanly using placementId or chunkIndex
+ * - Distinguishes multi-day chunks cleanly using placementId, chunkId, or chunkIndex
  * - Retains identical UID across repeated exports of an unchanged schedule
+ * - Editing session date or time NEVER changes its UID (no date/time dependencies in fallback)
+ * - Reordering chunks preserves each session's identity
  * - Never includes personal file paths or sensitive system metadata
  * - Avoids collisions between different tasks and different sessions of the same task
  *
@@ -177,16 +349,14 @@ export function generateStableSessionUid(placement) {
     return `${cleanId}@voxplan.local`;
   }
 
-  // 3. Fallback combining taskId, date, and chunkIndex / startTime
+  // 3. Fallback: derive purely from stable task domain identifiers (never from transient date or time)
   const cleanTaskId = String(placement.taskId || 'task').replace(/[^a-zA-Z0-9_-]/g, '_');
-  const dateStr = String(placement.proposedDate || 'date').replace(/[^0-9]/g, '');
-  const timeStr = String(placement.startTime || 'time').replace(/[^0-9]/g, '');
 
-  if (placement.isChunk && placement.chunkIndex !== undefined) {
-    return `placement_${cleanTaskId}_chunk_${placement.chunkIndex}@voxplan.local`;
+  if (placement.isChunk && placement.chunkIndex !== undefined && placement.chunkIndex !== null) {
+    return `chunk_${cleanTaskId}_seg_${placement.chunkIndex}@voxplan.local`;
   }
 
-  return `placement_${cleanTaskId}_${dateStr}_${timeStr}@voxplan.local`;
+  return `placement_${cleanTaskId}@voxplan.local`;
 }
 
 /**
@@ -204,11 +374,15 @@ export function generateStableSessionUid(placement) {
  * @returns {{ validSessions: Array, omittedSessions: Array }}
  */
 export function extractExportableSessions(schedule, tasks = []) {
-  const placements = schedule?.proposedPlacements || schedule?.placements || [];
+  const rawPlacements = schedule?.proposedPlacements || schedule?.placements;
+  const placements = Array.isArray(rawPlacements) ? rawPlacements : [];
   const taskMap = new Map((tasks || []).map((t) => [t.id, t]));
 
   const validSessions = [];
   const omittedSessions = [];
+
+  // Track task session counts to ensure distinct placementIds if multiple unindexed placements exist for same task
+  const taskSeenCounts = new Map();
 
   for (let idx = 0; idx < placements.length; idx++) {
     const p = placements[idx];
@@ -291,7 +465,7 @@ export function extractExportableSessions(schedule, tasks = []) {
       continue;
     }
 
-    // 4. Ensure DTEND > DTSTART
+    // 4. Ensure DTEND > DTSTART (strictly greater)
     if (dtEnd <= dtStart) {
       omittedSessions.push({
         placementId: p.placementId || `end_before_start_${idx}`,
@@ -302,8 +476,20 @@ export function extractExportableSessions(schedule, tasks = []) {
       continue;
     }
 
-    // 5. Construct valid session object
-    const uid = generateStableSessionUid(p);
+    // 5. Deduplicate placementId if legacy placement lacks one and multiple exist for same task
+    let effectivePlacement = p;
+    if (!p.placementId && !p.chunkId && taskId) {
+      const seen = taskSeenCounts.get(taskId) || 0;
+      taskSeenCounts.set(taskId, seen + 1);
+      if (seen > 0) {
+        effectivePlacement = {
+          ...p,
+          placementId: `placement_${taskId}_${seen + 1}`,
+        };
+      }
+    }
+
+    const uid = generateStableSessionUid(effectivePlacement);
 
     // Build human-friendly SUMMARY
     let summaryText = title;
@@ -347,7 +533,7 @@ export function extractExportableSessions(schedule, tasks = []) {
       startTime: p.startTime,
       endTime: p.endTime,
       summary: summaryText,
-      description: descParts.join('\\n'),
+      description: descParts.join('\n'),
       priority: priority || 'medium',
       category: category || '',
       taskId,
@@ -383,16 +569,25 @@ export function extractExportableSessions(schedule, tasks = []) {
  *   sessionCount: number,
  *   omittedCount: number,
  *   omittedSessions: Array,
- *   uids: Array<string>
+ *   uids: Array<string>,
+ *   tzidUsed: string|null,
+ *   warnings: Array<string>
  * }}
  */
 export function generateIcsCalendar(schedule, options = {}) {
   const tasks = options.tasks || [];
   const prodId = options.prodId || DEFAULT_PRODID;
   const calendarName = options.calendarName || 'VoxPlan Schedule';
-  const tzid = options.tzid && typeof options.tzid === 'string' ? options.tzid.trim() : null;
-  const dtStamp = formatIcsUtcTimestamp(options.exportTimestamp);
+  const rawTzid = options.tzid && typeof options.tzid === 'string' ? options.tzid.trim() : null;
+  const isTzidValid = rawTzid ? validateIanaTimeZone(rawTzid) : false;
+  const tzid = isTzidValid ? rawTzid : null;
+  const warnings = [];
 
+  if (rawTzid && !isTzidValid) {
+    warnings.push(`Invalid time zone identifier "${rawTzid}" was rejected; defaulted to floating local time.`);
+  }
+
+  const dtStamp = formatIcsUtcTimestamp(options.exportTimestamp);
   const { validSessions, omittedSessions } = extractExportableSessions(schedule, tasks);
 
   const lines = [
@@ -403,6 +598,15 @@ export function generateIcsCalendar(schedule, options = {}) {
     `METHOD:${DEFAULT_METHOD}`,
     `X-WR-CALNAME:${escapeIcsText(calendarName)}`,
   ];
+
+  // If a valid TZID was specified, inject the RFC 5545 VTIMEZONE definition
+  if (tzid) {
+    const refYear = validSessions.length > 0
+      ? parseInt(validSessions[0].date.slice(0, 4), 10)
+      : new Date().getFullYear();
+    const vtimezoneLines = generateVtimezoneComponent(tzid, refYear);
+    lines.push(...vtimezoneLines);
+  }
 
   const uids = [];
 
@@ -423,8 +627,7 @@ export function generateIcsCalendar(schedule, options = {}) {
 
     lines.push(`SUMMARY:${escapeIcsText(session.summary)}`);
     if (session.description) {
-      // Note: session.description already contains literal \n delimiters
-      lines.push(`DESCRIPTION:${session.description}`);
+      lines.push(`DESCRIPTION:${escapeIcsText(session.description)}`);
     }
     lines.push('STATUS:CONFIRMED');
     lines.push('END:VEVENT');
@@ -442,6 +645,8 @@ export function generateIcsCalendar(schedule, options = {}) {
     omittedSessions,
     uids,
     sessions: validSessions,
+    tzidUsed: tzid,
+    warnings,
   };
 }
 
