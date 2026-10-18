@@ -768,6 +768,8 @@ export default function App() {
       tasks,
       riskStats,
       modelStatus,
+      telemetryEvents,
+      activeProposal,
     });
 
     setConversationState(result.state);

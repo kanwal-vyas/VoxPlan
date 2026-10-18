@@ -21,6 +21,11 @@ import {
   parseEnhancedDate,
   formatISODate,
 } from './compoundCommandParser.js';
+import {
+  explainScheduleDecision,
+  explainScheduleChanges,
+  generatePlanDebrief,
+} from './scheduleDebrief.js';
 
 export const CONVERSATION_STATES = Object.freeze({
   IDLE: 'IDLE',
@@ -48,6 +53,9 @@ export const CONVERSATION_INTENTS = Object.freeze({
   SHOW_METRICS: 'SHOW_METRICS',
   SHOW_IMPORTANCE: 'SHOW_IMPORTANCE',
   EXPLAIN_RISK: 'EXPLAIN_RISK',
+  EXPLAIN_SCHEDULE_DECISION: 'EXPLAIN_SCHEDULE_DECISION',
+  EXPLAIN_SCHEDULE_CHANGES: 'EXPLAIN_SCHEDULE_CHANGES',
+  PLAN_DEBRIEF: 'PLAN_DEBRIEF',
   SCHEDULE_NEGOTIATION: 'SCHEDULE_NEGOTIATION',
   ACCEPT_PROPOSAL: 'ACCEPT_PROPOSAL',
   DISCARD_PROPOSAL: 'DISCARD_PROPOSAL',
@@ -768,6 +776,8 @@ export class DialogueManager {
         const verb = pendingIntent.intent === CONVERSATION_INTENTS.COMPLETE_TASK ? 'mark complete'
           : pendingIntent.intent === CONVERSATION_INTENTS.DELETE_TASK ? 'delete'
           : pendingIntent.intent === CONVERSATION_INTENTS.RESCHEDULE_TASK ? 'reschedule'
+          : pendingIntent.intent === CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION ? 'explain'
+          : pendingIntent.intent === CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_CHANGES ? 'check changes for'
           : 'modify';
 
         const now = new Date(this.clock());
@@ -1062,6 +1072,198 @@ export class DialogueManager {
       return this._handleScheduleIntent(schedIntent, text, tasks, context);
     }
 
+    // 4b. Planning Debrief Query while reviewing proposal
+    if (
+      /^(?:how\s+did\s+(?:my\s+plan\s+go|i\s+do|today'?s\s+plan\s+go|yesterday'?s\s+plan\s+go|things\s+go|my\s+day\s+go)|plan\s+debrief|debrief(?:\s+(?:today|yesterday))?|what\s+should\s+i\s+review\s+from\s+(?:yesterday'?s|today'?s)\s+(?:plan|schedule)|which\s+tasks?\s+did\s+i\s+complete(?:\s+as\s+planned)?|what\s+remains\s+unfinished)\b/i.test(text)
+    ) {
+      const period = /yesterday/i.test(text) ? 'yesterday' : 'today';
+      const debriefRes = generatePlanDebrief({
+        period,
+        tasks,
+        telemetryEvents: context.telemetryEvents || [],
+        proposalHistory: this.proposalHistory,
+        clock: this.clock,
+      });
+      return {
+        state: CONVERSATION_STATES.AWAITING_PROPOSAL_DECISION,
+        intent: CONVERSATION_INTENTS.PLAN_DEBRIEF,
+        targetTask: null,
+        proposal: activeProp,
+        responseText: debriefRes.responseText,
+        spokenSummary: debriefRes.spokenSummary,
+        metrics: debriefRes.metrics,
+        completedDetails: debriefRes.completedDetails,
+        incompleteDetails: debriefRes.incompleteDetails,
+        feedbackType: 'info',
+        requiresConfirmation: false,
+        isAuthorized: false,
+        action: null,
+        error: null,
+      };
+    }
+
+    // 4c. General Schedule Changes Query while reviewing proposal
+    if (
+      /^(?:what\s+(?:has\s+)?changed(?:\s+in\s+my\s+schedule|\s+in\s+the\s+proposal|\s+since\s+(?:the\s+)?last\s+proposal|\s+after\s+i\s+accepted\s+(?:the\s+)?(?:new\s+)?schedule)?\??|what\s+moved(?:\s+since\s+(?:the\s+)?last\s+proposal|\s+in\s+my\s+schedule)?\??|compare\s+(?:this\s+plan\s+with\s+(?:the\s+)?previous\s+one|schedule\s+with\s+previous\s+proposal)\??)$/i.test(text)
+    ) {
+      const changeRes = explainScheduleChanges({
+        activeProposal: activeProp,
+        proposalHistory: this.proposalHistory,
+        tasks,
+        telemetryEvents: context.telemetryEvents || [],
+        clock: this.clock,
+      });
+      return {
+        state: CONVERSATION_STATES.AWAITING_PROPOSAL_DECISION,
+        intent: CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_CHANGES,
+        targetTask: null,
+        proposal: activeProp,
+        responseText: changeRes.responseText,
+        spokenSummary: changeRes.spokenSummary,
+        movedTasks: changeRes.movedTasks,
+        addedTasks: changeRes.addedTasks,
+        removedTasks: changeRes.removedTasks,
+        statusChanges: changeRes.statusChanges,
+        feedbackType: 'info',
+        requiresConfirmation: false,
+        isAuthorized: false,
+        action: null,
+        error: changeRes.error || null,
+      };
+    }
+
+    // 4d. Single Task Move Inquiry while reviewing proposal
+    const taskMoveInPropMatch = text.match(/^(?:why\s+did\s+(?:the\s+task\s+|my\s+task\s+)?(.+?)\s+move\??)$/i) ||
+                                text.match(/^(?:why\s+was\s+(?:the\s+task\s+|my\s+task\s+)?(.+?)\s+moved\??)$/i);
+    if (taskMoveInPropMatch) {
+      const taskQuery = taskMoveInPropMatch[1].trim();
+      const resolution = this.resolveTaskReference(taskQuery, tasks);
+      if (resolution.status === RESOLUTION_STATUS.RESOLVED || resolution.status === 'exact') {
+        const changeRes = explainScheduleChanges({
+          activeProposal: activeProp,
+          proposalHistory: this.proposalHistory,
+          tasks,
+          telemetryEvents: context.telemetryEvents || [],
+          queryTaskId: resolution.task.id,
+          clock: this.clock,
+        });
+        return {
+          state: CONVERSATION_STATES.AWAITING_PROPOSAL_DECISION,
+          intent: CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_CHANGES,
+          targetTask: resolution.task,
+          proposal: activeProp,
+          responseText: changeRes.responseText,
+          spokenSummary: changeRes.spokenSummary,
+          feedbackType: 'info',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: null,
+          error: null,
+        };
+      }
+    }
+
+    // 4e. Explain Scheduling Decision while reviewing proposal
+    const explainSchedDateInProp = text.match(
+      /^(?:why\s+(?:was|is)\s+(?:the\s+task\s+|my\s+task\s+)?(.+?)\s+scheduled\s+(?:for|on)\s+(.+?)\??)$/i
+    );
+    if (explainSchedDateInProp) {
+      const taskQuery = explainSchedDateInProp[1].trim();
+      const targetDateQuery = explainSchedDateInProp[2].trim();
+      const resolution = this.resolveTaskReference(taskQuery, tasks);
+      if (resolution.status === RESOLUTION_STATUS.RESOLVED || resolution.status === 'exact') {
+        const explRes = explainScheduleDecision({
+          targetTask: resolution.task,
+          targetDateQuery,
+          tasks,
+          activeProposal: activeProp,
+          proposalHistory: this.proposalHistory,
+          telemetryEvents: context.telemetryEvents || [],
+          clock: this.clock,
+        });
+        return {
+          state: CONVERSATION_STATES.AWAITING_PROPOSAL_DECISION,
+          intent: CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION,
+          targetTask: resolution.task,
+          proposal: activeProp,
+          responseText: explRes.responseText,
+          spokenSummary: explRes.spokenSummary,
+          evidence: explRes.evidence,
+          feedbackType: 'info',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: null,
+          error: null,
+        };
+      }
+    }
+
+    const explainFitInProp = text.match(
+      /^(?:why\s+(?:couldn't|could\s+not|can't|can\s+not|wasn't|was\s+not)\s+(?:you\s+)?(?:fit\s+)?(?:the\s+task\s+|my\s+task\s+)?(.+?)\s+(?:in|on|for)\s+(.+?)\??)$/i
+    );
+    if (explainFitInProp) {
+      const taskQuery = explainFitInProp[1].trim();
+      const targetDateQuery = explainFitInProp[2].trim();
+      const resolution = this.resolveTaskReference(taskQuery, tasks);
+      if (resolution.status === RESOLUTION_STATUS.RESOLVED || resolution.status === 'exact') {
+        const explRes = explainScheduleDecision({
+          targetTask: resolution.task,
+          targetDateQuery,
+          tasks,
+          activeProposal: activeProp,
+          proposalHistory: this.proposalHistory,
+          telemetryEvents: context.telemetryEvents || [],
+          clock: this.clock,
+        });
+        return {
+          state: CONVERSATION_STATES.AWAITING_PROPOSAL_DECISION,
+          intent: CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION,
+          targetTask: resolution.task,
+          proposal: activeProp,
+          responseText: explRes.responseText,
+          spokenSummary: explRes.spokenSummary,
+          evidence: explRes.evidence,
+          feedbackType: 'info',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: null,
+          error: null,
+        };
+      }
+    }
+
+    const explainBlockedInProp = text.match(
+      /^(?:why\s+is\s+(?:the\s+task\s+|my\s+task\s+)?(.+?)\s+blocked\??|what\s+is\s+blocking\s+(?:the\s+task\s+|my\s+task\s+)?(.+?)\??)$/i
+    );
+    if (explainBlockedInProp) {
+      const taskQuery = (explainBlockedInProp[1] || explainBlockedInProp[2]).trim();
+      const resolution = this.resolveTaskReference(taskQuery, tasks);
+      if (resolution.status === RESOLUTION_STATUS.RESOLVED || resolution.status === 'exact') {
+        const explRes = explainScheduleDecision({
+          targetTask: resolution.task,
+          tasks,
+          activeProposal: activeProp,
+          proposalHistory: this.proposalHistory,
+          telemetryEvents: context.telemetryEvents || [],
+          clock: this.clock,
+        });
+        return {
+          state: CONVERSATION_STATES.AWAITING_PROPOSAL_DECISION,
+          intent: CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION,
+          targetTask: resolution.task,
+          proposal: activeProp,
+          responseText: explRes.responseText,
+          spokenSummary: explRes.spokenSummary,
+          evidence: explRes.evidence,
+          feedbackType: 'info',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: null,
+          error: null,
+        };
+      }
+    }
+
     // 5. Unrelated command entered: supersede active proposal cleanly, reset, and execute
     if (activeProp) {
       const superseded = {
@@ -1335,6 +1537,125 @@ export class DialogueManager {
     const subCommands = splitCompoundCommands(text);
     if (subCommands.length > 1) {
       return this._handleCompoundCommands(subCommands, tasks, context);
+    }
+
+    // 0a. Conversational Planning Debrief (Feature C)
+    if (
+      /^(?:how\s+did\s+(?:my\s+plan\s+go|i\s+do|today'?s\s+plan\s+go|yesterday'?s\s+plan\s+go|things\s+go|my\s+day\s+go)|plan\s+debrief|debrief(?:\s+(?:today|yesterday))?|what\s+should\s+i\s+review\s+from\s+(?:yesterday'?s|today'?s)\s+(?:plan|schedule)|which\s+tasks?\s+did\s+i\s+complete(?:\s+as\s+planned)?|what\s+remains\s+unfinished)\b/i.test(text)
+    ) {
+      const period = /yesterday/i.test(text) ? 'yesterday' : 'today';
+      const debriefRes = generatePlanDebrief({
+        period,
+        tasks,
+        telemetryEvents: context.telemetryEvents || [],
+        proposalHistory: this.proposalHistory,
+        clock: this.clock,
+      });
+
+      return {
+        state: CONVERSATION_STATES.IDLE,
+        intent: CONVERSATION_INTENTS.PLAN_DEBRIEF,
+        targetTask: null,
+        responseText: debriefRes.responseText,
+        spokenSummary: debriefRes.spokenSummary,
+        metrics: debriefRes.metrics,
+        completedDetails: debriefRes.completedDetails,
+        incompleteDetails: debriefRes.incompleteDetails,
+        feedbackType: 'info',
+        requiresConfirmation: false,
+        isAuthorized: false,
+        action: null,
+        error: null,
+      };
+    }
+
+    // 0b. Single Task Movement Inquiry (Feature B)
+    const taskMoveMatch = text.match(/^(?:why\s+did\s+(?:the\s+task\s+|my\s+task\s+)?(.+?)\s+move\??)$/i) ||
+                          text.match(/^(?:why\s+was\s+(?:the\s+task\s+|my\s+task\s+)?(.+?)\s+moved\??)$/i);
+    if (taskMoveMatch) {
+      const taskQuery = taskMoveMatch[1].trim();
+      return this._resolveAndDispatch(CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_CHANGES, taskQuery, {
+        telemetryEvents: context.telemetryEvents || [],
+      }, tasks);
+    }
+
+    // 0c. General Schedule Changes / Proposal Comparison (Feature B)
+    if (
+      /^(?:what\s+(?:has\s+)?changed(?:\s+in\s+my\s+schedule|\s+in\s+the\s+proposal|\s+since\s+(?:the\s+)?last\s+proposal|\s+after\s+i\s+accepted\s+(?:the\s+)?(?:new\s+)?schedule)?\??|what\s+moved(?:\s+since\s+(?:the\s+)?last\s+proposal|\s+in\s+my\s+schedule)?\??|compare\s+(?:this\s+plan\s+with\s+(?:the\s+)?previous\s+one|schedule\s+with\s+previous\s+proposal)\??)$/i.test(text)
+    ) {
+      const changeRes = explainScheduleChanges({
+        activeProposal: this.activeProposal,
+        proposalHistory: this.proposalHistory,
+        tasks,
+        telemetryEvents: context.telemetryEvents || [],
+        clock: this.clock,
+      });
+
+      return {
+        state: CONVERSATION_STATES.IDLE,
+        intent: CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_CHANGES,
+        targetTask: null,
+        responseText: changeRes.responseText,
+        spokenSummary: changeRes.spokenSummary,
+        movedTasks: changeRes.movedTasks,
+        addedTasks: changeRes.addedTasks,
+        removedTasks: changeRes.removedTasks,
+        statusChanges: changeRes.statusChanges,
+        feedbackType: 'info',
+        requiresConfirmation: false,
+        isAuthorized: false,
+        action: null,
+        error: changeRes.error || null,
+      };
+    }
+
+    // 0d. Explain Scheduling Decision (Feature A)
+    // Pattern 1: Why was [task] scheduled for [date]?
+    const explainSchedDateMatch = text.match(
+      /^(?:why\s+(?:was|is)\s+(?:the\s+task\s+|my\s+task\s+)?(.+?)\s+scheduled\s+(?:for|on)\s+(.+?)\??)$/i
+    );
+    if (explainSchedDateMatch) {
+      const taskQuery = explainSchedDateMatch[1].trim();
+      const targetDateQuery = explainSchedDateMatch[2].trim();
+      return this._resolveAndDispatch(CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION, taskQuery, {
+        targetDateQuery,
+        telemetryEvents: context.telemetryEvents || [],
+      }, tasks);
+    }
+
+    // Pattern 2: Why couldn't you fit [task] in [date]?
+    const explainFitMatch = text.match(
+      /^(?:why\s+(?:couldn't|could\s+not|can't|can\s+not|wasn't|was\s+not)\s+(?:you\s+)?(?:fit\s+)?(?:the\s+task\s+|my\s+task\s+)?(.+?)\s+(?:in|on|for)\s+(.+?)\??)$/i
+    );
+    if (explainFitMatch) {
+      const taskQuery = explainFitMatch[1].trim();
+      const targetDateQuery = explainFitMatch[2].trim();
+      return this._resolveAndDispatch(CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION, taskQuery, {
+        targetDateQuery,
+        telemetryEvents: context.telemetryEvents || [],
+      }, tasks);
+    }
+
+    // Pattern 3: Why is [task] blocked? / What is blocking [task]?
+    const explainBlockedMatch = text.match(
+      /^(?:why\s+is\s+(?:the\s+task\s+|my\s+task\s+)?(.+?)\s+blocked\??|what\s+is\s+blocking\s+(?:the\s+task\s+|my\s+task\s+)?(.+?)\??)$/i
+    );
+    if (explainBlockedMatch) {
+      const taskQuery = (explainBlockedMatch[1] || explainBlockedMatch[2]).trim();
+      return this._resolveAndDispatch(CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION, taskQuery, {
+        telemetryEvents: context.telemetryEvents || [],
+      }, tasks);
+    }
+
+    // Pattern 4: Explain schedule for [task]
+    const explainGeneralMatch = text.match(
+      /^(?:explain\s+(?:the\s+)?(?:schedule|scheduling(?:\s+decision)?)\s+(?:for|of)\s+(?:the\s+task\s+|my\s+task\s+)?(.+?)\??)$/i
+    );
+    if (explainGeneralMatch) {
+      const taskQuery = explainGeneralMatch[1].trim();
+      return this._resolveAndDispatch(CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION, taskQuery, {
+        telemetryEvents: context.telemetryEvents || [],
+      }, tasks);
     }
 
     // 1. ML Command: Train/Retrain model
@@ -1764,6 +2085,8 @@ export class DialogueManager {
         : intent === CONVERSATION_INTENTS.CHANGE_PRIORITY ? 'update'
         : intent === CONVERSATION_INTENTS.REOPEN_TASK ? 'reopen'
         : intent === CONVERSATION_INTENTS.DESCRIBE_TASK ? 'check'
+        : intent === CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION ? 'explain'
+        : intent === CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_CHANGES ? 'check changes for'
         : 'modify';
 
       // Check if duplicate titles exist across matching candidates
@@ -1825,6 +2148,8 @@ export class DialogueManager {
       const verb = intent === CONVERSATION_INTENTS.COMPLETE_TASK ? 'mark as done'
         : intent === CONVERSATION_INTENTS.DELETE_TASK ? 'delete'
         : intent === CONVERSATION_INTENTS.REOPEN_TASK ? 'reopen'
+        : intent === CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION ? 'explain'
+        : intent === CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_CHANGES ? 'check changes for'
         : 'inspect';
       return {
         state: CONVERSATION_STATES.AWAITING_CLARIFICATION,
@@ -2000,6 +2325,58 @@ export class DialogueManager {
           priority,
         },
         error: null,
+      };
+    }
+
+    // 7. Explain Scheduling Decision (Read-only -> no mutation!)
+    if (intent === CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION) {
+      const res = explainScheduleDecision({
+        targetTask: target,
+        targetDateQuery: params?.targetDateQuery || null,
+        tasks: _tasks,
+        activeProposal: this.activeProposal,
+        proposalHistory: this.proposalHistory,
+        telemetryEvents: params?.telemetryEvents || [],
+        clock: this.clock,
+      });
+
+      return {
+        state: CONVERSATION_STATES.IDLE,
+        intent: CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION,
+        targetTask: target,
+        responseText: res.responseText,
+        spokenSummary: res.spokenSummary,
+        evidence: res.evidence,
+        feedbackType: res.success ? 'info' : 'warning',
+        requiresConfirmation: false,
+        isAuthorized: false,
+        action: null,
+        error: res.error || null,
+      };
+    }
+
+    // 8. Explain Schedule Changes for specific task (Read-only -> no mutation!)
+    if (intent === CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_CHANGES) {
+      const changeRes = explainScheduleChanges({
+        activeProposal: this.activeProposal,
+        proposalHistory: this.proposalHistory,
+        tasks: _tasks,
+        telemetryEvents: params?.telemetryEvents || [],
+        queryTaskId: target.id,
+        clock: this.clock,
+      });
+
+      return {
+        state: CONVERSATION_STATES.IDLE,
+        intent: CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_CHANGES,
+        targetTask: target,
+        responseText: changeRes.responseText,
+        spokenSummary: changeRes.spokenSummary,
+        feedbackType: changeRes.success ? 'info' : 'warning',
+        requiresConfirmation: false,
+        isAuthorized: false,
+        action: null,
+        error: changeRes.error || null,
       };
     }
 

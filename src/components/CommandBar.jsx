@@ -524,6 +524,8 @@ export default function CommandBar({
           <div style={styles.promptsRow}>
             <span style={styles.promptsLabel}>Try saying:</span>
             {[
+              { label: 'How did my plan go?', cmd: 'How did my plan go?' },
+              { label: 'What changed in my schedule?', cmd: 'What changed in my schedule?' },
               { label: 'Spread tasks over 3 days', cmd: 'spread tasks across next 3 days' },
               { label: 'Show high risk tasks', cmd: 'show high risk tasks' },
               { label: 'Explain project risk', cmd: 'explain project risk' },

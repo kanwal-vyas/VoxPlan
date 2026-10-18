@@ -81,6 +81,11 @@ export function generateSpokenSummary(result, options = {}) {
     return `${clean} Say yes to confirm, or no to cancel.`;
   }
 
+  // 2b. Explicit Concise Spoken Summary (Conversational Explanations & Debriefs)
+  if (result.spokenSummary) {
+    return sanitizeForSpeech(result.spokenSummary);
+  }
+
   // 3. Schedule Proposal Pending Review (CRITICAL: Never claim schedule was applied!)
   if (state === 'AWAITING_PROPOSAL_DECISION' || proposal) {
     const prop = proposal || result.action?.proposal;
