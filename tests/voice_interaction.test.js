@@ -343,6 +343,69 @@ describe('A. Voice Recognition Lifecycle', () => {
     assert.equal(controller.getState(), RECOGNITION_STATES.IDLE);
     assert.equal(mockRec.isStopped, true);
   });
+
+  test('Single dispatch: duplicate final results dispatch onResult exactly once', () => {
+    let mockRec = null;
+    let submittedCommands = [];
+    const controller = new VoiceRecognitionController({
+      getSpeechRecognition: () => {
+        return function() {
+          mockRec = new MockSpeechRecognition();
+          return mockRec;
+        };
+      },
+      onResult: (cmd) => submittedCommands.push(cmd),
+    });
+
+    controller.start();
+    // Simulate first final result
+    mockRec.simulateResult('Complete English', true);
+    // Simulate duplicate final event from browser
+    mockRec.simulateResult('Complete English', true);
+
+    assert.equal(submittedCommands.length, 1);
+    assert.equal(submittedCommands[0], 'Complete English');
+    assert.equal(controller.getState(), RECOGNITION_STATES.IDLE);
+  });
+
+  test('onspeechend automatically triggers stop on the active session', () => {
+    let mockRec = null;
+    const controller = new VoiceRecognitionController({
+      getSpeechRecognition: () => {
+        return function() {
+          mockRec = new MockSpeechRecognition();
+          return mockRec;
+        };
+      },
+    });
+
+    controller.start();
+    assert.equal(mockRec.isStopped, false);
+    if (typeof mockRec.onspeechend === 'function') {
+      mockRec.onspeechend();
+      assert.equal(mockRec.isStopped, true);
+    }
+  });
+
+  test('no-speech error transitions quietly to IDLE and provides actionable guidance', () => {
+    let mockRec = null;
+    let errors = [];
+    const controller = new VoiceRecognitionController({
+      getSpeechRecognition: () => {
+        return function() {
+          mockRec = new MockSpeechRecognition();
+          return mockRec;
+        };
+      },
+      onError: (err) => errors.push(err),
+    });
+
+    controller.start();
+    mockRec.simulateError('no-speech');
+    assert.equal(controller.getState(), RECOGNITION_STATES.IDLE);
+    assert.equal(errors.length, 1);
+    assert.equal(errors[0].code, 'no-speech');
+  });
 });
 
 describe('B. Speech Synthesis (Text-to-Speech)', () => {

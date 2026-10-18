@@ -526,5 +526,81 @@ describe('Critical Correctness Regression — Ambiguous Task Mutation Prevention
     assert.equal(res2.isAuthorized, true);
     assert.equal(res2.targetTask.id, 'task-eng-pres');
   });
+
+  describe('Contextual Task Resolution using Meaningful Attributes (Phase 5.4 Hardening)', () => {
+    test('"Complete the English task for today" resolves only the unique task due today', () => {
+      const dm = new DialogueManager({ clock: () => FIXED_REFERENCE_TIME });
+      const tasks = createExactFourTaskScenario();
+
+      const res = dm.processInput('Complete the English task for today', { tasks });
+      assert.equal(res.state, CONVERSATION_STATES.IDLE);
+      assert.equal(res.isAuthorized, true);
+      assert.equal(res.targetTask.id, 'task-eng-today');
+      assert.equal(res.action.taskId, 'task-eng-today');
+    });
+
+    test('"Complete the English task due today" resolves only the unique task due today', () => {
+      const dm = new DialogueManager({ clock: () => FIXED_REFERENCE_TIME });
+      const tasks = createExactFourTaskScenario();
+
+      const res = dm.processInput('Complete the English task due today', { tasks });
+      assert.equal(res.state, CONVERSATION_STATES.IDLE);
+      assert.equal(res.isAuthorized, true);
+      assert.equal(res.targetTask.id, 'task-eng-today');
+      assert.equal(res.action.taskId, 'task-eng-today');
+    });
+
+    test('"Complete the English task for tomorrow" and "due tomorrow" resolve the task due tomorrow', () => {
+      const dm = new DialogueManager({ clock: () => FIXED_REFERENCE_TIME });
+      const tasks = createExactFourTaskScenario();
+
+      const res1 = dm.processInput('Complete the English task for tomorrow', { tasks });
+      assert.equal(res1.state, CONVERSATION_STATES.IDLE);
+      assert.equal(res1.isAuthorized, true);
+      assert.equal(res1.targetTask.id, 'task-eng-tomorrow');
+
+      const dm2 = new DialogueManager({ clock: () => FIXED_REFERENCE_TIME });
+      const res2 = dm2.processInput('Complete the English task due tomorrow', { tasks });
+      assert.equal(res2.state, CONVERSATION_STATES.IDLE);
+      assert.equal(res2.isAuthorized, true);
+      assert.equal(res2.targetTask.id, 'task-eng-tomorrow');
+    });
+
+    test('Two tasks with identical title and deadline remain ambiguous', () => {
+      const dm = new DialogueManager({ clock: () => FIXED_REFERENCE_TIME });
+      const duplicateTasks = [
+        { id: 'eng-1', title: 'English', dueDate: '2026-10-17', completed: false },
+        { id: 'eng-2', title: 'English', dueDate: '2026-10-17', completed: false },
+      ];
+
+      const res = dm.processInput('Complete the English task due today', { tasks: duplicateTasks });
+      assert.equal(res.state, CONVERSATION_STATES.AWAITING_CLARIFICATION);
+      assert.equal(res.isAuthorized, false);
+      assert.equal(res.action, null);
+    });
+
+    test('Nonexistent explicit deadline does not fall back to an unrelated task', () => {
+      const dm = new DialogueManager({ clock: () => FIXED_REFERENCE_TIME });
+      const tasks = createExactFourTaskScenario();
+
+      const res = dm.processInput('Complete the English task due 2026-11-15', { tasks });
+      assert.equal(res.state, CONVERSATION_STATES.IDLE);
+      assert.equal(res.isAuthorized, false);
+      assert.equal(res.action, null);
+      assert.equal(res.error, 'task_not_found');
+      assert.ok(tasks.every((t) => t.completed === false));
+    });
+
+    test('Deadline filter preserves ambiguity when multiple tasks match "no deadline"', () => {
+      const dm = new DialogueManager({ clock: () => FIXED_REFERENCE_TIME });
+      const tasks = createExactFourTaskScenario();
+
+      const res = dm.processInput('Complete the English task with no deadline', { tasks });
+      assert.equal(res.state, CONVERSATION_STATES.AWAITING_CLARIFICATION);
+      assert.equal(res.isAuthorized, false);
+      assert.equal(res.action, null);
+      assert.equal(res.candidateTasks.length, 2);
+    });
+  });
 });
 

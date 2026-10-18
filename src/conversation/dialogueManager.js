@@ -404,8 +404,65 @@ export class DialogueManager {
       }
     }
 
-    // 4. Strip conversational noise words for clean matching
-    let stripped = cleanLower
+    // 4. Extract identifying attributes from query (explicit deadlines, relative dates, "no deadline")
+    let targetDeadlineISO = undefined; // undefined = not specified; null = explicitly unscheduled (no deadline); string = specific ISO date
+    let queryWithoutAttr = cleanLower;
+
+    // 4a. Check for "no deadline" / "unscheduled"
+    const noDeadlineRegex = /\b(?:with\s+)?(?:no\s+deadline|without\s+(?:a\s+)?deadline|unscheduled)\b/i;
+    if (noDeadlineRegex.test(cleanLower)) {
+      targetDeadlineISO = null;
+      queryWithoutAttr = queryWithoutAttr.replace(noDeadlineRegex, ' ').trim();
+    } else {
+      // 4b. Check for explicit deadline / date attributes
+      // e.g.: "due today", "due tomorrow", "due on Friday", "due 2026-10-19", "for today", "for tomorrow", "today's"
+      const duePattern = /\b(?:due\s+(?:on\s+|by\s+|at\s+)?|scheduled\s+(?:for|on)\s+)(today|tomorrow|yesterday|\d{4}-\d{2}-\d{2}|next\s+\w+|\w+\s+\d{1,2}(?:st|nd|rd|th)?|\d{1,2}(?:st|nd|rd|th)?(?:\s+of)?\s+\w+)\b/i;
+      const forDatePattern = /\bfor\s+(today|tomorrow|yesterday)\b/i;
+      const possessiveDatePattern = /\b(today|tomorrow|yesterday)'s\b/i;
+
+      let dateMatch = queryWithoutAttr.match(duePattern);
+      let matchedPhrase = dateMatch ? dateMatch[0] : null;
+      let matchedDateStr = dateMatch ? dateMatch[1] : null;
+
+      if (!dateMatch) {
+        dateMatch = queryWithoutAttr.match(forDatePattern);
+        if (dateMatch) {
+          matchedPhrase = dateMatch[0];
+          matchedDateStr = dateMatch[1];
+        }
+      }
+
+      if (!dateMatch) {
+        dateMatch = queryWithoutAttr.match(possessiveDatePattern);
+        if (dateMatch) {
+          matchedPhrase = dateMatch[0];
+          matchedDateStr = dateMatch[1];
+        }
+      }
+
+      if (matchedDateStr) {
+        const lowerDate = matchedDateStr.toLowerCase();
+        if (lowerDate === 'today') {
+          targetDeadlineISO = todayISO;
+        } else if (lowerDate === 'tomorrow') {
+          targetDeadlineISO = tomorrowISO;
+        } else if (lowerDate === 'yesterday') {
+          const yest = new Date(this.clock());
+          yest.setDate(yest.getDate() - 1);
+          targetDeadlineISO = formatISODate(yest);
+        } else {
+          targetDeadlineISO = parseEnhancedDate(matchedDateStr, new Date(this.clock())) ||
+                              parseDateExpression(matchedDateStr, new Date(this.clock()));
+        }
+
+        if (targetDeadlineISO !== undefined && targetDeadlineISO !== null) {
+          queryWithoutAttr = queryWithoutAttr.replace(matchedPhrase, ' ').trim();
+        }
+      }
+    }
+
+    // 5. Strip conversational noise words for clean matching
+    let stripped = (queryWithoutAttr || cleanLower)
       .replace(/^(?:the|my|a|an)\s+/i, '')
       .replace(/^(?:task\s+(?:about|for|called|named)\s+)/i, '')
       .replace(/\s+task$/i, '')
@@ -415,15 +472,15 @@ export class DialogueManager {
       return { status: RESOLUTION_STATUS.NOT_FOUND, query };
     }
 
-    // 5. Full Matching across all available tasks
-    // Step 5a: Exact title matches
+    // 6. Full Matching across all available tasks
+    // Step 6a: Exact title matches
     const exactTitleMatches = tasks.filter((t) => {
       if (!t.title) return false;
       const tClean = t.title.trim().toLowerCase();
-      return tClean === cleanLower || tClean === stripped;
+      return tClean === cleanLower || tClean === queryWithoutAttr || tClean === stripped;
     });
 
-    // Step 5b: Exact stripped title matches
+    // Step 6b: Exact stripped title matches
     const strippedMatches = tasks.filter((t) => {
       if (!t.title) return false;
       const tStripped = t.title.trim().toLowerCase()
@@ -434,7 +491,7 @@ export class DialogueManager {
       return tStripped === stripped;
     });
 
-    // Step 5c: Word and token overlap matches
+    // Step 6c: Word and token overlap matches
     const STOP_WORDS = new Set(['the', 'my', 'a', 'an', 'task', 'tasks', 'called', 'named', 'about', 'for', 'to', 'of', 'in', 'on', 'at', 'with', 'and', 'is']);
     const normalize = (s) => s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
     const qNorm = normalize(stripped);
@@ -480,12 +537,54 @@ export class DialogueManager {
         }
       }
       if (partials.length === 1) {
+        if (targetDeadlineISO !== undefined) {
+          const matched = targetDeadlineISO === null ? !partials[0].dueDate : partials[0].dueDate === targetDeadlineISO;
+          if (matched) {
+            return { status: RESOLUTION_STATUS.RESOLVED, task: partials[0], isContextual: false };
+          }
+          return { status: RESOLUTION_STATUS.NOT_FOUND, query, reason: 'deadline_mismatch' };
+        }
         return { status: RESOLUTION_STATUS.RESOLVED, task: partials[0], isContextual: false };
       }
       if (partials.length > 1) {
+        if (targetDeadlineISO !== undefined) {
+          const deadlineFilteredPartials = partials.filter((t) => targetDeadlineISO === null ? !t.dueDate : t.dueDate === targetDeadlineISO);
+          if (deadlineFilteredPartials.length === 1) {
+            return { status: RESOLUTION_STATUS.RESOLVED, task: deadlineFilteredPartials[0], isContextual: false };
+          }
+          if (deadlineFilteredPartials.length > 1) {
+            return { status: RESOLUTION_STATUS.AMBIGUOUS, matches: deadlineFilteredPartials };
+          }
+          return { status: RESOLUTION_STATUS.NOT_FOUND, query, reason: 'deadline_mismatch' };
+        }
         return { status: RESOLUTION_STATUS.AMBIGUOUS, matches: partials };
       }
       return { status: RESOLUTION_STATUS.NOT_FOUND, query };
+    }
+
+    // 7. Apply identifying deadline attribute to narrow candidates if specified
+    if (targetDeadlineISO !== undefined) {
+      const deadlineFiltered = allCandidates.filter((t) => {
+        if (targetDeadlineISO === null) {
+          return !t.dueDate;
+        }
+        return t.dueDate === targetDeadlineISO;
+      });
+
+      if (deadlineFiltered.length === 1) {
+        return { status: RESOLUTION_STATUS.RESOLVED, task: deadlineFiltered[0], isContextual: false };
+      }
+      if (deadlineFiltered.length > 1) {
+        return { status: RESOLUTION_STATUS.AMBIGUOUS, matches: deadlineFiltered };
+      }
+      if (allCandidates.length > 0 && deadlineFiltered.length === 0) {
+        return {
+          status: RESOLUTION_STATUS.NOT_FOUND,
+          query,
+          reason: 'deadline_mismatch',
+          candidates: allCandidates,
+        };
+      }
     }
 
     // CRITICAL MUTATION SAFETY INVARIANT:
@@ -799,11 +898,16 @@ export class DialogueManager {
           return `${idx + 1}. "${t.title}"${metaStr}`;
         }).join(', ');
 
+        const responseText = `I still found ${countWord} matching tasks. Which one should I ${verb}? ${formattedCandidates}`;
+        clarification.prompt = responseText;
+
         return {
           state: CONVERSATION_STATES.AWAITING_CLARIFICATION,
           intent: pendingIntent.intent,
           targetTask: null,
-          responseText: `I still found ${countWord} matching tasks. Which one should I ${verb}? ${formattedCandidates}`,
+          candidateTasks: resolution.matches,
+          clarificationQuery: clarification.query || '',
+          responseText,
           feedbackType: 'warning',
           requiresConfirmation: false,
           isAuthorized: false,
@@ -812,11 +916,16 @@ export class DialogueManager {
         };
       }
 
+      const notFoundPrompt = `Could not find a task matching "${text}". Please specify the full task title or say "cancel".`;
+      clarification.prompt = notFoundPrompt;
+
       return {
         state: CONVERSATION_STATES.AWAITING_CLARIFICATION,
         intent: pendingIntent.intent,
         targetTask: null,
-        responseText: `Could not find a task matching "${text}". Please specify the full task title or say "cancel".`,
+        candidateTasks: clarification.matches || clarification.candidateTasks || [],
+        clarificationQuery: clarification.query || '',
+        responseText: notFoundPrompt,
         feedbackType: 'error',
         requiresConfirmation: false,
         isAuthorized: false,
@@ -2125,10 +2234,14 @@ export class DialogueManager {
         responseText = `I found ${countWord} matching tasks: ${resolution.matches[0].title} and ${resolution.matches[1].title}. Which one should I ${verb}?`;
       }
 
+      this.pendingClarification.prompt = responseText;
+
       return {
         state: CONVERSATION_STATES.AWAITING_CLARIFICATION,
         intent,
         targetTask: null,
+        candidateTasks: resolution.matches,
+        clarificationQuery: taskNameQuery,
         responseText,
         feedbackType: 'warning',
         requiresConfirmation: false,
@@ -2141,21 +2254,26 @@ export class DialogueManager {
     if (resolution.status === 'missing_context' || resolution.status === RESOLUTION_STATUS.NEEDS_CLARIFICATION) {
       this.state = CONVERSATION_STATES.AWAITING_CLARIFICATION;
       this.pendingIntent = { intent, params };
-      this.pendingClarification = {
-        missingField: 'targetTask',
-        query: taskNameQuery,
-      };
       const verb = intent === CONVERSATION_INTENTS.COMPLETE_TASK ? 'mark as done'
         : intent === CONVERSATION_INTENTS.DELETE_TASK ? 'delete'
         : intent === CONVERSATION_INTENTS.REOPEN_TASK ? 'reopen'
         : intent === CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_DECISION ? 'explain'
         : intent === CONVERSATION_INTENTS.EXPLAIN_SCHEDULE_CHANGES ? 'check changes for'
         : 'inspect';
+      const prompt = `I'm not sure which task you mean by "${taskNameQuery}". Which task would you like to ${verb}?`;
+      this.pendingClarification = {
+        missingField: 'targetTask',
+        query: taskNameQuery,
+        matches: [],
+        prompt,
+      };
       return {
         state: CONVERSATION_STATES.AWAITING_CLARIFICATION,
         intent,
         targetTask: null,
-        responseText: `I'm not sure which task you mean by "${taskNameQuery}". Which task would you like to ${verb}?`,
+        candidateTasks: [],
+        clarificationQuery: taskNameQuery,
+        responseText: prompt,
         feedbackType: 'warning',
         requiresConfirmation: false,
         isAuthorized: false,
@@ -2165,11 +2283,15 @@ export class DialogueManager {
     }
 
     // status: not_found
+    let notFoundMsg = `Task not found: "${taskNameQuery}"`;
+    if (resolution.reason === 'deadline_mismatch') {
+      notFoundMsg = `No task matching "${taskNameQuery}" was found with that deadline.`;
+    }
     return {
       state: CONVERSATION_STATES.IDLE,
       intent,
       targetTask: null,
-      responseText: `Task not found: "${taskNameQuery}"`,
+      responseText: notFoundMsg,
       feedbackType: 'error',
       requiresConfirmation: false,
       isAuthorized: false,

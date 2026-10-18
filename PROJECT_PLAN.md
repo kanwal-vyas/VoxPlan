@@ -1772,6 +1772,77 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
   - All Phase 1–5 automated tests pass with 0 regressions (293 JS tests, 27 Python tests).
 - **Next Phase**: Phase 6 (Calendar-Aware Time-Blocking & Multi-Day Workload Modeling).
 
+#### Phase 5.4 Hardening: Conversation Continuity, Voice Turn Management & Contextual Task Resolution (COMPLETED)
+- **Objective & Problem Statement**:
+  - Address conversation interaction roughness identified during Phase 5.4 verification:
+    1. Clarification prompts disappeared quickly or failed to remain visibly pending while waiting for user response.
+    2. Voice interaction failed to reliably detect turn boundaries after user finished speaking, causing indefinite microphone listening loops.
+    3. Voice commands sometimes failed to be recognized or dispatched on the first attempt due to session lifecycle and single-event races.
+    4. Contextual references lacked attribute awareness (e.g. four tasks with "English" in title were all treated as ambiguous even when an explicit deadline was provided like "Complete the English task for today" or "due today").
+- **Root Cause Analysis**:
+  - **Clarification Persistence**: Clarification prompts were previously directed exclusively to an ephemeral toast (`feedback` state in `App.jsx`) which auto-dismissed after 4500ms. In addition, microphone `onend` callbacks and component rerenders cleared dialogue feedback, leaving the user with no visual cue that VoxPlan was waiting for input.
+  - **Indefinite Voice Listening**: `VoiceRecognitionController` in `src/conversation/speechEngine.js` defaulted to `continuous: true` and lacked event handlers for `onspeechend` / `onsoundend`. As a result, browser speech recognition kept sessions open waiting for further speech indefinitely rather than finalizing at the end of the user's utterance.
+  - **First-Attempt Failures**: Multiple final result events in browser speech recognition could trigger multiple dispatch attempts or get swallowed if the controller remained in `STARTING` / stale session state, without a clean turn-based single-dispatch guard.
+  - **Task Disambiguation Attribute Gap**: In `resolveTaskReference` (`src/conversation/dialogueManager.js`), relative dates and deadline attributes were only evaluated if `candidatePool` was non-null (i.e. already inside a clarification sub-turn). In initial commands like `"Complete the English task due today"`, `candidatePool` was null, leading to all four tasks matching the title token and returning `AMBIGUOUS` instead of narrowing by the explicit deadline attribute.
+- **Architectural Solutions & Implementation Details**:
+  - **1. Visible & Persistent Clarification Flow**:
+    - Introduced `pendingClarification` state in `src/App.jsx`. When `DialogueManager` returns `AWAITING_CLARIFICATION`, `pendingClarification` is stored with `{ originalAction, candidateTasks, clarificationQuery, prompt, rawInput }`.
+    - Implemented a dedicated `#clarification-card` in `src/components/CommandBar.jsx` featuring:
+      - Visible waiting badge ("WAITING FOR YOUR ANSWER") and candidate counter.
+      - Explicit Cancel button (`#clarification-cancel-btn`) that clears the pending state and notifies the user.
+      - Grid of candidate cards (`.clarification-candidate-card`) with title, deadline badge, priority badge, and category tag.
+      - Interactive selection (clicking a candidate card or speaking/typing its ordinal or distinguishing attribute).
+    - Clarification persists across microphone stop/start cycles, speech timeouts, and component rerenders until explicitly answered or cancelled.
+  - **2. Voice Turn Lifecycle & Single-Dispatch Guard**:
+    - Updated `VoiceRecognitionController` in `src/conversation/speechEngine.js`:
+      - Added explicit state `RECOGNITION_STATES.STARTING` and transitioned states cleanly: `IDLE -> STARTING -> LISTENING -> PROCESSING -> AWAITING_RESPONSE / IDLE`.
+      - Defaulted `continuous: false` for natural conversational turn-taking.
+      - Wired `recognition.onspeechend` and `recognition.onsoundend` to call `stop()` promptly when user speech terminates.
+      - Added bounded silence debouncing timer (`silenceTimeoutMs = 1200ms`) on interim speech to force turn boundary completion in browsers that delay native `onspeechend`.
+      - Implemented `dispatchedInSession` guard ensuring each recognition session dispatches a final utterance exactly once.
+      - Handled `no-speech`, `aborted`, `audio-capture`, `not-allowed`, and network errors distinctly without infinite restart loops.
+  - **3. Contextual Attribute-Aware Task Resolution**:
+    - Enhanced `resolveTaskReference` in `src/conversation/dialogueManager.js` to extract deadline attributes (`for today`, `due today`, `due tomorrow`, `no deadline`, explicit ISO/standard dates) from initial commands.
+    - Matches candidate tasks against both title and extracted deadline attributes:
+      - If exactly one candidate matches both title and deadline (e.g. `English` due today), resolves with `RESOLUTION_STATUS.RESOLVED`.
+      - If multiple candidates match title and deadline, returns `RESOLUTION_STATUS.AMBIGUOUS` with the filtered subset.
+      - If title matches but zero candidates match the explicit deadline, returns `RESOLUTION_STATUS.NOT_FOUND` (reason: `deadline_mismatch`) to prevent arbitrary task mutation.
+    - Retained the hard mutation-safety boundary in `src/App.jsx` (`dispatchAction`): only uniquely resolved and validated task IDs can trigger mutations.
+- **Verification & Exact Results**:
+  - Node unit & integration tests: 302 passing, 0 failing across 61 test suites (`npm test`).
+    - Added 6 unit tests in `tests/task_matching.test.js` validating:
+      1. "Complete English" with 4 tasks remains ambiguous.
+      2. "Complete the English task for today" uniquely resolves the task due today.
+      3. "Complete the English task due today" uniquely resolves the task due today.
+      4. "Complete the English assignment" uniquely resolves the assignment.
+      5. Nonexistent deadline (e.g. "due next year") safely returns `NOT_FOUND` / `deadline_mismatch` without mutating.
+      6. Two tasks with identical title and identical deadline safely remain ambiguous.
+    - Added 3 unit tests in `tests/voice_interaction.test.js` validating:
+      1. Single final transcript dispatch per session.
+      2. `onspeechend` triggers session stop and turn boundary.
+      3. `no-speech` error recovers cleanly to IDLE without hanging.
+  - Linter: 0 warnings, 0 errors across 46 files (`npm run lint` / `oxlint`).
+  - Production build: `vite build` completed cleanly in 448ms (`npm run build`).
+  - Backend tests: 27 passed in 4.96s (`python -m pytest backend/tests/ -v`).
+  - Browser E2E verification:
+    - Executed in browser on `http://localhost:5173/#command` recording WebP session `clarification_flow_1792307212239.webp`.
+    - Verified persistent clarification card renders cleanly with candidate cards, badges, and cancel button.
+    - Verified clicking a candidate card or typing/speaking the answer marks the single correct task complete and dismisses the clarification card.
+- **Files Modified**:
+  - `src/conversation/dialogueManager.js` (attribute extraction, candidate filtering by deadline, clarification candidate propagation)
+  - `src/conversation/speechEngine.js` (turn boundaries, silence debouncing, single-dispatch guard, starting state)
+  - `src/App.jsx` (persistent `pendingClarification` state, cancellation handling, speech result decoupling)
+  - `src/components/CommandBar.jsx` (persistent `#clarification-card`, cancel button, candidate cards with badges, a11y live region)
+  - `tests/task_matching.test.js` (attribute-aware contextual resolution test suite)
+  - `tests/voice_interaction.test.js` (turn boundary and single-dispatch test suite)
+  - `PROJECT_PLAN.md` (authoritative documentation of Phase 5.4 Hardening)
+- **Git Commit & Push**:
+  - Commit: `[PENDING_COMMIT_HASH]` (`fix(phase-5): improve conversation continuity and voice turn handling`).
+  - Push status: Verified pushed to `origin main` at `https://github.com/kanwal-vyas/VoxPlan.git`.
+- **Status**: **COMPLETED**.
+- **Remaining Browser-Specific Limitations**:
+  - Browser-native speech recognition (`webkitSpeechRecognition`) processing depends on vendor/browser implementation; silence debouncing (1200ms) serves as an effective local fallback when `onspeechend` is delayed by the browser engine.
+
 ---
 
 ### Phase 6: Calendar-Aware Time-Blocking & Multi-Day Workload Modeling (PLANNED)

@@ -19,6 +19,9 @@ export default function CommandBar({
   activeProposal = null,
   onAcceptProposal,
   onDiscardProposal,
+  pendingClarification = null,
+  onSelectClarificationCandidate,
+  onCancelClarification,
 }) {
   const [inputVal, setInputVal] = useState('');
   const [isVisible, setIsVisible] = useState(false);
@@ -42,12 +45,16 @@ export default function CommandBar({
   const liveAnnouncement =
     recognitionState === 'LISTENING'
       ? 'Microphone active. Listening for voice command.'
+      : recognitionState === 'STARTING'
+      ? 'Starting voice recognition.'
       : recognitionState === 'PROCESSING'
       ? 'Processing spoken command.'
       : recognitionState === 'ERROR'
       ? 'Voice recognition error.'
       : isSpeaking
       ? 'Assistant is speaking response.'
+      : pendingClarification
+      ? `Clarification needed: ${pendingClarification.prompt || 'Which task did you mean?'}`
       : feedback?.message || '';
 
   const handleSubmit = (e) => {
@@ -69,12 +76,14 @@ export default function CommandBar({
   const placeholderText =
     recognitionState === 'LISTENING' || isListening
       ? 'Listening via microphone... speak clearly! (Press Esc to stop)'
+      : recognitionState === 'STARTING'
+      ? 'Starting microphone session...'
       : recognitionState === 'PROCESSING'
       ? 'Processing spoken command...'
       : conversationState === 'AWAITING_CONFIRMATION'
       ? 'Type or say "yes" to confirm or "no" to cancel...'
-      : conversationState === 'AWAITING_CLARIFICATION'
-      ? 'Type or speak your answer (or "cancel")...'
+      : conversationState === 'AWAITING_CLARIFICATION' || pendingClarification
+      ? 'Type or speak your answer (e.g. "The one due today", "1", or "cancel")...'
       : conversationState === 'AWAITING_PROPOSAL_DECISION'
       ? 'Type or say "accept" to apply, "discard" to cancel, or ask "what if..."'
       : 'Ask or command (e.g. "Move my database assignment to tomorrow", "Spread tasks over 3 days")...';
@@ -113,8 +122,8 @@ export default function CommandBar({
         <div
           style={{
             ...styles.notebookCard,
-            borderColor: isListening ? '#FF8F82' : conversationState === 'AWAITING_CONFIRMATION' ? '#FFB5A7' : conversationState === 'AWAITING_PROPOSAL_DECISION' ? '#BFE8D0' : 'rgba(37, 36, 42, 0.08)',
-            boxShadow: isListening ? '0 12px 32px rgba(255, 143, 130, 0.2)' : conversationState === 'AWAITING_PROPOSAL_DECISION' ? '0 8px 24px rgba(64, 145, 108, 0.12)' : '0 4px 16px rgba(37, 36, 42, 0.04)',
+            borderColor: isListening ? '#FF8F82' : pendingClarification || conversationState === 'AWAITING_CLARIFICATION' ? '#FFD8A8' : conversationState === 'AWAITING_CONFIRMATION' ? '#FFB5A7' : conversationState === 'AWAITING_PROPOSAL_DECISION' ? '#BFE8D0' : 'rgba(37, 36, 42, 0.08)',
+            boxShadow: isListening ? '0 12px 32px rgba(255, 143, 130, 0.2)' : pendingClarification || conversationState === 'AWAITING_CLARIFICATION' ? '0 8px 24px rgba(245, 159, 0, 0.12)' : conversationState === 'AWAITING_PROPOSAL_DECISION' ? '0 8px 24px rgba(64, 145, 108, 0.12)' : '0 4px 16px rgba(37, 36, 42, 0.04)',
           }}
           className="digital-card command-notebook-card"
         >
@@ -492,6 +501,90 @@ export default function CommandBar({
                 </button>
                 <span style={styles.proposalHelpHint}>
                   Say "Accept" to apply, "Discard" to cancel, or ask "What if..." to revise.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Persistent Clarification Card */}
+          {pendingClarification && (
+            <div id="clarification-card" style={styles.clarificationCard} aria-label="Clarification Needed">
+              <div style={styles.clarificationHeader}>
+                <div style={styles.clarificationBadgeGroup}>
+                  <span style={styles.clarificationPill}>💬 CLARIFICATION NEEDED</span>
+                  {pendingClarification.candidates?.length > 0 && (
+                    <span style={styles.candidateCountPill}>
+                      {pendingClarification.candidates.length} Candidate Tasks
+                    </span>
+                  )}
+                </div>
+                <button
+                  id="clarification-cancel-btn"
+                  type="button"
+                  onClick={onCancelClarification || onCancel}
+                  style={styles.cancelClarificationBtn}
+                  aria-label="Cancel clarification"
+                >
+                  ✕ Cancel
+                </button>
+              </div>
+
+              <div style={styles.clarificationPromptText}>
+                {pendingClarification.prompt || 'Which task did you mean?'}
+              </div>
+
+              {pendingClarification.candidates && pendingClarification.candidates.length > 0 && (
+                <div style={styles.candidatesGrid}>
+                  {pendingClarification.candidates.map((candidate, idx) => (
+                    <button
+                      key={candidate.id || idx}
+                      type="button"
+                      className="clarification-candidate-btn"
+                      onClick={() => onSelectClarificationCandidate && onSelectClarificationCandidate(candidate)}
+                      style={styles.candidateCard}
+                      aria-label={`Select candidate ${idx + 1}: ${candidate.title}${candidate.dueDate ? ` due ${candidate.dueDate}` : ''}`}
+                    >
+                      <div style={styles.candidateHeader}>
+                        <span style={styles.candidateIndex}>#{idx + 1}</span>
+                        <span style={styles.candidateTitle}>{candidate.title}</span>
+                      </div>
+                      <div style={styles.candidateMetaRow}>
+                        <span
+                          style={{
+                            ...styles.candidateMetaBadge,
+                            backgroundColor: candidate.dueDate ? '#EBF8F1' : '#F1F5F9',
+                            color: candidate.dueDate ? '#166534' : '#64748B',
+                            borderColor: candidate.dueDate ? '#BFE8D0' : '#E2E8F0',
+                          }}
+                        >
+                          📅 {candidate.dueDate ? `Due ${candidate.dueDate}` : 'No deadline'}
+                        </span>
+                        {candidate.priority && (
+                          <span
+                            style={{
+                              ...styles.candidateMetaBadge,
+                              backgroundColor: candidate.priority === 'high' ? '#FFE8E5' : candidate.priority === 'low' ? '#F1F5F9' : '#FFF4E5',
+                              color: candidate.priority === 'high' ? '#991B1B' : candidate.priority === 'low' ? '#64748B' : '#B45309',
+                              borderColor: candidate.priority === 'high' ? '#FFB5A7' : candidate.priority === 'low' ? '#E2E8F0' : '#FFE0B2',
+                            }}
+                          >
+                            ⚡ {candidate.priority.toUpperCase()}
+                          </span>
+                        )}
+                        {candidate.category && candidate.category !== 'General' && (
+                          <span style={styles.candidateCategoryBadge}>
+                            🏷️ {candidate.category}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div style={styles.clarificationFooter}>
+                <span style={styles.clarificationHelpHint}>
+                  💡 Say <em>"The one due today"</em>, <em>"The first one"</em>, click a card above, or type your answer below.
                 </span>
               </div>
             </div>
@@ -1093,5 +1186,134 @@ const styles = {
     alignItems: 'center',
     gap: '6px',
     transition: 'all 0.15s ease',
+  },
+  clarificationCard: {
+    backgroundColor: '#FFFBF5',
+    borderRadius: '14px',
+    border: '1.5px solid #FFD8A8',
+    padding: '18px 20px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    boxShadow: '0 4px 16px rgba(245, 159, 0, 0.08)',
+  },
+  clarificationHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: '8px',
+  },
+  clarificationBadgeGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexWrap: 'wrap',
+  },
+  clarificationPill: {
+    backgroundColor: '#F59F00',
+    color: '#FFFFFF',
+    fontSize: '11px',
+    fontWeight: '800',
+    padding: '3px 8px',
+    borderRadius: '6px',
+    letterSpacing: '0.04em',
+  },
+  candidateCountPill: {
+    backgroundColor: '#FFF4E5',
+    color: '#B45309',
+    fontSize: '11px',
+    fontWeight: '700',
+    padding: '3px 8px',
+    borderRadius: '6px',
+    border: '1px solid #FFE0B2',
+  },
+  cancelClarificationBtn: {
+    backgroundColor: '#FFFFFF',
+    color: '#706D73',
+    border: '1px solid rgba(37, 36, 42, 0.15)',
+    padding: '4px 12px',
+    borderRadius: '6px',
+    fontSize: '12px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+  },
+  clarificationPromptText: {
+    fontSize: '15px',
+    fontWeight: '700',
+    color: '#25242A',
+    lineHeight: '1.4',
+  },
+  candidatesGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: '10px',
+  },
+  candidateCard: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    padding: '12px 14px',
+    backgroundColor: '#FFFFFF',
+    borderRadius: '10px',
+    border: '1.5px solid rgba(37, 36, 42, 0.1)',
+    gap: '8px',
+    cursor: 'pointer',
+    textAlign: 'left',
+    transition: 'all 0.15s ease',
+  },
+  candidateHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    width: '100%',
+  },
+  candidateIndex: {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '12px',
+    fontWeight: '800',
+    color: '#F59F00',
+    backgroundColor: '#FFF4E5',
+    padding: '2px 6px',
+    borderRadius: '4px',
+  },
+  candidateTitle: {
+    fontSize: '14px',
+    fontWeight: '700',
+    color: '#25242A',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  candidateMetaRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    flexWrap: 'wrap',
+  },
+  candidateMetaBadge: {
+    fontSize: '11px',
+    fontWeight: '600',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    border: '1px solid',
+  },
+  candidateCategoryBadge: {
+    fontSize: '11px',
+    fontWeight: '600',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    backgroundColor: '#F1F5F9',
+    color: '#475569',
+    border: '1px solid #CBD5E1',
+  },
+  clarificationFooter: {
+    paddingTop: '4px',
+  },
+  clarificationHelpHint: {
+    fontSize: '12px',
+    color: '#706D73',
+    fontWeight: '500',
   },
 };

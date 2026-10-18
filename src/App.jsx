@@ -196,6 +196,7 @@ export default function App() {
   const [conversationState, setConversationState] = useState(CONVERSATION_STATES.IDLE);
   const [activeSubjectTaskId, setActiveSubjectTaskId] = useState(null);
   const [activeProposal, setActiveProposal] = useState(null);
+  const [pendingClarification, setPendingClarification] = useState(null);
 
   const voiceRecognitionRef = useRef(null);
   const speechSynthesisRef = useRef(null);
@@ -775,6 +776,21 @@ export default function App() {
     setConversationState(result.state);
     setActiveSubjectTaskId(dialogueManager.activeSubjectTaskId);
 
+    if (result.state === CONVERSATION_STATES.AWAITING_CLARIFICATION) {
+      const candidates = result.candidateTasks ||
+        dialogueManager.pendingClarification?.matches ||
+        dialogueManager.pendingClarification?.candidateTasks ||
+        [];
+      setPendingClarification({
+        prompt: result.responseText,
+        candidates,
+        intent: result.intent || dialogueManager.pendingIntent?.intent,
+        query: result.clarificationQuery || dialogueManager.pendingClarification?.query || '',
+      });
+    } else {
+      setPendingClarification(null);
+    }
+
     if (result.proposal) {
       setActiveProposal(result.proposal);
       await handleProposalGenerated(result.proposal);
@@ -900,6 +916,7 @@ export default function App() {
           dialogueManager.reset();
           setConversationState(CONVERSATION_STATES.IDLE);
           setActiveSubjectTaskId(null);
+          setPendingClarification(null);
           break;
         }
 
@@ -997,10 +1014,6 @@ export default function App() {
       },
       onResult: (transcript) => {
         setInterimTranscript('');
-        setFeedback({
-          type: 'info',
-          message: `Heard: "${transcript}"`,
-        });
         if (executeCommandRef.current) {
           executeCommandRef.current(transcript);
         }
@@ -1235,6 +1248,12 @@ export default function App() {
           activeProposal={activeProposal}
           onAcceptProposal={handleAcceptProposal}
           onDiscardProposal={handleDiscardProposal}
+          pendingClarification={pendingClarification}
+          onSelectClarificationCandidate={(candidate) => {
+            const query = candidate.title || candidate.id;
+            executeCommand(query);
+          }}
+          onCancelClarification={() => executeCommand('cancel')}
         />
       </div>
 
