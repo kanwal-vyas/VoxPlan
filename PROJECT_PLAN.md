@@ -2140,22 +2140,35 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
 **User-Facing Objective**: Allow VoxPlan to safely learn individual scheduling preferences (such as personal day-of-week velocity, category-specific buffer needs, or task-switching tolerances) based on verified longitudinal outcome data—with strict sample maturity gates, bounded weight changes, and one-click rollback.
 
 #### Stage 7.1: Longitudinal Sample Maturity Gating & Readiness Diagnostics
-- **Scope & Expected Deliverables**:
-  - Learning readiness gatekeeper (`src/scheduler/learningReadinessGate.js`) that evaluates the maturity of the local schedule feedback dataset.
+- **Status**: **COMPLETED**.
+- **Implementation Commit**: `5ecd2b5f59ecac5d365251a6ba107a8b1f68c09c`
+- **Scope & Delivered Artifacts**:
+  - Pure, deterministic learning readiness gatekeeper (`src/scheduler/learningReadinessGate.js`) that evaluates the maturity of the local schedule feedback dataset without side-effects or mutations.
   - Strict minimum evidence criteria before adaptation is unlocked:
-    - $\ge 20$ decided schedule proposals (`decidedCount >= 20`).
-    - $\ge 15$ verified unaltered task completions (`eligibleCompletedCount >= 15`).
-    - $\ge 3$ distinct task categories with completion observations.
-    - $\ge 14$ days of elapsed active telemetry history.
-  - Detailed diagnostic panel in Section 05 indicating exact progress toward readiness.
+    - $\ge 20$ decided schedule proposals (`decidedCount >= 20`): explicit `schedule_proposal_accepted` or `schedule_proposal_discarded` decisions keyed by unique `schedule_id`; generated drafts, views, unaccepted edits, and conflicting decisions are isolated and excluded.
+    - $\ge 15$ verified unaltered task completions (`eligibleCompletedCount >= 15`): tasks completed on their accepted scheduled date without prior manual date shifts; reopened tasks without subsequent completion and currently open tasks are excluded.
+    - $\ge 3$ distinct task categories with verified completion observations (`distinctCategoryCount >= 3`): normalized canonical categories across eligible completions; placeholders (`'unknown'`, `'none'`, `'n/a'`, etc.) and blanks are ignored.
+    - $\ge 14$ distinct active calendar days of eligible telemetry history (`activeDaysCount >= 14`): counted as unique local calendar dates (`YYYY-MM-DD`) containing behavioral user interactions; timestamps exceeding a 24-hour future sanity horizon or malformed strings are excluded. Empty calendar days do not inflate active day counts.
+  - Interactive, accessible diagnostics panel (`src/components/LearningReadinessPanel.jsx`) embedded in Section 05 (`PersonalModelDashboard.jsx`):
+    - Overall maturity score gauge ($X/4$ gates, $0\text{--}100\%$).
+    - Overall status pill (`NOT YET READY — ADAPTATION LOCKED`, `READY FOR PREFERENCE EVALUATION`, or `ASSESSMENT UNAVAILABLE`).
+    - 4 distinct gate cards displaying current value, required threshold, pass/unmet state, progress bar, and concise eligibility requirements.
+    - Data integrity & provenance diagnostics listing any excluded observations or conflicting events.
+    - Local-first privacy disclosure stating that all diagnostics are client-side in IndexedDB, zero weights are modified, and preference learning has not been performed.
 - **Dependencies**: Phase 4 Stages 5 & 6 feedback telemetry.
 - **Acceptance Criteria**:
-  - If any readiness criterion is unmet, automatic adaptation remains strictly disabled (`status: 'insufficient_evidence'`).
-  - Cold-start factory scheduler weights remain active and immutable until readiness criteria are 100% satisfied.
-  - Clearing behavioral history immediately locks the gatekeeper and resets readiness status to 0%.
-- **Verification**:
-  - Comprehensive boundary tests evaluating sets with 19 proposals (blocked), 14 completions (blocked), 2 categories (blocked), and 20+ proposals with 15+ completions (unlocked) (`tests/learning_readiness_gate.test.js`).
-- **Safety**: Prevents premature adaptation on small, noisy datasets.
+  - When any gate is unmet, automatic adaptation remains strictly locked (`status: 'insufficient_evidence'`, `isAdaptationUnlocked: false`).
+  - Cold-start factory scheduler weights remain 100% active and immutable.
+  - Clearing behavioral history in Section 04 immediately recalculates readiness to 0% and locks the gatekeeper without stale cache persistence.
+- **Verification & Test Suite**:
+  - 21 focused unit and boundary tests in `tests/learning_readiness_gate.test.js`: boundary tests (19 vs 20 decided, 14 vs 15 completions, 2 vs 3 categories, 13 vs 14 days), deduplication, conflict isolation, override exclusion, category normalization, future timestamp sanity, determinism, and immutability.
+  - Full frontend suite: 441 passing tests across 84 test suites with 0 failures (`npm test`).
+  - Backend suite: 27 passing tests (`python -m pytest backend/tests/ -q`).
+  - Linter: 0 errors across 57 files (`npm run lint`).
+  - Production build: Clean bundle build in 356ms (`npm run build`).
+  - Browser verification: Headless subagent verified accurate rendering of Section 05 readiness panel, status pill, 4 gate cards, progress bars, and honesty disclosures.
+- **Scope Boundary Enforcement**:
+  - Read-only diagnostics and gating evaluation only. No scheduler weights adapted, no models trained, no heuristics tuned, and no preferences learned. Factory baseline weights remain fully active.
 
 #### Stage 7.2: Empirical Preference Signal Derivation & Friction Profiling
 - **Scope & Expected Deliverables**:
