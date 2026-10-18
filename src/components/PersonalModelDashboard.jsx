@@ -6,6 +6,7 @@ import {
   NEUTRAL_BIAS_RATIO,
   MIN_EVALUATION_TASKS,
 } from '../telemetry/personalModel';
+import LearningReadinessPanel from './LearningReadinessPanel';
 
 export default function PersonalModelDashboard({ events = [], tasks = [] }) {
   const sectionRef = useRef(null);
@@ -458,6 +459,9 @@ export default function PersonalModelDashboard({ events = [], tasks = [] }) {
             </div>
           )}
         </div>
+
+        {/* Phase 7.1: Longitudinal Sample Maturity Gating & Readiness Diagnostics */}
+        <LearningReadinessPanel events={events} tasks={tasks} />
 
         {/* Methodological Honesty Disclosures Card */}
         <div style={styles.honestyGrid}>
