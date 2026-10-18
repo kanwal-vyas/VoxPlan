@@ -617,6 +617,7 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
       const meta = taskMeta.get(t.id);
 
       proposedPlacements.push({
+        placementId: `blocked_${t.id}`,
         taskId: t.id,
         taskTitle: t.title,
         taskPriority: t.priority || 'medium',
@@ -654,6 +655,7 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
         const conflictMsg = `Task effort (${meta.effectiveHours.toFixed(1)}h) exceeds daily capacity limit (${dailyCapacityHours}h/day). Manual task breakdown or capacity adjustment required.`;
 
         proposedPlacements.push({
+          placementId: `oversized_${t.id}`,
           taskId: t.id,
           taskTitle: t.title,
           taskPriority: t.priority || 'medium',
@@ -909,6 +911,7 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
       const isDateChanged = originalDueDate !== proposedDate;
 
       proposedPlacements.push({
+        placementId: `placement_${currentTask.id}`,
         taskId: currentTask.id,
         taskTitle: currentTask.title,
         taskPriority: currentTask.priority || 'medium',
@@ -951,6 +954,7 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
       warnings.push(`Task "${currentTask.title}" (${currentTask.id}) could not be scheduled within the ${horizonDays}-day calendar window.`);
 
       proposedPlacements.push({
+        placementId: `placement_${currentTask.id}`,
         taskId: currentTask.id,
         taskTitle: currentTask.title,
         taskPriority: currentTask.priority || 'medium',
@@ -982,6 +986,7 @@ export function generateAdaptiveSchedule(tasks = [], options = {}) {
     const conflictMsg = `Blocked: prerequisite task could not be scheduled within planning horizon.`;
 
     proposedPlacements.push({
+      placementId: `placement_${t.id}`,
       taskId: t.id,
       taskTitle: t.title,
       taskPriority: t.priority || 'medium',

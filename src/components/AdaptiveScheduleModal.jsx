@@ -4,6 +4,11 @@ import { compareScheduleStrategies } from '../scheduler/scheduleEvaluator';
 import { BENCHMARK_SCENARIOS, runStabilityBenchmark } from '../scheduler/scheduleBenchmarks';
 import { computeScheduleFeedback } from '../scheduler/scheduleFeedback';
 import { loadTimeBlockSettings, saveTimeBlockSettings } from '../scheduler/timeBlockScheduler';
+import {
+  ensurePlacementIds,
+  applyPlacementEdit,
+  validateFullProposal,
+} from '../scheduler/proposalEditor';
 
 export default function AdaptiveScheduleModal({
   tasks = [],
@@ -176,6 +181,37 @@ export default function AdaptiveScheduleModal({
     }
   }, [isOpen]);
 
+  // Phase 6.3: Interactive proposal draft editing state
+  const [draftProposal, setDraftProposal] = useState(null);
+  const [initialProposalSnapshot, setInitialProposalSnapshot] = useState(null);
+  const [undoStack, setUndoStack] = useState([]);
+  const [editingPlacementId, setEditingPlacementId] = useState(null);
+  const [editDate, setEditDate] = useState('');
+  const [editStartTime, setEditStartTime] = useState('');
+  const [editEndTime, setEditEndTime] = useState('');
+  const [validationError, setValidationError] = useState(null);
+  const [feedbackMessage, setFeedbackMessage] = useState(null);
+
+  // Synchronize draft proposal whenever generated proposal changes or modal opens
+  useEffect(() => {
+    if (isOpen && proposal) {
+      const ensured = ensurePlacementIds(JSON.parse(JSON.stringify(proposal)));
+      setDraftProposal(ensured);
+      setInitialProposalSnapshot(JSON.parse(JSON.stringify(ensured)));
+      setUndoStack([]);
+      setEditingPlacementId(null);
+      setValidationError(null);
+      setFeedbackMessage(null);
+    } else if (!isOpen) {
+      setDraftProposal(null);
+      setInitialProposalSnapshot(null);
+      setUndoStack([]);
+      setEditingPlacementId(null);
+      setValidationError(null);
+      setFeedbackMessage(null);
+    }
+  }, [isOpen, proposal]);
+
   useEffect(() => {
     if (isOpen && proposal && proposal.summary?.scheduleId && onProposalGenerated) {
       if (recordedProposalIdRef.current !== proposal.summary.scheduleId) {
@@ -185,18 +221,111 @@ export default function AdaptiveScheduleModal({
     }
   }, [isOpen, proposal, onProposalGenerated]);
 
-  const handleDiscard = (reason = 'user_discard') => {
-    if (!hasAppliedRef.current && proposal && onDiscardSchedule) {
-      onDiscardSchedule(proposal, reason);
+  const handleStartEdit = (p) => {
+    setEditingPlacementId(p.placementId);
+    setEditDate(p.proposedDate || todayStr);
+    setEditStartTime(p.startTime || workStart || '09:00');
+    setEditEndTime(p.endTime || workEnd || '10:00');
+    setValidationError(null);
+    setFeedbackMessage(null);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingPlacementId(null);
+    setValidationError(null);
+  };
+
+  const handleSaveEdit = (p) => {
+    const editContext = {
+      tasks,
+      dailyCapacityHours: Number(dailyCapacityHours) || 6.0,
+      enableIntraday,
+      workingHours: { start: workStart, end: workEnd },
+      blackouts: timeBlockConfig.blackouts || [],
+      focusWindows: timeBlockConfig.focusWindows || [],
+    };
+
+    const currentDraft = draftProposal || proposal;
+    const result = applyPlacementEdit(
+      currentDraft,
+      p.placementId,
+      {
+        proposedDate: editDate,
+        startTime: editStartTime,
+        endTime: editEndTime,
+      },
+      editContext
+    );
+
+    if (!result.success) {
+      setValidationError(result.error?.message || 'Placement edit rejected.');
+      return;
     }
+
+    setUndoStack((prev) => [...prev, currentDraft]);
+    setDraftProposal(result.proposal);
+    setEditingPlacementId(null);
+    setValidationError(null);
+    setFeedbackMessage(`Updated placement for "${p.taskTitle}".`);
+  };
+
+  const handleUndo = () => {
+    if (undoStack.length === 0) return;
+    const prevDraft = undoStack[undoStack.length - 1];
+    setUndoStack((prev) => prev.slice(0, -1));
+    setDraftProposal(prevDraft);
+    setEditingPlacementId(null);
+    setValidationError(null);
+    setFeedbackMessage('Reverted last schedule edit.');
+  };
+
+  const handleRevert = () => {
+    if (!initialProposalSnapshot) return;
+    setDraftProposal(JSON.parse(JSON.stringify(initialProposalSnapshot)));
+    setUndoStack([]);
+    setEditingPlacementId(null);
+    setValidationError(null);
+    setFeedbackMessage('Restored originally generated schedule proposal.');
+  };
+
+  const handleDiscard = (reason = 'user_discard') => {
+    if (!hasAppliedRef.current && (draftProposal || proposal) && onDiscardSchedule) {
+      onDiscardSchedule(draftProposal || proposal, reason);
+    }
+    setDraftProposal(null);
+    setInitialProposalSnapshot(null);
+    setUndoStack([]);
+    setEditingPlacementId(null);
+    setValidationError(null);
+    setFeedbackMessage(null);
     onClose();
   };
 
   const handleApply = () => {
     if (isStale) return;
+    if (hasAppliedRef.current) return;
+
+    const currentDraft = draftProposal || proposal;
+    const editContext = {
+      tasks,
+      dailyCapacityHours: Number(dailyCapacityHours) || 6.0,
+      enableIntraday,
+      workingHours: { start: workStart, end: workEnd },
+      blackouts: timeBlockConfig.blackouts || [],
+      focusWindows: timeBlockConfig.focusWindows || [],
+    };
+
+    const fullCheck = validateFullProposal(currentDraft, editContext);
+    if (!fullCheck.valid) {
+      setValidationError(
+        fullCheck.errors[0]?.message || 'Cannot apply schedule with hard constraint violations.'
+      );
+      return;
+    }
+
     hasAppliedRef.current = true;
     if (onApplySchedule) {
-      onApplySchedule(proposal);
+      onApplySchedule(currentDraft);
     }
     onClose();
   };
@@ -206,10 +335,11 @@ export default function AdaptiveScheduleModal({
     setSessionCount((c) => c + 1);
   };
 
-  if (!isOpen || !proposal) return null;
+  const activeProposal = draftProposal || proposal;
+  if (!isOpen || !activeProposal) return null;
 
-  const summary = proposal.summary || {};
-  const placements = proposal.proposedPlacements || proposal.placements || [];
+  const summary = activeProposal.summary || {};
+  const placements = activeProposal.proposedPlacements || activeProposal.placements || [];
   const cycles = summary.cycles || [];
 
   // Filter valid actionable date shifts
@@ -492,14 +622,68 @@ export default function AdaptiveScheduleModal({
               </div>
             )}
 
+            {/* Draft Editing Ribbon */}
+            <div style={styles.draftEditBar}>
+              <div style={styles.draftEditLeft}>
+                {undoStack.length > 0 ? (
+                  <span style={styles.draftActiveBadge}>
+                    ✏️ <strong>Draft Modified:</strong> {undoStack.length} manual edit{undoStack.length === 1 ? '' : 's'} applied (pending acceptance)
+                  </span>
+                ) : (
+                  <span style={styles.draftHint}>
+                    💡 Click <strong>"✏️ Edit"</strong> on any task to adjust its date or time window before accepting.
+                  </span>
+                )}
+              </div>
+              <div style={styles.draftEditActions}>
+                <button
+                  type="button"
+                  onClick={handleUndo}
+                  disabled={undoStack.length === 0}
+                  style={{
+                    ...styles.undoBtn,
+                    ...(undoStack.length === 0 ? styles.undoBtnDisabled : {}),
+                  }}
+                  aria-label="Undo last edit"
+                  title="Undo most recent schedule edit"
+                >
+                  ↶ Undo Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRevert}
+                  disabled={undoStack.length === 0}
+                  style={{
+                    ...styles.revertBtn,
+                    ...(undoStack.length === 0 ? styles.revertBtnDisabled : {}),
+                  }}
+                  aria-label="Revert to original proposal"
+                  title="Revert all edits to originally generated proposal"
+                >
+                  ↺ Revert Proposal
+                </button>
+              </div>
+            </div>
+            {feedbackMessage && (
+              <div style={styles.feedbackAlert} role="status" aria-live="polite">
+                {feedbackMessage}
+              </div>
+            )}
+            {validationError && !editingPlacementId && (
+              <div style={{ margin: '8px 28px 0', ...styles.inlineErrorBox }} role="alert" aria-live="assertive">
+                ⚠️ <strong>Blocking Constraint:</strong> {validationError}
+              </div>
+            )}
+
             {/* Placements List */}
             <div style={styles.listContainer}>
               <div style={styles.listHeaderRow}>
-                <span style={{ flex: 3 }}>Task & Priority</span>
-                <span style={{ flex: 1.5 }}>Original Due</span>
-                <span style={{ flex: 1.5 }}>Proposed Date</span>
-                <span style={{ flex: 1.2 }}>Effort</span>
-                <span style={{ flex: 1.3, textAlign: 'right' }}>Status</span>
+                <span style={{ flex: 2.8 }}>Task & Priority</span>
+                <span style={{ flex: 1.2 }}>Original Due</span>
+                <span style={{ flex: 1.6 }}>Proposed Date</span>
+                <span style={{ flex: 1.0 }}>Effort</span>
+                <span style={{ flex: 1.0, textAlign: 'right' }}>Status</span>
+                <span style={{ flex: 0.8, textAlign: 'right' }}>Action</span>
               </div>
 
               <div style={styles.scrollList}>
@@ -540,109 +724,200 @@ export default function AdaptiveScheduleModal({
                     const rowKey = p.placementId || (p.isChunk ? `${p.taskId}_seg_${p.chunkIndex}` : p.taskId);
 
                     return (
-                      <div
-                        key={rowKey}
-                        style={{
-                          ...styles.taskRow,
-                          ...(isShifted ? styles.taskRowShifted : {}),
-                          ...(isBlocked || isOversized ? { opacity: 0.85, borderStyle: 'dashed' } : {}),
-                        }}
-                      >
-                        <div style={{ flex: 3, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <div style={styles.taskTitleRow}>
-                            <span style={styles.priorityIndicator(p.taskPriority)} />
-                            <span style={styles.taskTitle}>{p.taskTitle}</span>
-                            {p.isChunk && (
-                              <span
-                                style={{
-                                  fontSize: '10px',
-                                  fontWeight: '700',
-                                  backgroundColor: '#EEF2FF',
-                                  color: '#4338CA',
-                                  border: '1px solid #C7D2FE',
-                                  borderRadius: '4px',
-                                  padding: '1px 6px',
-                                  marginLeft: '4px',
-                                }}
-                              >
-                                Session {p.chunkIndex + 1} of {p.totalChunks}
-                              </span>
-                            )}
-                            {p.inFocusWindow && (
-                              <span
-                                style={{
-                                  fontSize: '10px',
-                                  fontWeight: '700',
-                                  backgroundColor: '#FEF3C7',
-                                  color: '#92400E',
-                                  border: '1px solid #FCD34D',
-                                  borderRadius: '4px',
-                                  padding: '1px 6px',
-                                  marginLeft: '4px',
-                                }}
-                                title={`Scheduled in ${p.focusWindowLabel || 'Focus Window'}`}
-                              >
-                                🎯 {p.focusWindowLabel || 'Focus'}
-                              </span>
-                            )}
-                            {p.taskCategory && (
-                              <span style={styles.categoryTag}>{p.taskCategory}</span>
-                            )}
-                          </div>
-                          {p.explanation && (
-                            <span style={styles.explanationText}>{p.explanation}</span>
-                          )}
-                          {p.conflicts && p.conflicts.length > 0 && (
-                            <span style={styles.conflictText}>⚠️ {p.conflicts[0]}</span>
-                          )}
-                        </div>
-
-                        <div style={{ flex: 1.5, fontSize: '12px', color: '#71717A' }}>
-                          {p.originalDueDate || '—'}
-                        </div>
-
-                        <div style={{ flex: 1.5, fontSize: '12px', fontWeight: '700' }}>
-                          {p.proposedDate ? (
-                            <div>
-                              {isShifted ? (
-                                <span style={styles.shiftedDateBadge}>{p.proposedDate}</span>
-                              ) : (
-                                <span>{p.proposedDate}</span>
+                      <div key={rowKey} style={{ display: 'flex', flexDirection: 'column' }}>
+                        <div
+                          style={{
+                            ...styles.taskRow,
+                            ...(isShifted ? styles.taskRowShifted : {}),
+                            ...(isBlocked || isOversized ? { opacity: 0.85, borderStyle: 'dashed' } : {}),
+                          }}
+                        >
+                          <div style={{ flex: 2.8, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <div style={styles.taskTitleRow}>
+                              <span style={styles.priorityIndicator(p.taskPriority)} />
+                              <span style={styles.taskTitle}>{p.taskTitle}</span>
+                              {p.isChunk && (
+                                <span
+                                  style={{
+                                    fontSize: '10px',
+                                    fontWeight: '700',
+                                    backgroundColor: '#EEF2FF',
+                                    color: '#4338CA',
+                                    border: '1px solid #C7D2FE',
+                                    borderRadius: '4px',
+                                    padding: '1px 6px',
+                                    marginLeft: '4px',
+                                  }}
+                                >
+                                  Session {p.chunkIndex + 1} of {p.totalChunks}
+                                </span>
                               )}
-                              {p.startTime && p.endTime && (
-                                <div style={{ fontSize: '11px', color: '#4F46E5', fontWeight: '600', marginTop: '2px' }}>
-                                  🕒 {p.startTime} – {p.endTime}
-                                </div>
+                              {p.inFocusWindow && (
+                                <span
+                                  style={{
+                                    fontSize: '10px',
+                                    fontWeight: '700',
+                                    backgroundColor: '#FEF3C7',
+                                    color: '#92400E',
+                                    border: '1px solid #FCD34D',
+                                    borderRadius: '4px',
+                                    padding: '1px 6px',
+                                    marginLeft: '4px',
+                                  }}
+                                  title={`Scheduled in ${p.focusWindowLabel || 'Focus Window'}`}
+                                >
+                                  🎯 {p.focusWindowLabel || 'Focus'}
+                                </span>
+                              )}
+                              {p.taskCategory && (
+                                <span style={styles.categoryTag}>{p.taskCategory}</span>
                               )}
                             </div>
-                          ) : (
-                            <span style={{ color: '#9E2A2B', fontStyle: 'italic' }}>Unscheduled</span>
-                          )}
-                        </div>
-
-                        <div style={{ flex: 1.2 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
-                            <span style={styles.effortBadge(p.durationSource)}>
-                              {p.effectiveHours.toFixed(1)}h
-                            </span>
-                            {p.isChunk && typeof p.parentTotalEffort === 'number' && (
-                              <span style={{ fontSize: '10px', color: '#71717A' }} title={`Parent total effort: ${p.parentTotalEffort}h`}>
-                                ({p.parentTotalEffort.toFixed(1)}h total)
-                              </span>
+                            {p.explanation && (
+                              <span style={styles.explanationText}>{p.explanation}</span>
                             )}
-                            {p.appliedRatio !== 1.0 && p.durationSource === 'personalized' && (
-                              <span style={{ fontSize: '10px', color: '#5B44BA', fontWeight: '700' }}>
-                                ({(p.appliedRatio).toFixed(2)}x)
+                            {p.conflicts && p.conflicts.length > 0 && (
+                              <span style={styles.conflictText}>⚠️ {p.conflicts[0]}</span>
+                            )}
+                          </div>
+
+                          <div style={{ flex: 1.2, fontSize: '12px', color: '#71717A' }}>
+                            {p.originalDueDate || '—'}
+                          </div>
+
+                          <div style={{ flex: 1.6, fontSize: '12px', fontWeight: '700' }}>
+                            {p.proposedDate ? (
+                              <div>
+                                {isShifted ? (
+                                  <span style={styles.shiftedDateBadge}>{p.proposedDate}</span>
+                                ) : (
+                                  <span>{p.proposedDate}</span>
+                                )}
+                                {p.startTime && p.endTime && (
+                                  <div style={{ fontSize: '11px', color: '#4F46E5', fontWeight: '600', marginTop: '2px' }}>
+                                    🕒 {p.startTime} – {p.endTime}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span style={{ color: '#9E2A2B', fontStyle: 'italic' }}>Unscheduled</span>
+                            )}
+                          </div>
+
+                          <div style={{ flex: 1.0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                              <span style={styles.effortBadge(p.durationSource)}>
+                                {p.effectiveHours.toFixed(1)}h
                               </span>
+                              {p.isChunk && typeof p.parentTotalEffort === 'number' && (
+                                <span style={{ fontSize: '10px', color: '#71717A' }} title={`Parent total effort: ${p.parentTotalEffort}h`}>
+                                  ({p.parentTotalEffort.toFixed(1)}h total)
+                                </span>
+                              )}
+                              {p.appliedRatio !== 1.0 && p.durationSource === 'personalized' && (
+                                <span style={{ fontSize: '10px', color: '#5B44BA', fontWeight: '700' }}>
+                                  ({(p.appliedRatio).toFixed(2)}x)
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div style={{ flex: 1.0, textAlign: 'right' }}>
+                            <span style={{ ...styles.statusPill, ...statusPillStyle }}>
+                              {statusLabel}
+                            </span>
+                          </div>
+
+                          <div style={{ flex: 0.8, textAlign: 'right' }}>
+                            {p.status !== 'blocked_by_dependency' && p.status !== 'oversized_exceeds_capacity' && (
+                              <button
+                                type="button"
+                                onClick={() => handleStartEdit(p)}
+                                style={styles.editRowBtn}
+                                aria-label={`Adjust date and time for ${p.taskTitle}${p.isChunk ? ` session ${p.chunkIndex + 1}` : ''}`}
+                              >
+                                ✏️ Edit
+                              </button>
                             )}
                           </div>
                         </div>
 
-                        <div style={{ flex: 1.3, textAlign: 'right' }}>
-                          <span style={{ ...styles.statusPill, ...statusPillStyle }}>
-                            {statusLabel}
-                          </span>
-                        </div>
+                        {editingPlacementId === p.placementId && (
+                          <div style={styles.inlineEditPanel} role="region" aria-label={`Edit schedule for ${p.taskTitle}`}>
+                            <div style={styles.inlineEditRow}>
+                              <div style={styles.inlineField}>
+                                <label htmlFor={`edit-date-${p.placementId}`} style={styles.inlineLabel}>
+                                  Date:
+                                </label>
+                                <input
+                                  id={`edit-date-${p.placementId}`}
+                                  type="date"
+                                  value={editDate}
+                                  onChange={(e) => setEditDate(e.target.value)}
+                                  style={styles.inlineInput}
+                                  aria-label="Proposed Date"
+                                />
+                              </div>
+
+                              {enableIntraday && (
+                                <>
+                                  <div style={styles.inlineField}>
+                                    <label htmlFor={`edit-start-${p.placementId}`} style={styles.inlineLabel}>
+                                      Start:
+                                    </label>
+                                    <input
+                                      id={`edit-start-${p.placementId}`}
+                                      type="time"
+                                      value={editStartTime}
+                                      onChange={(e) => setEditStartTime(e.target.value)}
+                                      style={styles.inlineInput}
+                                      aria-label="Session Start Time"
+                                    />
+                                  </div>
+
+                                  <div style={styles.inlineField}>
+                                    <label htmlFor={`edit-end-${p.placementId}`} style={styles.inlineLabel}>
+                                      End:
+                                    </label>
+                                    <input
+                                      id={`edit-end-${p.placementId}`}
+                                      type="time"
+                                      value={editEndTime}
+                                      onChange={(e) => setEditEndTime(e.target.value)}
+                                      style={styles.inlineInput}
+                                      aria-label="Session End Time"
+                                    />
+                                  </div>
+                                </>
+                              )}
+
+                              <div style={styles.inlineBtnRow}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveEdit(p)}
+                                  style={styles.inlineSaveBtn}
+                                  aria-label="Save placement edit"
+                                >
+                                  ✓ Save
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleCancelEdit}
+                                  style={styles.inlineCancelBtn}
+                                  aria-label="Cancel editing"
+                                >
+                                  ✕ Cancel
+                                </button>
+                              </div>
+                            </div>
+
+                            {validationError && (
+                              <div style={styles.inlineErrorBox} role="alert" aria-live="assertive">
+                                ⚠️ <strong>Constraint Issue:</strong> {validationError}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })
@@ -1846,5 +2121,170 @@ const styles = {
     color: '#4B5563',
     padding: '2px 8px',
     borderRadius: '4px',
+  },
+
+  // Phase 6.3: Interactive Proposal Editing Styles
+  draftEditBar: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '8px 28px',
+    backgroundColor: '#FFFDF9',
+    borderBottom: '1px solid rgba(37, 36, 42, 0.08)',
+    flexWrap: 'wrap',
+    gap: '8px',
+  },
+  draftEditLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  draftActiveBadge: {
+    fontSize: '12px',
+    color: '#1E40AF',
+    backgroundColor: '#EFF6FF',
+    border: '1px solid #BFDBFE',
+    padding: '3px 8px',
+    borderRadius: '6px',
+    fontWeight: '600',
+  },
+  draftHint: {
+    fontSize: '12px',
+    color: '#71717A',
+  },
+  draftEditActions: {
+    display: 'flex',
+    gap: '8px',
+  },
+  undoBtn: {
+    backgroundColor: '#FFFFFF',
+    color: '#25242A',
+    border: '1.5px solid #25242A',
+    borderRadius: '6px',
+    padding: '4px 10px',
+    fontSize: '11px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'all 0.15s ease',
+  },
+  undoBtnDisabled: {
+    opacity: 0.35,
+    cursor: 'not-allowed',
+    borderColor: '#D4D4D8',
+    color: '#A1A1AA',
+  },
+  revertBtn: {
+    backgroundColor: '#FFFFFF',
+    color: '#9E2A2B',
+    border: '1.5px solid #9E2A2B',
+    borderRadius: '6px',
+    padding: '4px 10px',
+    fontSize: '11px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'all 0.15s ease',
+  },
+  revertBtnDisabled: {
+    opacity: 0.35,
+    cursor: 'not-allowed',
+    borderColor: '#D4D4D8',
+    color: '#A1A1AA',
+  },
+  feedbackAlert: {
+    margin: '8px 28px 0',
+    padding: '6px 14px',
+    backgroundColor: '#ECFDF5',
+    border: '1px solid #A7F3D0',
+    borderRadius: '6px',
+    fontSize: '12px',
+    color: '#065F46',
+    fontWeight: '600',
+  },
+  editRowBtn: {
+    backgroundColor: '#FFFDF9',
+    color: '#25242A',
+    border: '1.5px solid rgba(37, 36, 42, 0.2)',
+    borderRadius: '6px',
+    padding: '3px 8px',
+    fontSize: '11px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'all 0.15s ease',
+  },
+  inlineEditPanel: {
+    marginTop: '6px',
+    marginBottom: '6px',
+    padding: '10px 14px',
+    backgroundColor: '#FFFDF5',
+    border: '1.5px solid #F59E0B',
+    borderRadius: '8px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    width: '100%',
+    boxSizing: 'border-box',
+  },
+  inlineEditRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    flexWrap: 'wrap',
+  },
+  inlineField: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+  },
+  inlineLabel: {
+    fontSize: '12px',
+    fontWeight: '700',
+    color: '#25242A',
+  },
+  inlineInput: {
+    backgroundColor: '#FFFFFF',
+    border: '1.5px solid #25242A',
+    borderRadius: '6px',
+    padding: '4px 8px',
+    fontSize: '12px',
+    fontWeight: '600',
+    fontFamily: 'inherit',
+  },
+  inlineBtnRow: {
+    display: 'flex',
+    gap: '6px',
+    marginLeft: 'auto',
+  },
+  inlineSaveBtn: {
+    backgroundColor: '#D4F0E2',
+    color: '#1B5E3C',
+    border: '1.5px solid #27754E',
+    borderRadius: '6px',
+    padding: '4px 10px',
+    fontSize: '12px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
+  inlineCancelBtn: {
+    backgroundColor: '#F4F4F5',
+    color: '#52525B',
+    border: '1.5px solid #D4D4D8',
+    borderRadius: '6px',
+    padding: '4px 8px',
+    fontSize: '12px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
+  inlineErrorBox: {
+    padding: '6px 10px',
+    backgroundColor: '#FFE5E0',
+    border: '1px solid #FF8F82',
+    borderRadius: '6px',
+    fontSize: '11px',
+    color: '#9E2A2B',
   },
 };
