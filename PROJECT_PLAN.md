@@ -20,7 +20,7 @@ This document tracks the phased evolution of VoxPlan from a static task tracker 
 | **Phase 4, Stage 5** | Local Schedule Feedback & Outcome Tracking | **COMPLETED** | Versioned privacy-preserving telemetry schema (`SCHEMA_VERSION = 2`) recording proposal generation, acceptance, and discard actions; single-action deduplication; subsequent manual override detection (postponed vs advanced shifts); unaltered completion outcome matching; pure feedback analytics module (`scheduleFeedback.js`); modal feedback tab with explicit denominators and insufficient-data guards (< 3 observations); strict cautious learning boundary; and 110 automated tests across 27 suites. |
 | **Phase 4, Stage 6** | Schedule Feedback Integrity & Attribution Audit | **COMPLETED** | Stable session-scoped proposal identities; durable deduplication surviving page reloads without backend dependency (hydrating index from cached IndexedDB events on `telemetry.init()`); multi-proposal interval-based outcome attribution (`[acceptedAt, supersededAt)`); task lifecycle hardening (excluding reopened incomplete tasks & active backlog tasks); isolation of conflicting proposal decisions; standardized unique task denominators; privacy-preserving observability diagnostics; and 115 automated tests across 30 suites. |
 | **Phase 5** | Conversational Planning, Multi-Turn Dialog & Voice Experience | **IN PROGRESS (Stages 5.1 & 5.2 Completed)** | Multi-turn planning state machine, clarification dialog, natural language batch rescheduling & negotiation, conversational schedule debriefing, accessible Web Speech voice synthesis and typed fallback symmetry. |
-| **Phase 6** | Calendar-Aware Time-Blocking & Multi-Day Workload Modeling | **IN PROGRESS (Stages 6.1, 6.2, 6.3 Completed)** | Multi-day task chunking for oversized work, calendar focus time-blocking, meeting buffer constraints, interactive proposal canvas editing, and local RFC 5545 iCalendar (.ics) export (4 stages). |
+| **Phase 6** | Calendar-Aware Time-Blocking & Multi-Day Workload Modeling | **COMPLETED** | Multi-day task chunking for oversized work, calendar focus time-blocking, meeting buffer constraints, interactive proposal canvas editing, and local RFC 5545 iCalendar (.ics) export (4 stages). |
 | **Phase 7** | Evidence-Gated Schedule Adaptation & Preference Learning | **PLANNED** | Longitudinal feedback maturity gate (20+ decisions, 15+ outcomes), empirical friction analysis, bounded heuristic weight tuning ($\pm 20\%$) with Bayesian shrinkage, simulation sandbox, and one-click rollback (4 stages). |
 | **Phase 8** | Production Hardening, Accessibility, Security & Release Readiness | **PLANNED** | Full WCAG 2.1 AA accessibility compliance, keyboard navigation, schema-versioned data lifecycle & encrypted backup, bundle code-splitting, PWA offline resilience, and CI/CD release verification (4 stages). |
 
@@ -2048,23 +2048,78 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
   - Push status: Verified pushed to `origin main` at `https://github.com/kanwal-vyas/VoxPlan.git`.
 - **Status**: **COMPLETED**.
 - **Remaining Limitations & Deferred Work**:
-  - RFC 5545 iCalendar (`.ics`) standard export deferred to Stage 6.4.
+  - None within Phase 6. All four stages (6.1, 6.2, 6.3, 6.4) are fully implemented and verified. Phase 6 is complete.
 
-#### Stage 6.4: Standard Calendar Export & Local Synchronization
-- **Scope & Expected Deliverables**:
-  - RFC 5545 compliant iCalendar (`.ics`) file generator (`src/scheduler/icalExporter.js`).
-  - One-click export button in the schedule proposal modal generating an `.ics` file containing all scheduled focus blocks with UIDs, start/end timestamps, task titles, and categories.
-  - Clean local download flow with zero cloud calendar permissions or OAuth dependencies.
-- **Dependencies**: Stage 6.2.
-- **Acceptance Criteria**:
-  - Generated `.ics` files pass strict RFC 5545 format linters.
-  - Exported files cleanly import into Apple Calendar, Google Calendar, and Microsoft Outlook with correct start/end times and timezones.
-- **Verification**:
-  - Automated validation tests checking iCalendar line folding, UTC timestamp formatting (`Z`), escape sequences, and multi-day segment handling (`tests/ical_exporter.test.js`).
-- **Phase 6 Objective Exit Criteria**:
-  - Multi-day tasks schedule and display seamlessly across horizon days.
-  - Zero time-slot collisions in presence of blackout windows.
-  - RFC 5545 `.ics` export imports cleanly without errors across major calendar software.
+#### Stage 6.4: Standard Calendar Export & Local Synchronization (COMPLETED)
+- **Objective & Scope**:
+  - Provide a user-controlled, local-first calendar export engine generating standards-compliant RFC 5545 iCalendar (`.ics`) snapshots for import into compatible calendar clients (Google Calendar, Apple Calendar, Microsoft Outlook).
+  - Explicitly local-first: no two-way calendar sync, no external cloud calendar accounts, no OAuth, no background remote daemons, and zero network transmission.
+- **Authoritative Export Source & Data Flow**:
+  - The export source is strictly the **accepted schedule** (`acceptedSchedule` in `App.jsx`, persisted in `localStorage` under `voxplan_accepted_schedule`), stamped with `acceptedAt`.
+  - Unaccepted generated proposals and active Phase 6.3 editing drafts are strictly quarantined and never exported as accepted schedules.
+  - When no schedule has been accepted, export actions in the modal and command bar explain the requirement and remain safely disabled.
+  - Export is a pure snapshot: it does not mutate tasks, proposal drafts, feedback records, or telemetry.
+- **Dedicated Deterministic ICS Generator (`src/scheduler/icalExporter.js`)**:
+  - Pure domain module independent of React and browser DOM APIs with zero input mutations.
+  - Standard calendar container: `BEGIN:VCALENDAR`, `VERSION:2.0`, `PRODID:-//VoxPlan//VoxPlan Schedule//EN`, `CALSCALE:GREGORIAN`, `BEGIN:VEVENT` ... `END:VEVENT`, and `END:VCALENDAR`.
+  - Standard CRLF (`\r\n`) line terminators throughout.
+  - Session extraction (`extractExportableSessions`) maps atomic and chunked scheduled placements while strictly excluding unscheduled, blocked, or oversized placements.
+- **Multi-Day Chunking & Session Event Representation**:
+  - Each scheduled task chunk / session is serialized as its own distinct calendar event (`VEVENT`).
+  - No duplicate parent events: multi-day tasks never emit an artificial full-duration parent event that duplicates chunk sessions.
+  - Partial allocations are preserved: only valid scheduled segments are exported.
+  - Distinct sessions with identical task titles remain distinct.
+  - Validates `DTEND > DTSTART`; tasks lacking valid session timings are omitted with descriptive user feedback.
+- **Dates, Time Zones & Daylight Saving Time**:
+  - Schedules store local calendar dates (`proposedDate: "YYYY-MM-DD"`) and local wall-clock times (`startTime: "HH:MM"`, `endTime: "HH:MM"`).
+  - Serialized using RFC 5545 `FORM #1` floating local date-time format (`YYYYMMDDTHHMMSS`) without trailing `Z`, preventing 1-day or multi-hour shifts across UTC conversion boundaries.
+  - Optional `tzid` parameter supports explicit time zone tagging (`DTSTART;TZID=...:YYYYMMDDTHHMMSS`) when specified by the user.
+  - `DTSTAMP` is serialized as UTC timestamp (`YYYYMMDDTHHMMSSZ`) reflecting generation time.
+- **RFC 5545 Escaping & Octet-Based Line Folding**:
+  - Text property escaping (`escapeIcsText`) escapes backslashes (`\\`), semicolons (`\;`), commas (`\,`), and newlines (`\n`), preventing property and component injection from arbitrary task titles or descriptions.
+  - Octet-based line folding (`foldIcsLine`): strictly enforces the RFC 5545 75-octet (byte) limit using `TextEncoder` on Unicode code points without splitting multibyte UTF-8 sequences (e.g. Japanese Kanji, emojis). Continuation lines begin with a single space (` `).
+  - Unfolding helper (`unfoldIcsText`) validates exact round-trip fidelity.
+- **Stable Event UIDs**:
+  - Deterministic UIDs derived from stable placement IDs (`placementId` or `${cleanId}@voxplan.local`), ensuring identical UIDs across repeated exports of the same schedule snapshot.
+  - Sibling chunks have distinct UIDs (e.g., `chunk_task1_chunk_1@voxplan.local`).
+- **User Interface Integration**:
+  - Dedicated 4th tab in `AdaptiveScheduleModal.jsx`: `📅 Export Calendar (.ics)` with schedule metadata, session preview table, timezone selector, snapshot notice, and download button.
+  - Quick export button in TAB 1 footer when an accepted schedule exists.
+  - Natural language command execution in `CommandBar.jsx` (`"export calendar"`, `"export schedule"`).
+  - Browser Blob generation (`text/calendar;charset=utf-8`) with automatic `URL.revokeObjectURL` cleanup.
+  - Meaningful feedback on exported session counts and clear explanations for unaccepted / empty states.
+- **Acceptance Criteria & Phase 6 Exit Criteria**:
+  - [x] RFC 5545 compliant `.ics` calendar generation without external dependencies.
+  - [x] Export restricted strictly to accepted schedule snapshots.
+  - [x] Multi-day chunk sessions exported as individual events with zero duplicate parent events.
+  - [x] Floating local date-time formatting prevents UTC drift and timezone offset errors.
+  - [x] Strict text escaping protects against calendar injection attacks.
+  - [x] UTF-8 octet-based line folding respects the 75-byte limit without breaking multibyte characters.
+  - [x] Stable, deterministic UIDs preserve event identity across repeated exports.
+  - [x] Zero state mutations or telemetry side effects caused by exporting.
+  - [x] Clean browser file download with memory cleanup.
+  - [x] All Phase 6 exit criteria met: multi-day task chunking, intraday focus windows, interactive proposal editing, and standard calendar export.
+- **Verification & Test Results**:
+  - Unit & Integration Test Suite: **407 passed across 78 suites** (`npm test`), including 21 dedicated tests in `tests/ical_exporter.test.js` covering zero-event calendars, single session, multi-day chunked tasks with no duplicate parent, partial allocations, blocked/oversized task exclusion, identical task titles, DTEND > DTSTART, local floating time vs UTC drift, optional TZID, missing timing omission, stable UIDs across repeated exports, escaping, injection protection, octet folding with Japanese/emojis, CRLF endings, adaptive scheduler integration, and localStorage persistence.
+  - Linter: **0 errors** across all 54 files (`npm run lint` / `oxlint`).
+  - Production Build: **Vite build completed successfully** in 372ms (`npm run build`).
+  - Backend ML Tests: **27 passed** (`python -m pytest backend/tests/ -q`).
+  - Browser Verification: End-to-end browser subagent verified modal export tab, empty state when no schedule is accepted, acceptance flow, accepted schedule preview, timezone toggle, download trigger, and command bar integration.
+- **Files Added / Modified**:
+  - `src/scheduler/icalExporter.js` (NEW): RFC 5545 calendar export generator, text escaping, octet folding, session extraction, and local download utilities.
+  - `tests/ical_exporter.test.js` (NEW): 21 automated unit and integration tests for RFC 5545 compliance, date/time safety, and chunk handling.
+  - `src/App.jsx`: Added `acceptedSchedule` state, persistence to `localStorage`, export handlers, and command-bar calendar export integration.
+  - `src/components/AdaptiveScheduleModal.jsx`: Added 4th Tab `📅 Export Calendar (.ics)`, quick export button in Tab 1, snapshot notice, sessions preview table, and empty/unaccepted states.
+  - `PROJECT_PLAN.md`: Updated authoritative project plan with Stage 6.4 completion and Phase 6 milestone sign-off.
+- **Git Commits & Push Verification**:
+  - Implementation Commit: `93d9d3f` (`feat(phase-6): add RFC 5545 calendar export`)
+  - Documentation Commit: `docs(phase-6): record Phase 6.4 completion and commit hash`
+  - Push status: Verified pushed to `origin main` at `https://github.com/kanwal-vyas/VoxPlan.git`.
+- **Status**: **COMPLETED**.
+- **Known Limitations & Next Roadmap Stage**:
+  - Calendar export is a local snapshot; external calendar apps will not auto-sync subsequent VoxPlan changes without re-exporting and re-importing.
+  - Floating local time assumes user remains in their local timezone for schedule execution unless an explicit TZID is selected.
+  - Phase 6 is 100% complete. Phase 7 (Evidence-Gated Schedule Adaptation & Preference Learning) remains planned as the next milestone.
 
 ---
 
