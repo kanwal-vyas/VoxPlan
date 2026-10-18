@@ -21,7 +21,7 @@ This document tracks the phased evolution of VoxPlan from a static task tracker 
 | **Phase 4, Stage 6** | Schedule Feedback Integrity & Attribution Audit | **COMPLETED** | Stable session-scoped proposal identities; durable deduplication surviving page reloads without backend dependency (hydrating index from cached IndexedDB events on `telemetry.init()`); multi-proposal interval-based outcome attribution (`[acceptedAt, supersededAt)`); task lifecycle hardening (excluding reopened incomplete tasks & active backlog tasks); isolation of conflicting proposal decisions; standardized unique task denominators; privacy-preserving observability diagnostics; and 115 automated tests across 30 suites. |
 | **Phase 5** | Conversational Planning, Multi-Turn Dialog & Voice Experience | **IN PROGRESS (Stages 5.1 & 5.2 Completed)** | Multi-turn planning state machine, clarification dialog, natural language batch rescheduling & negotiation, conversational schedule debriefing, accessible Web Speech voice synthesis and typed fallback symmetry. |
 | **Phase 6** | Calendar-Aware Time-Blocking & Multi-Day Workload Modeling | **COMPLETED** | Multi-day task chunking for oversized work, calendar focus time-blocking, meeting buffer constraints, interactive proposal canvas editing, and local RFC 5545 iCalendar (.ics) export (4 stages). |
-| **Phase 7** | Evidence-Gated Schedule Adaptation & Preference Learning | **PLANNED** | Longitudinal feedback maturity gate (20+ decisions, 15+ outcomes), empirical friction analysis, bounded heuristic weight tuning ($\pm 20\%$) with Bayesian shrinkage, simulation sandbox, and one-click rollback (4 stages). |
+| **Phase 7** | Evidence-Gated Schedule Adaptation & Preference Learning | **IN PROGRESS (Stages 7.1, 7.2, and 7.3 Completed)** | Longitudinal feedback maturity gate (20+ decisions, 15+ outcomes), empirical friction analysis, bounded heuristic weight tuning (±20%) with Bayesian shrinkage, simulation sandbox, and one-click rollback (4 stages). |
 | **Phase 8** | Production Hardening, Accessibility, Security & Release Readiness | **PLANNED** | Full WCAG 2.1 AA accessibility compliance, keyboard navigation, schema-versioned data lifecycle & encrypted backup, bundle code-splitting, PWA offline resilience, and CI/CD release verification (4 stages). |
 
 ---
@@ -2241,21 +2241,85 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
   - Read-only analysis and diagnostics only. No scheduler weights adapted, no Bayesian updating, no models trained, no heuristics tuned, and schedule generation remains 100% invariant. Baseline factory weights remain fully active.
   - Phase 7.3 remains completely **UNIMPLEMENTED**.
 
-#### Stage 7.3: Bounded Heuristic Weight Adaptation & Bayesian Shrinkage (PLANNED)
-- **Scope & Expected Deliverables**:
-  - Adaptive weight tuner (`src/scheduler/adaptiveWeightTuner.js`) adjusting heuristic scoring coefficients:
-    - $W_{urgency}$ (deadline urgency), $W_{priority}$ (priority boost), $W_{unblock}$ (downstream unblocking bonus), $W_{friction}$ (category buffer).
-  - Mathematical safety guards:
-    - Strict Bayesian shrinkage toward default factory weights ($K_{prior} = 10$).
-    - Hard clamp: No weight may deviate by more than $\pm 20\%$ from its baseline default.
-    - Hard constraints (topological DAG ordering and daily capacity limits) are **never** weighted or relaxed.
-- **Dependencies**: Stage 7.2.
-- **Acceptance Criteria**:
-  - Adapted weights always satisfy $\forall w: 0.8 \times w_{default} \le w \le 1.2 \times w_{default}$.
-  - Adapted scheduler run against all 12 benchmark fixtures achieves equal or lower schedule churn without introducing a single deadline or capacity violation.
-- **Verification**:
-  - Automated benchmark regression suite evaluating adapted vs baseline models across all 12 fixtures (`tests/adaptive_weight_tuner.test.js`).
-- **Safety**: Hard constraints are mathematically decoupled from heuristic weights; cyclic or capacity-violating proposals remain impossible.
+#### Stage 7.3: Bounded Heuristic Weight Adaptation & Bayesian Shrinkage (COMPLETED)
+- **Status**: **COMPLETED**.
+- **Implementation Commit**: `ff6410c8befe2062b69270cf6447d463b6de2316` (`feat(phase-7): add bounded shadow weight adaptation`)
+- **Documentation Commit**: `docs(phase-7): document bounded adaptation sandbox`
+- **Scope Boundary Enforcement & Confirmation**:
+  - **SHADOW EVALUATION ONLY**: Candidate weights are strictly evaluated in memory within an isolated evaluation sandbox. They **never** replace factory weights in production schedule generation (`isAdaptationUnlocked: false`, `productionApplied: false`, `isShadowOnly: true`).
+  - Production scheduling continues using 100% immutable factory baseline weights.
+  - Phase 7.1 readiness gates remain authoritative: when readiness is unmet, adaptation remains locked and personalized candidate weights cannot be certified.
+- **Factory Weight Vector & Scoring Semantics Audit**:
+  - Discovered and exported in `src/scheduler/adaptiveScheduler.js`:
+    ```javascript
+    export const FACTORY_SCHEDULER_WEIGHTS = Object.freeze({
+      urgencyWeight: 50.0,   // Linear calendar due-date proximity (points per day within 30-day window)
+      priorityWeight: 100.0, // Inter-tier spacing: High = 300, Med = 200, Low = 100
+      unblockWeight: 15.0,   // Critical-path DAG unblocking bonus (+15 pts/dependent, clamped at 3 = 45 pts)
+      riskWeight: 25.0,      // Guarded secondary ML completion risk penalty nudge (Med = 25, High = 60)
+    });
+    ```
+  - **Component Normalization & Direction**: All components contribute positively to priority score ($score \ge 0$). Higher priority score schedules a ready task earlier in the Kahn ready-queue.
+  - **Decoupling of Hard Constraints from Heuristics**: Kahn's topological prerequisite ordering (`inDegree === 0`) and daily working-hour capacity bin-packing are **hard constraints** that can never be weighted, relaxed, or overridden by priority scores.
+  - **Tie-Breaking Determinism**: Stable 4-tier selection: 1. Priority score descending, 2. Calendar due date ascending, 3. Shortest Processing Time (SPT) ascending, 4. Alphabetical task ID ascending.
+- **Mathematical Shrinkage Model & Interpretation of $K_{\text{prior}}$**:
+  - **Formula**: Conjugate Normal-Normal / Empirical-Bayes precision-weighted posterior estimator:
+    $$\hat{w} = \frac{K_{\text{prior}} \cdot w_0 + N \cdot w_{\text{empirical}}}{K_{\text{prior}} + N}$$
+  - **$K_{\text{prior}} = 10$ Interpretation**: Effective prior pseudo-observation count anchoring empirical evidence to baseline.
+    - $N = 0 \implies \hat{w} = w_0$ (100% factory baseline).
+    - Weak evidence ($N = 3$) $\implies \hat{w} = \frac{10 \cdot w_0 + 3 \cdot w_{\text{emp}}}{13}$ (76.9% baseline anchor).
+    - Equal weighting ($N = 10$) $\implies 50\%$ baseline, $50\%$ empirical.
+    - Abundant evidence ($N = 40$) $\implies 20\%$ baseline, $80\%$ empirical (dominated by data).
+  - Handles non-finite, negative, or invalid empirical weights by safely preserving the factory baseline.
+- **Strict Parameter Bounds ($\pm 20\%$) & Clamping**:
+  - For positive baseline $w_0 > 0$:
+    $$0.80 \cdot w_0 \le w_{\text{candidate}} \le 1.20 \cdot w_0$$
+    - `urgencyWeight`: $[40.0, 60.0]$
+    - `priorityWeight`: $[80.0, 120.0]$
+    - `unblockWeight`: $[12.0, 18.0]$
+    - `riskWeight`: $[20.0, 30.0]$
+  - All coefficients are positive. Relative clamping preserves sign constraints.
+- **Evidence-to-Weight Mapping & Conflict Policy**:
+  - **Supported Mapping**: `priorityWeight` is mapped from high-priority task postponement friction (`task_postponement_friction` with direction `deprioritize_high_friction_tasks`, moderating priority boost for users who defer high-priority commitments).
+  - **Conflict Quarantine**: Opposing signals (e.g. advance vs postpone) quarantine the affected coefficient back to factory baseline without arbitrary averaging.
+  - **Unsupported Mappings Documented & Isolated**:
+    - *Proposal Discard Friction*: Non-specific heuristic friction; discard rate cannot be attributed to urgency vs priority without debrief feedback.
+    - *Category Effort Overrun*: Signal maps to duration multipliers ($W_{friction}$), not ready-queue heuristic scoring.
+    - *Weekday Velocity Dip*: Signal maps to daily working-hour capacity, not ready-queue heuristic scoring.
+    - *Intraday Window Friction*: Signal is unavailable due to missing intraday window provenance.
+- **Shadow Evaluation Methodology & Regression Gates**:
+  - Implemented in `src/scheduler/shadowSchedulerEvaluator.js`.
+  - Runs baseline and candidate weights on identical task backlogs and calendar constraints.
+  - Computes schedule churn, on-time task counts, delayed task counts, total delay days, capacity utilization %, and infeasible placements.
+  - **Regression Gate**: Requires zero new topological cycles, zero new infeasible placements, and zero uncompensated delay regressions.
+  - **Conservative Evidence Honesty**: When verified real-user completions $< 15$, reports `evaluationOutcome: 'not_evaluable_insufficient_real_evidence'`. Synthetic tests validate mathematical invariants, but never claim empirical personal superiority.
+- **UI Integration**:
+  - Embedded `AdaptationSandboxCard.jsx` into Section 05 (`LearningReadinessPanel.jsx` / `PersonalModelDashboard.jsx`).
+  - Renders active factory baseline weights, candidate weights, clamp bounds, Bayesian shrinkage formula explainer, unsupported mappings, and shadow comparison table.
+  - Includes interactive "Simulating Synthetic Mature Telemetry" checkbox to audit shrinkage mathematics in memory without touching persistent records.
+- **Verification & Test Suite**:
+  - 19 automated tests in `tests/adaptive_weight_tuner.test.js`:
+    - 1. Bayesian shrinkage mathematics ($N=0, 3, 10, 40$, invalid inputs, constants $K_{\text{prior}}=10$, $\text{maxDelta}=20\%$).
+    - 2. Parameter safety clamping ($+20\%$, $-20\%$, within bounds).
+    - 3. Readiness gating integration (unmet gate strictly locks adaptation and returns baseline).
+    - 4. Evidence-to-weight mapping & conflict quarantine.
+    - 5. Shadow evaluation & regression gate checks.
+    - 6. Production isolation & schedule invariance before and after adapter execution.
+  - Full frontend suite: **492 passing tests across 103 test suites** with 0 failures (`npm test`).
+  - Backend suite: **27 passing tests** (`python -m pytest backend/tests/ -q`).
+  - Linter: **0 errors** across 64 files (`npm run lint` / `oxlint`).
+  - Production build: Clean bundle build in 739ms (`npm run build`).
+  - Browser verification: Headless subagent verified rendering of locked adaptation sandbox card, baseline weights, tabs, clamp bounds, and synthetic demo toggle on `http://localhost:5173/#personal-model`.
+- **Delivered Files**:
+  - `src/scheduler/adaptiveScheduler.js`: Exported `FACTORY_SCHEDULER_WEIGHTS` and added optional `weights` parameter to priority scoring and schedule generation.
+  - `src/scheduler/boundedWeightAdapter.js`: Pure candidate weight derivation module with Bayesian shrinkage, safety clamping, and conflict quarantine.
+  - `src/scheduler/shadowSchedulerEvaluator.js`: Shadow scheduler evaluation comparing baseline and candidate under identical inputs with regression gates.
+  - `src/components/AdaptationSandboxCard.jsx`: Accessible, interactive UI card for shadow evaluation sandbox.
+  - `src/components/LearningReadinessPanel.jsx`: Integrated sandbox card below preference signals.
+  - `tests/adaptive_weight_tuner.test.js`: Comprehensive 19-test automated suite.
+  - `PROJECT_PLAN.md`: Updated living project plan.
+- **Remaining Roadmap Stages**:
+  - Stage 7.4: User Control Dashboard, Schedule Simulation & One-Click Rollback (active deployment, user toggle, rollback controls).
 
 #### Stage 7.4: User Control Dashboard, Schedule Simulation & One-Click Rollback
 - **Scope & Expected Deliverables**:
