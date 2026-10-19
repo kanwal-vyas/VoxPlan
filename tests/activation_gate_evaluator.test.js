@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   evaluateActivationGate,
   ACTIVATION_GATE_OUTCOMES,
+  THRESHOLD_STATUS,
   evaluateSinglePairedObservation,
 } from '../src/scheduler/activationGateEvaluator.js';
 import { computeScheduleObjectiveScore } from '../src/scheduler/rankingEvaluator.js';
@@ -36,8 +37,14 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
 
   // Helper to create synthetic or realistic paired observations across clusters
   function createPairedObservations({
-    count = 18,
-    clusters = ['scenario_sprint_alpha', 'scenario_sprint_beta', 'scenario_sprint_gamma'],
+    count = 20,
+    clusters = [
+      'scenario_sprint_alpha',
+      'scenario_sprint_beta',
+      'scenario_sprint_gamma',
+      'scenario_sprint_delta',
+      'scenario_sprint_epsilon',
+    ],
     candScoreBase = 85.0,
     baseScoreBase = 80.0,
     variance = 1.0,
@@ -382,13 +389,13 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
     });
 
     it('2.4 returns NOT_SUPERIOR when clustered uncertainty interval lower bound crosses zero', () => {
-      // Pairs with high variance where delta is sometimes negative, pulling CI lower bound <= 0
+      // Pairs across 5 clusters with high variance where delta is sometimes negative, pulling CI lower bound <= 0
       const highVariancePairs = [];
-      const clusters = ['c1', 'c2', 'c3', 'c4'];
-      for (let i = 0; i < 20; i++) {
-        const cluster = clusters[i % 4];
-        // cluster c4 has negative deltas
-        const delta = cluster === 'c4' ? -5.0 : 3.0;
+      const clusters = ['c1', 'c2', 'c3', 'c4', 'c5'];
+      for (let i = 0; i < 25; i++) {
+        const cluster = clusters[i % 5];
+        // cluster c5 has negative deltas
+        const delta = cluster === 'c5' ? -7.0 : 3.0;
         highVariancePairs.push({
           observationId: `var_${i}`,
           context: { scenario_key: cluster },
@@ -567,10 +574,10 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
 
   describe('5. Full Eligibility & Production Isolation', () => {
     it('5.1 grants ELIGIBLE_FOR_SUPERVISED_REVIEW when all gates pass with significant positive delta', () => {
-      // 24 pairs across 4 clusters, candidate consistently superior (+4.0 pts)
+      // 25 pairs across 5 clusters, candidate consistently superior (+4.0 pts)
       const pairs = createPairedObservations({
-        count: 24,
-        clusters: ['cluster_a', 'cluster_b', 'cluster_c', 'cluster_d'],
+        count: 25,
+        clusters: ['cluster_a', 'cluster_b', 'cluster_c', 'cluster_d', 'cluster_e'],
         candScoreBase: 88.0,
         baseScoreBase: 84.0,
         variance: 0.2,
@@ -762,12 +769,12 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
 
     // Scenario 7: Candidate with a positive point estimate but uncertainty crossing zero
     it('F.7 returns NOT_SUPERIOR when point estimate is positive but 95% CI lower bound crosses zero', () => {
-      // 24 pairs, mean delta ~ +1.5, but high inter-cluster variance pulling lower bound <= 0
+      // 25 pairs across 5 clusters, mean delta ~ +1.5, but high inter-cluster variance pulling lower bound <= 0
       const pairs = [];
-      const clusters = ['cl_a', 'cl_b', 'cl_c', 'cl_d'];
-      for (let i = 0; i < 24; i++) {
-        const cl = clusters[i % 4];
-        const delta = cl === 'cl_d' ? -4.0 : 3.0; // Cluster cl_d regresses
+      const clusters = ['cl_a', 'cl_b', 'cl_c', 'cl_d', 'cl_e'];
+      for (let i = 0; i < 25; i++) {
+        const cl = clusters[i % 5];
+        const delta = cl === 'cl_e' ? -6.0 : 3.0; // Cluster cl_e regresses
         pairs.push({
           observationId: `p_ci_zero_${i}`,
           context: { scenario_key: cl },
@@ -823,7 +830,7 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
     });
 
     // Scenario 10: Candidate with large apparent effect but small clusters (M < 5 flagged)
-    it('F.10 flags small cluster warning when 3 <= M < 5 clusters are used', () => {
+    it('F.10 flags small cluster warning and yields INSUFFICIENT_EVIDENCE when 3 <= M < 5 clusters are used', () => {
       const pairs = createPairedObservations({
         count: 21,
         clusters: ['cl_1', 'cl_2', 'cl_3'], // M = 3
@@ -837,7 +844,10 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
         pairedObservations: pairs,
         minMeaningfulDelta: 1.0,
       });
+      assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
       assert.equal(res.uncertainty.isSmallClusterSample, true);
+      assert.equal(res.uncertainty.isExploratoryOnly, true);
+      assert.equal(res.uncertainty.isDecisionReady, false);
       assert.equal(res.uncertainty.uniqueMultisetsCount, 10);
       assert.ok(res.uncertainty.disclaimer.includes('Small cluster count'));
     });
@@ -1009,6 +1019,392 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
       const score = computeScheduleObjectiveScore(overflowSchedule);
       // onTimeRate clamped to 1.0 (100 pts), utilFraction clamped to 1.0 (+10 pts), churn clamped to 1.0 (-20 pts) => 90 pts
       assert.equal(score, 90.0);
+    });
+  });
+
+  describe('7. Phase 7.4 Stage 4A.2: Minimum-Evidence Policy & Statistical Gate Hardening', () => {
+    // G.1: Rejects candidate with N < 15 paired observations as INSUFFICIENT_EVIDENCE
+    it('G.1 rejects candidate with N < 15 paired observations as INSUFFICIENT_EVIDENCE even if clusters >= 5', () => {
+      const pairs = createPairedObservations({
+        count: 14,
+        clusters: ['c1', 'c2', 'c3', 'c4', 'c5'],
+        candScoreBase: 90,
+        baseScoreBase: 80,
+      });
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: pairs,
+      });
+      assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.equal(res.evidenceAssessment.eligibleObservationsCount, 14);
+      assert.equal(res.evidenceAssessment.hasSufficientPairs, false);
+      assert.equal(res.evidencePolicy.evaluationEvidencePassed, false);
+      assert.ok(res.reasons.some((r) => r.includes('below minimum required (15)')));
+    });
+
+    // G.2: Rejects candidate with M = 3 clusters as INSUFFICIENT_EVIDENCE even when delta > epsilon and bootstrap CI is strictly positive
+    it('G.2 rejects candidate with M = 3 clusters as INSUFFICIENT_EVIDENCE despite large delta and positive CI', () => {
+      const pairs = createPairedObservations({
+        count: 24,
+        clusters: ['c1', 'c2', 'c3'],
+        candScoreBase: 92,
+        baseScoreBase: 80, // delta ~ +12.0
+      });
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: pairs,
+        minMeaningfulDelta: 1.0,
+      });
+      assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.equal(res.evidenceAssessment.distinctClustersCount, 3);
+      assert.equal(res.evidenceAssessment.hasSufficientClusters, false);
+      assert.equal(res.evidencePolicy.evaluationEvidencePassed, false);
+      assert.equal(res.uncertainty.isDecisionReady, false);
+      assert.equal(res.uncertainty.isExploratoryOnly, true);
+      assert.equal(res.uncertainty.isSmallClusterSample, true);
+    });
+
+    // G.3: Rejects candidate with M = 4 clusters as INSUFFICIENT_EVIDENCE even when all 4 clusters show positive deltas
+    it('G.3 rejects candidate with M = 4 clusters as INSUFFICIENT_EVIDENCE even when all clusters show positive improvement', () => {
+      const pairs = createPairedObservations({
+        count: 24,
+        clusters: ['c1', 'c2', 'c3', 'c4'],
+        candScoreBase: 88,
+        baseScoreBase: 80,
+      });
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: pairs,
+        minMeaningfulDelta: 1.0,
+      });
+      assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.equal(res.evidenceAssessment.distinctClustersCount, 4);
+      assert.equal(res.evidenceAssessment.hasSufficientClusters, false);
+      assert.equal(res.evidencePolicy.evaluationEvidencePassed, false);
+      assert.equal(res.uncertainty.isDecisionReady, false);
+      assert.equal(res.uncertainty.isExploratoryOnly, true);
+      assert.ok(res.reasons.some((r) => r.includes('below decision eligibility minimum')));
+    });
+
+    // G.4: Rejects candidate when cross-cluster backlog leakage is present
+    it('G.4 rejects candidate when cross-cluster backlog leakage is present as INSUFFICIENT_EVIDENCE', () => {
+      const pairs = createPairedObservations({
+        count: 20,
+        clusters: ['c1', 'c2', 'c3', 'c4', 'c5'],
+      });
+      // Inject identical taskSetId across c1 and c2
+      pairs[0].taskSetId = 'shared_project_leakage';
+      pairs[1].taskSetId = 'shared_project_leakage';
+      pairs[0].context.scenario_key = 'c1';
+      pairs[1].context.scenario_key = 'c2';
+
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: pairs,
+      });
+      assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.equal(res.evidenceAssessment.crossClusterLeakageDetected, true);
+      assert.equal(res.evidencePolicy.evaluationEvidencePassed, false);
+      assert.ok(res.reasons.some((r) => r.includes('Cross-cluster backlog leakage detected')));
+    });
+
+    // G.5: Allows exploratory bootstrap simulation when 3 <= M < 5
+    it('G.5 allows exploratory bootstrap simulation when 3 <= M < 5, setting isExploratoryOnly=true and isDecisionReady=false', () => {
+      const pairs = createPairedObservations({
+        count: 21,
+        clusters: ['c1', 'c2', 'c3'],
+        candScoreBase: 86,
+        baseScoreBase: 80,
+      });
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: pairs,
+      });
+      assert.equal(res.uncertainty.canEstimateUncertainty, true);
+      assert.equal(res.uncertainty.isExploratoryOnly, true);
+      assert.equal(res.uncertainty.isDecisionReady, false);
+      assert.equal(res.uncertainty.isSmallClusterSample, true);
+      assert.equal(res.uncertainty.uniqueMultisetsCount, 10);
+      assert.ok(res.uncertainty.disclaimer.includes('Small cluster count'));
+    });
+
+    // G.6: Rejects exploratory bootstrap simulation when M < 3
+    it('G.6 rejects exploratory bootstrap simulation when M < 3, setting canEstimateUncertainty=false', () => {
+      const pairs = createPairedObservations({
+        count: 20,
+        clusters: ['c1', 'c2'],
+      });
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: pairs,
+      });
+      assert.equal(res.uncertainty.canEstimateUncertainty, false);
+      assert.equal(res.uncertainty.isDecisionReady, false);
+      assert.equal(res.uncertainty.isExploratoryOnly, false);
+      assert.ok(res.uncertainty.disclaimer.includes('below minimum required (3)'));
+    });
+
+    // G.7: Grants ELIGIBLE_FOR_SUPERVISED_REVIEW when all criteria pass
+    it('G.7 grants ELIGIBLE_FOR_SUPERVISED_REVIEW when N >= 15, M >= 5, no leakage, all gates pass, delta > epsilon, and CI lower > 0', () => {
+      const pairs = createPairedObservations({
+        count: 25,
+        clusters: ['c1', 'c2', 'c3', 'c4', 'c5'],
+        candScoreBase: 89,
+        baseScoreBase: 82,
+        variance: 0.2,
+      });
+      const res = evaluateActivationGate({
+        candidateWeights: {
+          urgencyWeight: 52.0,
+          priorityWeight: 105.0,
+          unblockWeight: 15.0,
+          riskWeight: 26.0,
+        },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: pairs,
+        minMeaningfulDelta: 1.0,
+        randomSeed: 42,
+      });
+      assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.ELIGIBLE_FOR_SUPERVISED_REVIEW);
+      assert.equal(res.isEligibleForSuperVISED_REVIEW ?? res.isEligibleForSupervisedReview, true);
+      assert.equal(res.evidencePolicy.operationalExposurePassed, true);
+      assert.equal(res.evidencePolicy.evaluationEvidencePassed, true);
+      assert.equal(res.evidencePolicy.statisticalAdequacyPassed, true);
+      assert.equal(res.uncertainty.isDecisionReady, true);
+      assert.equal(res.uncertainty.isExploratoryOnly, false);
+      assert.ok(res.uncertainty.ciLower > 0);
+    });
+
+    // G.8: Strict outcome precedence: INSUFFICIENT_METHODOLOGY takes precedence over INFEASIBLE and INSUFFICIENT_EVIDENCE
+    it('G.8 enforces precedence: INSUFFICIENT_METHODOLOGY takes precedence over INFEASIBLE and INSUFFICIENT_EVIDENCE', () => {
+      const res = evaluateActivationGate({
+        candidateWeights: { urgencyWeight: 999.0 }, // Out of bounds
+        scoringFn: null, // Invalid methodology
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: createPairedObservations(),
+      });
+      assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_METHODOLOGY);
+    });
+
+    // G.9: Strict outcome precedence: INFEASIBLE takes precedence over INSUFFICIENT_EVIDENCE and NOT_SUPERIOR
+    it('G.9 enforces precedence: INFEASIBLE takes precedence over INSUFFICIENT_EVIDENCE and NOT_SUPERIOR', () => {
+      const res = evaluateActivationGate({
+        candidateWeights: { urgencyWeight: 999.0 }, // Out of bounds
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: createPairedObservations({ count: 2 }), // Sparse
+      });
+      assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.INFEASIBLE);
+    });
+
+    // G.10: Strict outcome precedence: INSUFFICIENT_EVIDENCE takes precedence over NOT_SUPERIOR
+    it('G.10 enforces precedence: INSUFFICIENT_EVIDENCE takes precedence over NOT_SUPERIOR (sparse data never labeled NOT_SUPERIOR)', () => {
+      const pairs = createPairedObservations({
+        count: 20,
+        clusters: ['c1', 'c2'],
+        candScoreBase: 75,
+        baseScoreBase: 80,
+      });
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: pairs,
+      });
+      assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.notEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR);
+    });
+
+    // G.11: Returns NOT_SUPERIOR when N >= 15, M >= 5, all gates pass, but delta < epsilon
+    it('G.11 returns NOT_SUPERIOR when N >= 15, M >= 5, all gates pass, but delta < epsilon', () => {
+      const pairs = createPairedObservations({
+        count: 25,
+        clusters: ['c1', 'c2', 'c3', 'c4', 'c5'],
+        candScoreBase: 80.5,
+        baseScoreBase: 80.0, // delta = +0.5 < epsilon 1.0
+      });
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: pairs,
+        minMeaningfulDelta: 1.0,
+      });
+      assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR);
+      assert.equal(res.pairedComparison.meetsPracticalImprovement, false);
+      assert.equal(res.evidencePolicy.evaluationEvidencePassed, true);
+    });
+
+    // G.12: Returns NOT_SUPERIOR when N >= 15, M >= 5, all gates pass, delta >= epsilon, but CI lower <= 0
+    it('G.12 returns NOT_SUPERIOR when N >= 15, M >= 5, all gates pass, delta >= epsilon, but CI lower crosses zero', () => {
+      const pairs = [];
+      const clusters = ['c1', 'c2', 'c3', 'c4', 'c5'];
+      for (let i = 0; i < 25; i++) {
+        const cl = clusters[i % 5];
+        const delta = cl === 'c5' ? -8.0 : 3.5;
+        pairs.push({
+          observationId: `obs_ci_cross_${i}`,
+          context: { scenario_key: cl },
+          candidateScore: 80 + delta,
+          baselineScore: 80,
+        });
+      }
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: pairs,
+        minMeaningfulDelta: 1.0,
+        randomSeed: 42,
+      });
+      assert.ok((res.pairedComparison.meanDelta ?? 0) >= 1.0);
+      assert.ok(res.uncertainty.ciLower <= 0);
+      assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR);
+      assert.equal(res.evidencePolicy.evaluationEvidencePassed, true);
+    });
+
+    // G.13: Validates three-pillar minimum-evidence policy outputs
+    it('G.13 outputs three distinct evidence pillars with clear boolean status and diagnostics', () => {
+      const pairs = createPairedObservations({
+        count: 25,
+        clusters: ['c1', 'c2', 'c3', 'c4', 'c5'],
+      });
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: pairs,
+      });
+      assert.ok(res.evidencePolicy);
+      assert.equal(typeof res.evidencePolicy.operationalExposurePassed, 'boolean');
+      assert.equal(typeof res.evidencePolicy.evaluationEvidencePassed, 'boolean');
+      assert.equal(typeof res.evidencePolicy.statisticalAdequacyPassed, 'boolean');
+      assert.equal(res.evidencePolicy.operationalExposurePassed, true);
+      assert.equal(res.evidencePolicy.evaluationEvidencePassed, true);
+    });
+
+    // G.14: Verifies threshold metadata is flagged as provisional operational heuristic
+    it('G.14 declares threshold epsilon metadata explicitly as provisional operational heuristic', () => {
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: createPairedObservations(),
+      });
+      assert.ok(res.thresholdPolicy);
+      assert.equal(res.thresholdPolicy.status, THRESHOLD_STATUS.PROVISIONAL_OPERATIONAL_HEURISTIC);
+      assert.ok(res.thresholdPolicy.disclaimer.includes('provisional operational heuristic'));
+      assert.ok(res.methodologyDisclosures.some((d) => d.includes('provisional multi-attribute operational heuristic')));
+    });
+
+    // G.15: Verifies Monte Carlo stability across multiple random seeds
+    it('G.15 produces consistent decision outcome across different random seeds on decision-ready sample', () => {
+      const pairs = createPairedObservations({
+        count: 30,
+        clusters: ['c1', 'c2', 'c3', 'c4', 'c5', 'c6'],
+        candScoreBase: 89,
+        baseScoreBase: 82, // Robust +7 delta
+        variance: 0.1,
+      });
+      const candidateWeights = {
+        urgencyWeight: 52.0,
+        priorityWeight: 105.0,
+        unblockWeight: 15.0,
+        riskWeight: 26.0,
+      };
+      const seeds = [42, 101, 202, 999];
+      const outcomes = seeds.map((seed) => {
+        const res = evaluateActivationGate({
+          candidateWeights,
+          readinessReport: createPassingReadinessReport(),
+          rollbackPreflight: createPassingRollbackPreflight(),
+          pairedObservations: pairs,
+          randomSeed: seed,
+        });
+        return res.outcome;
+      });
+      assert.ok(outcomes.every((o) => o === ACTIVATION_GATE_OUTCOMES.ELIGIBLE_FOR_SUPERVISED_REVIEW));
+    });
+
+    // G.16: Verifies cluster multiset combinatorial count calculation
+    it('G.16 correctly calculates cluster multiset combinatorial capacity for M=3 (10), M=4 (35), M=5 (126)', () => {
+      const checkM = (mCount, expectedMultisets) => {
+        const clusters = Array.from({ length: mCount }, (_, idx) => `cl_${idx}`);
+        const pairs = createPairedObservations({ count: 20, clusters });
+        const res = evaluateActivationGate({
+          candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+          readinessReport: createPassingReadinessReport(),
+          rollbackPreflight: createPassingRollbackPreflight(),
+          pairedObservations: pairs,
+        });
+        assert.equal(res.uncertainty.uniqueMultisetsCount, expectedMultisets);
+      };
+      checkM(3, 10);
+      checkM(4, 35);
+      checkM(5, 126);
+    });
+
+    // G.17: Verifies production isolation: candidate eligibility does not modify factory baseline weights or unlock adaptation
+    it('G.17 enforces strict production isolation: candidate eligibility never mutates factory weights or unlocks adaptation', () => {
+      const pairs = createPairedObservations({
+        count: 25,
+        clusters: ['c1', 'c2', 'c3', 'c4', 'c5'],
+        candScoreBase: 88,
+        baseScoreBase: 82,
+      });
+      const candidateWeights = {
+        urgencyWeight: 55.0,
+        priorityWeight: 95.0,
+        unblockWeight: 15.0,
+        riskWeight: 25.0,
+      };
+      const factoryBefore = JSON.stringify(FACTORY_SCHEDULER_WEIGHTS);
+      const res = evaluateActivationGate({
+        candidateWeights,
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: pairs,
+      });
+      const factoryAfter = JSON.stringify(FACTORY_SCHEDULER_WEIGHTS);
+      assert.equal(factoryBefore, factoryAfter);
+      assert.equal(res.productionApplied, false);
+      assert.equal(res.isAdaptationUnlocked, false);
+    });
+
+    // G.18: Disqualifies synthetic demonstration data from real-user eligibility
+    it('G.18 disqualifies synthetic demonstration data from meeting real-user activation criteria', () => {
+      const pairs = createPairedObservations({
+        count: 30,
+        clusters: ['c1', 'c2', 'c3', 'c4', 'c5'],
+        candScoreBase: 95,
+        baseScoreBase: 80,
+        isSynthetic: true,
+      });
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: pairs,
+        isSyntheticData: true,
+      });
+      assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.equal(res.evidenceAssessment.isSyntheticData, true);
+      assert.equal(res.evidencePolicy.operationalExposurePassed, false);
+      assert.ok(res.reasons.some((r) => r.includes('Synthetic demonstration data')));
     });
   });
 });

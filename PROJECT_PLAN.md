@@ -3012,9 +3012,81 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
   - **Browser Verification**: Verified browser UI rendered smoothly with updated outcome semantics.
 
 - **Remaining Methodological Limitations**:
-  1. *Small Cluster Count ($M < 5$)*: Empirical percentile bootstrap intervals cannot guarantee nominal 95% coverage when $M$ is small due to restricted multiset combinations ($\binom{5}{3} = 10$).
-  2. *Proxy Alignment vs Real Satisfaction*: Alignment with a weighted multi-attribute schedule score measures proxy objective improvement, not user satisfaction.
+  1. *Small Cluster Count ($M < 5$)*: Empirical percentile bootstrap intervals cannot guarantee nominal 95% coverage when $M$ is small due to restricted multiset combinations ($\binom{5}{3} = 10$). Addressed in Stage 7.4.4A.2 by enforcing $M \ge 5$ for decision readiness.
+  2. *Proxy Alignment vs Real Satisfaction*: Alignment with a weighted multi-attribute schedule score measures proxy objective improvement, not real-world user satisfaction.
   3. *Provisional Epsilon*: $\epsilon = 1.0$ is an operational heuristic and should be calibrated through longitudinal user study.
+
+---
+
+#### Stage 7.4.4A.2: Statistical Gate Hardening & Minimum-Evidence Policy (COMPLETED)
+- **Status**: Completed and fully verified.
+- **Objectives**:
+  1. Harden VoxPlan's shadow-only adaptive scheduling evaluation gate so that candidates cannot qualify for supervised review when the evidence is too sparse, correlated, duplicated, methodologically unsupported, or otherwise inadequate.
+  2. Implement conservative, explicit minimum-evidence rules separating evidence policy into three distinct pillars: Operational Exposure, Evaluation Evidence, and Statistical Adequacy.
+  3. Enforce decision cluster floor ($M \ge 5$ independent clusters) to ensure combinatorial validity for 95% bootstrap intervals. When $3 \le M < 5$, allow exploratory simulation diagnostics (`isExploratoryOnly: true`, `isDecisionReady: false`) while strictly preventing qualification (`outcome = INSUFFICIENT_EVIDENCE`).
+  4. Detect and reject cross-cluster backlog leakage where identical task sets appear under disparate scenario clusters.
+  5. Declare threshold $\epsilon = 1.0$ explicitly as a provisional operational heuristic (`thresholdStatus = 'provisional_operational_heuristic'`) combining multi-attribute schedule dimensions without guaranteeing real-world user satisfaction.
+  6. Enforce strict 5-tier outcome precedence (`INSUFFICIENT_METHODOLOGY` $\to$ `INFEASIBLE` $\to$ `INSUFFICIENT_EVIDENCE` $\to$ `NOT_SUPERIOR` $\to$ `ELIGIBLE_FOR_SUPERVISED_REVIEW`), ensuring insufficient evidence is never mislabeled as `NOT_SUPERIOR`.
+  7. Enhance UI transparency in `AdaptationSandboxCard.jsx` with distinct cluster progress ($M / 5$), provisional $\epsilon$ disclosure, cross-cluster leakage warnings, and exploratory bootstrap badges.
+  8. Implement 18 adversarial regression tests (Scope G, tests G.1–G.18) covering all boundary conditions.
+  9. Strict Safety Invariants: Production adaptation remains disabled (`isAdaptationUnlocked === false`, `productionApplied === false`), factory weights remain 100% active in all production scheduling paths.
+
+- **Architectural Deliverables & Hardening Implementation**:
+  1. **Three-Pillar Minimum-Evidence Policy Architecture (Scope A)**:
+     - *Pillar 1: Operational Exposure*: Long-term exposure heuristic requiring $\ge 20$ decisions, $\ge 15$ completions, $\ge 3$ distinct categories, $\ge 7$ active telemetry days. Discloses that operational exposure provides interaction diversity, not formal asymptotic power. Disqualifies synthetic demonstration data.
+     - *Pillar 2: Evaluation Evidence*: Empirical paired evidence requiring $N \ge 15$ eligible paired comparisons across $M \ge 5$ independent scenario clusters with zero cross-cluster backlog leakage and valid configuration snapshots.
+     - *Pillar 3: Statistical Adequacy*: Formal statistical decision readiness requiring $\overline{\Delta} \ge \epsilon$ and cluster-aware bootstrap $CI_{lower} > 0$ over $M \ge 5$ independent clusters.
+  2. **Combinatorial Resampling Floor & Small-Cluster Boundary (Scope B)**:
+     - Enforced `MIN_DECISION_CLUSTERS = 5` and `MIN_EXPLORATORY_CLUSTERS = 3`.
+     - Combinatorial foundation: $M=3$ yields only $\binom{3+3-1}{3} = \binom{5}{3} = 10$ unique cluster multisets; $M=4$ yields $\binom{7}{4} = 35$ multisets. Neither offers adequate granularity for empirical 2.5% and 97.5% percentile cutoffs.
+     - When $3 \le M < 5$: Runs clustered bootstrap for exploratory simulation diagnostics, but flags `isExploratoryOnly: true`, `isDecisionReady: false`, and `isSmallClusterSample: true`, returning `INSUFFICIENT_EVIDENCE`.
+     - When $M < 3$: Rejects uncertainty estimation entirely (`canEstimateUncertainty: false`).
+  3. **Cross-Cluster Backlog Leakage Quarantine (Scope B & C)**:
+     - Tracks `taskSetId` across clusters; if an identical backlog appears in $>1$ cluster, flags `crossClusterLeakageDetected = true`, marks `evaluationEvidencePassed = false`, and returns `INSUFFICIENT_EVIDENCE`.
+  4. **Provisional Epsilon Heuristic Formalization (Scope D)**:
+     - Documented $\epsilon = 1.0$ as `THRESHOLD_STATUS.PROVISIONAL_OPERATIONAL_HEURISTIC` in output and methodology disclosures.
+     - Clarified that a 1.0-point composite difference represents a multi-attribute scalarization trade-off (+100 on-time, -15 delay, +10 utilization, -20 churn), not an empirically established user satisfaction difference.
+  5. **Strict 5-Tier Outcome Precedence (Scope E)**:
+     - Rule 1: `INSUFFICIENT_METHODOLOGY` (invalid scoring, non-finite score, negative $\epsilon$).
+     - Rule 2: `INFEASIBLE` (Kahn cycle, capacity overruns, out-of-bounds weights, tampered baseline).
+     - Rule 3: `INSUFFICIENT_EVIDENCE` (operational readiness unmet, $N < 15$, $M < 5$, cross-cluster leakage, synthetic data, snapshot invalid, rollback failure).
+     - Rule 4: `NOT_SUPERIOR` (evidence is complete and feasible, but $\overline{\Delta} < \epsilon$ or $CI_{lower} \le 0$).
+     - Rule 5: `ELIGIBLE_FOR_SUPERVISED_REVIEW` (all gates and statistical adequacy criteria met).
+  6. **UI Transparency Enhancements (`AdaptationSandboxCard.jsx`, Scope F)**:
+     - Distinct Scenario Clusters card displays `${distinctClustersCount} / 5` with `✓ Decision-Ready` or `✕ Inadequate (< 5)`.
+     - Practical Threshold card displays `Practical Threshold (ε, Provisional)` with `(Operational Heuristic)`.
+     - Uncertainty Panel displays `Clustered Bootstrap Resampling (95% CI — Decision-Ready)` vs `(95% CI — Exploratory Only)`.
+     - Renders exploratory warning badge when $M < 5$: *Small cluster sample ($M < 5$): confidence interval is an exploratory simulation diagnostic only and cannot support decision eligibility.*
+     - Renders cross-cluster leakage warning alert when detected.
+     - Displays 3-pillar policy status breakdown: *Exposure: ✓/✕ | Evidence: ✓/✕ | Statistical: ✓/✕*.
+  7. **Comprehensive 18-Test Adversarial Regression Suite (Scope G)**:
+     - Added Section 7 (`Phase 7.4 Stage 4A.2: Minimum-Evidence Policy & Statistical Gate Hardening`) to `tests/activation_gate_evaluator.test.js` with tests G.1–G.18:
+       - G.1: Rejection when $N < 15$ (`INSUFFICIENT_EVIDENCE`).
+       - G.2: Rejection when $M = 3$ despite large positive delta and positive CI (`INSUFFICIENT_EVIDENCE`).
+       - G.3: Rejection when $M = 4$ despite all positive clusters (`INSUFFICIENT_EVIDENCE`).
+       - G.4: Rejection on cross-cluster backlog leakage (`INSUFFICIENT_EVIDENCE`).
+       - G.5: Exploratory bootstrap enabled for $3 \le M < 5$ with `isExploratoryOnly: true` and `isDecisionReady: false`.
+       - G.6: Rejection of exploratory bootstrap when $M < 3$.
+       - G.7: Eligibility grant when $N \ge 15, M \ge 5$, zero leakage, all gates pass, $\overline{\Delta} > \epsilon$, $CI_{lower} > 0$.
+       - G.8: Precedence: `INSUFFICIENT_METHODOLOGY` over `INFEASIBLE` and `INSUFFICIENT_EVIDENCE`.
+       - G.9: Precedence: `INFEASIBLE` over `INSUFFICIENT_EVIDENCE` and `NOT_SUPERIOR`.
+       - G.10: Precedence: `INSUFFICIENT_EVIDENCE` over `NOT_SUPERIOR` (sparse data never mislabeled as `NOT_SUPERIOR`).
+       - G.11: Returns `NOT_SUPERIOR` when $N \ge 15, M \ge 5$, all gates pass, but $\overline{\Delta} < \epsilon$.
+       - G.12: Returns `NOT_SUPERIOR` when $N \ge 15, M \ge 5$, all gates pass, $\overline{\Delta} \ge \epsilon$, but $CI_{lower} \le 0$.
+       - G.13: Outputs three distinct evidence pillars with clear boolean status and diagnostics.
+       - G.14: Explicit declaration of $\epsilon$ metadata as `provisional_operational_heuristic`.
+       - G.15: Monte Carlo stability across multiple random seeds (42, 101, 202, 999) on decision-ready sample.
+       - G.16: Exact cluster multiset combinatorial capacity verification: $M=3 \to 10$, $M=4 \to 35$, $M=5 \to 126$.
+       - G.17: Strict production isolation: candidate eligibility never mutates factory weights or unlocks adaptation.
+       - G.18: Disqualification of synthetic demonstration data from real-user activation.
+
+- **Verification Results**:
+  - **Frontend Test Suite**: **667 passed, 0 failed across 136 suites** (`npm test`).
+  - **Activation Gate Test Suite**: **57 passed, 0 failed across 8 suites** (`node --test tests/activation_gate_evaluator.test.js`).
+  - **Backend Pytest Suite**: **27 passed, 0 failed** (`python -m pytest`).
+  - **Linter**: **0 errors, 1 pre-existing warning** in `AdaptiveScheduleModal.jsx` across 73 files (`npm run lint`).
+  - **Client Production Build**: **Built production bundle cleanly in 249ms** (`npm run build`).
+  - **Git Diff & Whitespace**: **Clean with zero whitespace or line-ending errors** (`git diff --check`).
 
 - **Next Recommended Stage**:
   - Stage 7.4.4B: Supervised Production Activation & Dynamic Deployment Gates (user confirmation modal, explicit human consent flow, and runtime weight routing, with production adaptation remaining disabled until explicit user confirmation).

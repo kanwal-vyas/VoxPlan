@@ -2005,9 +2005,19 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                 ? 'Evaluation cannot proceed: scoring methodology, parameter thresholds, or cluster provenance definitions are invalid or missing.'
                 : activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR
                 ? 'Candidate weights do not demonstrate statistically defensible quality superiority over canonical factory baseline (delta < epsilon or confidence interval crosses zero).'
-                : 'Current evidence does not yet satisfy operational readiness thresholds (>= 20 decisions, >= 15 completions) or requires >= 15 paired observations across >= 3 scenario clusters.'}
+                : 'Current evidence does not yet satisfy operational readiness thresholds (>= 20 decisions, >= 15 completions) or requires >= 15 paired observations across >= 5 independent scenario clusters without cross-cluster backlog leakage.'}
             </p>
           </div>
+
+          {/* Cross-Cluster Leakage Alert */}
+          {activeActivationGate.evidenceAssessment.crossClusterLeakageDetected && (
+            <div style={{ ...styles.syntheticWarningBanner, marginBottom: '16px', backgroundColor: '#FEF2F2', borderColor: '#FCA5A5' }} role="alert">
+              <span style={styles.syntheticWarningIcon}>⚠️</span>
+              <div style={styles.syntheticWarningText}>
+                <strong style={{ color: '#991B1B' }}>Cross-Cluster Backlog Leakage Detected:</strong> Overlapping task sets appear across distinct clusters, violating independent cluster sampling assumptions and precluding activation eligibility.
+              </div>
+            </div>
+          )}
 
           {/* Endpoint Metrics Grid */}
           <div style={styles.rankingStatsGrid}>
@@ -2021,12 +2031,12 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
               <span style={styles.rankingStatSub}>Primary Endpoint: S(W_c) - S(W_f)</span>
             </div>
             <div style={styles.rankingStatCard}>
-              <span style={styles.rankingStatLabel}>Practical Threshold (ε)</span>
+              <span style={styles.rankingStatLabel}>Practical Threshold (ε, Provisional)</span>
               <span style={styles.rankingStatValue}>
                 {activeActivationGate.pairedComparison.minMeaningfulDelta} pts
               </span>
               <span style={styles.rankingStatSub}>
-                {activeActivationGate.pairedComparison.meetsPracticalImprovement ? '✓ Met' : '✕ Unmet'}
+                {activeActivationGate.pairedComparison.meetsPracticalImprovement ? '✓ Met' : '✕ Unmet'} (Operational Heuristic)
               </span>
             </div>
             <div style={styles.rankingStatCard}>
@@ -2039,9 +2049,11 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
             <div style={styles.rankingStatCard}>
               <span style={styles.rankingStatLabel}>Distinct Scenario Clusters</span>
               <span style={styles.rankingStatValue}>
-                {activeActivationGate.evidenceAssessment.distinctClustersCount}
+                {activeActivationGate.evidenceAssessment.distinctClustersCount} / {activeActivationGate.evidenceAssessment.minDecisionClustersRequired ?? 5}
               </span>
-              <span style={styles.rankingStatSub}>Minimum 3 Required</span>
+              <span style={styles.rankingStatSub}>
+                {activeActivationGate.evidenceAssessment.distinctClustersCount >= 5 ? '✓ Decision-Ready' : '✕ Inadequate (< 5)'}
+              </span>
             </div>
           </div>
 
@@ -2053,7 +2065,9 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                 <span style={styles.uncertaintyLabel}>Uncertainty Estimation Method:</span>
                 <span style={styles.uncertaintyValue}>
                   {activeActivationGate.uncertainty.canEstimateUncertainty
-                    ? 'Clustered Bootstrap Resampling (95% CI)'
+                    ? activeActivationGate.uncertainty.isDecisionReady
+                      ? 'Clustered Bootstrap Resampling (95% CI — Decision-Ready)'
+                      : 'Clustered Bootstrap Resampling (95% CI — Exploratory Only)'
                     : 'Insufficient Observations or Clusters'}
                 </span>
               </div>
@@ -2065,6 +2079,21 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                     : 'N/A (Sparse Evidence)'}
                 </span>
               </div>
+              {activeActivationGate.evidencePolicy && (
+                <div style={styles.uncertaintyStatRow}>
+                  <span style={styles.uncertaintyLabel}>Evidence Policy Pillars:</span>
+                  <span style={styles.uncertaintyValue}>
+                    Exposure: {activeActivationGate.evidencePolicy.operationalExposurePassed ? '✓' : '✕'} |
+                    Evidence: {activeActivationGate.evidencePolicy.evaluationEvidencePassed ? '✓' : '✕'} |
+                    Statistical: {activeActivationGate.evidencePolicy.statisticalAdequacyPassed ? '✓' : '✕'}
+                  </span>
+                </div>
+              )}
+              {activeActivationGate.uncertainty.isExploratoryOnly && (
+                <div style={{ marginTop: '8px', padding: '6px 10px', backgroundColor: '#FFFBEB', borderRadius: '4px', border: '1px solid #FDE68A', fontSize: '11px', color: '#92400E' }}>
+                  ⚠️ <strong>Exploratory Simulation Diagnostic Only:</strong> Small cluster sample (M &lt; 5). Combinatorial cluster permutations are too sparse to support decision eligibility or confirm superiority.
+                </div>
+              )}
               <p style={{ margin: '8px 0 0 0', fontSize: '11px', color: '#6B7280', lineHeight: '1.4' }}>
                 {activeActivationGate.uncertainty.disclaimer}
               </p>

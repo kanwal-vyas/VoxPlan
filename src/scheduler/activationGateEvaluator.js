@@ -1,11 +1,11 @@
 /**
- * VoxPlan Shadow-Only Activation-Gate Evaluator (Phase 7.4 Stage 4A & 4A.1 Audit).
+ * VoxPlan Shadow-Only Activation-Gate Evaluator (Phase 7.4 Stage 4A, 4A.1, & 4A.2 Hardening).
  *
  * Implements a pure, deterministic, read-only evaluator that tests whether
  * a candidate scheduler-weight configuration satisfies VoxPlan's documented
  * evidence, quality, feasibility, and rollback-readiness criteria.
  *
- * Strict Production Safety & Invariants (Scope 9):
+ * Strict Production Safety & Invariants (Scope 9 & 10):
  * 1. Read-Only & Shadow Only: Evaluates candidate configurations purely in memory.
  *    Never mutates production scheduler weights, active configuration, or storage.
  * 2. Immutable Factory Baseline: Baseline evaluation always uses FACTORY_SCHEDULER_WEIGHTS.
@@ -15,13 +15,16 @@
  * 5. Methodological Honesty: Distinguishes operational exposure heuristics from formal
  *    statistical inference; uses cluster-aware bootstrap resampling instead of naive
  *    uncorrelated intervals; and never equates concordance with user satisfaction.
- * 6. Audit & Precedence Rigor (Stage 4A.1):
- *    - Infeasible candidate schedules are strictly quarantined and immediately trigger INFEASIBLE.
- *    - Cross-cluster backlog leakage and content-level duplicate comparisons are detected and handled.
- *    - Multi-attribute composite score threshold epsilon = 1.0 is treated as a provisional operational
- *      heuristic, not a clinical equivalence guarantee.
- *    - Small cluster samples (M < 5) explicitly disclose combinatorial multiset limits.
- *    - INSUFFICIENT_METHODOLOGY is assigned when scoring or evaluation parameters are invalid.
+ * 6. Minimum-Evidence Policy (Stage 4A.2 Hardening):
+ *    - Separates Operational Exposure, Evaluation Evidence, and Statistical Adequacy.
+ *    - Enforces MIN_DECISION_CLUSTERS = 5. Small cluster samples (M < 5) provide restricted
+ *      combinatorial support (10 multisets for M=3, 35 for M=4) and CANNOT qualify for
+ *      supervised review (strictly return INSUFFICIENT_EVIDENCE).
+ *    - When 3 <= M < 5, bootstrap interval is computed strictly for exploratory simulation
+ *      diagnostics (flagged as isExploratoryOnly: true, isDecisionReady: false).
+ *    - Cross-cluster backlog leakage and duplicate backlogs across clusters trigger
+ *      conservative INSUFFICIENT_EVIDENCE and invalidate decision readiness.
+ *    - Threshold epsilon = 1.0 is explicitly identified as a provisional operational heuristic.
  */
 
 import { FACTORY_SCHEDULER_WEIGHTS } from './adaptiveScheduler.js';
@@ -42,17 +45,36 @@ export const ACTIVATION_GATE_OUTCOMES = Object.freeze({
 });
 
 /**
+ * Status definition for practical improvement threshold.
+ */
+export const THRESHOLD_STATUS = Object.freeze({
+  PROVISIONAL_OPERATIONAL_HEURISTIC: 'provisional_operational_heuristic',
+});
+
+/**
  * Default practical improvement threshold (\epsilon) on the 100-point schedule objective scale.
  * Note: 1.0 point is a composite scalarization combining timeliness (+100), delay (-15),
  * utilization (+10), and churn (-20); it must not be conflated with a uniform 1% on-time gain.
  */
 export const DEFAULT_MIN_MEANINGFUL_DELTA = 1.0;
 
+export const DEFAULT_THRESHOLD_DISCLAIMER =
+  'Threshold epsilon = 1.0 is a provisional operational heuristic combining timeliness, delay, utilization, and churn; it is NOT an empirically validated minimum clinically important difference (MCID) and does not guarantee user satisfaction.';
+
 /**
- * Minimum sample requirements for statistical inference.
+ * Minimum sample policy constants for statistical evaluation.
+ *
+ * Operational Heuristics vs Statistical Decision Floors:
+ * - MIN_PAIRED_OBSERVATIONS: Operational floor (15 pairs) for paired sample size.
+ * - MIN_EXPLORATORY_CLUSTERS: Absolute mathematical floor (3 clusters) to execute exploratory resampling.
+ * - MIN_DECISION_CLUSTERS: Conservative decision-readiness floor (5 clusters). When M < 5,
+ *   the multiset combinatorics (10 multisets for M=3, 35 for M=4) provide insufficient empirical
+ *   resolution for 95% CI coverage, strictly preventing candidate qualification for supervised review.
  */
 export const MIN_PAIRED_OBSERVATIONS = MIN_HOLDOUT_SAMPLE; // 15
-export const MIN_INDEPENDENT_CLUSTERS = MIN_SCENARIO_GROUPS; // 3
+export const MIN_EXPLORATORY_CLUSTERS = MIN_SCENARIO_GROUPS; // 3
+export const MIN_DECISION_CLUSTERS = 5;
+export const MIN_INDEPENDENT_CLUSTERS = MIN_DECISION_CLUSTERS; // Exported for backward compatibility
 export const DEFAULT_BOOTSTRAP_ITERATIONS = 1000;
 
 /**
@@ -64,8 +86,9 @@ export const METHODOLOGY_DISCLOSURES = Object.freeze([
   'A positive point estimate alone does not establish superiority without uncertainty estimation.',
   'Operational exposure heuristics (>= 20 decisions, >= 15 completions) ensure interaction diversity, not asymptotic statistical power.',
   'Eligibility for supervised review authorizes human review only; production activation remains disabled.',
-  'A 1.0-point composite score difference (\u03b5 = 1.0) is a multi-attribute scalarization combining timeliness, delay, utilization, and churn; it is not mathematically equivalent to a uniform 1% on-time gain or 1.6h delay across all schedules.',
-  'Small cluster counts (M < 5) have limited combinatorial support (e.g. M=3 yields only 10 unique cluster multisets); empirical percentile intervals cannot guarantee nominal 95% coverage with small M.',
+  'A 1.0-point composite score difference (\u03b5 = 1.0) is a provisional multi-attribute operational heuristic combining timeliness, delay, utilization, and churn; it is NOT an empirically validated minimum clinically important difference (MCID).',
+  'Decision-readiness requires at least 5 independent clusters (M >= 5). Cluster counts below 5 (e.g. M=3 yields only 10 unique multisets, M=4 yields 35) provide restricted empirical resolution; any bootstrap interval computed with M < 5 is strictly exploratory and disqualified from activation decisions.',
+  'Cross-cluster backlog leakage occurs when identical or overlapping backlogs appear under disparate scenario labels, violating cluster exchangeability and invalidating decision readiness.',
 ]);
 
 /**
@@ -359,9 +382,9 @@ export function runClusteredBootstrap(
   const clusterKeys = Array.from(clustersMap.keys());
   const numClusters = clusterKeys.length;
 
-  if (numClusters < MIN_INDEPENDENT_CLUSTERS) {
+  if (numClusters < MIN_EXPLORATORY_CLUSTERS) {
     throw new Error(
-      `Clustered bootstrap requires at least ${MIN_INDEPENDENT_CLUSTERS} distinct clusters. Received ${numClusters}.`
+      `Clustered bootstrap requires at least ${MIN_EXPLORATORY_CLUSTERS} distinct clusters. Received ${numClusters}.`
     );
   }
 
@@ -414,8 +437,9 @@ export function runClusteredBootstrap(
   const variance = bootstrapMeans.reduce((acc, v) => acc + Math.pow(v - grandMean, 2), 0) / (iterations - 1);
   const standardError = Math.round(Math.sqrt(Math.max(0, variance)) * 1000) / 1000;
 
-  const isSmallClusterSample = numClusters < 5;
-  const uniqueMultisetsCount = numClusters === 3 ? 10 : numClusters === 4 ? 35 : null;
+  const isSmallClusterSample = numClusters < MIN_DECISION_CLUSTERS;
+  const uniqueMultisetsCount =
+    numClusters === 3 ? 10 : numClusters === 4 ? 35 : numClusters === 5 ? 126 : null;
 
   return {
     ciLower,
@@ -460,7 +484,7 @@ export function evaluateActivationGate({
   const reasons = [];
 
   // -------------------------------------------------------------------------
-  // 1. Scoring & Methodology Specification Validation (Audit A & Audit E)
+  // 1. Scoring & Methodology Specification Validation (Scope D & Scope E)
   // -------------------------------------------------------------------------
   const scoringValid = typeof scoringFn === 'function';
   const epsilonValid = typeof minMeaningfulDelta === 'number' && isFinite(minMeaningfulDelta) && minMeaningfulDelta > 0;
@@ -474,6 +498,8 @@ export function evaluateActivationGate({
       `Invalid practical significance threshold (epsilon = ${minMeaningfulDelta}); must be a finite positive number.`
     );
   }
+
+  const methodologyValid = scoringValid && epsilonValid;
 
   // -------------------------------------------------------------------------
   // 2. Candidate Configuration Validation (Audit Boundary)
@@ -510,7 +536,7 @@ export function evaluateActivationGate({
   }
 
   // -------------------------------------------------------------------------
-  // 3. Operational Evidence Sufficiency Assessment
+  // 3. Operational Evidence Sufficiency Assessment (Policy Pillar 1)
   // -------------------------------------------------------------------------
   let operationalReadinessPassed = true;
   let decidedCount = 0;
@@ -558,7 +584,7 @@ export function evaluateActivationGate({
   }
 
   // -------------------------------------------------------------------------
-  // 4. Paired Observation Quality & Feasibility Processing (Audit C & D)
+  // 4. Paired Observation Quality & Feasibility Processing (Policy Pillar 2)
   // -------------------------------------------------------------------------
   const rawPairs = Array.isArray(pairedObservations) ? pairedObservations : [];
   const eligiblePairs = [];
@@ -594,8 +620,19 @@ export function evaluateActivationGate({
 
     // Cluster key and backlog key extraction
     const clusterKey = extractClusterKey(rawObs);
-    const comparisonId = rawObs.comparison_id || rawObs.comparisonId || rawObs.context?.comparison_id || rawObs.context?.comparisonId || null;
-    const taskSetId = rawObs.taskSetId || rawObs.candidateTaskSetId || rawObs.context?.taskSetId || rawObs.backlogId || rawObs.context?.backlogId || null;
+    const comparisonId =
+      rawObs.comparison_id ||
+      rawObs.comparisonId ||
+      rawObs.context?.comparison_id ||
+      rawObs.context?.comparisonId ||
+      null;
+    const taskSetId =
+      rawObs.taskSetId ||
+      rawObs.candidateTaskSetId ||
+      rawObs.context?.taskSetId ||
+      rawObs.backlogId ||
+      rawObs.context?.backlogId ||
+      null;
 
     // Deduplication by underlying comparison ID if provided with different superficial observationId
     if (comparisonId) {
@@ -689,8 +726,15 @@ export function evaluateActivationGate({
   const baselineMeanScore = eligibleCount > 0 ? Math.round((sumBaseScore / eligibleCount) * 1000) / 1000 : null;
   const concordanceProportion = eligibleCount > 0 ? Math.round((concordantCount / eligibleCount) * 1000) / 1000 : null;
 
+  // Evaluation evidence check under minimum-evidence policy
+  const evaluationEvidencePassed =
+    eligibleCount >= MIN_PAIRED_OBSERVATIONS &&
+    distinctClustersCount >= MIN_DECISION_CLUSTERS &&
+    !crossClusterLeakageDetected &&
+    !isSyntheticData;
+
   // -------------------------------------------------------------------------
-  // 5. Hard Feasibility Gate (Audit D)
+  // 5. Hard Feasibility Gate
   // -------------------------------------------------------------------------
   const candidateHasViolations = candidateViolations.length > 0;
   const baselineHasViolations = baselineViolations.length > 0;
@@ -730,7 +774,7 @@ export function evaluateActivationGate({
   }
 
   // -------------------------------------------------------------------------
-  // 7. Practical Significance & Clustered Uncertainty Estimation (Audit B)
+  // 7. Practical Significance & Uncertainty Estimation (Policy Pillar 3)
   // -------------------------------------------------------------------------
   const meetsPracticalImprovement = meanDelta != null && meanDelta >= epsilon;
 
@@ -756,15 +800,25 @@ export function evaluateActivationGate({
     uncertaintyDisclaimer = `Eligible paired observations (${eligibleCount}) below minimum required (${MIN_PAIRED_OBSERVATIONS}) for clustered uncertainty estimation.`;
     reasons.push(uncertaintyDisclaimer);
   }
-  if (distinctClustersCount < MIN_INDEPENDENT_CLUSTERS) {
-    const clusterDisclaimer = `Distinct scenario clusters (${distinctClustersCount}) below minimum required (${MIN_INDEPENDENT_CLUSTERS}) to adjust for scenario correlation.`;
+  if (distinctClustersCount < MIN_EXPLORATORY_CLUSTERS) {
+    const clusterDisclaimer = `Distinct scenario clusters (${distinctClustersCount}) below minimum required (${MIN_EXPLORATORY_CLUSTERS}) to adjust for scenario correlation.`;
     reasons.push(clusterDisclaimer);
     if (!uncertaintyDisclaimer) {
       uncertaintyDisclaimer = clusterDisclaimer;
     }
+  } else if (distinctClustersCount < MIN_DECISION_CLUSTERS) {
+    const smallClusterDisclaimer = `Distinct scenario clusters (${distinctClustersCount}) below decision eligibility minimum (${MIN_DECISION_CLUSTERS}); small cluster count has restricted combinatorial support and cannot support supervised review qualification.`;
+    reasons.push(smallClusterDisclaimer);
   }
 
-  if (eligibleCount >= MIN_PAIRED_OBSERVATIONS && distinctClustersCount >= MIN_INDEPENDENT_CLUSTERS) {
+  if (crossClusterLeakageDetected) {
+    reasons.push(
+      'Cross-cluster backlog leakage detected; overlapping backlogs violate cluster independence and invalidate decision readiness.'
+    );
+  }
+
+  // Exploratory bootstrap can run if eligibleCount >= MIN_PAIRED_OBSERVATIONS and distinctClustersCount >= MIN_EXPLORATORY_CLUSTERS
+  if (eligibleCount >= MIN_PAIRED_OBSERVATIONS && distinctClustersCount >= MIN_EXPLORATORY_CLUSTERS) {
     try {
       const prng = createMulberry32(randomSeed);
       bootstrapResult = runClusteredBootstrap(clustersMap, DEFAULT_BOOTSTRAP_ITERATIONS, prng);
@@ -773,38 +827,50 @@ export function evaluateActivationGate({
       ciUpper = bootstrapResult.ciUpper;
       isCiPositive = ciLower > 0;
 
-      const clusterSampleNote = bootstrapResult.isSmallClusterSample
-        ? ` Note: Small cluster count (M=${distinctClustersCount} < 5) has restricted multiset combinations (${bootstrapResult.uniqueMultisetsCount}); empirical percentile coverage cannot be guaranteed.`
-        : '';
+      const isDecisionClusterCount = distinctClustersCount >= MIN_DECISION_CLUSTERS;
+      const isDecisionReadyForBootstrap = isDecisionClusterCount && !crossClusterLeakageDetected;
 
-      uncertaintyDisclaimer = `Deterministic clustered bootstrap (${DEFAULT_BOOTSTRAP_ITERATIONS} resamples across ${distinctClustersCount} clusters). 95% CI on mean paired difference is [${ciLower}, ${ciUpper}]. Assumes cluster-level exchangeability.${clusterSampleNote}`;
+      if (!isDecisionReadyForBootstrap) {
+        uncertaintyDisclaimer = `Deterministic clustered bootstrap (${DEFAULT_BOOTSTRAP_ITERATIONS} resamples across ${distinctClustersCount} clusters). 95% CI on mean paired difference is [${ciLower}, ${ciUpper}] (EXPLORATORY ONLY — Not Decision-Ready). Warning: Small cluster count (M=${distinctClustersCount} < ${MIN_DECISION_CLUSTERS}) or cross-cluster leakage restricts combinatorial support (${bootstrapResult.uniqueMultisetsCount ?? 'restricted'} multisets); empirical percentile coverage cannot be guaranteed.`;
+      } else {
+        uncertaintyDisclaimer = `Deterministic clustered bootstrap (${DEFAULT_BOOTSTRAP_ITERATIONS} resamples across ${distinctClustersCount} clusters). 95% CI on mean paired difference is [${ciLower}, ${ciUpper}]. Assumes cluster-level exchangeability. Decision-ready under minimum-evidence policy.`;
+      }
     } catch (err) {
       uncertaintyDisclaimer = `Failed to estimate clustered uncertainty: ${err.message}`;
       reasons.push(uncertaintyDisclaimer);
     }
   }
 
-  // Check statistical superiority conditions
-  if (meanDelta != null && !meetsPracticalImprovement) {
+  const isDecisionReady =
+    canEstimateUncertainty &&
+    distinctClustersCount >= MIN_DECISION_CLUSTERS &&
+    !crossClusterLeakageDetected &&
+    eligibleCount >= MIN_PAIRED_OBSERVATIONS &&
+    operationalReadinessPassed &&
+    rollbackPreflightPassed &&
+    snapshotValid &&
+    !isSyntheticData;
+
+  // Check statistical superiority conditions (applicable when decision evidence is met)
+  if (evaluationEvidencePassed && meanDelta != null && !meetsPracticalImprovement) {
     reasons.push(
       `Mean paired score improvement (${meanDelta}) is below the practical significance threshold (epsilon = ${epsilon}).`
     );
   }
-  if (canEstimateUncertainty && !isCiPositive) {
+  if (evaluationEvidencePassed && canEstimateUncertainty && !isCiPositive) {
     reasons.push(
       `Uncertainty interval lower bound (${ciLower}) does not exceed zero; statistically significant superiority not established.`
     );
   }
 
   // -------------------------------------------------------------------------
-  // 8. Outcome Determination (Audit E: Strict Order of Precedence)
+  // 8. Outcome Determination (Scope E: Strict Order of Precedence)
   // -------------------------------------------------------------------------
   let outcome;
 
   // Rule 1: Invalid evaluation methodology / scoring / parameters
   if (
-    !scoringValid ||
-    !epsilonValid ||
+    !methodologyValid ||
     (rawPairs.length > 0 && eligibleCount === 0 && excludedPairs.every((p) => p.reason?.includes('Non-finite')))
   ) {
     outcome = ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_METHODOLOGY;
@@ -813,18 +879,17 @@ export function evaluateActivationGate({
   else if (!feasibilityPassed || !candidateWeightsValid || !factoryBaselineValid) {
     outcome = ACTIVATION_GATE_OUTCOMES.INFEASIBLE;
   }
-  // Rule 3: Insufficient evidence (operational readiness unmet, N < 15, M < 3, snapshot invalid, rollback failure)
+  // Rule 3: Insufficient evidence under minimum-evidence policy (Scope B & Scope E)
   else if (
     !operationalReadinessPassed ||
-    eligibleCount < MIN_PAIRED_OBSERVATIONS ||
-    distinctClustersCount < MIN_INDEPENDENT_CLUSTERS ||
+    !evaluationEvidencePassed ||
     !rollbackPreflightPassed ||
     !snapshotValid
   ) {
     outcome = ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE;
   }
-  // Rule 4: Not superior (mean delta < epsilon or CI lower bound <= 0)
-  else if (!meetsPracticalImprovement || !canEstimateUncertainty || !isCiPositive) {
+  // Rule 4: Not superior (evidence is sufficient and candidate is feasible, but superiority criteria are not met)
+  else if (!meetsPracticalImprovement || !isCiPositive || (meanDelta != null && meanDelta <= 0)) {
     outcome = ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR;
   }
   // Rule 5: Eligible for supervised review (all criteria met)
@@ -840,6 +905,52 @@ export function evaluateActivationGate({
     reasons,
     candidateIdentity: candidateSnapshot?.snapshotId || 'candidate_slider_parameters',
     factoryBaselineIdentity: 'canonical_factory_weights_v1',
+    productionApplied: false,
+    isAdaptationUnlocked: false,
+    evidencePolicy: {
+      operationalExposurePassed: operationalReadinessPassed,
+      evaluationEvidencePassed,
+      statisticalAdequacyPassed: isDecisionReady,
+      operationalExposure: {
+        passed: operationalReadinessPassed,
+        decidedProposalsCount: decidedCount,
+        minDecidedRequired: READINESS_THRESHOLDS.MIN_DECIDED_PROPOSALS,
+        verifiedCompletionsCount,
+        minCompletionsRequired: READINESS_THRESHOLDS.MIN_VERIFIED_COMPLETIONS,
+        distinctCategoriesCount: distinctCategoryCount,
+        minCategoriesRequired: READINESS_THRESHOLDS.MIN_DISTINCT_CATEGORIES,
+        activeDaysCount,
+        minActiveDaysRequired: READINESS_THRESHOLDS.MIN_ACTIVE_DAYS,
+        purpose: 'Longitudinal interaction diversity and exposure heuristic, NOT formal statistical power.',
+      },
+      evaluationEvidence: {
+        passed: evaluationEvidencePassed,
+        totalObservationsSupplied: rawPairs.length,
+        eligibleObservationsCount: eligibleCount,
+        minPairedObservationsRequired: MIN_PAIRED_OBSERVATIONS,
+        distinctClustersCount,
+        minDecisionClustersRequired: MIN_DECISION_CLUSTERS,
+        minExploratoryClustersRequired: MIN_EXPLORATORY_CLUSTERS,
+        excludedObservationsCount: excludedPairs.length,
+        excludedPairs,
+        crossClusterLeakageDetected,
+        isSyntheticData,
+      },
+      statisticalAdequacy: {
+        isDecisionReady,
+        isExploratoryOnly: !isDecisionReady && canEstimateUncertainty,
+        isSmallClusterSample: distinctClustersCount < MIN_DECISION_CLUSTERS,
+        uniqueMultisetsCount: bootstrapResult?.uniqueMultisetsCount ?? null,
+        meetsClusterThreshold: distinctClustersCount >= MIN_DECISION_CLUSTERS,
+        meetsSampleThreshold: eligibleCount >= MIN_PAIRED_OBSERVATIONS,
+        zeroLeakageEnforced: !crossClusterLeakageDetected,
+        uncertaintyMethod: canEstimateUncertainty ? 'clustered_bootstrap_percentile_95' : null,
+        bootstrapIterations: canEstimateUncertainty ? (bootstrapResult?.iterations ?? DEFAULT_BOOTSTRAP_ITERATIONS) : null,
+        ciLower,
+        ciUpper,
+        isCiPositive,
+      },
+    },
     evidenceAssessment: {
       operationalReadinessPassed,
       isSyntheticData,
@@ -852,12 +963,24 @@ export function evaluateActivationGate({
       excludedObservationsCount: excludedPairs.length,
       excludedPairs,
       distinctClustersCount,
+      minDecisionClustersRequired: MIN_DECISION_CLUSTERS,
+      minExploratoryClustersRequired: MIN_EXPLORATORY_CLUSTERS,
+      hasSufficientPairs: eligibleCount >= MIN_PAIRED_OBSERVATIONS,
+      hasSufficientClusters: distinctClustersCount >= MIN_DECISION_CLUSTERS,
       crossClusterLeakageDetected,
+      isDecisionReady,
+    },
+    thresholdPolicy: {
+      status: THRESHOLD_STATUS.PROVISIONAL_OPERATIONAL_HEURISTIC,
+      disclaimer: DEFAULT_THRESHOLD_DISCLAIMER,
+      epsilon,
     },
     pairedComparison: {
       primaryEndpoint: 'paired_schedule_quality_score_difference',
       meanDelta,
       minMeaningfulDelta: epsilon,
+      thresholdStatus: THRESHOLD_STATUS.PROVISIONAL_OPERATIONAL_HEURISTIC,
+      thresholdDisclaimer: DEFAULT_THRESHOLD_DISCLAIMER,
       meetsPracticalImprovement,
       candidateMeanScore,
       baselineMeanScore,
@@ -876,9 +999,14 @@ export function evaluateActivationGate({
       confidenceLevel: 0.95,
       isCiPositive,
       canEstimateUncertainty,
-      standardError: bootstrapResult?.standardError ?? null,
-      isSmallClusterSample: bootstrapResult?.isSmallClusterSample ?? false,
+      isDecisionReady,
+      isExploratoryOnly: !isDecisionReady && canEstimateUncertainty,
+      isSmallClusterSample: distinctClustersCount < MIN_DECISION_CLUSTERS,
       uniqueMultisetsCount: bootstrapResult?.uniqueMultisetsCount ?? null,
+      distinctClustersCount,
+      minDecisionClustersRequired: MIN_DECISION_CLUSTERS,
+      minExploratoryClustersRequired: MIN_EXPLORATORY_CLUSTERS,
+      standardError: bootstrapResult?.standardError ?? null,
       naiveUnclustered: {
         standardError: naiveStandardError,
         ciLower: naiveCiLower,
