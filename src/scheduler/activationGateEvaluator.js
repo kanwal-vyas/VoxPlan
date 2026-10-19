@@ -89,6 +89,10 @@ export const METHODOLOGY_DISCLOSURES = Object.freeze([
   'A 1.0-point composite score difference (\u03b5 = 1.0) is a provisional multi-attribute operational heuristic combining timeliness, delay, utilization, and churn; it is NOT an empirically validated minimum clinically important difference (MCID).',
   'Decision-readiness requires at least 5 independent clusters (M >= 5). Cluster counts below 5 (e.g. M=3 yields only 10 unique multisets, M=4 yields 35) provide restricted empirical resolution; any bootstrap interval computed with M < 5 is strictly exploratory and disqualified from activation decisions.',
   'Cross-cluster backlog leakage occurs when identical or overlapping backlogs appear under disparate scenario labels, violating cluster exchangeability and invalidating decision readiness.',
+  'Nominal 95% bootstrap percentile coverage is a property of repeated sampling under ideal cluster exchangeability; it does not guarantee 95% empirical coverage when cluster sizes are heavily imbalanced or when cluster effects are heavy-tailed or correlated.',
+  'The five-cluster threshold (M >= 5) is an operational safeguard against extreme small-sample degeneracy, not an asymptotic statistical guarantee of nominal 95% confidence interval coverage.',
+  'Candidate eligibility requires consistency across scenario clusters; positive grand mean deltas driven by an outlier cluster while the majority of clusters regress are disqualified from supervised review.',
+  'Composite score gains must not mask critical metric regressions: candidates that cause an unacceptable degradation in primary on-time completion (> 5%) or task delay are disqualified.',
 ]);
 
 /**
@@ -136,6 +140,47 @@ export function extractClusterKey(observation) {
   if (rawKey == null) return null;
   const str = String(rawKey).trim();
   return str.length > 0 ? str : null;
+}
+
+/**
+ * Computes a canonical task-set fingerprint from an observation's task content.
+ *
+ * @param {Object} observation
+ * @returns {string|null}
+ */
+export function computeTaskSetFingerprint(observation) {
+  if (!observation || typeof observation !== 'object') return null;
+  if (observation.taskSetFingerprint) return String(observation.taskSetFingerprint).trim();
+  if (observation.context?.taskSetFingerprint) return String(observation.context.taskSetFingerprint).trim();
+
+  const rawTasks =
+    observation.tasks ||
+    observation.context?.tasks ||
+    observation.candidateAlternative?.tasks ||
+    observation.candidateAlternative?.schedule ||
+    observation.baselineAlternative?.tasks ||
+    observation.baselineAlternative?.schedule;
+
+  if (Array.isArray(rawTasks) && rawTasks.length > 0) {
+    const ids = rawTasks
+      .map((t) => (t && typeof t === 'object' ? (t.id ?? t.taskId ?? t.title) : t))
+      .filter((id) => id != null)
+      .map(String)
+      .sort();
+    if (ids.length > 0) {
+      return `fp_${ids.join('__')}`;
+    }
+  }
+
+  const taskIds = observation.taskIds || observation.context?.taskIds;
+  if (Array.isArray(taskIds) && taskIds.length > 0) {
+    const sorted = taskIds.filter((id) => id != null).map(String).sort();
+    if (sorted.length > 0) {
+      return `fp_${sorted.join('__')}`;
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -604,6 +649,11 @@ export function evaluateActivationGate({
   let sumCandScore = 0;
   let sumBaseScore = 0;
 
+  // Component-level tracking for non-regression guardrails
+  let pairsWithComponentsCount = 0;
+  let sumOnTimeDelta = 0;
+  let sumDelayDelta = 0;
+
   for (let i = 0; i < rawPairs.length; i++) {
     const rawObs = rawPairs[i];
     const pairId = rawObs.observationId || rawObs.id || `pair_${i}`;
@@ -633,6 +683,12 @@ export function evaluateActivationGate({
       rawObs.backlogId ||
       rawObs.context?.backlogId ||
       null;
+    const taskSetFingerprint =
+      rawObs.taskSetFingerprint ||
+      rawObs.context?.taskSetFingerprint ||
+      computeTaskSetFingerprint(rawObs);
+
+    const effectiveBacklogKey = taskSetFingerprint || taskSetId;
 
     // Deduplication by underlying comparison ID if provided with different superficial observationId
     if (comparisonId) {
@@ -646,9 +702,9 @@ export function evaluateActivationGate({
       seenPairKeys.add(comparisonId);
     }
 
-    // Deduplication by identical backlog task set within cluster (Audit F.5: superficial ID on same backlog)
-    if (taskSetId) {
-      const clusterBacklogKey = `${clusterKey || 'no_cluster'}::${taskSetId}`;
+    // Deduplication by identical backlog task set or fingerprint within cluster (Audit F.5 & Scope D)
+    if (effectiveBacklogKey) {
+      const clusterBacklogKey = `${clusterKey || 'no_cluster'}::${effectiveBacklogKey}`;
       if (seenContentKeys.has(clusterBacklogKey)) {
         excludedPairs.push({
           pairId,
@@ -659,18 +715,18 @@ export function evaluateActivationGate({
       seenContentKeys.add(clusterBacklogKey);
     }
 
-    // Cross-cluster backlog leakage detection
-    if (taskSetId && clusterKey) {
-      if (taskSetClusterMap.has(taskSetId)) {
-        const prevCluster = taskSetClusterMap.get(taskSetId);
+    // Cross-cluster backlog leakage detection by taskSetId or task content fingerprint
+    if (effectiveBacklogKey && clusterKey) {
+      if (taskSetClusterMap.has(effectiveBacklogKey)) {
+        const prevCluster = taskSetClusterMap.get(effectiveBacklogKey);
         if (prevCluster !== clusterKey) {
           crossClusterLeakageDetected = true;
           reasons.push(
-            `Cross-cluster backlog leakage detected: task set "${taskSetId}" appears in both cluster "${prevCluster}" and "${clusterKey}".`
+            `Cross-cluster backlog leakage detected: backlog or fingerprint "${effectiveBacklogKey}" appears in both cluster "${prevCluster}" and "${clusterKey}".`
           );
         }
       } else {
-        taskSetClusterMap.set(taskSetId, clusterKey);
+        taskSetClusterMap.set(effectiveBacklogKey, clusterKey);
       }
     }
 
@@ -705,6 +761,32 @@ export function evaluateActivationGate({
     sumCandScore += evalRes.candidateScore;
     sumBaseScore += evalRes.baselineScore;
 
+    // Component metric tracking if schedule alternatives provide breakdown
+    const candAlt = rawObs.candidateAlternative || rawObs.candidateSchedule || rawObs.candidate;
+    const baseAlt = rawObs.baselineAlternative || rawObs.baselineSchedule || rawObs.baseline;
+    const candMetrics = candAlt?.metrics || candAlt?.summary;
+    const baseMetrics = baseAlt?.metrics || baseAlt?.summary;
+
+    if (candMetrics && baseMetrics) {
+      const candTotal = Number(candMetrics.totalTasks ?? 0);
+      const candOnTime = Number(candMetrics.onTimeTasksCount ?? 0);
+      const candDelayed = Number(candMetrics.delayedTasksCount ?? 0);
+      const candDelayDays = candDelayed > 0 ? Number(candMetrics.totalDelayDays ?? 0) / candDelayed : 0;
+
+      const baseTotal = Number(baseMetrics.totalTasks ?? 0);
+      const baseOnTime = Number(baseMetrics.onTimeTasksCount ?? 0);
+      const baseDelayed = Number(baseMetrics.delayedTasksCount ?? 0);
+      const baseDelayDays = baseDelayed > 0 ? Number(baseMetrics.totalDelayDays ?? 0) / baseDelayed : 0;
+
+      if (candTotal > 0 && baseTotal > 0) {
+        const candRate = Math.max(0, Math.min(1, candOnTime / candTotal));
+        const baseRate = Math.max(0, Math.min(1, baseOnTime / baseTotal));
+        sumOnTimeDelta += (candRate - baseRate);
+        sumDelayDelta += (candDelayDays - baseDelayDays);
+        pairsWithComponentsCount++;
+      }
+    }
+
     if (evalRes.delta > 0) {
       concordantCount++;
     } else if (evalRes.delta < 0) {
@@ -725,6 +807,50 @@ export function evaluateActivationGate({
   const candidateMeanScore = eligibleCount > 0 ? Math.round((sumCandScore / eligibleCount) * 1000) / 1000 : null;
   const baselineMeanScore = eligibleCount > 0 ? Math.round((sumBaseScore / eligibleCount) * 1000) / 1000 : null;
   const concordanceProportion = eligibleCount > 0 ? Math.round((concordantCount / eligibleCount) * 1000) / 1000 : null;
+
+  const meanOnTimeDelta = pairsWithComponentsCount > 0
+    ? Math.round((sumOnTimeDelta / pairsWithComponentsCount) * 1000) / 1000
+    : null;
+  const meanDelayDelta = pairsWithComponentsCount > 0
+    ? Math.round((sumDelayDelta / pairsWithComponentsCount) * 1000) / 1000
+    : null;
+
+  // Critical metric regression guardrail (Scope F):
+  // If candidate drops on-time rate by >5% or increases average delay by >1.0 days despite composite gain, flag regression
+  let criticalMetricRegressionDetected = false;
+  if (pairsWithComponentsCount >= 5) {
+    if (meanOnTimeDelta != null && meanOnTimeDelta < -0.05) {
+      criticalMetricRegressionDetected = true;
+      reasons.push(
+        `Critical metric regression detected: candidate composite score gain masks unacceptable degradation in primary on-time completion rate (drop of ${Math.round(Math.abs(meanOnTimeDelta) * 1000) / 10}%).`
+      );
+    } else if (meanDelayDelta != null && meanDelayDelta > 1.0) {
+      criticalMetricRegressionDetected = true;
+      reasons.push(
+        `Critical metric regression detected: candidate composite score gain masks unacceptable increase in average task delay (+${Math.round(meanDelayDelta * 10) / 10} days).`
+      );
+    }
+  }
+
+  // Outlier cluster dominance guardrail (Scope F):
+  // If overall meanDelta is positive but >50% of distinct clusters regress, disqualify candidate
+  let outlierClusterDominanceDetected = false;
+  if (distinctClustersCount >= MIN_DECISION_CLUSTERS && meanDelta != null && meanDelta > 0) {
+    let negativeClusterCount = 0;
+    for (const [, clObs] of clustersMap.entries()) {
+      const clSum = clObs.reduce((acc, o) => acc + o.delta, 0);
+      const clMean = clObs.length > 0 ? clSum / clObs.length : 0;
+      if (clMean < 0) {
+        negativeClusterCount++;
+      }
+    }
+    if (negativeClusterCount > distinctClustersCount / 2) {
+      outlierClusterDominanceDetected = true;
+      reasons.push(
+        `Outlier cluster dominance detected: positive overall improvement (+${meanDelta}) is driven by outlier cluster(s), while the majority (${negativeClusterCount}/${distinctClustersCount}) of distinct scenario clusters experience quality regression.`
+      );
+    }
+  }
 
   // Evaluation evidence check under minimum-evidence policy
   const evaluationEvidencePassed =
@@ -889,7 +1015,13 @@ export function evaluateActivationGate({
     outcome = ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE;
   }
   // Rule 4: Not superior (evidence is sufficient and candidate is feasible, but superiority criteria are not met)
-  else if (!meetsPracticalImprovement || !isCiPositive || (meanDelta != null && meanDelta <= 0)) {
+  else if (
+    !meetsPracticalImprovement ||
+    !isCiPositive ||
+    (meanDelta != null && meanDelta <= 0) ||
+    criticalMetricRegressionDetected ||
+    outlierClusterDominanceDetected
+  ) {
     outcome = ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR;
   }
   // Rule 5: Eligible for supervised review (all criteria met)
@@ -989,6 +1121,10 @@ export function evaluateActivationGate({
       tiedCount,
       concordanceProportion,
       totalPairsEvaluated: eligibleCount,
+      meanOnTimeDelta,
+      meanDelayDelta,
+      criticalMetricRegressionDetected,
+      outlierClusterDominanceDetected,
     },
     uncertainty: {
       method: canEstimateUncertainty ? 'clustered_bootstrap_percentile_95' : null,

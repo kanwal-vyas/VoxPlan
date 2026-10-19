@@ -2019,6 +2019,24 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
             </div>
           )}
 
+          {/* Critical Metric Regression or Outlier Cluster Dominance Alert */}
+          {activeActivationGate.pairedComparison?.criticalMetricRegressionDetected && (
+            <div style={{ ...styles.syntheticWarningBanner, marginBottom: '16px', backgroundColor: '#FEF2F2', borderColor: '#FCA5A5' }} role="alert">
+              <span style={styles.syntheticWarningIcon}>⚠️</span>
+              <div style={styles.syntheticWarningText}>
+                <strong style={{ color: '#991B1B' }}>Critical Metric Regression Guardrail:</strong> Candidate composite score gain masks unacceptable degradation in primary scheduling metrics (on-time rate drop &gt; 5% or delay increase &gt; 1.0 day).
+              </div>
+            </div>
+          )}
+          {activeActivationGate.pairedComparison?.outlierClusterDominanceDetected && (
+            <div style={{ ...styles.syntheticWarningBanner, marginBottom: '16px', backgroundColor: '#FEF2F2', borderColor: '#FCA5A5' }} role="alert">
+              <span style={styles.syntheticWarningIcon}>⚠️</span>
+              <div style={styles.syntheticWarningText}>
+                <strong style={{ color: '#991B1B' }}>Outlier Cluster Dominance Guardrail:</strong> Positive grand mean difference is driven by extreme outlier cluster(s) while &gt; 50% of distinct scenario clusters regress.
+              </div>
+            </div>
+          )}
+
           {/* Endpoint Metrics Grid */}
           <div style={styles.rankingStatsGrid}>
             <div style={styles.rankingStatCard}>
@@ -2052,7 +2070,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                 {activeActivationGate.evidenceAssessment.distinctClustersCount} / {activeActivationGate.evidenceAssessment.minDecisionClustersRequired ?? 5}
               </span>
               <span style={styles.rankingStatSub}>
-                {activeActivationGate.evidenceAssessment.distinctClustersCount >= 5 ? '✓ Decision-Ready' : '✕ Inadequate (< 5)'}
+                {activeActivationGate.evidenceAssessment.distinctClustersCount >= 5 ? '✓ Operational Floor Met (M ≥ 5)' : '✕ Inadequate (< 5 Clusters)'}
               </span>
             </div>
           </div>
@@ -2066,7 +2084,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                 <span style={styles.uncertaintyValue}>
                   {activeActivationGate.uncertainty.canEstimateUncertainty
                     ? activeActivationGate.uncertainty.isDecisionReady
-                      ? 'Clustered Bootstrap Resampling (95% CI — Decision-Ready)'
+                      ? 'Clustered Bootstrap Resampling (95% CI — Operational Safeguard Floor)'
                       : 'Clustered Bootstrap Resampling (95% CI — Exploratory Only)'
                     : 'Insufficient Observations or Clusters'}
                 </span>

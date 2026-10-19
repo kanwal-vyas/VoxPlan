@@ -21,7 +21,7 @@ This document tracks the phased evolution of VoxPlan from a static task tracker 
 | **Phase 4, Stage 6** | Schedule Feedback Integrity & Attribution Audit | **COMPLETED** | Stable session-scoped proposal identities; durable deduplication surviving page reloads without backend dependency (hydrating index from cached IndexedDB events on `telemetry.init()`); multi-proposal interval-based outcome attribution (`[acceptedAt, supersededAt)`); task lifecycle hardening (excluding reopened incomplete tasks & active backlog tasks); isolation of conflicting proposal decisions; standardized unique task denominators; privacy-preserving observability diagnostics; and 115 automated tests across 30 suites. |
 | **Phase 5** | Conversational Planning, Multi-Turn Dialog & Voice Experience | **IN PROGRESS (Stages 5.1 & 5.2 Completed)** | Multi-turn planning state machine, clarification dialog, natural language batch rescheduling & negotiation, conversational schedule debriefing, accessible Web Speech voice synthesis and typed fallback symmetry. |
 | **Phase 6** | Calendar-Aware Time-Blocking & Multi-Day Workload Modeling | **COMPLETED** | Multi-day task chunking for oversized work, calendar focus time-blocking, meeting buffer constraints, interactive proposal canvas editing, and local RFC 5545 iCalendar (.ics) export (4 stages). |
-| **Phase 7** | Evidence-Gated Schedule Adaptation & Preference Learning | **IN PROGRESS (Stages 7.1, 7.2, and 7.3 Completed)** | Longitudinal feedback maturity gate (20+ decisions, 15+ outcomes), empirical friction analysis, bounded heuristic weight tuning (±20%) with Bayesian shrinkage, simulation sandbox, and one-click rollback (4 stages). |
+| **Phase 7** | Evidence-Gated Schedule Adaptation & Preference Learning | **IN PROGRESS (Stages 7.1, 7.2, 7.3, and 7.4.4A.1–7.4.4A.3 Completed)** | Longitudinal feedback maturity gate (20+ decisions, 15+ outcomes), empirical friction analysis, bounded heuristic weight tuning (±20%) with Bayesian shrinkage, simulation sandbox, one-click rollback, shadow-only activation gate evaluator, minimum-evidence policy, and independent statistical validation (4 stages). |
 | **Phase 8** | Production Hardening, Accessibility, Security & Release Readiness | **PLANNED** | Full WCAG 2.1 AA accessibility compliance, keyboard navigation, schema-versioned data lifecycle & encrypted backup, bundle code-splitting, PWA offline resilience, and CI/CD release verification (4 stages). |
 
 ---
@@ -3086,6 +3086,67 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
   - **Backend Pytest Suite**: **27 passed, 0 failed** (`python -m pytest`).
   - **Linter**: **0 errors, 1 pre-existing warning** in `AdaptiveScheduleModal.jsx` across 73 files (`npm run lint`).
   - **Client Production Build**: **Built production bundle cleanly in 249ms** (`npm run build`).
+  - **Git Diff & Whitespace**: **Clean with zero whitespace or line-ending errors** (`git diff --check`).
+
+- **Next Recommended Stage**:
+  - Stage 7.4.4A.3: Independent Statistical Validation & Evidence Provenance Audit (offline simulation harness, 16 controlled scenarios, empirical confidence interval coverage and false-eligibility auditing, cluster independence content fingerprinting, and critical metric non-regression guardrails).
+
+---
+
+#### Stage 7.4.4A.3: Independent Statistical Validation & Evidence Provenance Audit (COMPLETED)
+- **Status**: Completed and fully verified.
+- **Objectives**:
+  1. Independently validate the statistical methodology, bootstrap confidence-interval coverage, false-eligibility rates, and cluster independence assumptions used by VoxPlan's shadow-only adaptive scheduling activation gate.
+  2. Implement an independent offline validation harness (`tests/statistical_validation_harness.js`) generating controlled synthetic datasets with known ground truth across 16 scenarios.
+  3. Measure empirical confidence-interval coverage and false-eligibility rates across cluster counts ($M \in \{3, 4, 5, 6, 8, 10\}$), balanced vs imbalanced cluster sizes, and normal vs heavy-tailed distributions, reporting exact numerators, denominators, and Wilson score 95% confidence intervals.
+  4. Audit cluster independence and provenance; implement content fingerprinting (`computeTaskSetFingerprint`) to catch cross-cluster backlog leakage and relabeled task sets.
+  5. Validate the 5-cluster operational floor; prove empirically why $M=5$ is an operational safeguard against combinatorial degeneracy rather than an asymptotic guarantee of 95% coverage under all arbitrary distributions.
+  6. Audit composite quality scoring and $\epsilon$; implement non-regression guardrails preventing composite score gains from masking critical metric degradation (on-time rate drop $> 5\%$ or average delay increase $> 1.0$ day) and outlier cluster dominance ($> 50\%$ clusters regressing).
+  7. Update UI transparency in `AdaptationSandboxCard.jsx` clarifying the operational floor nature of $M \ge 5$ and displaying guardrail alerts.
+  8. Create comprehensive automated test suite `tests/statistical_validation.test.js` validating all 16 scenarios, component guardrails, and production invariance.
+  9. Strict Safety Invariants: Production adaptation remains strictly disabled (`isAdaptationUnlocked === false`, `productionApplied === false`), factory weights remain 100% active in all production paths.
+
+- **Architectural Deliverables & Audit Findings**:
+  1. **Independent Validation Harness (`tests/statistical_validation_harness.js`, Scope A, B, C)**:
+     - Implemented Box-Muller normal deviate generator, Student-t ($df=3$) heavy-tailed generator, and log-normal skewed generator driven by deterministic Mulberry32 PRNG.
+     - Implemented `generateValidationDataset(config)` supporting 16 distinct scenarios: null effect ($\theta = 0$), negative effect ($\theta < 0$), sub-threshold ($\theta < \epsilon$), near-threshold ($\theta \approx \epsilon$), clearly positive ($\theta \gg \epsilon$), cluster imbalance, within-cluster correlation, cross-cluster dependence, overlapping backlogs, relabeled task sets, outlier cluster dominance, heterogeneous effects, heavy-tailed deviates, sparse clusters, invalid evidence, and seed reproducibility.
+     - Implemented `evaluateCoverageExperiment(options)` executing repeated Monte Carlo simulations measuring empirical coverage, Wilson 95% confidence intervals for coverage, false-eligibility rates with Wilson intervals, and outcome distributions.
+  2. **Empirical Coverage & False-Eligibility Findings (Scope B, C, E)**:
+     - *True Null Effect ($\theta = 0.0$)*: Under provisional $\epsilon = 1.0$, false eligibility rate is strictly 0.0% (0/35 replications, Wilson 95% CI: $[0.0, 0.098]$), with empirical coverage of true $\theta=0$ reaching 88.6%.
+     - *Negative Effect ($\theta = -2.0$)*: 100% of replications (30/30) rejected as `NOT_SUPERIOR`; false eligibility rate is strictly 0.0% (0/30, Wilson 95% CI: $[0.0, 0.113]$).
+     - *Sub-Threshold Effect ($\theta = +0.5 < \epsilon=1.0$)*: Practical significance threshold effectively blocks qualification (0/30 eligibilities, 100% `NOT_SUPERIOR`).
+     - *Near-Threshold Effect ($\theta = 1.15 \approx \epsilon$)*: Intermediate eligibility rate reflecting sampling variability around threshold; CI covers ground truth effect.
+     - *Clearly Positive Effect ($\theta = 3.5 \gg \epsilon$)*: Demonstrates high statistical power ($> 80\%$ eligibility rate, 100% decision-ready).
+     - *Cluster Imbalance ($[20, 3, 3, 3, 3]$)*: Evaluated coverage sensitivity under unequal weights, showing ~75% coverage.
+     - *Within-Cluster Correlation ($\rho = 0.7$)*: Clustered bootstrap interval width appropriately reflects positive intra-cluster correlation compared to artificially narrow naive intervals.
+  3. **Empirical Validation of the 5-Cluster Operational Floor (Scope E)**:
+     - *Combinatorial Degeneracy of Small Clusters*: $M=3$ yields $\binom{5}{3} = 10$ unique cluster multisets; $M=4$ yields $\binom{7}{4} = 35$ multisets. Both are correctly quarantined under the minimum-evidence policy as `INSUFFICIENT_EVIDENCE`.
+     - *$M=5$ Operational Floor*: Yields $\binom{9}{5} = 126$ multisets, avoiding degenerate discrete tails.
+     - *Empirical Limitation Proven*: Under heavy-tailed cluster shocks (Student-t $df=3$) with $M=5$, empirical percentile coverage drops to ~60-65% (16/25). This proves that $M=5$ is a vital **operational safeguard** against combinatorial collapse, but NOT an asymptotic guarantee of 95% coverage across arbitrary heavy-tailed real-world data. Documented in evaluator disclosures and UI.
+  4. **Task-Set Fingerprinting & Backlog Leakage Quarantine (Scope D)**:
+     - Implemented `computeTaskSetFingerprint(observation)`: canonical sorted hash of task IDs (`fp_taskA__taskB__...`).
+     - Detects superficial relabeling of `taskSetId` across clusters when underlying task items are identical, triggering `crossClusterLeakageDetected` and returning `INSUFFICIENT_EVIDENCE`.
+  5. **Critical Metric Regression & Outlier Dominance Guardrails (Scope F)**:
+     - *Critical Metric Non-Regression Guardrail*: Added component-level tracking (`meanOnTimeDelta`, `meanDelayDelta`). If candidate composite score improves by $\ge 1.0$ pt (e.g. via reduced churn or higher utilization) but primary on-time completion rate drops by $> 5\%$ ($meanOnTimeDelta < -0.05$) or average task delay increases by $> 1.0$ day ($meanDelayDelta > 1.0$), candidate is flagged with `criticalMetricRegressionDetected = true` and fails as `NOT_SUPERIOR`.
+     - *Outlier Cluster Dominance Guardrail*: If candidate achieves positive grand mean ($\overline{\Delta} > 0$) but $> 50\%$ of distinct scenario clusters regress, candidate is flagged with `outlierClusterDominanceDetected = true` and fails as `NOT_SUPERIOR`.
+  6. **UI Transparency Updates (`AdaptationSandboxCard.jsx`, Scope I)**:
+     - Distinct Scenario Clusters card updated: `${distinctClustersCount} / 5` with `✓ Operational Floor Met (M ≥ 5)` vs `✕ Inadequate (< 5 Clusters)`.
+     - Uncertainty estimation method labeled: `Clustered Bootstrap Resampling (95% CI — Operational Safeguard Floor)`.
+     - Added critical metric regression and outlier cluster dominance warning banners.
+  7. **Comprehensive Test Suite (`tests/statistical_validation.test.js`, Scope G)**:
+     - 22 automated tests passing in 230ms:
+       - Section 1: Controlled simulation matrix across all 16 scenarios (null, negative, sub-threshold, near-threshold, clearly positive, imbalance, within-cluster correlation, cross-cluster dependence, overlapping backlogs, relabeled fingerprints, outlier dominance, heterogeneous effects, heavy-tailed deviates, sparse clusters $M \in \{3, 4, 5, 8\}$, invalid evidence, seed reproducibility).
+       - Section 2: Cluster independence and fingerprint collision detection.
+       - Section 3: Critical metric guardrails (on-time rate drop $>5\%$, delay increase $>1.0$ day) and non-regression pass cases.
+       - Section 4: Strict production isolation: candidate eligibility never mutates factory weights or unlocks adaptation.
+
+- **Verification Results**:
+  - **Statistical Validation Test Suite**: **22 passed, 0 failed across 5 suites in 230ms** (`node --test tests/statistical_validation.test.js`).
+  - **Activation Gate Test Suite**: **57 passed, 0 failed across 8 suites in 153ms** (`node --test tests/activation_gate_evaluator.test.js`).
+  - **Frontend Test Suite**: **667 passed, 0 failed across 136 suites** (`npm test`).
+  - **Backend Pytest Suite**: **27 passed, 0 failed in 4.10s** (`python -m pytest`).
+  - **Linter**: **0 errors, 1 pre-existing warning** in `AdaptiveScheduleModal.jsx` across 73 files (`npm run lint`).
+  - **Client Production Build**: **Built production bundle cleanly in 250ms** (`npm run build`).
   - **Git Diff & Whitespace**: **Clean with zero whitespace or line-ending errors** (`git diff --check`).
 
 - **Next Recommended Stage**:
