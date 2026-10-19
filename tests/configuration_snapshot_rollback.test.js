@@ -494,4 +494,138 @@ describe('Phase 7.4 Stage 3: Versioned Configuration Snapshots & Rollback Safety
       assert.deepEqual(afterSimulation, initialActive);
     });
   });
+
+  describe('5. Stage 3.1 Hardened Failure Paths & Concurrency Audits', () => {
+    it('validateConfigurationSnapshot rejects unexpected root-level fields', () => {
+      const snap = createFactorySnapshot();
+      const tampered = {
+        ...snap,
+        unexpectedMetadata: 'malicious_or_accidental_payload',
+        tasks: [{ id: 'task_1' }],
+      };
+      const val = validateConfigurationSnapshot(tampered);
+      assert.equal(val.isValid, false);
+      assert.ok(val.errors.some((e) => e.includes('Unexpected snapshot field: "unexpectedMetadata"')));
+      assert.ok(val.errors.some((e) => e.includes('Unexpected snapshot field: "tasks"')));
+    });
+
+    it('saveSnapshot halts with corrupted_storage and refuses to overwrite corrupted storage (anti-data-loss)', () => {
+      // Seed corrupted JSON in snapshots storage
+      mockStorage.setItem(SNAPSHOT_STORAGE_KEY, '{ invalid_json_partial_write: ');
+
+      const validSnap = createFactorySnapshot();
+      const res = saveSnapshot(validSnap, { storage: mockStorage });
+
+      assert.equal(res.success, false);
+      assert.equal(res.status, 'corrupted_storage');
+      assert.ok(res.error.includes('Refusing to overwrite to prevent data loss'));
+      // Verify storage was not overwritten with blank dictionary
+      assert.equal(mockStorage.getItem(SNAPSHOT_STORAGE_KEY), '{ invalid_json_partial_write: ');
+    });
+
+    it('restoreFactoryConfiguration handles storage failure during factory snapshot creation', () => {
+      const throwingStorage = {
+        getItem: (k) => mockStorage.getItem(k),
+        setItem: (k, v) => {
+          if (k === SNAPSHOT_STORAGE_KEY) {
+            throw new Error('Quota exceeded on snapshots table (simulated)');
+          }
+          mockStorage.setItem(k, v);
+        },
+      };
+
+      const res = restoreFactoryConfiguration({ storage: throwingStorage });
+      assert.equal(res.success, false);
+      assert.equal(res.status, 'storage_failure');
+      assert.ok(res.error.includes('Quota exceeded'));
+    });
+
+    it('restoreFactoryConfiguration avoids redundant writes when factory snapshot already exists', () => {
+      // 1. Initial factory restore ensures snap_factory_baseline is stored
+      const res1 = restoreFactoryConfiguration({ storage: mockStorage });
+      assert.equal(res1.success, true);
+
+      // Track setItem calls
+      let snapshotWriteCount = 0;
+      const trackingStorage = {
+        getItem: (k) => mockStorage.getItem(k),
+        setItem: (k, v) => {
+          if (k === SNAPSHOT_STORAGE_KEY) {
+            snapshotWriteCount++;
+          }
+          mockStorage.setItem(k, v);
+        },
+      };
+
+      // 2. Second factory restore
+      const res2 = restoreFactoryConfiguration({ storage: trackingStorage });
+      assert.equal(res2.success, true);
+      // SNAPSHOT_STORAGE_KEY should not be written to again because snap_factory_baseline already exists
+      assert.equal(snapshotWriteCount, 0);
+    });
+
+    it('accepts candidate weights at exact permitted ±20% boundary values', () => {
+      // Exact bounds: urgency [40.0, 60.0], priority [80.0, 120.0], unblock [12.0, 18.0], risk [20.0, 30.0]
+      const minBoundsSnap = createConfigurationSnapshot({
+        weights: {
+          urgencyWeight: 40.0,
+          priorityWeight: 80.0,
+          unblockWeight: 12.0,
+          riskWeight: 20.0,
+        },
+        snapshotId: 'snap_min_bounds',
+      });
+      assert.equal(validateConfigurationSnapshot(minBoundsSnap).isValid, true);
+
+      const maxBoundsSnap = createConfigurationSnapshot({
+        weights: {
+          urgencyWeight: 60.0,
+          priorityWeight: 120.0,
+          unblockWeight: 18.0,
+          riskWeight: 30.0,
+        },
+        snapshotId: 'snap_max_bounds',
+      });
+      assert.equal(validateConfigurationSnapshot(maxBoundsSnap).isValid, true);
+    });
+
+    it('getActiveConfigRecord gracefully recovers from corrupted active record JSON', () => {
+      mockStorage.setItem(ACTIVE_CONFIG_RECORD_KEY, '{ corrupted_json_payload ');
+
+      const active = getActiveConfigRecord({ storage: mockStorage });
+      assert.equal(active.revision, 1);
+      assert.equal(active.isFactoryBaseline, true);
+      assert.deepEqual(active.activeWeights, FACTORY_SCHEDULER_WEIGHTS);
+      assert.equal(active.productionApplied, false);
+    });
+
+    it('sequential rollbacks increment revision deterministically without gap or corruption', () => {
+      const snapA = createConfigurationSnapshot({
+        weights: { urgencyWeight: 45.0, priorityWeight: 110.0, unblockWeight: 15.0, riskWeight: 25.0 },
+        snapshotId: 'snap_alpha',
+      });
+      const snapB = createConfigurationSnapshot({
+        weights: { urgencyWeight: 48.0, priorityWeight: 95.0, unblockWeight: 14.0, riskWeight: 26.0 },
+        snapshotId: 'snap_beta',
+      });
+
+      saveSnapshot(snapA, { storage: mockStorage });
+      saveSnapshot(snapB, { storage: mockStorage });
+
+      // Rollback to snapA (rev 1 -> 2)
+      const resA = rollbackToSnapshot('snap_alpha', { expectedRevision: 1, storage: mockStorage });
+      assert.equal(resA.success, true);
+      assert.equal(resA.activeConfig.revision, 2);
+
+      // Rollback to snapB (rev 2 -> 3)
+      const resB = rollbackToSnapshot('snap_beta', { expectedRevision: 2, storage: mockStorage });
+      assert.equal(resB.success, true);
+      assert.equal(resB.activeConfig.revision, 3);
+
+      // Restore factory (rev 3 -> 4)
+      const resFactory = restoreFactoryConfiguration({ expectedRevision: 3, storage: mockStorage });
+      assert.equal(resFactory.success, true);
+      assert.equal(resFactory.activeConfig.revision, 4);
+    });
+  });
 });

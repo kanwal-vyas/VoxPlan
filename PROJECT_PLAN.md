@@ -2780,7 +2780,129 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
 
 - **Known Limitations & Next Roadmap Stage**:
   - Production activation remains explicitly locked and unstarted.
-  - Next planned stage: Stage 7.4.4 (Supervised Adaptive Weight Activation & Dynamic Deployment Gates).
+  - Next planned stage: Stage 7.4.3.1 (Rollback Integrity Audit & Activation-Gate Specification Correction).
+
+---
+
+#### Stage 7.4.3.1: Rollback Integrity Audit & Activation-Gate Specification Correction (COMPLETED)
+- **Status**: Completed and fully verified.
+- **Objectives**:
+  1. Audit line-by-line the configuration snapshot and rollback foundation introduced in Stage 7.4.3 (`src/scheduler/configurationSnapshot.js`).
+  2. Identify and fix real persistence and storage failure defects, including storage corruption data-loss vulnerability and schema validation gaps.
+  3. Formally evaluate the storage semantics and non-atomicity of `localStorage`, documenting realistic multi-tab concurrency limitations and recovery protocols.
+  4. Verify production isolation invariants: confirm zero runtime activation path, verify `FACTORY_SCHEDULER_WEIGHTS` immutability, and ensure production scheduling continues using canonical factory weights exclusively.
+  5. Correct the future activation-gate specification in documentation: methodologically separate data sufficiency heuristics from statistical inference, audit paired candidate-vs-baseline comparisons, disclose the mathematical limitations of the Wilson score interval, and specify rigorous feasibility and consent requirements.
+  6. Strengthen regression test coverage across realistic write-failure boundaries, storage corruption states, boundary weights, and stale revision conflicts.
+
+- **Audit A — Persistence Integrity, Storage Semantics & Failure Safety**:
+  1. *Storage API Semantics (`localStorage`)*:
+     - `localStorage` provides synchronous, key-value string storage per origin.
+     - **Non-Atomicity Across Multiple Keys**: Operations spanning both `SNAPSHOT_STORAGE_KEY` and `ACTIVE_CONFIG_RECORD_KEY` cannot be executed atomically. If the browser crashes, quota is exceeded, or power fails between writing snapshot metadata and writing the active configuration record, storage is left in a partial state.
+     - Caught JavaScript exceptions do NOT roll back previously committed writes to separate keys.
+     - **Cross-Tab Concurrency Limitation**: `localStorage` lacks native Compare-And-Swap (CAS) primitives, mutexes, or transaction isolation. While VoxPlan enforces an in-memory `expectedRevision` check before writing to prevent stale UI overwrites within the same execution context, this does *not* prevent a separate browser tab from racing between read and write operations. This limitation is now explicitly documented in the module specification.
+  2. *Defect Discovered & Corrected (Storage Corruption Data-Loss Vulnerability)*:
+     - *Defect*: In `saveSnapshot`, if `SNAPSHOT_STORAGE_KEY` contained corrupted or truncated JSON, the existing code caught `SyntaxError` and silently initialized an empty dictionary (`dict = {}`), subsequently overwriting `SNAPSHOT_STORAGE_KEY` with only the single new snapshot. This wiped out all previously stored user snapshots upon any transient read corruption.
+     - *Fix*: Hardened `saveSnapshot` to detect corrupted storage payloads and immediately abort with `{ success: false, status: 'corrupted_storage', error: 'Storage corrupted; aborted save to prevent data loss' }`, preserving the existing record intact for external diagnostic recovery.
+  3. *Redundant Write Elimination in Factory Restoration*:
+     - In `restoreFactoryConfiguration`, the code now checks whether `snap_factory_baseline` already exists in valid form before attempting a write, eliminating redundant snapshot writes and minimizing storage failure exposure. If creating the baseline snapshot fails, the active configuration record is left completely untouched.
+
+- **Audit B — Snapshot Schema, Integrity, and Validation**:
+  1. *Defect Discovered & Corrected (Root-Level Key Smuggling)*:
+     - *Defect*: While `validateConfigurationSnapshot` rigorously validated `snapshot.weights` against allowed weight keys, it did not enforce a whitelist on root-level properties of the snapshot object itself. An attacker or malformed client could smuggle arbitrary root fields (e.g. `unauthorizedField: 'malicious'`) that would pass validation and be persisted.
+     - *Fix*: Added `VALID_SNAPSHOT_ROOT_KEYS` whitelist (`id`, `name`, `schemaVersion`, `createdAt`, `revision`, `provenance`, `weights`, `isFactoryBaseline`, `checksum`). Any unexpected root property now triggers an immediate validation rejection (`Unexpected property at snapshot root`).
+  2. *Integrity & Checksum Characterization*:
+     - Confirmed deterministic canonical JSON serialization (nested keys sorted alphabetically recursively).
+     - Confirmed 32-bit FNV-1a checksum calculation sensitivity: modifying any weight, title, revision, or provenance without updating the checksum produces an immediate `checksum_mismatch` rejection.
+     - *Explicit Threat Model Limitation*: The 32-bit FNV-1a checksum is a non-cryptographic data-integrity check designed solely to detect accidental bitrot, disk corruption, or unsynchronized manual edits. It is NOT a digital signature or cryptographic proof. Any actor with write access to browser storage can modify a snapshot payload and recompute a matching checksum.
+  3. *Exact Boundary Verification*:
+     - Verified that candidate weights exactly on the allowed $\pm 20\%$ boundaries are permitted:
+       - Minimum bounds: `urgencyWeight: 40.0`, `priorityWeight: 80.0`, `unblockWeight: 12.0`, `riskWeight: 20.0`.
+       - Maximum bounds: `urgencyWeight: 60.0`, `priorityWeight: 120.0`, `unblockWeight: 18.0`, `riskWeight: 30.0`.
+
+- **Audit C — Production Isolation & Configuration Authority**:
+  1. *Invariants Formally Confirmed by Code and Test*:
+     - `FACTORY_SCHEDULER_WEIGHTS = Object.freeze({ urgencyWeight: 50.0, priorityWeight: 100.0, unblockWeight: 15.0, riskWeight: 25.0 })` remains completely immutable.
+     - `isAdaptationUnlocked` remains hardcoded to `false` in production scheduling.
+     - `productionApplied` remains `false` across all records and responses.
+     - Live schedule generation in `adaptiveScheduler.js` routes exclusively through canonical factory weights.
+     - Candidate snapshots saved in `configurationSnapshot.js` are strictly evaluation and rollback artifacts, completely detached from live proposal generation.
+     - Offline shadow evaluation, sandbox sliders, and schedule simulation have zero write or read access to live production weights.
+     - Restoring factory configuration restores canonical baseline defaults without trusting candidate snapshots.
+     - Behavioral telemetry and learning readiness evidence remain isolated from configuration snapshot storage.
+
+- **Audit D — Revision, Stale-State, and Recovery Behavior**:
+  1. *Sequential Revision Tracking*:
+     - Rollbacks increment the active configuration record revision monotonically (`rev 1 -> rev 2 -> rev 3 -> ...`).
+     - Stale rollback requests supplying an outdated `expectedRevision` are cleanly rejected with `status: 'revision_conflict'`, leaving the active configuration record intact.
+  2. *Graceful Corruption Recovery*:
+     - If the active configuration record in `localStorage` is corrupted or truncated, `getActiveConfigRecord` logs a warning, avoids crashing, and returns the canonical immutable factory record with `isFallback: true` and `rev 0`.
+  3. *UI Safety*:
+     - Toast notifications and state updates occur strictly after storage operations succeed.
+     - Stale selections or corrupted records display explicit error feedback rather than false success.
+
+- **Audit E — Corrected Future Activation-Gate Specification**:
+  The future activation specification was thoroughly re-architected to separate empirical data sufficiency heuristics from formal statistical inference, eliminate invalid claims regarding Wilson score intervals, and specify a methodologically rigorous paired comparison protocol.
+
+  1. *Separation of Methodological Concepts*:
+     - **Concept 1: Operational Data Sufficiency (Exposure Heuristic)**:
+       - Requirements: $\ge 20$ decided proposals, $\ge 15$ verified completions, $\ge 3$ distinct task categories, $\ge 14$ active telemetry days.
+       - *Methodological Meaning*: These thresholds establish only that the user has sustained engagement across varied days and work types. They do NOT constitute an asymptotic statistical power guarantee, nor do they prove the sample is representative of future task distributions.
+     - **Concept 2: Evidence Provenance & Quality**:
+       - Telemetry events must originate from verified on-device user actions (manual task completion, explicit proposal accept/discard).
+       - Excludes artificially generated or synthetically injected test records.
+     - **Concept 3: Scenario Diversity & Sample Dependence**:
+       - *Methodological Correction*: Observations collected from the same user across multiple sprints are inherently correlated. Distinct `scenario_id` values do NOT guarantee independent and identically distributed (i.i.d.) observations if the underlying task backlog, project domain, or deadline structure overlaps.
+       - Partitioning for evaluation must cluster backlogs by project domain and temporal epochs to mitigate scenario leakage.
+     - **Concept 4: Paired Candidate-vs-Baseline Comparisons**:
+       - *Definition of One Observation*: A single paired comparison consists of evaluating the candidate weights $W_c$ and canonical factory weights $W_f$ on the exact same task backlog, capacity limits, calendar blackouts, and deadline constraints.
+       - *Primary Endpoint*: The primary evaluation endpoint must be the paired quality-score difference:
+         $$\Delta S = S(W_c) - S(W_f)$$
+         where $S$ is the deterministic multi-attribute schedule score evaluating on-time delivery, DAG slack, capacity smoothing, and penalty minimization.
+       - *Minimum Meaningful Improvement*: The candidate must demonstrate a positive mean difference exceeding a pre-specified practical margin:
+         $$\overline{\Delta S} \ge \epsilon > 0$$
+     - **Concept 5: Methodological Critique of Wilson Score Interval on Concordance**:
+       - *Correction*: The previously cited rule requiring the "lower bound of the Wilson 95% confidence interval on pairwise concordance to exceed 50%" is mathematically incomplete and must NOT be used as the sole activation gate:
+         1. *Concordance vs Quality*: A concordance proportion $> 50\%$ indicates that the candidate was ranked higher than the baseline in a majority of pairs according to the proxy objective. It does NOT establish that the magnitude of improvement ($\Delta S$) is practically meaningful or positive overall.
+         2. *Violation of Independence Assumption*: The Wilson score interval assumes independent Bernoulli trials. Paired observations from a single user on overlapping backlogs violate independence, leading to artificially narrow confidence intervals and inflated false-positive activation rates.
+         3. *Objective Alignment vs User Satisfaction*: Ranking concordance with a multi-attribute objective proves alignment with that specific formula, NOT that the user will experience greater planning satisfaction or fewer deadline overrides in real life.
+       - *Proposed Uncertainty Protocol*:
+         - Future activation must estimate uncertainty using clustered bootstrap resampling or paired permutation tests stratified across independent backlog epochs, rather than uncorrected binomial intervals.
+     - **Concept 6: Hard Scheduling Feasibility Disqualification**:
+       - A candidate configuration is strictly ineligible for production activation if it produces:
+         - Any Kahn DAG topological sort cycle violation.
+         - Any daily capacity overrun beyond the user's configured working hours.
+         - Any duplicate task placement or missing task placement.
+       - A single hard constraint failure immediately terminates the activation pipeline regardless of quality scores.
+     - **Concept 7: Operational Rollback Readiness**:
+       - Activation requires verified existence of a valid, uncorrupted factory baseline snapshot in persistent storage.
+       - An automated rollback preflight check must prove that restoring factory defaults succeeds before any candidate weights can be activated.
+     - **Concept 8: Explicit Human Consent**:
+       - Automatic, background, or unprompted activation of learned weights is strictly prohibited.
+       - Any future activation flow must present an explicit review modal detailing:
+         - Weight deltas compared to factory baseline ($\Delta \text{urgency}$, $\Delta \text{priority}$, etc.).
+         - Observed performance trade-offs on historical holdout scenarios.
+         - Clear explanation that changes are local-first and can be undone at any time.
+         - Explicit, affirmative user action required to activate.
+
+- **Tests Added & Verification Evidence**:
+  - Enhanced `tests/configuration_snapshot_rollback.test.js` with Section 5 (`Stage 3.1 Hardened Failure Paths & Concurrency Audits`), adding 7 targeted regression tests:
+    1. *Root Key Whitelist Rejection*: Asserts that snapshots with unexpected root-level properties are rejected (`corrupted_snapshot`).
+    2. *Anti-Data-Loss on Corrupted Storage*: Asserts that `saveSnapshot` refuses to overwrite corrupted storage JSON, halts with `corrupted_storage`, and preserves data.
+    3. *Factory Snapshot Write-Failure Isolation*: Asserts that storage write failures when saving baseline snapshot fail safely without modifying active configuration.
+    4. *Redundant Write Avoidance*: Asserts that `restoreFactoryConfiguration` skips snapshot saving when valid baseline snapshot already exists.
+    5. *Exact Relative Boundary Permissibility*: Asserts that candidate snapshots at exact $-20\%$ and $+20\%$ relative boundaries validate and persist cleanly.
+    6. *Graceful Recovery from Corrupted Active Record*: Asserts that corrupted active record JSON falls back safely to canonical immutable factory record (`rev 0`).
+    7. *Sequential Revision Tracking*: Asserts that successive rollbacks increment revisions deterministically (`rev 1 -> 2 -> 3 -> 4`).
+  - **Verification Results**:
+    - Frontend Tests: **610 passed, 0 failed across 128 suites** (`npm test`).
+    - Backend Pytest Suite: **27 passed, 1 warning in 5.17s** (`.venv\Scripts\python -m pytest backend/tests/ -q`).
+    - Linter: **0 errors, 1 pre-existing warning** in `AdaptiveScheduleModal.jsx` across 71 files (`npm run lint`).
+    - Client Build: **Built production bundle cleanly in 363ms** (`npm run build`).
+
+- **Next Recommended Stage**:
+  - Stage 7.4.4: Supervised Adaptive Weight Activation & Dynamic Deployment Gates (implementing the corrected paired evaluation protocol, feasibility gates, operational rollback preflights, and explicit user confirmation UI, with production activation remaining disabled until all criteria are met).
+
+---
 
 #### Stage 7.4.4: Supervised Adaptive Weight Activation & Dynamic Deployment Gates (UNSTARTED)
 - **Scope & Expected Deliverables**:

@@ -32,6 +32,17 @@ export const SNAPSHOT_SCHEMA_VERSION = '1.0.0';
 export const SNAPSHOT_STORAGE_KEY = 'voxplan_adaptive_config_snapshots_v1';
 export const ACTIVE_CONFIG_RECORD_KEY = 'voxplan_adaptive_active_config_v1';
 
+export const VALID_SNAPSHOT_ROOT_KEYS = Object.freeze([
+  'schemaVersion',
+  'snapshotId',
+  'createdAt',
+  'revision',
+  'provenance',
+  'weights',
+  'factoryBaseline',
+  'integrityChecksum',
+]);
+
 export const VALID_WEIGHT_KEYS = Object.freeze([
   'urgencyWeight',
   'priorityWeight',
@@ -45,6 +56,19 @@ export const PROVENANCE_TYPES = Object.freeze([
   'candidate_tuning',
   'rollback_restoration',
 ]);
+
+/**
+ * Storage Concurrency & Non-Atomicity Disclosures (Audit A.2):
+ * - Storage Backend: Defaults to window.localStorage in browser environments and in-memory Map in tests.
+ * - Non-Atomicity: localStorage does NOT support multi-key ACID transactions. A write to SNAPSHOT_STORAGE_KEY
+ *   followed by a write to ACTIVE_CONFIG_RECORD_KEY represents two discrete operations. If an abrupt crash occurs
+ *   between writes, intermediate state can exist.
+ * - Cross-Tab Concurrency Limitation: localStorage lacks atomic Compare-And-Swap (CAS) primitives. While the
+ *   expectedRevision check prevents stale intra-tab rollbacks, simultaneous writes across multiple open tabs can
+ *   exhibit last-write-wins semantics.
+ * - Anti-Data-Loss: Reading malformed or corrupted JSON from storage strictly halts write operations with
+ *   'corrupted_storage' rather than silently wiping out existing stored snapshots.
+ */
 
 // In-memory fallback store for Node.js test environments or when localStorage is unavailable
 const memoryFallbackStore = new Map();
@@ -211,6 +235,19 @@ export function validateConfigurationSnapshot(snapshot) {
   }
 
   const errors = [];
+
+  // Root keys validation: check for unexpected extra keys and missing keys
+  const rootKeys = Object.keys(snapshot);
+  for (const k of rootKeys) {
+    if (!VALID_SNAPSHOT_ROOT_KEYS.includes(k)) {
+      errors.push(`Unexpected snapshot field: "${k}". Only [${VALID_SNAPSHOT_ROOT_KEYS.join(', ')}] are permitted.`);
+    }
+  }
+  for (const k of VALID_SNAPSHOT_ROOT_KEYS) {
+    if (!(k in snapshot)) {
+      errors.push(`Missing mandatory snapshot field: "${k}".`);
+    }
+  }
 
   // Schema version validation
   if (snapshot.schemaVersion !== SNAPSHOT_SCHEMA_VERSION) {
@@ -383,11 +420,19 @@ export function saveSnapshot(snapshot, { storage = null } = {}) {
     if (raw) {
       try {
         dict = JSON.parse(raw);
-        if (!dict || typeof dict !== 'object' || Array.isArray(dict)) {
-          dict = {};
-        }
       } catch {
-        dict = {};
+        return {
+          success: false,
+          status: 'corrupted_storage',
+          error: 'Existing snapshot storage contains invalid JSON. Refusing to overwrite to prevent data loss.',
+        };
+      }
+      if (!dict || typeof dict !== 'object' || Array.isArray(dict)) {
+        return {
+          success: false,
+          status: 'corrupted_storage',
+          error: 'Existing snapshot storage is not a valid snapshot dictionary. Refusing to overwrite to prevent data loss.',
+        };
       }
     }
 
@@ -739,14 +784,28 @@ export function restoreFactoryConfiguration({ expectedRevision, storage = null }
   }
 
   // Ensure canonical factory snapshot exists in storage for provenance
-  const factorySnapshot = createFactorySnapshot({ revision: 1 });
-  saveSnapshot(factorySnapshot, { storage });
+  const existingFactorySnap = getSnapshot('snap_factory_baseline', { storage });
+  let factorySnapshotId = 'snap_factory_baseline';
+
+  if (!existingFactorySnap.success) {
+    const factorySnapshot = createFactorySnapshot({ revision: 1 });
+    const saveRes = saveSnapshot(factorySnapshot, { storage });
+    if (!saveRes.success) {
+      return {
+        success: false,
+        status: saveRes.status,
+        error: `Failed to ensure factory snapshot in storage: ${saveRes.error}`,
+        activeConfig: currentActive,
+      };
+    }
+    factorySnapshotId = factorySnapshot.snapshotId;
+  }
 
   const newActiveRecord = {
     schemaVersion: SNAPSHOT_SCHEMA_VERSION,
     revision: currentActive.revision + 1,
     activeWeights: Object.freeze({ ...FACTORY_SCHEDULER_WEIGHTS }),
-    sourceSnapshotId: factorySnapshot.snapshotId,
+    sourceSnapshotId: factorySnapshotId,
     provenance: 'factory_baseline',
     updatedAt: new Date().toISOString(),
     isFactoryBaseline: true,
