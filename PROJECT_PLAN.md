@@ -2530,27 +2530,75 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
 - **Known Limitations & Next Roadmap Stage**:
   - Real user explicit preference telemetry is cold-start locked (0 eligible comparisons).
   - Production model learning and automatic activation remain strictly disabled.
-  - Stage 7.4 (User Control Dashboard, Schedule Simulation & One-Click Rollback) remains strictly unstarted.
+  - Stage 7.4.1 (User Controls, Schedule Simulation & Shadow-Only Evaluation) successfully executed.
 
-#### Stage 7.4: User Control Dashboard, Schedule Simulation & One-Click Rollback
+#### Stage 7.4.1: User Controls, Schedule Simulation & Shadow-Only Evaluation (COMPLETED)
+- **Status**: **COMPLETED**.
+- **Scope & Mission**:
+  - Implement transparent user-facing controls, status reporting, and isolated schedule simulation for Phase 7.4.
+  - **NON-NEGOTIABLE PRODUCTION SAFETY ENFORCED**:
+    - `FACTORY_SCHEDULER_WEIGHTS` strictly preserved and immutable: `urgencyWeight: 50.0`, `priorityWeight: 100.0`, `unblockWeight: 15.0`, `riskWeight: 25.0`.
+    - `isAdaptationUnlocked: false` and `productionApplied: false` permanently enforced.
+    - Zero fitted or learned weights applied to production. Production schedule generation remains 100% bit-for-bit invariant.
+    - Zero external network requests, remote AI models, or cloud dependencies.
+    - Simulation is strictly read-only and memory-isolated; tasks, event histories, and scheduler configurations are never mutated.
+    - No candidate weights can be applied to production schedules; no production activation button exists.
+
+- **Delivered Capabilities & Architecture**:
+  1. **Transparent Scheduler Mode & Personalization Status Panel**:
+     - Embedded at the top of Section 05 (`src/components/AdaptationSandboxCard.jsx`).
+     - Distinct status pill badges: `🛡️ Factory Scheduler: Active`, `🔒 Adaptation: Disabled`, `🔬 Evaluation: Shadow-Only`.
+     - Explicit 5-stage personalization pipeline hierarchy separating independent lifecycle stages:
+       1. *Evidence Collection* ($N_{\text{observed}}$ recorded choices)
+       2. *Evidence Eligibility* ($N_{\text{eligible}}$ deduplicated pairs, exclusions breakdown)
+       3. *Learning Readiness* (Longitudinal gatekeeper status with unmet requirements count)
+       4. *Candidate Evaluation* (Offline pairwise concordance under multi-attribute quality objective)
+       5. *Production Activation* (Strictly Locked / Disabled)
+  2. **Explicit Preference Evidence Collection Control**:
+     - Local-first consent setting stored in `localStorage` under `voxplan_preference_collection_enabled` (default: ON).
+     - Integrated in `src/telemetry/telemetryManager.js` via `isPreferenceCollectionEnabled()` and `setPreferenceCollectionEnabled(bool)`.
+     - Disabling collection immediately blocks `recordSchedulePreference` across all UI entry points (`AdaptiveScheduleModal`) while preserving essential task lifecycle telemetry (`task_created`, `task_completed`, etc.).
+     - Historical preference records and completion telemetry are never altered or deleted upon toggle.
+     - Toggling the setting generates zero synthetic events.
+  3. **Deterministic & Isolated Schedule Simulator**:
+     - Pure evaluation module implemented in `src/scheduler/scheduleSimulator.js`.
+     - `validateCandidateWeights` enforces strict $\pm 20\%$ parameter bounds (`urgencyWeight`: [40, 60], `priorityWeight`: [80, 120], `unblockWeight`: [12, 18], `riskWeight`: [20, 30]) and strictly rejects non-finite values (NaN, Infinity), negative values, and unsupported configuration keys.
+     - Standard test scenarios (`deadline_vs_priority`, `dependency_chain`, `capacity_bottleneck`) and active backlog simulation (`active_backlog`).
+     - Deep input cloning guaranteeing paired-input isolation without input mutation.
+     - Side-by-side comparative metrics: Scheduled tasks coverage, on-time adherence rate %, delayed tasks count, cumulative delay days, capacity utilization rate %, schedule churn (shifted placements), and topological hard-constraint validation.
+     - Automated plain-language trade-off summary and feasibility verdict (`✓ 100% Feasible Schedule` vs `❌ Infeasible Schedule`).
+     - Infeasible schedules (cycles or capacity overruns) are flagged and disqualified from promotion.
+
+- **Verification Results**:
+  - **Frontend Test Suite**: **566 passed, 0 failed across 120 suites** (`npm test`).
+    - Added 26 comprehensive unit and regression tests in `tests/schedule_simulation_controls.test.js` covering factory invariants, parameter validation bounds, non-finite rejection, deterministic simulation, input mutation safety, hard-constraint violation flags, preference collection toggle persistence, and telemetry isolation.
+  - **Backend Pytest Suite**: **27 passed, 1 warning in 5.55s** (`python -m pytest`).
+  - **Linter**: **0 errors, 1 pre-existing warning** across 69 files (`npm run lint` / `oxlint`).
+  - **Production Build**: Clean client bundle built in 537ms (`npm run build`).
+  - **Browser Verification**: Subagent session (`simulation_controls_demo_1792384653978.webp`) verified:
+    1. Status panel badges (`Factory Scheduler: Active`, `Adaptation: Disabled`, `Evaluation: Shadow-Only`) and 5-stage pipeline in `#personal-model`.
+    2. Interactive `🎮 Schedule Simulation (Shadow-Only)` tab with scenario dropdown, sliders, delta badges, side-by-side comparison table, and trade-off summary.
+    3. Toggling preference collection checkbox updates status to `Paused (Blocked)` and back to `Active (Collecting)` with feedback alert.
+    4. Adaptive Sprint Planner modal opens with Strategy Benchmark preference card, scope notices, and paused notification when collection is disabled.
+    5. Absence of production activation controls verified.
+
+- **Delivered & Modified Files**:
+  - `src/scheduler/scheduleSimulator.js`: Pure schedule simulation engine, candidate parameter validation, and standard scenario definitions.
+  - `src/telemetry/telemetryManager.js`: Added preference collection toggle methods, persistence key, and recording guard.
+  - `src/components/AdaptationSandboxCard.jsx`: Added status panel, 5-stage pipeline diagnostics, preference collection switch, and interactive simulation tab.
+  - `src/components/AdaptiveScheduleModal.jsx`: Guarded preference recording against disabled collection state and added pause banner.
+  - `tests/schedule_simulation_controls.test.js`: Comprehensive 26-test automated suite.
+  - `PROJECT_PLAN.md`: Updated living project plan.
+
+- **Known Limitations & Next Roadmap Stage**:
+  - Real user explicit preference telemetry remains cold-start locked.
+  - Stage 7.4.2 (Adaptive Weight Activation Gates & One-Click Rollback Mechanism) remains strictly unstarted.
+
+#### Stage 7.4.2: Adaptive Weight Activation Gates & One-Click Rollback Mechanism (UNSTARTED)
 - **Scope & Expected Deliverables**:
-  - "Adaptive Scheduling Preferences" control card in Section 05:
-    - Visual display of default vs adapted heuristic weights.
-    - Side-by-side proposal simulator showing how adapted weights influence task placement compared to baseline.
-    - Master toggle: "Enable Personal Schedule Adaptation" (default: OFF).
-    - Emergency button: "Reset All Weights to Factory Defaults".
-- **Dependencies**: Stage 7.3.
-- **Acceptance Criteria**:
-  - Clicking "Reset" instantly deletes adapted parameters from local storage and restores default weights in under 10ms.
-  - Toggling adaptation OFF immediately causes subsequent proposals to generate using pure baseline weights.
+  - Strict production activation gate (requiring verified readiness + $\ge 15$ eligible preference comparisons + superior concordance).
+  - Snapshot engine and one-click rollback button restoring baseline weights immediately.
   - Telemetry clear history triggers automatic parameter reset.
-- **Verification**:
-  - Unit and UI tests verifying reset latency, toggle synchronization, and simulator diff rendering (`tests/schedule_preferences_ui.test.js`).
-- **Phase 7 Objective Exit Criteria**:
-  - Gatekeeper safely protects cold-start users from premature adaptation.
-  - Bounded adaptation provably improves schedule acceptance or stability on longitudinal benchmark fixtures.
-  - One-click rollback restores baseline weights immediately.
-  - Zero external network dependencies.
 
 ---
 

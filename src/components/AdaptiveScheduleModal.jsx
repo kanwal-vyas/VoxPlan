@@ -179,6 +179,14 @@ export default function AdaptiveScheduleModal({
   ]);
 
   const handleRecordPreference = async (prefStratKey, altStratKey, label) => {
+    if (typeof telemetry.isPreferenceCollectionEnabled === 'function' && !telemetry.isPreferenceCollectionEnabled()) {
+      setPreferenceFeedback({
+        type: 'info',
+        text: `ℹ Explicit preference collection is disabled in Personal Settings. Strategy choices are not being recorded.`,
+      });
+      return;
+    }
+
     const stratPref = benchmarkComparison?.strategies?.[prefStratKey];
     const stratAlt = benchmarkComparison?.strategies?.[altStratKey];
     if (!stratPref || !stratAlt) return;
@@ -1199,6 +1207,11 @@ export default function AdaptiveScheduleModal({
               <div style={{ fontSize: '11px', color: '#64748B', lineHeight: 1.4, marginBottom: '10px', fontStyle: 'italic' }}>
                 Scope notice: Your selection represents preference for this specific backlog scenario only. It does not imply a general preference across all contexts, does not endorse individual task placements, and does not alter production schedule generation.
               </div>
+              {typeof telemetry.isPreferenceCollectionEnabled === 'function' && !telemetry.isPreferenceCollectionEnabled() && (
+                <div style={styles.preferencePausedBanner} role="status">
+                  ⏸️ <strong>Preference Collection Paused:</strong> Explicit preference collection is disabled in Personal Settings. You can compare schedules freely, but choices will not be recorded to local telemetry.
+                </div>
+              )}
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 <button
                   type="button"
@@ -3068,5 +3081,15 @@ const styles = {
     fontSize: '11px',
     color: '#0369A1',
     fontWeight: '600',
+  },
+  preferencePausedBanner: {
+    marginBottom: '10px',
+    padding: '8px 12px',
+    backgroundColor: '#FFFBEB',
+    border: '1.5px solid #FCD34D',
+    borderRadius: '6px',
+    fontSize: '11px',
+    color: '#92400E',
+    lineHeight: 1.4,
   },
 };

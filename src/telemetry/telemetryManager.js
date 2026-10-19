@@ -16,6 +16,7 @@ import { computeBehavioralStats } from './behavioralStats.js';
 
 const PROFILE_ID_KEY = 'voxplan_profile_id';
 const ACTIVE_TIMER_KEY = 'voxplan_active_timer';
+export const PREFERENCE_COLLECTION_STORAGE_KEY = 'voxplan_preference_collection_enabled';
 
 /**
  * Returns the persistent, stable anonymous local profile ID.
@@ -32,7 +33,7 @@ export function getOrCreateProfileId() {
   return profileId;
 }
 
-class TelemetryManager {
+export class TelemetryManager {
   constructor() {
     this.profileId = getOrCreateProfileId();
     this.subscribers = new Set();
@@ -40,6 +41,7 @@ class TelemetryManager {
     this.isInitialized = false;
     this.activeTimer = this.loadActiveTimer();
     this.recordedProposalActions = new Set();
+    this._preferenceCollectionEnabledMemory = null;
   }
 
   /**
@@ -319,6 +321,51 @@ class TelemetryManager {
     });
   }
 
+  /**
+   * Checks whether optional explicit schedule preference collection is currently enabled.
+   * Defaults to true if no preference is explicitly stored.
+   *
+   * @returns {boolean}
+   */
+  isPreferenceCollectionEnabled() {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return this._preferenceCollectionEnabledMemory !== null
+        ? this._preferenceCollectionEnabledMemory
+        : true;
+    }
+    try {
+      const val = localStorage.getItem(PREFERENCE_COLLECTION_STORAGE_KEY);
+      if (val === null) return true;
+      return val === 'true';
+    } catch {
+      return this._preferenceCollectionEnabledMemory !== null
+        ? this._preferenceCollectionEnabledMemory
+        : true;
+    }
+  }
+
+  /**
+   * Sets whether optional explicit schedule preference collection is enabled.
+   * Does not alter or delete existing historical telemetry events.
+   *
+   * @param {boolean} enabled
+   * @returns {boolean} Whether setting was successfully stored.
+   */
+  setPreferenceCollectionEnabled(enabled) {
+    const boolVal = Boolean(enabled);
+    this._preferenceCollectionEnabledMemory = boolVal;
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return true;
+    }
+    try {
+      localStorage.setItem(PREFERENCE_COLLECTION_STORAGE_KEY, boolVal ? 'true' : 'false');
+      return true;
+    } catch (err) {
+      console.warn('Failed to persist preference collection setting to localStorage:', err);
+      return false;
+    }
+  }
+
   async recordSchedulePreference({
     comparisonId,
     alternativeA,
@@ -328,6 +375,10 @@ class TelemetryManager {
     source = 'explicit_user_choice',
     taskId = null,
   }) {
+    if (!this.isPreferenceCollectionEnabled()) {
+      return null;
+    }
+
     if (!comparisonId || !alternativeA || !alternativeB || !selected) {
       return null;
     }
