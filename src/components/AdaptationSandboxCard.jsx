@@ -27,6 +27,11 @@ import {
   rollbackToSnapshot,
   restoreFactoryConfiguration,
 } from '../scheduler/configurationSnapshot';
+import {
+  evaluateActivationGate,
+  ACTIVATION_GATE_OUTCOMES,
+  DEFAULT_MIN_MEANINGFUL_DELTA,
+} from '../scheduler/activationGateEvaluator';
 import { telemetry } from '../telemetry/telemetryManager';
 
 /**
@@ -376,6 +381,34 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
   const activeRanking = showSyntheticDemo && syntheticDemo
     ? syntheticDemo.rankingEvaluation
     : realAnalysis.rankingEvaluation;
+
+  const activeActivationGate = useMemo(() => {
+    const isSynthetic = showSyntheticDemo;
+    const readiness = isSynthetic ? syntheticDemo?.readiness : realAnalysis.readiness;
+    const factorySnapAvailable = snapshotsList.some((s) => s.snapshot?.isFactoryBaseline && s.isValid);
+
+    // Build paired observations from current real evidence
+    const pairedObservations = realAnalysis.preferenceEvidence?.eligible?.map((cmp, idx) => ({
+      observationId: cmp.comparison_id || `cmp_${idx}`,
+      context: cmp.context || { scenario_key: 'real_user_comparisons' },
+      candidateAlternative: cmp.preferredAlternative,
+      baselineAlternative: cmp.nonPreferredAlternative,
+    })) || [];
+
+    return evaluateActivationGate({
+      candidateWeights: simCandidateWeights,
+      baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+      readinessReport: readiness,
+      rollbackPreflight: {
+        success: true,
+        verified: true,
+        factorySnapshotAvailable: factorySnapAvailable,
+      },
+      pairedObservations,
+      isSyntheticData: isSynthetic,
+      minMeaningfulDelta: DEFAULT_MIN_MEANINGFUL_DELTA,
+    });
+  }, [showSyntheticDemo, syntheticDemo, realAnalysis, simCandidateWeights, snapshotsList]);
 
   const isRealReadinessMet = realAnalysis.readiness?.status === 'ready';
   const weightKeys = ['urgencyWeight', 'priorityWeight', 'unblockWeight', 'riskWeight'];
@@ -764,6 +797,16 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
           style={activeTab === 'ranking' ? styles.tabButtonActive : styles.tabButton}
         >
           🎯 Preference Ranking (Offline)
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id="tab-activation-gate"
+          aria-selected={activeTab === 'activation_gate'}
+          onClick={() => setActiveTab('activation_gate')}
+          style={activeTab === 'activation_gate' ? styles.tabButtonActive : styles.tabButton}
+        >
+          ⚖️ Activation Gate (Shadow-Only)
         </button>
         <button
           type="button"
@@ -1867,6 +1910,184 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
               <li><strong>Pairwise Loss:</strong> Uses strict binary concordance over explicit user choices. Ties and non-finite scores receive zero concordance credit.</li>
               <li><strong>Hard Constraint Decoupling:</strong> Alternatives violating Kahn topological order or working hour capacities cannot earn concordance credit.</li>
               <li><strong>Zero Automatic Model Promotion:</strong> Offline ranking evaluation strictly measures candidate viability; it does not deploy weights to production.</li>
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Activation Gate (Shadow-Only) (Phase 7.4 Stage 4A) */}
+      {activeTab === 'activation_gate' && (
+        <div style={styles.tabContent} id="activation-gate-panel">
+          {showSyntheticDemo && (
+            <div style={{ ...styles.syntheticWarningBanner, marginBottom: '16px' }} role="alert">
+              <span style={styles.syntheticWarningIcon}>⚠️</span>
+              <div style={styles.syntheticWarningText}>
+                <strong>Synthetic Demonstration Active:</strong> The activation gate below is evaluating in-memory synthetic fixture data. Synthetic demonstration data is strictly disqualified from meeting real-user activation criteria (Outcome: <code>{activeActivationGate.outcome}</code>).
+              </div>
+            </div>
+          )}
+
+          <div style={styles.rankingHeaderBanner}>
+            <div style={styles.rankingHeaderTitle}>
+              ⚖️ Shadow-Only Activation-Gate Audit
+            </div>
+            <div style={styles.rankingHeaderDesc}>
+              Converts VoxPlan&apos;s documented activation criteria into an executable, shadow-only evaluation protocol. Evaluates candidate scheduler weights against real operational evidence, paired schedule quality differences, hard feasibility constraints, and rollback preflight readiness.
+              {' '}<strong>Production Invariant:</strong> Evaluation is strictly read-only. Candidate weights are NEVER automatically activated in production.
+            </div>
+          </div>
+
+          {/* Outcome Status Banner */}
+          <div
+            style={{
+              padding: '16px',
+              borderRadius: '8px',
+              marginBottom: '16px',
+              border: '1px solid',
+              backgroundColor:
+                activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.ELIGIBLE_FOR_SUPERVISED_REVIEW
+                  ? '#ECFDF5'
+                  : activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.INFEASIBLE
+                  ? '#FEF2F2'
+                  : activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR
+                  ? '#F3F4F6'
+                  : '#FFFBEB',
+              borderColor:
+                activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.ELIGIBLE_FOR_SUPERVISED_REVIEW
+                  ? '#A7F3D0'
+                  : activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.INFEASIBLE
+                  ? '#FCA5A5'
+                  : activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR
+                  ? '#D1D5DB'
+                  : '#FDE68A',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '18px' }}>
+                  {activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.ELIGIBLE_FOR_SUPERVISED_REVIEW
+                    ? '✓'
+                    : activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.INFEASIBLE
+                    ? '✕'
+                    : activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR
+                    ? '⏸'
+                    : '🔒'}
+                </span>
+                <span
+                  style={{
+                    fontWeight: '800',
+                    fontSize: '13px',
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
+                    color:
+                      activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.ELIGIBLE_FOR_SUPERVISED_REVIEW
+                        ? '#065F46'
+                        : activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.INFEASIBLE
+                        ? '#991B1B'
+                        : activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR
+                        ? '#374151'
+                        : '#92400E',
+                  }}
+                >
+                  Outcome: {activeActivationGate.outcome.replace(/_/g, ' ')}
+                </span>
+              </div>
+              <span style={styles.statusPillLocked}>
+                🔒 Production Adaptation Disabled
+              </span>
+            </div>
+            <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#374151', lineHeight: '1.5' }}>
+              {activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.ELIGIBLE_FOR_SUPERVISED_REVIEW
+                ? 'Candidate scheduler weights satisfy all documented evidence, feasibility, superiority, and rollback criteria for supervised human review. Note: Production activation remains completely disabled.'
+                : activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.INFEASIBLE
+                ? 'Candidate configuration violates hard scheduling constraints (e.g. DAG cycle, capacity overrun, or invalid weights) and is strictly disqualified.'
+                : activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR
+                ? 'Candidate weights do not demonstrate statistically defensible quality superiority over canonical factory baseline (delta < epsilon or confidence interval crosses zero).'
+                : 'Current evidence does not yet satisfy operational readiness thresholds (>= 20 decisions, >= 15 completions) or requires >= 15 paired observations across >= 3 scenario clusters.'}
+            </p>
+          </div>
+
+          {/* Endpoint Metrics Grid */}
+          <div style={styles.rankingStatsGrid}>
+            <div style={styles.rankingStatCard}>
+              <span style={styles.rankingStatLabel}>Mean Paired Quality Delta</span>
+              <span style={{ ...styles.rankingStatValue, color: (activeActivationGate.pairedComparison.meanDelta ?? 0) > 0 ? '#1B5E3C' : '#4B5563' }}>
+                {activeActivationGate.pairedComparison.meanDelta != null
+                  ? `${activeActivationGate.pairedComparison.meanDelta > 0 ? '+' : ''}${activeActivationGate.pairedComparison.meanDelta} pts`
+                  : 'N/A'}
+              </span>
+              <span style={styles.rankingStatSub}>Primary Endpoint: S(W_c) - S(W_f)</span>
+            </div>
+            <div style={styles.rankingStatCard}>
+              <span style={styles.rankingStatLabel}>Practical Threshold (ε)</span>
+              <span style={styles.rankingStatValue}>
+                {activeActivationGate.pairedComparison.minMeaningfulDelta} pts
+              </span>
+              <span style={styles.rankingStatSub}>
+                {activeActivationGate.pairedComparison.meetsPracticalImprovement ? '✓ Met' : '✕ Unmet'}
+              </span>
+            </div>
+            <div style={styles.rankingStatCard}>
+              <span style={styles.rankingStatLabel}>Eligible Paired Observations</span>
+              <span style={styles.rankingStatValue}>
+                {activeActivationGate.evidenceAssessment.eligibleObservationsCount}
+              </span>
+              <span style={styles.rankingStatSub}>Minimum 15 Required</span>
+            </div>
+            <div style={styles.rankingStatCard}>
+              <span style={styles.rankingStatLabel}>Distinct Scenario Clusters</span>
+              <span style={styles.rankingStatValue}>
+                {activeActivationGate.evidenceAssessment.distinctClustersCount}
+              </span>
+              <span style={styles.rankingStatSub}>Minimum 3 Required</span>
+            </div>
+          </div>
+
+          {/* Uncertainty & Clustered Bootstrap Panel */}
+          <div style={{ ...styles.rankingDetailCard, marginTop: '16px' }}>
+            <h4 style={styles.rankingDetailTitle}>📊 Clustered Uncertainty & Statistical Rigor</h4>
+            <div style={styles.uncertaintyContent}>
+              <div style={styles.uncertaintyStatRow}>
+                <span style={styles.uncertaintyLabel}>Uncertainty Estimation Method:</span>
+                <span style={styles.uncertaintyValue}>
+                  {activeActivationGate.uncertainty.canEstimateUncertainty
+                    ? 'Clustered Bootstrap Resampling (95% CI)'
+                    : 'Insufficient Observations or Clusters'}
+                </span>
+              </div>
+              <div style={styles.uncertaintyStatRow}>
+                <span style={styles.uncertaintyLabel}>95% Bootstrap Confidence Interval:</span>
+                <span style={styles.uncertaintyValue}>
+                  {activeActivationGate.uncertainty.canEstimateUncertainty
+                    ? `[${activeActivationGate.uncertainty.ciLower}, ${activeActivationGate.uncertainty.ciUpper}] pts`
+                    : 'N/A (Sparse Evidence)'}
+                </span>
+              </div>
+              <p style={{ margin: '8px 0 0 0', fontSize: '11px', color: '#6B7280', lineHeight: '1.4' }}>
+                {activeActivationGate.uncertainty.disclaimer}
+              </p>
+            </div>
+          </div>
+
+          {/* Audit Reasons List */}
+          {activeActivationGate.reasons.length > 0 && (
+            <div style={{ ...styles.rankingDetailCard, marginTop: '16px' }}>
+              <h4 style={styles.rankingDetailTitle}>🔍 Audit Findings & Gate Check Details</h4>
+              <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px', fontSize: '12px', color: '#4B5563', lineHeight: '1.6' }}>
+                {activeActivationGate.reasons.map((r, idx) => (
+                  <li key={idx}>{r}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Methodology Disclosures */}
+          <div style={{ ...styles.rankingDetailCard, marginTop: '16px', backgroundColor: '#F8FAFC' }}>
+            <h4 style={{ ...styles.rankingDetailTitle, color: '#334155' }}>📜 Methodological Disclosures & Safety Boundaries</h4>
+            <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px', fontSize: '11px', color: '#64748B', lineHeight: '1.5' }}>
+              {activeActivationGate.methodologyDisclosures.map((disc, idx) => (
+                <li key={idx}>{disc}</li>
+              ))}
             </ul>
           </div>
         </div>

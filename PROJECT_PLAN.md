@@ -2900,11 +2900,57 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
     - Client Build: **Built production bundle cleanly in 363ms** (`npm run build`).
 
 - **Next Recommended Stage**:
-  - Stage 7.4.4: Supervised Adaptive Weight Activation & Dynamic Deployment Gates (implementing the corrected paired evaluation protocol, feasibility gates, operational rollback preflights, and explicit user confirmation UI, with production activation remaining disabled until all criteria are met).
+  - Stage 7.4.4A: Shadow-Only Activation-Gate Evaluator (implemented as an auditable, read-only decision engine prior to any production activation workflow).
 
 ---
 
-#### Stage 7.4.4: Supervised Adaptive Weight Activation & Dynamic Deployment Gates (UNSTARTED)
+#### Stage 7.4.4A: Shadow-Only Activation-Gate Evaluator (COMPLETED)
+- **Status**: Completed and fully verified.
+- **Objectives**:
+  1. Implement a pure, deterministic, read-only evaluator (`src/scheduler/activationGateEvaluator.js`) that converts the Stage 7.4.3.1 corrected activation-gate specification into an executable evaluation protocol.
+  2. Implement the primary endpoint: paired quality-score difference $\Delta_i = S(W_c, X_i) - S(W_f, X_i)$ evaluated on identical task backlogs, horizons, and constraints using `computeScheduleObjectiveScore`.
+  3. Ground the practical improvement threshold $\epsilon$ (default $\epsilon = 1.0$ points, representing a +1% on-time placement rate or ~1.6h delay reduction).
+  4. Implement clustered bootstrap resampling across distinct scenario/project clusters ($M \ge 3$, $N \ge 15$, $B = 300$ resamples) with a deterministic, seedable PRNG (Mulberry32) to model correlated backlog observations.
+  5. Enforce hard scheduling feasibility (0 Kahn DAG cycles, 0 capacity overruns, 0 duplicate placements) and operational rollback preflight verification (factory snapshot availability, candidate snapshot integrity).
+  6. Return a typed outcome vocabulary (`eligible_for_supervised_review`, `not_superior`, `infeasible`, `insufficient_evidence`, `insufficient_methodology`) with a structured list of audit reasons.
+  7. Maintain strict production isolation: `isAdaptationUnlocked === false`, `productionApplied === false`, `FACTORY_SCHEDULER_WEIGHTS` immutable, zero runtime activation paths or mutation of production configuration.
+  8. Integrate a compact, read-only Activation Gate tab in Section 05 (`AdaptationSandboxCard.jsx`) and add comprehensive regression tests.
+
+- **Architectural & Methodological Deliverables**:
+  1. **Core Evaluator Module (`src/scheduler/activationGateEvaluator.js`)**:
+     - *Pure Function Contract*: `evaluateActivationGate(params)` accepts candidate weights, factory weights, candidate snapshot, paired observations, readiness report, rollback preflight, $\epsilon$, and PRNG seed.
+     - *Deterministic PRNG*: Pure JavaScript Mulberry32 PRNG (`createMulberry32(seed)`) ensures 100% reproducible clustered bootstrap resampling across platforms.
+     - *Cluster-Aware Uncertainty Estimation*: Observations from a single user on task backlogs are correlated. Evaluator groups observations by `scenario_key` / `scenario_id` / `project_id`. When $M \ge 3$ clusters and $N \ge 15$ observations exist, it executes $B = 300$ clustered resamples with replacement, deriving an empirical 95% percentile confidence interval $[CI_{lower}, CI_{upper}]$.
+     - *Failure to Support Fallback*: If $M < 3$ or $N < 15$, uncertainty is reported as unavailable without fabricating invalid unclustered intervals.
+     - *Superiority Criteria*: A candidate is classified as `not_superior` if mean delta $\overline{\Delta} < \epsilon$ or $CI_{lower} \le 0$.
+     - *Hard Feasibility Gate*: Any DAG cycle, capacity overrun, or placement omission immediately disqualifies the candidate as `infeasible`. Baseline feasibility is also verified.
+     - *Rollback Readiness Gate*: Requires verified factory baseline snapshot in persistent storage and valid candidate snapshot integrity.
+     - *Synthetic Evidence Quarantine*: Demonstrative synthetic fixtures are flagged and disqualified from meeting real-user readiness or activation criteria.
+     - *Methodological Disclosures*: Explicitly documents that proxy concordance is not proof of user satisfaction, and cluster intervals assume cluster exchangeability.
+  2. **UI Integration (`src/components/AdaptationSandboxCard.jsx`)**:
+     - Added read-only `⚖️ Activation Gate (Shadow-Only)` tab (`#tab-activation-gate`).
+     - Renders outcome status banner with distinct badges for all 5 outcomes, primary endpoint metrics grid ($\overline{\Delta}$, $\epsilon$, eligible pairs, distinct clusters), clustered uncertainty card, structured audit findings, and methodology disclosures.
+     - Fully isolated: no activation buttons or state mutations.
+  3. **Comprehensive Automated Test Suite (`tests/activation_gate_evaluator.test.js`)**:
+     - Added 22 focused tests covering candidate weight bounds, baseline tampering rejection, snapshot checksum validation, synthetic data quarantine, unpaired constraints/backlog rejection, duplicate deduplication, cluster provenance requirements, operational readiness gating, $\epsilon$ thresholds, CI lower bound zero-crossing, deterministic PRNG reproducibility, DAG cycles, capacity overruns, baseline infeasibility, rollback preflight failures, full eligibility, production invariance, and methodology disclosures.
+
+- **Verification Results**:
+  - **Frontend Test Suite**: **632 passed, 0 failed across 134 suites** (`npm test`).
+  - **Backend Pytest Suite**: **27 passed, 1 warning in 3.94s** (`.venv\Scripts\python -m pytest backend/tests/ -q`).
+  - **Linter**: **0 errors, 1 pre-existing warning** in `AdaptiveScheduleModal.jsx` across 73 files (`npm run lint`).
+  - **Client Production Build**: **Built production bundle cleanly in 265ms** (`npm run build`).
+  - **Browser Verification**: Subagent session (`activation_gate_demo_1792409557062.webp`) and screenshot (`activation_gate_panel_1792409682529.png`) verified:
+    - Navigated to Section 05 and clicked `#tab-activation-gate`.
+    - Verified Outcome status banner: `OUTCOME: INSUFFICIENT EVIDENCE` with locked adaptation badge `🔒 Production Adaptation Disabled`.
+    - Verified primary endpoint metrics grid, Clustered Uncertainty card, Audit Findings list, and Methodological Disclosures.
+    - Confirmed zero activation buttons or production mutation paths.
+
+- **Next Recommended Stage**:
+  - Stage 7.4.4B: Supervised Production Activation & Dynamic Deployment Gates (implementing the user confirmation modal, explicit human consent flow, and runtime weight routing, with production adaptation remaining disabled until explicit user confirmation).
+
+---
+
+#### Stage 7.4.4B: Supervised Production Activation & Dynamic Deployment Gates (UNSTARTED)
 - **Scope & Expected Deliverables**:
   - Implement the supervised production activation workflow requiring verified readiness + $\ge 15$ eligible preference comparisons + superior concordance + 0 hard constraint violations + explicit user confirmation.
   - Automatic parameter reset on telemetry clearing.
