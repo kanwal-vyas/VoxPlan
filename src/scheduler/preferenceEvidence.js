@@ -56,6 +56,54 @@ export function generatePairKey(idA, idB) {
 }
 
 /**
+ * Generates an order-independent canonical comparison key that binds
+ * the context/scenario identity with the sorted pair of alternatives.
+ *
+ * This ensures:
+ * 1. The same pair compared in DIFFERENT scenarios/contexts (e.g. Scenario A vs Scenario B)
+ *    is recognized as distinct comparisons and neither collides nor cancels out as a contradiction.
+ * 2. Repeated comparisons within the SAME scenario/context are accurately deduplicated.
+ * 3. Conflicting choices within the SAME scenario/context are quarantined as contradictory.
+ * 4. Submissions with varying comparison_id wrappers but identical context and alternatives
+ *    cannot evade deduplication.
+ *
+ * @param {string} idA - First alternative identifier.
+ * @param {string} idB - Second alternative identifier.
+ * @param {Object|string} [context=null] - Comparison context or scenario identifier.
+ * @param {string} [comparisonId=null] - Fallback comparison identifier if context lacks scenario info.
+ * @returns {string} Canonical comparison key.
+ */
+export function generateCanonicalComparisonKey(idA, idB, context = null, comparisonId = null) {
+  const pairKey = generatePairKey(idA, idB);
+  if (!pairKey) return '';
+
+  let contextIdentifier = '';
+  if (typeof context === 'string' && context.trim()) {
+    contextIdentifier = context.trim();
+  } else if (context && typeof context === 'object') {
+    contextIdentifier =
+      context.scenario_key ||
+      context.scenarioKey ||
+      context.scenario_name ||
+      context.scenarioName ||
+      context.scenario_id ||
+      context.scenarioId ||
+      '';
+  }
+
+  // If no scenario context was provided, fall back to comparisonId if available
+  if (!contextIdentifier && comparisonId) {
+    contextIdentifier = String(comparisonId).trim();
+  }
+
+  if (contextIdentifier) {
+    return `${String(contextIdentifier).trim()}:::${pairKey}`;
+  }
+  return pairKey;
+}
+
+
+/**
  * Validates an explicit preference comparison record or event payload.
  *
  * @param {Object} record - The comparison record or telemetry event payload.
@@ -248,6 +296,9 @@ export function extractEligiblePreferenceEvidence(events = []) {
     const idA = altA.id || altA.strategy || altA.schedule_id || altA.scheduleId;
     const idB = altB.id || altB.strategy || altB.schedule_id || altB.scheduleId;
     const pairKey = generatePairKey(idA, idB);
+    const context = record.comparison_context || record.context || record.payload?.comparison_context || {};
+    const comparisonId = record.comparison_id || record.comparisonId || record.payload?.comparison_id || null;
+    const canonicalKey = generateCanonicalComparisonKey(idA, idB, context, comparisonId);
 
     const preferredId = selected === SELECTION_VALUES.ALTERNATIVE_A ? idA : idB;
     const nonPreferredId = selected === SELECTION_VALUES.ALTERNATIVE_A ? idB : idA;
@@ -255,10 +306,11 @@ export function extractEligiblePreferenceEvidence(events = []) {
     const nonPreferredAlt = selected === SELECTION_VALUES.ALTERNATIVE_A ? altB : altA;
 
     const normalizedItem = {
-      comparisonId: record.comparison_id || record.comparisonId || record.payload?.comparison_id,
+      comparisonId,
       eventId: record.eventId || record.event_id || null,
       timestamp: record.timestamp || new Date().toISOString(),
       pairKey,
+      canonicalKey,
       alternativeA: altA,
       alternativeB: altB,
       selected,
@@ -266,35 +318,35 @@ export function extractEligiblePreferenceEvidence(events = []) {
       nonPreferredId,
       preferredAlternative: preferredAlt,
       nonPreferredAlternative: nonPreferredAlt,
-      context: record.comparison_context || record.context || record.payload?.comparison_context || {},
+      context,
       rawRecord: record,
     };
 
-    if (!validObservationsByPair.has(pairKey)) {
-      validObservationsByPair.set(pairKey, []);
+    if (!validObservationsByPair.has(canonicalKey)) {
+      validObservationsByPair.set(canonicalKey, []);
     }
-    validObservationsByPair.get(pairKey).push(normalizedItem);
+    validObservationsByPair.get(canonicalKey).push(normalizedItem);
   }
 
-  // Step 2: Deduplication and Contradiction Detection per Pair
+  // Step 2: Deduplication and Contradiction Detection per Canonical Comparison
   const eligible = [];
 
-  for (const [pairKey, pairObservations] of validObservationsByPair.entries()) {
+  for (const [canonicalKey, pairObservations] of validObservationsByPair.entries()) {
     if (pairObservations.length === 1) {
       eligible.push(pairObservations[0]);
       continue;
     }
 
-    // Check if observations within this pair disagree
+    // Check if observations within this canonical comparison disagree
     const preferredIds = new Set(pairObservations.map((o) => String(o.preferredId)));
 
     if (preferredIds.size > 1) {
-      // Contradiction detected! Quarantine all records for this pair
+      // Contradiction detected! Quarantine all records for this canonical comparison
       for (const obs of pairObservations) {
         excluded.push({
           record: obs.rawRecord,
           reason: EVIDENCE_STATUS.CONTRADICTORY,
-          details: `Contradictory selections observed for pair "${pairKey}". Multiple conflicting preferences detected.`,
+          details: `Contradictory selections observed for comparison "${canonicalKey}". Multiple conflicting preferences detected within the same context.`,
         });
         byReasonCounts.contradictory++;
       }
@@ -305,7 +357,7 @@ export function extractEligiblePreferenceEvidence(events = []) {
         excluded.push({
           record: pairObservations[i].rawRecord,
           reason: EVIDENCE_STATUS.DUPLICATE,
-          details: `Identical repeated selection for pair "${pairKey}". Deduplicated to prevent observation inflation.`,
+          details: `Identical repeated selection for comparison "${canonicalKey}". Deduplicated to prevent observation inflation.`,
         });
         byReasonCounts.duplicate++;
       }

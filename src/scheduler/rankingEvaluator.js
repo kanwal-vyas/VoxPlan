@@ -69,6 +69,49 @@ export function computeScheduleObjectiveScore(alternative) {
   return isFinite(score) ? score : -Infinity;
 }
 
+export function computeWilsonScoreInterval(successes, total, confidence = 0.95) {
+  if (typeof total !== 'number' || total <= 0 || !isFinite(total)) {
+    return {
+      ciLower: null,
+      ciUpper: null,
+      ciLowerPct: null,
+      ciUpperPct: null,
+      marginOfErrorPct: null,
+      method: 'Wilson score interval (95% CI)',
+      confidenceLevel: confidence,
+    };
+  }
+
+  const k = Math.max(0, Math.min(total, Number(successes) || 0));
+  const n = total;
+  const pHat = k / n;
+
+  // Two-sided normal quantile: for 0.95, z ≈ 1.959964
+  const z = confidence === 0.99 ? 2.575829 : confidence === 0.90 ? 1.644853 : 1.959964;
+  const zSq = z * z;
+
+  const denom = 1 + zSq / n;
+  const center = (pHat + zSq / (2 * n)) / denom;
+  const varianceTerm = (pHat * (1 - pHat)) / n + zSq / (4 * n * n);
+  const halfWidth = (z / denom) * Math.sqrt(Math.max(0, varianceTerm));
+
+  const lower = Math.max(0.0, center - halfWidth);
+  const upper = Math.min(1.0, center + halfWidth);
+
+  // Maximum distance between point estimate and bounds as margin of error
+  const moe = Math.max(pHat - lower, upper - pHat);
+
+  return {
+    ciLower: Math.round(lower * 1000) / 1000,
+    ciUpper: Math.round(upper * 1000) / 1000,
+    ciLowerPct: Math.round(lower * 1000) / 10,
+    ciUpperPct: Math.round(upper * 1000) / 10,
+    marginOfErrorPct: Math.round(moe * 1000) / 10,
+    method: `Wilson score interval (${Math.round(confidence * 100)}% CI)`,
+    confidenceLevel: confidence,
+  };
+}
+
 /**
  * Checks concordance between an explicitly preferred alternative and a non-preferred alternative
  * under a given scoring function.
@@ -95,6 +138,22 @@ export function evaluatePairwiseConcordance(preferredAlt, nonPreferredAlt, scori
     };
   }
 
+  // Hard-constraint gate: non-preferred alternative must also satisfy hard constraints
+  const isQCompliant = nonPreferredAlt?.isConstraintCompliant !== false &&
+    !nonPreferredAlt?.cycleDetected &&
+    (nonPreferredAlt?.infeasiblePlacementsCount ?? 0) === 0;
+
+  if (!isQCompliant) {
+    return {
+      isConcordant: false,
+      isTied: false,
+      disqualified: true,
+      disqualificationReason: 'non_preferred_alternative_violates_hard_constraints',
+      scorePreferred: null,
+      scoreNonPreferred: null,
+    };
+  }
+
   const scoreP = scoringFn(preferredAlt);
   const scoreQ = scoringFn(nonPreferredAlt);
 
@@ -104,8 +163,8 @@ export function evaluatePairwiseConcordance(preferredAlt, nonPreferredAlt, scori
       isTied: false,
       disqualified: true,
       disqualificationReason: 'non_finite_scoring_evaluation',
-      scorePreferred: scoreP,
-      scoreNonPreferred: scoreQ,
+      scorePreferred: isFinite(scoreP) ? scoreP : null,
+      scoreNonPreferred: isFinite(scoreQ) ? scoreQ : null,
     };
   }
 
@@ -231,10 +290,10 @@ export function evaluateOfflineRanking({
     };
   }
 
-  // 2. Evaluate Baseline Pairwise Accuracy
+  // 2. Evaluate Baseline Pairwise Concordance
   const baselineMetrics = evaluatePairsAccuracy(comparisons, baselineScoringFn);
 
-  // 3. Evaluate Candidate Pairwise Accuracy (if candidate scoring function provided)
+  // 3. Evaluate Candidate Pairwise Concordance (if candidate scoring function provided)
   let candidateMetrics = null;
   let delta = null;
 
@@ -243,36 +302,60 @@ export function evaluateOfflineRanking({
     delta = Math.round((candidateMetrics.accuracy - baselineMetrics.accuracy) * 1000) / 1000;
   }
 
-  // 4. Uncertainty Estimation (Wald interval / small-sample margin of error)
-  const p = baselineMetrics.accuracy;
-  const marginOfError = sampleSize > 0
-    ? Math.min(1.0, 1.96 * Math.sqrt((p * (1 - p)) / sampleSize))
-    : 1.0;
-  const marginOfErrorPct = Math.round(marginOfError * 1000) / 10;
+  // 4. Uncertainty Estimation via Wilson Score Interval (95% CI)
+  // Replaces flawed asymptotic Wald formula which collapses to 0.0% on boundary estimates (p=1 or p=0)
+  // and is statistically invalid on small samples.
+  const wilsonInterval = computeWilsonScoreInterval(
+    baselineMetrics.concordantCount,
+    baselineMetrics.totalEvaluated,
+    0.95
+  );
 
   // 5. Grouped Cross-Validation / Holdout Split (Leakage Prevention)
+  // Requires genuine scenario/context identifiers. Never falls back to algorithm pairKey,
+  // which would leak comparisons on the same underlying scenario across partitions.
   const groupsMap = new Map();
+  let ungroupedCount = 0;
+
   for (const cmp of comparisons) {
-    const groupKey = cmp.context?.scenario_name || cmp.context?.scenario_id || cmp.pairKey || 'default_group';
-    if (!groupsMap.has(groupKey)) {
-      groupsMap.set(groupKey, []);
+    const groupKey =
+      cmp.context?.scenario_key ||
+      cmp.context?.scenarioKey ||
+      cmp.context?.scenario_name ||
+      cmp.context?.scenarioName ||
+      cmp.context?.scenario_id ||
+      cmp.context?.scenarioId ||
+      null;
+
+    if (!groupKey) {
+      ungroupedCount++;
+      continue;
     }
-    groupsMap.get(groupKey).push(cmp);
+
+    const normalizedKey = String(groupKey).trim();
+    if (!groupsMap.has(normalizedKey)) {
+      groupsMap.set(normalizedKey, []);
+    }
+    groupsMap.get(normalizedKey).push(cmp);
   }
 
   const distinctGroups = Array.from(groupsMap.keys());
   let splitValidation = {
     isSplitDefensible: false,
-    splitStrategy: 'none_insufficient_sample',
+    splitStrategy: sampleSize < MIN_HOLDOUT_SAMPLE ? 'none_insufficient_sample' : 'none_insufficient_scenario_groups',
     distinctGroupsCount: distinctGroups.length,
+    ungroupedComparisonsCount: ungroupedCount,
     trainMetrics: null,
     testMetrics: null,
+    reason: sampleSize < MIN_HOLDOUT_SAMPLE
+      ? `Sample size (${sampleSize}) below minimum threshold of ${MIN_HOLDOUT_SAMPLE} required for grouped holdout partitioning.`
+      : `Identified ${distinctGroups.length} independent scenario group(s), below the minimum requirement of ${MIN_SCENARIO_GROUPS} distinct scenario groups to prevent cross-partition leakage.`,
   };
 
   if (sampleSize >= MIN_HOLDOUT_SAMPLE && distinctGroups.length >= MIN_SCENARIO_GROUPS) {
     // Deterministic 60/40 grouped split
     const sortedGroups = [...distinctGroups].sort();
-    const trainGroupCount = Math.max(1, Math.floor(sortedGroups.length * 0.6));
+    const trainGroupCount = Math.max(1, Math.min(sortedGroups.length - 1, Math.round(sortedGroups.length * 0.6)));
     const trainGroupKeys = new Set(sortedGroups.slice(0, trainGroupCount));
 
     const trainPairs = [];
@@ -291,8 +374,12 @@ export function evaluateOfflineRanking({
         isSplitDefensible: true,
         splitStrategy: 'grouped_by_scenario_60_40',
         distinctGroupsCount: distinctGroups.length,
+        ungroupedComparisonsCount: ungroupedCount,
+        trainGroupCount,
+        testGroupCount: sortedGroups.length - trainGroupCount,
         trainMetrics: evaluatePairsAccuracy(trainPairs, candidateScoringFn || baselineScoringFn),
         testMetrics: evaluatePairsAccuracy(testPairs, candidateScoringFn || baselineScoringFn),
+        reason: `Deterministic 60/40 grouped holdout across ${distinctGroups.length} independent scenario groups (${trainPairs.length} train, ${testPairs.length} test comparisons). No scenario crosses partitions.`,
       };
     }
   }
@@ -309,10 +396,16 @@ export function evaluateOfflineRanking({
       sampleSize,
       minRequired: MIN_EVALUATION_SAMPLE,
       isSmallSample: sampleSize < MIN_HOLDOUT_SAMPLE,
-      marginOfErrorPct,
+      confidenceLevel: wilsonInterval.confidenceLevel,
+      method: wilsonInterval.method,
+      ciLower: wilsonInterval.ciLower,
+      ciUpper: wilsonInterval.ciUpper,
+      ciLowerPct: wilsonInterval.ciLowerPct,
+      ciUpperPct: wilsonInterval.ciUpperPct,
+      marginOfErrorPct: wilsonInterval.marginOfErrorPct,
       disclaimer: sampleSize < MIN_HOLDOUT_SAMPLE
-        ? `Preliminary sample size (N = ${sampleSize}). Statistical margin of error is ±${marginOfErrorPct}%; holdout partitioning requires N >= ${MIN_HOLDOUT_SAMPLE}.`
-        : `Defensible sample size (N = ${sampleSize}). Estimated margin of error: ±${marginOfErrorPct}%.`,
+        ? `Preliminary sample size (N = ${sampleSize}). 95% Wilson score CI is [${wilsonInterval.ciLowerPct}%, ${wilsonInterval.ciUpperPct}%] (±${wilsonInterval.marginOfErrorPct}%). Assumes independent Bernoulli trials; does NOT account for inter-scenario dependence, selection bias, or distribution shift. Grouped holdout requires N >= ${MIN_HOLDOUT_SAMPLE} across >= ${MIN_SCENARIO_GROUPS} distinct scenario groups.`
+        : `Evaluated sample size (N = ${sampleSize}). 95% Wilson score CI is [${wilsonInterval.ciLowerPct}%, ${wilsonInterval.ciUpperPct}%] (±${wilsonInterval.marginOfErrorPct}%). Assumes independent trials; does not adjust for selection bias or non-response.`,
     },
     splitValidation,
     productionInvariance: {

@@ -11,7 +11,7 @@ import { FACTORY_SCHEDULER_WEIGHTS } from '../scheduler/adaptiveScheduler';
 import { analyzePreferenceSignals } from '../scheduler/preferenceAnalyzer';
 import { evaluateLearningReadiness } from '../scheduler/learningReadinessGate';
 import { extractEligiblePreferenceEvidence } from '../scheduler/preferenceEvidence';
-import { evaluateOfflineRanking, MIN_EVALUATION_SAMPLE, MIN_HOLDOUT_SAMPLE } from '../scheduler/rankingEvaluator';
+import { evaluateOfflineRanking, MIN_EVALUATION_SAMPLE } from '../scheduler/rankingEvaluator';
 
 /**
  * AdaptationSandboxCard (Phase 7.3)
@@ -552,13 +552,22 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
       {/* Tab 5: Preference Ranking & Offline Evaluation */}
       {activeTab === 'ranking' && (
         <div style={styles.tabContent}>
+          {showSyntheticDemo && (
+            <div style={{ ...styles.syntheticWarningBanner, marginBottom: '16px' }} role="alert">
+              <span style={styles.syntheticWarningIcon}>⚠️</span>
+              <div style={styles.syntheticWarningText}>
+                <strong>Synthetic Demonstration Active:</strong> The metrics below reflect in-memory mock scenario comparisons ({activeRanking.evidenceSummary?.eligibleCount || 0} synthetic pairs) for auditing statistical concordance. Real user telemetry has recorded {realAnalysis.preferenceEvidence.counts.eligibleCount || 0} eligible comparisons and cannot activate production adaptation.
+              </div>
+            </div>
+          )}
+
           <div style={styles.rankingHeaderBanner}>
             <div style={styles.rankingHeaderTitle}>
               🎯 Explicit Preference Evidence & Offline Ranking Pipeline
             </div>
             <div style={styles.rankingHeaderDesc}>
-              Evaluates whether explicit pairwise user preferences can support future scheduler personalization.
-              All evaluations run strictly offline in memory; production scheduler weights remain 100% frozen.
+              Evaluates whether explicit pairwise user preferences align with offline schedule-quality objectives.
+              All evaluations run strictly offline in memory; factory scheduler weights remain 100% frozen.
             </div>
           </div>
 
@@ -622,7 +631,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                 <div>
                   <span style={styles.evaluatedBadge}>OFFLINE EVALUATED</span>
                   <h4 style={{ margin: '4px 0 0 0', fontSize: '15px', color: '#111827' }}>
-                    Baseline Factory Pairwise Accuracy: {activeRanking.baselineMetrics?.accuracyPct}%
+                    Pairwise Concordance with Quality Objective: {activeRanking.baselineMetrics?.accuracyPct}%
                   </h4>
                 </div>
                 <div style={styles.concordancePill}>
@@ -644,8 +653,13 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                   <span style={{ fontWeight: '700', color: '#4B5563' }}>{activeRanking.baselineMetrics?.tiedCount}</span>
                 </div>
                 <div style={styles.rankingBreakdownCol}>
-                  <span style={styles.breakdownLabel}>Statistical Margin of Error:</span>
-                  <span style={{ fontWeight: '700', color: '#1E40AF' }}>±{activeRanking.uncertainty?.marginOfErrorPct}%</span>
+                  <span style={styles.breakdownLabel}>Wilson 95% CI Margin:</span>
+                  <span style={{ fontWeight: '700', color: '#1E40AF' }}>
+                    ±{activeRanking.uncertainty?.marginOfErrorPct}%{' '}
+                    <span style={{ fontSize: '10px', color: '#6B7280', fontWeight: '400' }}>
+                      [{activeRanking.uncertainty?.ciLowerPct}%, {activeRanking.uncertainty?.ciUpperPct}%]
+                    </span>
+                  </span>
                 </div>
               </div>
 
@@ -653,7 +667,10 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
               <div style={styles.uncertaintyNote}>
                 <strong>⚠️ Statistical Limitation & Data Maturity:</strong> {activeRanking.uncertainty?.disclaimer}
                 <div style={{ marginTop: '4px' }}>
-                  <strong>Grouped Partitioning Strategy:</strong> {activeRanking.splitValidation?.isSplitDefensible ? 'Active (60/40 grouped holdout)' : `Inactive (${activeRanking.evidenceSummary?.eligibleCount} / ${MIN_HOLDOUT_SAMPLE} required)`}.
+                  <strong>Grouped Partitioning Strategy:</strong>{' '}
+                  {activeRanking.splitValidation?.isSplitDefensible
+                    ? `Active (${activeRanking.splitValidation?.reason})`
+                    : `Inactive (${activeRanking.splitValidation?.reason || 'Prerequisites unmet'})`}.
                 </div>
               </div>
             </div>

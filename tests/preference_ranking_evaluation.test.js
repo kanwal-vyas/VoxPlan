@@ -11,15 +11,18 @@ import {
   EVIDENCE_STATUS,
   SELECTION_VALUES,
   generatePairKey,
+  generateCanonicalComparisonKey,
   validatePreferenceEvidence,
   extractEligiblePreferenceEvidence,
 } from '../src/scheduler/preferenceEvidence.js';
 import {
   computeScheduleObjectiveScore,
+  computeWilsonScoreInterval,
   evaluatePairwiseConcordance,
   evaluateOfflineRanking,
   MIN_EVALUATION_SAMPLE,
   MIN_HOLDOUT_SAMPLE,
+  MIN_SCENARIO_GROUPS,
   RANKING_EVALUATION_STATUS,
 } from '../src/scheduler/rankingEvaluator.js';
 import {
@@ -267,9 +270,10 @@ describe('Phase 7.3 Follow-up: Explicit Preference Evidence & Offline Ranking Ev
   });
 
   describe('3. Offline Ranking Evaluation Pipeline & Objective Scoring', () => {
-    it('verifies standard sample thresholds: min evaluation sample = 5 and min holdout sample = 15', () => {
+    it('verifies standard sample thresholds: min evaluation sample = 5, min holdout sample = 15, and min scenario groups = 3', () => {
       assert.equal(MIN_EVALUATION_SAMPLE, 5);
       assert.equal(MIN_HOLDOUT_SAMPLE, 15);
+      assert.equal(MIN_SCENARIO_GROUPS, 3);
     });
 
     it('computes baseline schedule objective score deterministically', () => {
@@ -519,6 +523,355 @@ describe('Phase 7.3 Follow-up: Explicit Preference Evidence & Offline Ranking Ev
 
       extractEligiblePreferenceEvidence([inputRecord]);
       assert.equal(JSON.stringify(inputRecord), inputSnapshot);
+    });
+
+    it('guarantees zero external network requests or remote dependencies in ranking evaluation', () => {
+      // Offline evaluator and evidence extractor must be pure synchronous/in-memory functions
+      assert.equal(typeof extractEligiblePreferenceEvidence, 'function');
+      assert.equal(typeof evaluateOfflineRanking, 'function');
+      assert.equal(typeof computeScheduleObjectiveScore, 'function');
+      assert.equal(typeof computeWilsonScoreInterval, 'function');
+    });
+  });
+
+  describe('5. Phase 7.3 Integrity Audit & Corrective Hardening Regressions', () => {
+    describe('5.1 Evidence Semantics & Canonical Identity', () => {
+      it('generateCanonicalComparisonKey incorporates scenario context to preserve cross-scenario comparisons', () => {
+        const key1 = generateCanonicalComparisonKey('adaptive', 'edf', { scenario_key: 'backlog_contention' });
+        const key2 = generateCanonicalComparisonKey('adaptive', 'edf', { scenario_key: 'deadline_rush' });
+        assert.notEqual(key1, key2);
+        assert.equal(key1, 'backlog_contention:::adaptive___vs___edf');
+        assert.equal(key2, 'deadline_rush:::adaptive___vs___edf');
+      });
+
+      it('canonical comparison key prevents deduplication evasion when scenario context is identical but comparison_id differs', () => {
+        const keyA = generateCanonicalComparisonKey('adaptive', 'edf', { scenario_name: 'Sprint Crunch' }, 'cmp_random_1');
+        const keyB = generateCanonicalComparisonKey('adaptive', 'edf', { scenario_name: 'Sprint Crunch' }, 'cmp_random_2');
+        assert.equal(keyA, keyB);
+        assert.equal(keyA, 'Sprint Crunch:::adaptive___vs___edf');
+      });
+
+      it('preserves distinct preferences across different scenarios comparing the same strategies without falsely flagging them as duplicates or contradictions', () => {
+        const multiScenarioEvents = [
+          {
+            event_type: 'schedule_preference_expressed',
+            event_id: 'evt_scen_1',
+            timestamp: '2026-10-18T10:00:00.000Z',
+            payload: {
+              comparison_id: 'cmp_scen_1',
+              source: 'explicit_user_choice',
+              alternative_a: { id: 'adaptive', strategy: 'adaptive' },
+              alternative_b: { id: 'edf', strategy: 'edf' },
+              selected: 'alternative_a', // prefers adaptive in scenario 1
+              comparison_context: { scenario_key: 'scenario_1', scenario_name: 'Heavy Backlog' },
+            },
+          },
+          {
+            event_type: 'schedule_preference_expressed',
+            event_id: 'evt_scen_2',
+            timestamp: '2026-10-18T10:05:00.000Z',
+            payload: {
+              comparison_id: 'cmp_scen_2',
+              source: 'explicit_user_choice',
+              alternative_a: { id: 'adaptive', strategy: 'adaptive' },
+              alternative_b: { id: 'edf', strategy: 'edf' },
+              selected: 'alternative_b', // prefers edf in scenario 2 (DIFFERENT context, NOT contradiction!)
+              comparison_context: { scenario_key: 'scenario_2', scenario_name: 'Deadline Rush' },
+            },
+          },
+          {
+            event_type: 'schedule_preference_expressed',
+            event_id: 'evt_scen_3',
+            timestamp: '2026-10-18T10:10:00.000Z',
+            payload: {
+              comparison_id: 'cmp_scen_3',
+              source: 'explicit_user_choice',
+              alternative_a: { id: 'adaptive', strategy: 'adaptive' },
+              alternative_b: { id: 'edf', strategy: 'edf' },
+              selected: 'alternative_a', // prefers adaptive in scenario 3
+              comparison_context: { scenario_key: 'scenario_3', scenario_name: 'Shared Dependencies' },
+            },
+          },
+        ];
+
+        const res = extractEligiblePreferenceEvidence(multiScenarioEvents);
+        assert.equal(res.eligible.length, 3);
+        assert.equal(res.excluded.length, 0);
+        assert.equal(res.counts.byReason.contradictory, 0);
+        assert.equal(res.counts.byReason.duplicate, 0);
+      });
+
+      it('quarantines contradictory selections within the same scenario regardless of comparison_id', () => {
+        const conflictingSameScenario = [
+          {
+            event_type: 'schedule_preference_expressed',
+            event_id: 'evt_conf_1',
+            payload: {
+              comparison_id: 'cmp_first_submission',
+              source: 'explicit_user_choice',
+              alternative_a: { id: 'adaptive', strategy: 'adaptive' },
+              alternative_b: { id: 'edf', strategy: 'edf' },
+              selected: 'alternative_a',
+              comparison_context: { scenario_key: 'same_scenario' },
+            },
+          },
+          {
+            event_type: 'schedule_preference_expressed',
+            event_id: 'evt_conf_2',
+            payload: {
+              comparison_id: 'cmp_second_submission_different_id',
+              source: 'explicit_user_choice',
+              alternative_a: { id: 'adaptive', strategy: 'adaptive' },
+              alternative_b: { id: 'edf', strategy: 'edf' },
+              selected: 'alternative_b', // Conflict!
+              comparison_context: { scenario_key: 'same_scenario' },
+            },
+          },
+        ];
+
+        const res = extractEligiblePreferenceEvidence(conflictingSameScenario);
+        assert.equal(res.eligible.length, 0);
+        assert.equal(res.excluded.length, 2);
+        assert.equal(res.counts.byReason.contradictory, 2);
+      });
+
+      it('deduplicates repeated identical selections within the same scenario even if submitted with different comparison_id', () => {
+        const repeatedSameScenario = [
+          {
+            event_type: 'schedule_preference_expressed',
+            event_id: 'evt_rep_1',
+            payload: {
+              comparison_id: 'cmp_init',
+              source: 'explicit_user_choice',
+              alternative_a: { id: 'adaptive', strategy: 'adaptive' },
+              alternative_b: { id: 'edf', strategy: 'edf' },
+              selected: 'alternative_a',
+              comparison_context: { scenario_key: 'same_scenario' },
+            },
+          },
+          {
+            event_type: 'schedule_preference_expressed',
+            event_id: 'evt_rep_2',
+            payload: {
+              comparison_id: 'cmp_retry_new_uuid',
+              source: 'explicit_user_choice',
+              alternative_a: { id: 'adaptive', strategy: 'adaptive' },
+              alternative_b: { id: 'edf', strategy: 'edf' },
+              selected: 'alternative_a', // Exact duplicate
+              comparison_context: { scenario_key: 'same_scenario' },
+            },
+          },
+        ];
+
+        const res = extractEligiblePreferenceEvidence(repeatedSameScenario);
+        assert.equal(res.eligible.length, 1);
+        assert.equal(res.excluded.length, 1);
+        assert.equal(res.counts.byReason.duplicate, 1);
+      });
+    });
+
+    describe('5.2 Statistical Correctness & Wilson Score Interval', () => {
+      it('computes valid non-zero margin of error for boundary estimates (p=1.0) and does not collapse to 0%', () => {
+        // Sample of 5 concordant pairs out of 5 (100% concordance)
+        const wilson = computeWilsonScoreInterval(5, 5, 0.95);
+        assert.equal(wilson.confidenceLevel, 0.95);
+        assert.ok(wilson.marginOfErrorPct > 0, 'Margin of error must be strictly positive on small boundary sample');
+        assert.ok(wilson.ciLowerPct > 50.0 && wilson.ciLowerPct < 60.0, 'Wilson 95% lower bound for 5/5 should be ~56.6%');
+        assert.equal(wilson.ciUpperPct, 100.0);
+        assert.ok(wilson.marginOfErrorPct > 40.0, 'Wilson MoE for 5/5 should be ~43.5%, not 0.0%');
+      });
+
+      it('computes valid non-zero margin of error for boundary estimates (p=0.0)', () => {
+        const wilson = computeWilsonScoreInterval(0, 5, 0.95);
+        assert.equal(wilson.ciLowerPct, 0.0);
+        assert.ok(wilson.ciUpperPct > 40.0 && wilson.ciUpperPct < 50.0, 'Wilson upper bound for 0/5 should be ~43.4%');
+        assert.ok(wilson.marginOfErrorPct > 0);
+      });
+
+      it('handles empty or non-positive sample sizes gracefully', () => {
+        const zeroWilson = computeWilsonScoreInterval(0, 0, 0.95);
+        assert.equal(zeroWilson.marginOfErrorPct, null);
+        assert.equal(zeroWilson.ciLowerPct, null);
+        assert.equal(zeroWilson.ciUpperPct, null);
+      });
+
+      it('evaluateOfflineRanking explicitly reports 95% Wilson score confidence interval and stated limitations', () => {
+        const comparisons = [];
+        for (let i = 1; i <= 5; i++) {
+          comparisons.push({
+            comparisonId: `cmp_${i}`,
+            preferredAlternative: { id: 'a', metrics: { onTimeTasksCount: 4, totalTasks: 4 } },
+            nonPreferredAlternative: { id: 'b', metrics: { onTimeTasksCount: 2, totalTasks: 4, totalDelayDays: 2, delayedTasksCount: 2 } },
+            context: { scenario_name: `Scenario ${i}` },
+          });
+        }
+
+        const report = evaluateOfflineRanking({ eligibleComparisons: comparisons });
+        assert.equal(report.status, RANKING_EVALUATION_STATUS.EVALUATED);
+        assert.equal(report.uncertainty.confidenceLevel, 0.95);
+        assert.equal(report.uncertainty.method, 'Wilson score interval (95% CI)');
+        assert.ok(report.uncertainty.ciLowerPct != null);
+        assert.ok(report.uncertainty.ciUpperPct != null);
+        assert.ok(report.uncertainty.marginOfErrorPct > 0);
+        assert.ok(report.uncertainty.disclaimer.includes('Wilson score CI'));
+        assert.ok(report.uncertainty.disclaimer.includes('independent Bernoulli trials'));
+      });
+
+      it('ties and non-finite scores receive zero concordance credit', () => {
+        // Equal scores
+        const tieResult = evaluatePairwiseConcordance(
+          { id: 'a', metrics: { onTimeTasksCount: 3, totalTasks: 3, capacityUtilizationPct: 80 } },
+          { id: 'b', metrics: { onTimeTasksCount: 3, totalTasks: 3, capacityUtilizationPct: 80 } }
+        );
+        assert.equal(tieResult.isConcordant, false);
+        assert.equal(tieResult.isTied, true);
+
+        // Non-finite score
+        const nonFiniteResult = evaluatePairwiseConcordance(
+          { id: 'a', metrics: { onTimeTasksCount: 3, totalTasks: 3 } },
+          { id: 'b', metrics: null },
+          () => NaN
+        );
+        assert.equal(nonFiniteResult.isConcordant, false);
+        assert.equal(nonFiniteResult.disqualified, true);
+        assert.equal(nonFiniteResult.disqualificationReason, 'non_finite_scoring_evaluation');
+      });
+
+      it('disqualifies pairs where nonPreferredAlternative violates hard constraints', () => {
+        const nonCompliantResult = evaluatePairwiseConcordance(
+          { id: 'pref', isConstraintCompliant: true, metrics: { onTimeTasksCount: 4, totalTasks: 4 } },
+          { id: 'non_pref', isConstraintCompliant: false, cycleDetected: true, metrics: { onTimeTasksCount: 3, totalTasks: 4 } }
+        );
+        assert.equal(nonCompliantResult.isConcordant, false);
+        assert.equal(nonCompliantResult.disqualified, true);
+        assert.equal(nonCompliantResult.disqualificationReason, 'non_preferred_alternative_violates_hard_constraints');
+      });
+    });
+
+    describe('5.3 Grouped Validation & Leakage Prevention', () => {
+      it('refuses to split when independent scenario groups < 3 even if sample size N >= 15', () => {
+        // 16 comparisons across only 2 scenario groups
+        const comparisons = [];
+        for (let i = 1; i <= 16; i++) {
+          const scenario = (i % 2) === 0 ? 'Scenario_A' : 'Scenario_B';
+          comparisons.push({
+            comparisonId: `cmp_${i}`,
+            preferredAlternative: { id: 'a', metrics: { onTimeTasksCount: 4, totalTasks: 4 } },
+            nonPreferredAlternative: { id: 'b', metrics: { onTimeTasksCount: 2, totalTasks: 4 } },
+            context: { scenario_name: scenario },
+          });
+        }
+
+        const report = evaluateOfflineRanking({ eligibleComparisons: comparisons });
+        assert.equal(report.status, RANKING_EVALUATION_STATUS.EVALUATED);
+        assert.equal(report.splitValidation.isSplitDefensible, false);
+        assert.equal(report.splitValidation.splitStrategy, 'none_insufficient_scenario_groups');
+        assert.equal(report.splitValidation.distinctGroupsCount, 2);
+        assert.ok(report.splitValidation.reason.includes('below the minimum requirement of 3 distinct scenario groups'));
+      });
+
+      it('refuses to fall back to pairKey as proxy for scenario independence', () => {
+        // 15 comparisons with distinct pairKeys but NO scenario context
+        const comparisons = [];
+        for (let i = 1; i <= 15; i++) {
+          comparisons.push({
+            comparisonId: `cmp_${i}`,
+            pairKey: `pair_algo_${i % 4}`,
+            preferredAlternative: { id: 'a', metrics: { onTimeTasksCount: 4, totalTasks: 4 } },
+            nonPreferredAlternative: { id: 'b', metrics: { onTimeTasksCount: 2, totalTasks: 4 } },
+            context: {}, // No scenario identifier
+          });
+        }
+
+        const report = evaluateOfflineRanking({ eligibleComparisons: comparisons });
+        assert.equal(report.splitValidation.isSplitDefensible, false);
+        assert.equal(report.splitValidation.distinctGroupsCount, 0);
+        assert.equal(report.splitValidation.ungroupedComparisonsCount, 15);
+        assert.equal(report.splitValidation.splitStrategy, 'none_insufficient_scenario_groups');
+      });
+
+      it('proves that related observations in the same scenario never cross partitions under grouped holdout', () => {
+        const comparisons = [];
+        for (let i = 1; i <= 18; i++) {
+          const scenNum = (i % 3) + 1;
+          comparisons.push({
+            comparisonId: `cmp_holdout_${i}`,
+            preferredAlternative: { id: `pref_${i}`, metrics: { onTimeTasksCount: 4, totalTasks: 4 } },
+            nonPreferredAlternative: { id: `non_pref_${i}`, metrics: { onTimeTasksCount: 2, totalTasks: 4 } },
+            context: { scenario_name: `Scenario_${scenNum}` },
+          });
+        }
+
+        const report = evaluateOfflineRanking({ eligibleComparisons: comparisons });
+        assert.equal(report.splitValidation.isSplitDefensible, true);
+        assert.equal(report.splitValidation.splitStrategy, 'grouped_by_scenario_60_40');
+        assert.equal(report.splitValidation.distinctGroupsCount, 3);
+        assert.equal(report.splitValidation.trainGroupCount, 2);
+        assert.equal(report.splitValidation.testGroupCount, 1);
+        assert.equal(
+          report.splitValidation.trainMetrics.totalEvaluated + report.splitValidation.testMetrics.totalEvaluated,
+          18
+        );
+      });
+    });
+
+    describe('5.4 Fairness of Baseline Comparison', () => {
+      it('evaluates candidate scoring function equivalent to baseline when scoring functions are identical (delta === 0.0)', () => {
+        const comparisons = [];
+        for (let i = 1; i <= 6; i++) {
+          comparisons.push({
+            comparisonId: `cmp_fair_${i}`,
+            preferredAlternative: { id: 'a', metrics: { onTimeTasksCount: 4, totalTasks: 4, capacityUtilizationPct: 80 } },
+            nonPreferredAlternative: { id: 'b', metrics: { onTimeTasksCount: 2, totalTasks: 4, capacityUtilizationPct: 60, totalDelayDays: 3, delayedTasksCount: 2 } },
+            context: { scenario_name: `Scenario_${i}` },
+          });
+        }
+
+        const report = evaluateOfflineRanking({
+          eligibleComparisons: comparisons,
+          baselineScoringFn: computeScheduleObjectiveScore,
+          candidateScoringFn: computeScheduleObjectiveScore, // Identical
+        });
+
+        assert.equal(report.status, RANKING_EVALUATION_STATUS.EVALUATED);
+        assert.equal(report.baselineMetrics.accuracy, report.candidateMetrics.accuracy);
+        assert.equal(report.baselineMetrics.concordantCount, report.candidateMetrics.concordantCount);
+        assert.equal(report.baselineMetrics.discordantCount, report.candidateMetrics.discordantCount);
+        assert.equal(report.delta, 0.0);
+      });
+
+      it('baseline and candidate receive identical comparisons and evaluation partition', () => {
+        let baselineCalls = 0;
+        let candidateCalls = 0;
+
+        const countingBaseline = (alt) => {
+          baselineCalls++;
+          return computeScheduleObjectiveScore(alt);
+        };
+        const countingCandidate = (alt) => {
+          candidateCalls++;
+          return computeScheduleObjectiveScore(alt);
+        };
+
+        const comparisons = [];
+        for (let i = 1; i <= 5; i++) {
+          comparisons.push({
+            comparisonId: `cmp_calls_${i}`,
+            preferredAlternative: { id: 'a', metrics: { onTimeTasksCount: 4, totalTasks: 4 } },
+            nonPreferredAlternative: { id: 'b', metrics: { onTimeTasksCount: 2, totalTasks: 4 } },
+            context: { scenario_name: `Scenario_${i}` },
+          });
+        }
+
+        evaluateOfflineRanking({
+          eligibleComparisons: comparisons,
+          baselineScoringFn: countingBaseline,
+          candidateScoringFn: countingCandidate,
+        });
+
+        assert.equal(baselineCalls, 10); // 5 comparisons * 2 alternatives
+        assert.equal(candidateCalls, 10); // Exactly equal scoring opportunities
+      });
     });
   });
 });

@@ -2468,6 +2468,70 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
   - Real user longitudinal telemetry remains cold-start locked.
   - Next planned stage: Stage 7.4 (User Control Dashboard, Schedule Simulation & One-Click Rollback).
 
+#### Stage 7.3: Preference Ranking Evaluation Integrity Audit & Corrective Hardening (COMPLETED)
+- **Status**: **COMPLETED**.
+- **Scope & Mission**:
+  - Independent audit and corrective hardening of explicit preference evidence collection, offline ranking evaluation, statistical uncertainty estimation, and leakage prevention.
+  - **NON-NEGOTIABLE PRODUCTION SAFETY ENFORCED**:
+    - `FACTORY_SCHEDULER_WEIGHTS` strictly preserved and immutable: `urgencyWeight: 50.0`, `priorityWeight: 100.0`, `unblockWeight: 15.0`, `riskWeight: 25.0`.
+    - `isAdaptationUnlocked: false` and `productionApplied: false` permanently enforced.
+    - Zero fitted or learned weights applied to production. Production schedule generation remains 100% bit-for-bit invariant.
+    - Zero external cloud services, remote AI models, network telemetry, or paid dependencies.
+    - Evaluation is strictly read-only and memory-isolated; tasks, event histories, and scheduler configurations are never mutated.
+    - Stage 7.4 (User Control Dashboard & One-Click Rollback) remains strictly unstarted.
+
+- **Defects Discovered & Fixes Applied**:
+  1. **Canonical Comparison Key Lacked Scenario Context Binding**:
+     - *Defect*: `generatePairKey(idA, idB)` only bound the algorithm IDs (e.g. `adaptive___vs___edf`), completely ignoring comparison context and scenario identifiers. If a user compared Adaptive vs EDF in Scenario 1 and then again in Scenario 2, Scenario 2 was either erroneously dropped as a `DUPLICATE` or quarantined as a `CONTRADICTORY` observation if choices differed.
+     - *Fix*: Introduced `generateCanonicalComparisonKey(idA, idB, context, comparisonId)` in `src/scheduler/preferenceEvidence.js`, which binds scenario/context identity with order-independent sorted alternative IDs. Distinct scenarios are now properly preserved as separate eligible observations, while repeated comparisons within the same scenario are deduplicated and conflicting choices within the same scenario are quarantined.
+  2. **Asymptotic Wald Uncertainty Formula Collapsed to 0.0% on Boundary Estimates**:
+     - *Defect*: The evaluator used the asymptotic Wald normal approximation formula $1.96 \cdot \sqrt{\hat{p}(1-\hat{p})/n}$. When $\hat{p} = 1.0$ (e.g. 5/5 concordant) or $\hat{p} = 0.0$, the variance collapsed to zero, claiming $\pm 0.0\%$ margin of error on small samples ($N < 30$).
+     - *Fix*: Implemented `computeWilsonScoreInterval(successes, total, 0.95)` based on the Wilson score interval (Wilson, 1927). For $N=5, k=5$ (100% concordance), the 95% CI is correctly derived as $[56.6\%, 100.0\%]$ with half-width $\pm 43.5\%$, preventing deceptive certainty claims on sparse data.
+  3. **Grouped Holdout Partitioning Leaked Scenarios via Algorithm Pair Fallback**:
+     - *Defect*: When scenario context was missing, the holdout partitioner fell back to `cmp.pairKey` (e.g. `adaptive___vs___edf`), grouping comparisons by algorithm label rather than task/backlog scenario. This allowed comparisons on the exact same underlying scenario to cross train/test partitions.
+     - *Fix*: Restricted grouping strictly to verified scenario identifiers (`scenario_key`, `scenario_name`, `scenario_id`). If comparisons lack scenario context or if fewer than `MIN_SCENARIO_GROUPS` (3) exist, the evaluator refuses to partition, setting `isSplitDefensible: false` and `splitStrategy: 'none_insufficient_scenario_groups'`.
+  4. **Fire-and-Forget UI Preference Recording Falsely Claimed Success**:
+     - *Defect*: In `src/components/AdaptiveScheduleModal.jsx`, `telemetry.recordSchedulePreference` was called without awaiting its return value. A success toast appeared immediately even if persistence failed, validation errored, or the submission was deduplicated.
+     - *Fix*: Refactored to `handleRecordPreference` which asynchronously awaits the recorded event. Surfaces truthful feedback: success toast for new records, deduplication notice (`ℹ Preference already recorded (deduplicated)`) for repeated submissions, and error alert if persistence fails.
+  5. **Non-Preferred Alternative Constraint Compliance Bypassed in Concordance Gate**:
+     - *Defect*: `evaluatePairwiseConcordance` verified hard constraint compliance (`isConstraintCompliant`, `cycleDetected`, `infeasiblePlacementsCount`) only for `preferredAlt`, leaving `nonPreferredAlt` unverified at the concordance gate.
+     - *Fix*: Hardened gate to verify hard constraint compliance for both alternatives. If either alternative violates DAG topological ordering or capacity limits, the comparison is disqualified with specific reason codes.
+  6. **Misleading Nomenclature for Offline Composite Quality Objective**:
+     - *Defect*: The UI and comments labeled `computeScheduleObjectiveScore` as "Baseline Factory Pairwise Accuracy", confusing the offline schedule quality metric with the production scheduler's factory task weights (50/100/15/25).
+     - *Fix*: Re-labeled to "Pairwise Concordance with Baseline Quality Objective" across evaluator and UI, explicitly documenting that it measures alignment with a multi-attribute quality objective (timeliness, delay, utilization, churn), not guaranteed user satisfaction.
+
+- **Audited Methodology & Evidence Semantics**:
+  - **Explicit Choice Semantics**: Recorded preferences represent pairwise choices between strategies for a specific scenario backlog only. They do not establish general strategy superiority, do not endorse individual task placements, and do not imply user satisfaction.
+  - **Concordance Metric**: Strict pairwise concordance: $C = \text{concordantCount} / \text{totalEvaluated}$, where concordant requires $S(\text{pref}) > S(\text{nonPref})$. Ties ($S(\text{pref}) = S(\text{nonPref})$) and non-finite scores receive zero concordance credit.
+  - **Uncertainty Derivation**: Wilson score 95% confidence interval $\tilde{p} \pm \text{SE}_{\text{Wilson}}$ with explicit disclaimer stating that nominal intervals assume independent Bernoulli trials and do not adjust for scenario correlation, selection bias, or distribution shift.
+  - **Leakage Prevention**: Grouped holdout enforces deterministic 60/40 partition across $\ge 3$ verified scenario groups. Related comparisons sharing the same scenario never cross partitions.
+
+- **Verification Results**:
+  - **Frontend Test Suite**: **540 passed, 0 failed across 113 suites** (`npm test`).
+    - Added 17 targeted regression tests in `tests/preference_ranking_evaluation.test.js` covering canonical comparison keys, cross-scenario preservation, Wilson score boundary calculations, non-finite score zero credit, both-alternative constraint gating, baseline/candidate equivalence, and leakage prevention.
+  - **Backend Pytest Suite**: **27 passed, 1 warning in 5.93s** (`python -m pytest`).
+  - **Linter**: **0 errors, 1 warning** (pre-existing `set-state-in-effect`) across 67 files (`npm run lint`).
+  - **Production Build**: Clean client bundle built in 438ms (`npm run build`).
+  - **Browser Verification**: Subagent session (`ranking_audit_demo_1792382791599.webp`) verified:
+    1. Insufficient evidence gate ($N < 5$) displayed with honest disclaimer in `#personal-model`.
+    2. Synthetic mature demonstration toggle displays prominent `⚠️ Synthetic Demonstration Active` warning banner in Preference Ranking tab.
+    3. Valid non-collapsed Wilson 95% CI margin ($\pm 39.0\%$, CI $[61.0\%, 100.0\%]$) on synthetic fixture.
+    4. Explicit preference buttons in Adaptive Sprint Planner with clear scope notice.
+    5. Real-time feedback toast on initial click and honest deduplication notice on second click.
+
+- **Delivered & Modified Files**:
+  - `src/scheduler/preferenceEvidence.js`: Added `generateCanonicalComparisonKey` and canonical context grouping.
+  - `src/scheduler/rankingEvaluator.js`: Implemented `computeWilsonScoreInterval`, hardened grouped validation without `pairKey` fallback, and enforced both-alternative constraint checks.
+  - `src/components/AdaptiveScheduleModal.jsx`: Async preference recording with honest feedback and scope notice.
+  - `src/components/AdaptationSandboxCard.jsx`: Added synthetic demo banner in Tab 5, honest Wilson CI labeling, and defensive holdout notices.
+  - `tests/preference_ranking_evaluation.test.js`: Expanded test suite to 40 comprehensive unit and regression tests.
+  - `PROJECT_PLAN.md`: Complete audit findings, mathematical derivations, and verification records.
+
+- **Known Limitations & Next Roadmap Stage**:
+  - Real user explicit preference telemetry is cold-start locked (0 eligible comparisons).
+  - Production model learning and automatic activation remain strictly disabled.
+  - Stage 7.4 (User Control Dashboard, Schedule Simulation & One-Click Rollback) remains strictly unstarted.
+
 #### Stage 7.4: User Control Dashboard, Schedule Simulation & One-Click Rollback
 - **Scope & Expected Deliverables**:
   - "Adaptive Scheduling Preferences" control card in Section 05:
