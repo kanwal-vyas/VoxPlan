@@ -2946,7 +2946,78 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
     - Confirmed zero activation buttons or production mutation paths.
 
 - **Next Recommended Stage**:
-  - Stage 7.4.4B: Supervised Production Activation & Dynamic Deployment Gates (implementing the user confirmation modal, explicit human consent flow, and runtime weight routing, with production adaptation remaining disabled until explicit user confirmation).
+  - Stage 7.4.4A.1: Statistical Validation & Activation-Gate Audit (rigorous mathematical audit of scoring formula, practical threshold epsilon, bootstrap stability, cluster independence, and outcome precedence).
+
+---
+
+#### Stage 7.4.4A.1: Statistical Validation & Activation-Gate Audit (COMPLETED)
+- **Status**: Completed and fully verified.
+- **Objectives**:
+  1. Audit the statistical assumptions, scoring methodology, uncertainty estimation, and decision logic implemented in Phase 7.4 Stage 4A (`src/scheduler/activationGateEvaluator.js`, `src/scheduler/rankingEvaluator.js`, and `src/components/AdaptationSandboxCard.jsx`).
+  2. Audit A (Objective Formula & Practical Threshold): Verify direction, normalization, empty-backlog handling, and trade-off mechanics of the schedule objective score $S = 100(\text{onTimeRate}) - 15(\text{avgDelayDays}) + 10(\text{utilFraction}) - 20(\text{churnRate})$. Audit whether equating $\epsilon = 1.0$ to "1% on-time gain or 1.6h delay" is mathematically defensible.
+  3. Audit B (Clustered Bootstrap Implementation): Inspect resampling algorithm, cluster combinations, iteration count ($B=300 \to 1000$), deterministic PRNG (Mulberry32), and combinatorial limits of small cluster counts ($M < 5$).
+  4. Audit C (Pairing, Leakage & Provenance): Detect duplicate comparisons with superficial IDs, cross-cluster backlog leakage, and enforce exact context matching.
+  5. Audit D (Composite Objective vs Hard Feasibility): Decouple continuous quality scoring from hard feasibility; quarantine infeasible candidate observations so they do not distort `eligiblePairs` or `meanDelta` while ensuring immediate candidate disqualification.
+  6. Audit E (Outcome Precedence & Semantics): Enforce strict 5-tier outcome precedence and wire `INSUFFICIENT_METHODOLOGY` for invalid scoring or evaluation parameters.
+  7. Audit F (Adversarial Validation Matrix): Implement 16 deterministic adversarial and synthetic test scenarios covering all boundary conditions.
+  8. Strict Safety Invariants: Production adaptation remains disabled (`isAdaptationUnlocked === false`, `productionApplied === false`), factory weights remain 100% immutable and active.
+
+- **Audit Findings & Architectural Deliverables**:
+  1. **Scoring Function Audit & Empty-Schedule Correction (Audit A)**:
+     - *Defect Corrected*: `computeScheduleObjectiveScore` previously defaulted `onTimeRate = 1.0` when `totalTasks <= 0`, resulting in empty schedules being awarded 105.0 points (+100 on-time + 5 baseline utilization). Corrected to return `0.0` for empty task sets or backlogs.
+     - *Component Normalization*: All rates strictly clamped: `onTimeRate \in [0, 1]`, `utilFraction \in [0, 1]`, `churnRate \in [0, 1]`, and `avgDelayDays \ge 0`.
+     - *Threshold Multi-Attribute Clarification*: A composite score difference of $\Delta S = 1.0$ cannot be equated to a uniform 1% on-time improvement or 1.6h delay reduction. Because $S$ combines four metrics, a +1.0 delta can arise from +10% capacity utilization alone, -5% churn alone, or a mixture where on-time rate drops by 1% (-1.0 pt) but churn drops by 10% (+2.0 pts). The threshold $\epsilon = 1.0$ is documented as an **operational provisional heuristic**, not an empirically validated minimum clinically important difference (MCID).
+  2. **Clustered Bootstrap Resampling & Combinatorial Limits (Audit B)**:
+     - *Bootstrap Iterations*: Increased `DEFAULT_BOOTSTRAP_ITERATIONS` from 300 to 1000 to eliminate Monte Carlo tail instability at the 2.5th and 97.5th percentile cutoffs.
+     - *Degeneracy of $M=3$ Clusters*: With $M=3$ clusters, resampling with replacement yields only $\binom{3+3-1}{3} = \binom{5}{3} = 10$ unique cluster combinations (multisets). An empirical 95% interval derived from 10 points cannot guarantee nominal 95% frequentist coverage. Retained $M \ge 3$ as an operational provisional threshold, but added an explicit `isSmallClusterSample` warning flag and disclosure when $M < 5$.
+     - *Naive vs Cluster-Aware Comparison*: Computed naive unclustered variance alongside clustered bootstrap; demonstrated that naive intervals are artificially narrow under cluster-correlated data.
+  3. **Pairing, Content Deduplication & Leakage Detection (Audit C)**:
+     - Added content-level deduplication: observations sharing underlying comparison IDs or identical task sets within a cluster are excluded as `duplicate_observation` or `duplicate_backlog_in_cluster`.
+     - Added cross-cluster backlog leakage detection (`crossClusterLeakageDetected`): detects when the same underlying backlog is evaluated under disparate cluster labels.
+  4. **Feasibility Quarantine & Gate Decoupling (Audit D)**:
+     - *Defect Corrected*: Previously, infeasible observations were pushed to `eligiblePairs` and their $-10000$ penalty distorted `sumDelta` and continuous statistics. Infeasible observations are now strictly quarantined into `excludedPairs` (reason `infeasible_schedule_violation`), preventing metric pollution while immediately triggering `outcome = INFEASIBLE`.
+  5. **Outcome Precedence & Semantics (Audit E)**:
+     - Implemented strict 5-tier evaluation precedence:
+       1. `INSUFFICIENT_METHODOLOGY`: Invalid scoring function, non-positive $\epsilon$, or non-finite outputs.
+       2. `INFEASIBLE`: Hard constraint violations, out-of-bounds candidate weights, tampered baseline.
+       3. `INSUFFICIENT_EVIDENCE`: Operational readiness unmet, $N < 15$, $M < 3$, snapshot invalid, rollback failure.
+       4. `NOT_SUPERIOR`: $\overline{\Delta} < \epsilon$, $CI_{lower} \le 0$, negative delta.
+       5. `ELIGIBLE_FOR_SUPERVISED_REVIEW`: All checks satisfied with statistically significant positive improvement.
+     - Updated UI in `AdaptationSandboxCard.jsx` to render explicit `INSUFFICIENT_METHODOLOGY` explanation.
+  6. **Adversarial & Synthetic Test Matrix (Audit F)**:
+     - Added Section 6 to `tests/activation_gate_evaluator.test.js` with 17 new regression tests covering all 16 prompt scenarios:
+       - F.1: No evidence (`insufficient_evidence`).
+       - F.2: Too few eligible pairs ($N < 15$).
+       - F.3: Enough pairs but too few usable clusters ($M < 3$).
+       - F.4: Repeated observations from one underlying backlog.
+       - F.5: Duplicated observations with different superficial IDs.
+       - F.6: Cross-cluster backlog leakage detection.
+       - F.7: Positive point estimate with CI lower bound $\le 0$ (`not_superior`).
+       - F.8: Negative point estimate (`not_superior`).
+       - F.9: Practically negligible effect ($\overline{\Delta} < \epsilon$).
+       - F.10: Small cluster sample warning ($3 \le M < 5$).
+       - F.11: Hard feasibility failure taking precedence over score delta (`infeasible`).
+       - F.12: Corrupted candidate snapshot checksum (`insufficient_evidence`).
+       - F.13: Failed rollback preflight or missing factory snapshot (`insufficient_evidence`).
+       - F.14: Invalid scoring or non-positive $\epsilon$ (`insufficient_methodology`).
+       - F.15: Deterministic repeat evaluation with fixed seed.
+       - F.16: Cluster-aware vs naive unclustered CI comparison under correlated data.
+       - Audit A: Objective score empty backlog, clamping, and non-finite metrics.
+
+- **Verification Results**:
+  - **Frontend Test Suite**: **649 passed, 0 failed across 135 suites** (`npm test`).
+  - **Backend Pytest Suite**: **27 passed, 1 warning in 4.12s** (`.venv\Scripts\python -m pytest backend/tests/ -q`).
+  - **Linter**: **0 errors, 1 pre-existing warning** in `AdaptiveScheduleModal.jsx` across 73 files (`npm run lint`).
+  - **Client Production Build**: **Built production bundle cleanly in 251ms** (`npm run build`).
+  - **Browser Verification**: Verified browser UI rendered smoothly with updated outcome semantics.
+
+- **Remaining Methodological Limitations**:
+  1. *Small Cluster Count ($M < 5$)*: Empirical percentile bootstrap intervals cannot guarantee nominal 95% coverage when $M$ is small due to restricted multiset combinations ($\binom{5}{3} = 10$).
+  2. *Proxy Alignment vs Real Satisfaction*: Alignment with a weighted multi-attribute schedule score measures proxy objective improvement, not user satisfaction.
+  3. *Provisional Epsilon*: $\epsilon = 1.0$ is an operational heuristic and should be calibrated through longitudinal user study.
+
+- **Next Recommended Stage**:
+  - Stage 7.4.4B: Supervised Production Activation & Dynamic Deployment Gates (user confirmation modal, explicit human consent flow, and runtime weight routing, with production adaptation remaining disabled until explicit user confirmation).
 
 ---
 

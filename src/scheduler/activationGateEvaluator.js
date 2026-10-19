@@ -1,5 +1,5 @@
 /**
- * VoxPlan Shadow-Only Activation-Gate Evaluator (Phase 7.4 Stage 4A).
+ * VoxPlan Shadow-Only Activation-Gate Evaluator (Phase 7.4 Stage 4A & 4A.1 Audit).
  *
  * Implements a pure, deterministic, read-only evaluator that tests whether
  * a candidate scheduler-weight configuration satisfies VoxPlan's documented
@@ -15,6 +15,13 @@
  * 5. Methodological Honesty: Distinguishes operational exposure heuristics from formal
  *    statistical inference; uses cluster-aware bootstrap resampling instead of naive
  *    uncorrelated intervals; and never equates concordance with user satisfaction.
+ * 6. Audit & Precedence Rigor (Stage 4A.1):
+ *    - Infeasible candidate schedules are strictly quarantined and immediately trigger INFEASIBLE.
+ *    - Cross-cluster backlog leakage and content-level duplicate comparisons are detected and handled.
+ *    - Multi-attribute composite score threshold epsilon = 1.0 is treated as a provisional operational
+ *      heuristic, not a clinical equivalence guarantee.
+ *    - Small cluster samples (M < 5) explicitly disclose combinatorial multiset limits.
+ *    - INSUFFICIENT_METHODOLOGY is assigned when scoring or evaluation parameters are invalid.
  */
 
 import { FACTORY_SCHEDULER_WEIGHTS } from './adaptiveScheduler.js';
@@ -36,7 +43,8 @@ export const ACTIVATION_GATE_OUTCOMES = Object.freeze({
 
 /**
  * Default practical improvement threshold (\epsilon) on the 100-point schedule objective scale.
- * 1.0 point represents an additional 1% on-time placement rate or ~1.6 hours reduction in average task delay.
+ * Note: 1.0 point is a composite scalarization combining timeliness (+100), delay (-15),
+ * utilization (+10), and churn (-20); it must not be conflated with a uniform 1% on-time gain.
  */
 export const DEFAULT_MIN_MEANINGFUL_DELTA = 1.0;
 
@@ -45,7 +53,7 @@ export const DEFAULT_MIN_MEANINGFUL_DELTA = 1.0;
  */
 export const MIN_PAIRED_OBSERVATIONS = MIN_HOLDOUT_SAMPLE; // 15
 export const MIN_INDEPENDENT_CLUSTERS = MIN_SCENARIO_GROUPS; // 3
-export const DEFAULT_BOOTSTRAP_ITERATIONS = 300;
+export const DEFAULT_BOOTSTRAP_ITERATIONS = 1000;
 
 /**
  * Methodological disclosures and limitations documentation.
@@ -56,6 +64,8 @@ export const METHODOLOGY_DISCLOSURES = Object.freeze([
   'A positive point estimate alone does not establish superiority without uncertainty estimation.',
   'Operational exposure heuristics (>= 20 decisions, >= 15 completions) ensure interaction diversity, not asymptotic statistical power.',
   'Eligibility for supervised review authorizes human review only; production activation remains disabled.',
+  'A 1.0-point composite score difference (\u03b5 = 1.0) is a multi-attribute scalarization combining timeliness, delay, utilization, and churn; it is not mathematically equivalent to a uniform 1% on-time gain or 1.6h delay across all schedules.',
+  'Small cluster counts (M < 5) have limited combinatorial support (e.g. M=3 yields only 10 unique cluster multisets); empirical percentile intervals cannot guarantee nominal 95% coverage with small M.',
 ]);
 
 /**
@@ -110,7 +120,7 @@ export function extractClusterKey(observation) {
  * Ensures that candidate and baseline alternatives were evaluated on the same backlog and constraints.
  *
  * @param {Object} observation
- * @param {Function} scoringFn
+ * @param {Function} [scoringFn=computeScheduleObjectiveScore]
  * @returns {{
  *   valid: boolean,
  *   reason: string|null,
@@ -197,20 +207,20 @@ export function evaluateSinglePairedObservation(observation, scoringFn = compute
     }
   }
 
-  if (observation.candidateTaskSetId && observation.baselineTaskSetId) {
-    if (observation.candidateTaskSetId !== observation.baselineTaskSetId) {
-      return {
-        valid: false,
-        reason: 'Observation candidate and baseline task backlog sets do not match (unpaired backlogs).',
-        clusterKey,
-        candidateScore: null,
-        baselineScore: null,
-        delta: null,
-        candidateFeasible: false,
-        baselineFeasible: false,
-        feasibilityViolations: ['unpaired_task_backlog'],
-      };
-    }
+  const candTaskSet = observation.candidateTaskSetId ?? observation.taskSetId ?? null;
+  const baseTaskSet = observation.baselineTaskSetId ?? observation.taskSetId ?? null;
+  if (candTaskSet && baseTaskSet && candTaskSet !== baseTaskSet) {
+    return {
+      valid: false,
+      reason: 'Observation candidate and baseline task backlog sets do not match (unpaired backlogs).',
+      clusterKey,
+      candidateScore: null,
+      baselineScore: null,
+      delta: null,
+      candidateFeasible: false,
+      baselineFeasible: false,
+      feasibilityViolations: ['unpaired_task_backlog'],
+    };
   }
 
   // 4. Resolve candidate and baseline metrics/alternatives
@@ -228,16 +238,27 @@ export function evaluateSinglePairedObservation(observation, scoringFn = compute
     const hasCycle = Boolean(candAlt.cycleDetected || candAlt.metrics?.cycleDetected);
     const infeasiblePlacements = Number(candAlt.infeasiblePlacementsCount ?? candAlt.metrics?.infeasiblePlacementsCount ?? 0);
     const oversizedCount = Number(candAlt.oversizedCount ?? candAlt.metrics?.oversizedCount ?? 0);
-    const hasConstraintViolation = candAlt.isConstraintCompliant === false || candAlt.isFeasible === false;
+    const hasConstraintViolation =
+      candAlt.isConstraintCompliant === false ||
+      candAlt.isFeasible === false ||
+      candAlt.metrics?.isConstraintCompliant === false ||
+      candAlt.metrics?.isFeasible === false;
 
     if (hasCycle || infeasiblePlacements > 0 || oversizedCount > 0 || hasConstraintViolation) {
       candFeasible = false;
       if (hasCycle) violations.push('candidate_dependency_cycle');
       if (infeasiblePlacements > 0) violations.push(`candidate_infeasible_placements_${infeasiblePlacements}`);
       if (oversizedCount > 0) violations.push(`candidate_capacity_overrun_${oversizedCount}`);
+      if (hasConstraintViolation && !hasCycle && infeasiblePlacements === 0 && oversizedCount === 0) {
+        violations.push('candidate_hard_constraint_failure');
+      }
     }
 
-    candScore = scoringFn(candAlt);
+    try {
+      candScore = typeof scoringFn === 'function' ? scoringFn(candAlt) : NaN;
+    } catch {
+      candScore = NaN;
+    }
   } else if (typeof observation.candidateScore === 'number' && isFinite(observation.candidateScore)) {
     candScore = observation.candidateScore;
     if (observation.candidateFeasible === false) {
@@ -251,16 +272,27 @@ export function evaluateSinglePairedObservation(observation, scoringFn = compute
     const hasCycle = Boolean(baseAlt.cycleDetected || baseAlt.metrics?.cycleDetected);
     const infeasiblePlacements = Number(baseAlt.infeasiblePlacementsCount ?? baseAlt.metrics?.infeasiblePlacementsCount ?? 0);
     const oversizedCount = Number(baseAlt.oversizedCount ?? baseAlt.metrics?.oversizedCount ?? 0);
-    const hasConstraintViolation = baseAlt.isConstraintCompliant === false || baseAlt.isFeasible === false;
+    const hasConstraintViolation =
+      baseAlt.isConstraintCompliant === false ||
+      baseAlt.isFeasible === false ||
+      baseAlt.metrics?.isConstraintCompliant === false ||
+      baseAlt.metrics?.isFeasible === false;
 
     if (hasCycle || infeasiblePlacements > 0 || oversizedCount > 0 || hasConstraintViolation) {
       baseFeasible = false;
       if (hasCycle) violations.push('baseline_dependency_cycle');
       if (infeasiblePlacements > 0) violations.push(`baseline_infeasible_placements_${infeasiblePlacements}`);
       if (oversizedCount > 0) violations.push(`baseline_capacity_overrun_${oversizedCount}`);
+      if (hasConstraintViolation && !hasCycle && infeasiblePlacements === 0 && oversizedCount === 0) {
+        violations.push('baseline_hard_constraint_failure');
+      }
     }
 
-    baseScore = scoringFn(baseAlt);
+    try {
+      baseScore = typeof scoringFn === 'function' ? scoringFn(baseAlt) : NaN;
+    } catch {
+      baseScore = NaN;
+    }
   } else if (typeof observation.baselineScore === 'number' && isFinite(observation.baselineScore)) {
     baseScore = observation.baselineScore;
     if (observation.baselineFeasible === false) {
@@ -309,7 +341,10 @@ export function evaluateSinglePairedObservation(observation, scoringFn = compute
  *   ciUpper: number,
  *   standardError: number,
  *   bootstrapMeans: number[],
- *   iterations: number
+ *   iterations: number,
+ *   numClusters: number,
+ *   isSmallClusterSample: boolean,
+ *   uniqueMultisetsCount: number|null
  * }}
  */
 export function runClusteredBootstrap(
@@ -317,6 +352,10 @@ export function runClusteredBootstrap(
   iterations = DEFAULT_BOOTSTRAP_ITERATIONS,
   prng = createMulberry32(42)
 ) {
+  if (!clustersMap || typeof clustersMap.keys !== 'function') {
+    throw new Error('clustersMap must be a valid Map instance.');
+  }
+
   const clusterKeys = Array.from(clustersMap.keys());
   const numClusters = clusterKeys.length;
 
@@ -324,6 +363,19 @@ export function runClusteredBootstrap(
     throw new Error(
       `Clustered bootstrap requires at least ${MIN_INDEPENDENT_CLUSTERS} distinct clusters. Received ${numClusters}.`
     );
+  }
+
+  // Validate that all clusters have non-empty arrays with finite deltas
+  for (const k of clusterKeys) {
+    const obs = clustersMap.get(k);
+    if (!Array.isArray(obs) || obs.length === 0) {
+      throw new Error(`Cluster "${k}" is empty or not an array.`);
+    }
+    for (const item of obs) {
+      if (typeof item?.delta !== 'number' || !isFinite(item.delta)) {
+        throw new Error(`Cluster "${k}" contains non-finite delta: ${item?.delta}`);
+      }
+    }
   }
 
   const bootstrapMeans = [];
@@ -362,12 +414,18 @@ export function runClusteredBootstrap(
   const variance = bootstrapMeans.reduce((acc, v) => acc + Math.pow(v - grandMean, 2), 0) / (iterations - 1);
   const standardError = Math.round(Math.sqrt(Math.max(0, variance)) * 1000) / 1000;
 
+  const isSmallClusterSample = numClusters < 5;
+  const uniqueMultisetsCount = numClusters === 3 ? 10 : numClusters === 4 ? 35 : null;
+
   return {
     ciLower,
     ciUpper,
     standardError,
     bootstrapMeans,
     iterations,
+    numClusters,
+    isSmallClusterSample,
+    uniqueMultisetsCount,
   };
 }
 
@@ -402,7 +460,23 @@ export function evaluateActivationGate({
   const reasons = [];
 
   // -------------------------------------------------------------------------
-  // 1. Candidate Configuration Validation (Audit Boundary)
+  // 1. Scoring & Methodology Specification Validation (Audit A & Audit E)
+  // -------------------------------------------------------------------------
+  const scoringValid = typeof scoringFn === 'function';
+  const epsilonValid = typeof minMeaningfulDelta === 'number' && isFinite(minMeaningfulDelta) && minMeaningfulDelta > 0;
+  const epsilon = epsilonValid ? minMeaningfulDelta : DEFAULT_MIN_MEANINGFUL_DELTA;
+
+  if (!scoringValid) {
+    reasons.push('Invalid schedule objective scoring function provided (must be an executable function).');
+  }
+  if (!epsilonValid) {
+    reasons.push(
+      `Invalid practical significance threshold (epsilon = ${minMeaningfulDelta}); must be a finite positive number.`
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // 2. Candidate Configuration Validation (Audit Boundary)
   // -------------------------------------------------------------------------
   const weightValidation = validateCandidateWeights(candidateWeights);
   const candidateWeightsValid = weightValidation.isValid;
@@ -436,7 +510,7 @@ export function evaluateActivationGate({
   }
 
   // -------------------------------------------------------------------------
-  // 2. Operational Evidence Sufficiency Assessment
+  // 3. Operational Evidence Sufficiency Assessment
   // -------------------------------------------------------------------------
   let operationalReadinessPassed = true;
   let decidedCount = 0;
@@ -484,7 +558,7 @@ export function evaluateActivationGate({
   }
 
   // -------------------------------------------------------------------------
-  // 3. Paired Observation Quality & Feasibility Processing
+  // 4. Paired Observation Quality & Feasibility Processing (Audit C & D)
   // -------------------------------------------------------------------------
   const rawPairs = Array.isArray(pairedObservations) ? pairedObservations : [];
   const eligiblePairs = [];
@@ -493,6 +567,9 @@ export function evaluateActivationGate({
   const baselineViolations = [];
   const clustersMap = new Map();
   const seenPairKeys = new Set();
+  const seenContentKeys = new Set();
+  const taskSetClusterMap = new Map();
+  let crossClusterLeakageDetected = false;
 
   let concordantCount = 0;
   let discordantCount = 0;
@@ -505,7 +582,7 @@ export function evaluateActivationGate({
     const rawObs = rawPairs[i];
     const pairId = rawObs.observationId || rawObs.id || `pair_${i}`;
 
-    // Deduplication check
+    // Deduplication check by explicit ID
     if (seenPairKeys.has(pairId)) {
       excludedPairs.push({
         pairId,
@@ -514,6 +591,51 @@ export function evaluateActivationGate({
       continue;
     }
     seenPairKeys.add(pairId);
+
+    // Cluster key and backlog key extraction
+    const clusterKey = extractClusterKey(rawObs);
+    const comparisonId = rawObs.comparison_id || rawObs.comparisonId || rawObs.context?.comparison_id || rawObs.context?.comparisonId || null;
+    const taskSetId = rawObs.taskSetId || rawObs.candidateTaskSetId || rawObs.context?.taskSetId || rawObs.backlogId || rawObs.context?.backlogId || null;
+
+    // Deduplication by underlying comparison ID if provided with different superficial observationId
+    if (comparisonId) {
+      if (seenPairKeys.has(comparisonId)) {
+        excludedPairs.push({
+          pairId,
+          reason: 'duplicate_observation',
+        });
+        continue;
+      }
+      seenPairKeys.add(comparisonId);
+    }
+
+    // Deduplication by identical backlog task set within cluster (Audit F.5: superficial ID on same backlog)
+    if (taskSetId) {
+      const clusterBacklogKey = `${clusterKey || 'no_cluster'}::${taskSetId}`;
+      if (seenContentKeys.has(clusterBacklogKey)) {
+        excludedPairs.push({
+          pairId,
+          reason: 'duplicate_backlog_in_cluster',
+        });
+        continue;
+      }
+      seenContentKeys.add(clusterBacklogKey);
+    }
+
+    // Cross-cluster backlog leakage detection
+    if (taskSetId && clusterKey) {
+      if (taskSetClusterMap.has(taskSetId)) {
+        const prevCluster = taskSetClusterMap.get(taskSetId);
+        if (prevCluster !== clusterKey) {
+          crossClusterLeakageDetected = true;
+          reasons.push(
+            `Cross-cluster backlog leakage detected: task set "${taskSetId}" appears in both cluster "${prevCluster}" and "${clusterKey}".`
+          );
+        }
+      } else {
+        taskSetClusterMap.set(taskSetId, clusterKey);
+      }
+    }
 
     const evalRes = evaluateSinglePairedObservation(rawObs, scoringFn);
 
@@ -525,11 +647,20 @@ export function evaluateActivationGate({
       continue;
     }
 
-    if (!evalRes.candidateFeasible) {
-      candidateViolations.push(...evalRes.feasibilityViolations);
-    }
-    if (!evalRes.baselineFeasible) {
-      baselineViolations.push(...evalRes.feasibilityViolations);
+    // Feasibility quarantine: Infeasible observations MUST NOT pollute eligible pairs or continuous score metrics!
+    if (!evalRes.candidateFeasible || !evalRes.baselineFeasible) {
+      if (!evalRes.candidateFeasible) {
+        candidateViolations.push(...evalRes.feasibilityViolations);
+      }
+      if (!evalRes.baselineFeasible) {
+        baselineViolations.push(...evalRes.feasibilityViolations);
+      }
+      excludedPairs.push({
+        pairId,
+        reason: 'infeasible_schedule_violation',
+        violations: evalRes.feasibilityViolations,
+      });
+      continue;
     }
 
     eligiblePairs.push(evalRes);
@@ -559,7 +690,7 @@ export function evaluateActivationGate({
   const concordanceProportion = eligibleCount > 0 ? Math.round((concordantCount / eligibleCount) * 1000) / 1000 : null;
 
   // -------------------------------------------------------------------------
-  // 4. Hard Feasibility Gate
+  // 5. Hard Feasibility Gate (Audit D)
   // -------------------------------------------------------------------------
   const candidateHasViolations = candidateViolations.length > 0;
   const baselineHasViolations = baselineViolations.length > 0;
@@ -577,7 +708,7 @@ export function evaluateActivationGate({
   }
 
   // -------------------------------------------------------------------------
-  // 5. Rollback Readiness Gate
+  // 6. Rollback Readiness Gate
   // -------------------------------------------------------------------------
   let rollbackPreflightPassed = true;
   let rollbackDetails = 'Rollback preflight verified.';
@@ -599,12 +730,8 @@ export function evaluateActivationGate({
   }
 
   // -------------------------------------------------------------------------
-  // 6. Practical Significance & Uncertainty Estimation
+  // 7. Practical Significance & Clustered Uncertainty Estimation (Audit B)
   // -------------------------------------------------------------------------
-  const epsilon = typeof minMeaningfulDelta === 'number' && isFinite(minMeaningfulDelta) && minMeaningfulDelta > 0
-    ? minMeaningfulDelta
-    : DEFAULT_MIN_MEANINGFUL_DELTA;
-
   const meetsPracticalImprovement = meanDelta != null && meanDelta >= epsilon;
 
   let canEstimateUncertainty = false;
@@ -614,13 +741,30 @@ export function evaluateActivationGate({
   let isCiPositive = false;
   let uncertaintyDisclaimer = '';
 
+  // Naive unclustered interval for methodology comparison (Audit F.16)
+  let naiveStandardError = null;
+  let naiveCiLower = null;
+  let naiveCiUpper = null;
+  if (eligibleCount > 1 && meanDelta != null) {
+    const sampleVar = eligiblePairs.reduce((acc, p) => acc + Math.pow(p.delta - meanDelta, 2), 0) / (eligibleCount - 1);
+    naiveStandardError = Math.round((Math.sqrt(sampleVar) / Math.sqrt(eligibleCount)) * 1000) / 1000;
+    naiveCiLower = Math.round((meanDelta - 1.96 * naiveStandardError) * 1000) / 1000;
+    naiveCiUpper = Math.round((meanDelta + 1.96 * naiveStandardError) * 1000) / 1000;
+  }
+
   if (eligibleCount < MIN_PAIRED_OBSERVATIONS) {
     uncertaintyDisclaimer = `Eligible paired observations (${eligibleCount}) below minimum required (${MIN_PAIRED_OBSERVATIONS}) for clustered uncertainty estimation.`;
     reasons.push(uncertaintyDisclaimer);
-  } else if (distinctClustersCount < MIN_INDEPENDENT_CLUSTERS) {
-    uncertaintyDisclaimer = `Distinct scenario clusters (${distinctClustersCount}) below minimum required (${MIN_INDEPENDENT_CLUSTERS}) to adjust for scenario correlation.`;
-    reasons.push(uncertaintyDisclaimer);
-  } else {
+  }
+  if (distinctClustersCount < MIN_INDEPENDENT_CLUSTERS) {
+    const clusterDisclaimer = `Distinct scenario clusters (${distinctClustersCount}) below minimum required (${MIN_INDEPENDENT_CLUSTERS}) to adjust for scenario correlation.`;
+    reasons.push(clusterDisclaimer);
+    if (!uncertaintyDisclaimer) {
+      uncertaintyDisclaimer = clusterDisclaimer;
+    }
+  }
+
+  if (eligibleCount >= MIN_PAIRED_OBSERVATIONS && distinctClustersCount >= MIN_INDEPENDENT_CLUSTERS) {
     try {
       const prng = createMulberry32(randomSeed);
       bootstrapResult = runClusteredBootstrap(clustersMap, DEFAULT_BOOTSTRAP_ITERATIONS, prng);
@@ -628,7 +772,12 @@ export function evaluateActivationGate({
       ciLower = bootstrapResult.ciLower;
       ciUpper = bootstrapResult.ciUpper;
       isCiPositive = ciLower > 0;
-      uncertaintyDisclaimer = `Deterministic clustered bootstrap (${DEFAULT_BOOTSTRAP_ITERATIONS} resamples across ${distinctClustersCount} clusters). 95% CI on mean paired difference is [${ciLower}, ${ciUpper}]. Assumes cluster-level exchangeability.`;
+
+      const clusterSampleNote = bootstrapResult.isSmallClusterSample
+        ? ` Note: Small cluster count (M=${distinctClustersCount} < 5) has restricted multiset combinations (${bootstrapResult.uniqueMultisetsCount}); empirical percentile coverage cannot be guaranteed.`
+        : '';
+
+      uncertaintyDisclaimer = `Deterministic clustered bootstrap (${DEFAULT_BOOTSTRAP_ITERATIONS} resamples across ${distinctClustersCount} clusters). 95% CI on mean paired difference is [${ciLower}, ${ciUpper}]. Assumes cluster-level exchangeability.${clusterSampleNote}`;
     } catch (err) {
       uncertaintyDisclaimer = `Failed to estimate clustered uncertainty: ${err.message}`;
       reasons.push(uncertaintyDisclaimer);
@@ -648,24 +797,30 @@ export function evaluateActivationGate({
   }
 
   // -------------------------------------------------------------------------
-  // 7. Outcome Determination
+  // 8. Outcome Determination (Audit E: Strict Order of Precedence)
   // -------------------------------------------------------------------------
   let outcome;
 
-  // Rule 1: Infeasible candidates are immediately disqualified
-  if (!feasibilityPassed || !candidateWeightsValid || !factoryBaselineValid) {
+  // Rule 1: Invalid evaluation methodology / scoring / parameters
+  if (
+    !scoringValid ||
+    !epsilonValid ||
+    (rawPairs.length > 0 && eligibleCount === 0 && excludedPairs.every((p) => p.reason?.includes('Non-finite')))
+  ) {
+    outcome = ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_METHODOLOGY;
+  }
+  // Rule 2: Hard feasibility failures (candidate violations, out-of-bounds weights, baseline violations)
+  else if (!feasibilityPassed || !candidateWeightsValid || !factoryBaselineValid) {
     outcome = ACTIVATION_GATE_OUTCOMES.INFEASIBLE;
   }
-  // Rule 2: Insufficient evidence (operational or paired sample)
+  // Rule 3: Insufficient evidence (operational readiness unmet, N < 15, M < 3, snapshot invalid, rollback failure)
   else if (
     !operationalReadinessPassed ||
     eligibleCount < MIN_PAIRED_OBSERVATIONS ||
-    distinctClustersCount < MIN_INDEPENDENT_CLUSTERS
+    distinctClustersCount < MIN_INDEPENDENT_CLUSTERS ||
+    !rollbackPreflightPassed ||
+    !snapshotValid
   ) {
-    outcome = ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE;
-  }
-  // Rule 3: Rollback readiness failure
-  else if (!rollbackPreflightPassed || !snapshotValid) {
     outcome = ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE;
   }
   // Rule 4: Not superior (mean delta < epsilon or CI lower bound <= 0)
@@ -697,6 +852,7 @@ export function evaluateActivationGate({
       excludedObservationsCount: excludedPairs.length,
       excludedPairs,
       distinctClustersCount,
+      crossClusterLeakageDetected,
     },
     pairedComparison: {
       primaryEndpoint: 'paired_schedule_quality_score_difference',
@@ -714,12 +870,20 @@ export function evaluateActivationGate({
     uncertainty: {
       method: canEstimateUncertainty ? 'clustered_bootstrap_percentile_95' : null,
       clusterUnit: 'scenario_or_project_group',
-      bootstrapIterations: canEstimateUncertainty ? DEFAULT_BOOTSTRAP_ITERATIONS : null,
+      bootstrapIterations: canEstimateUncertainty ? (bootstrapResult?.iterations ?? DEFAULT_BOOTSTRAP_ITERATIONS) : null,
       ciLower,
       ciUpper,
       confidenceLevel: 0.95,
       isCiPositive,
       canEstimateUncertainty,
+      standardError: bootstrapResult?.standardError ?? null,
+      isSmallClusterSample: bootstrapResult?.isSmallClusterSample ?? false,
+      uniqueMultisetsCount: bootstrapResult?.uniqueMultisetsCount ?? null,
+      naiveUnclustered: {
+        standardError: naiveStandardError,
+        ciLower: naiveCiLower,
+        ciUpper: naiveCiUpper,
+      },
       disclaimer: uncertaintyDisclaimer,
     },
     feasibilityGate: {

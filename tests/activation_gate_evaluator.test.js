@@ -5,6 +5,7 @@ import {
   ACTIVATION_GATE_OUTCOMES,
   evaluateSinglePairedObservation,
 } from '../src/scheduler/activationGateEvaluator.js';
+import { computeScheduleObjectiveScore } from '../src/scheduler/rankingEvaluator.js';
 import { FACTORY_SCHEDULER_WEIGHTS } from '../src/scheduler/adaptiveScheduler.js';
 import { createConfigurationSnapshot } from '../src/scheduler/configurationSnapshot.js';
 
@@ -625,6 +626,389 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
       assert.ok(res.methodologyDisclosures.length >= 4);
       assert.ok(res.methodologyDisclosures.some((d) => d.includes('Pairwise concordance')));
       assert.ok(res.methodologyDisclosures.some((d) => d.includes('correlated')));
+    });
+  });
+
+  describe('6. Phase 7.4 Stage 4A.1: Adversarial & Synthetic Statistical Validation Matrix (Audit F)', () => {
+    // Scenario 1: No evidence
+    it('F.1 handles no evidence by returning INSUFFICIENT_EVIDENCE', () => {
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: [],
+      });
+      assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.equal(res.evidenceAssessment.eligibleObservationsCount, 0);
+      assert.equal(res.isEligibleForSupervisedReview, false);
+    });
+
+    // Scenario 2: Too few eligible pairs
+    it('F.2 handles too few eligible pairs (N < 15) by returning INSUFFICIENT_EVIDENCE', () => {
+      const pairs = createPairedObservations({ count: 10 });
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: pairs,
+      });
+      assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.equal(res.evidenceAssessment.eligibleObservationsCount, 10);
+      assert.ok(res.reasons.some((r) => r.includes('below minimum required (15)')));
+    });
+
+    // Scenario 3: Enough pairs but too few usable clusters
+    it('F.3 handles enough pairs but too few usable clusters (M < 3) by returning INSUFFICIENT_EVIDENCE', () => {
+      const pairs = createPairedObservations({
+        count: 20,
+        clusters: ['cluster_1', 'cluster_2'],
+      });
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: pairs,
+      });
+      assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.equal(res.evidenceAssessment.distinctClustersCount, 2);
+      assert.ok(res.reasons.some((r) => r.includes('below minimum required (3)')));
+    });
+
+    // Scenario 4: Repeated observations from one underlying backlog
+    it('F.4 excludes repeated observations from one underlying backlog in the same cluster', () => {
+      const pairs = [
+        {
+          observationId: 'pair_backlog_a',
+          taskSetId: 'shared_backlog_123',
+          context: { scenario_key: 'cluster_x' },
+          candidateScore: 85,
+          baselineScore: 80,
+        },
+        {
+          observationId: 'pair_backlog_b',
+          taskSetId: 'shared_backlog_123', // Same backlog in same cluster
+          context: { scenario_key: 'cluster_x' },
+          candidateScore: 85,
+          baselineScore: 80,
+        },
+      ];
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: pairs,
+      });
+      assert.equal(res.evidenceAssessment.eligibleObservationsCount, 1);
+      assert.equal(res.evidenceAssessment.excludedObservationsCount, 1);
+      assert.equal(res.evidenceAssessment.excludedPairs[0].reason, 'duplicate_backlog_in_cluster');
+    });
+
+    // Scenario 5: Duplicated observations with different superficial identifiers
+    it('F.5 excludes duplicated observations with different superficial identifiers sharing same comparison ID', () => {
+      const pairs = [
+        {
+          observationId: 'superficial_id_1',
+          comparison_id: 'canonical_comparison_99',
+          context: { scenario_key: 'cluster_alpha' },
+          candidateScore: 90,
+          baselineScore: 85,
+        },
+        {
+          observationId: 'superficial_id_2', // Different observationId
+          comparison_id: 'canonical_comparison_99', // Identical comparisonId!
+          context: { scenario_key: 'cluster_alpha' },
+          candidateScore: 90,
+          baselineScore: 85,
+        },
+      ];
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: pairs,
+      });
+      assert.equal(res.evidenceAssessment.eligibleObservationsCount, 1);
+      assert.equal(res.evidenceAssessment.excludedObservationsCount, 1);
+      assert.equal(res.evidenceAssessment.excludedPairs[0].reason, 'duplicate_observation');
+    });
+
+    // Scenario 6: Overlapping project or task groups (Cross-cluster leakage)
+    it('F.6 detects cross-cluster backlog leakage when identical task set appears under distinct clusters', () => {
+      const pairs = [
+        {
+          observationId: 'leak_obs_1',
+          taskSetId: 'project_backlog_core',
+          context: { scenario_key: 'cluster_sprint_1' },
+          candidateScore: 85,
+          baselineScore: 80,
+        },
+        {
+          observationId: 'leak_obs_2',
+          taskSetId: 'project_backlog_core', // Same backlog claimed under different cluster!
+          context: { scenario_key: 'cluster_sprint_2' },
+          candidateScore: 85,
+          baselineScore: 80,
+        },
+      ];
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: pairs,
+      });
+      assert.equal(res.evidenceAssessment.crossClusterLeakageDetected, true);
+      assert.ok(res.reasons.some((r) => r.includes('Cross-cluster backlog leakage detected')));
+    });
+
+    // Scenario 7: Candidate with a positive point estimate but uncertainty crossing zero
+    it('F.7 returns NOT_SUPERIOR when point estimate is positive but 95% CI lower bound crosses zero', () => {
+      // 24 pairs, mean delta ~ +1.5, but high inter-cluster variance pulling lower bound <= 0
+      const pairs = [];
+      const clusters = ['cl_a', 'cl_b', 'cl_c', 'cl_d'];
+      for (let i = 0; i < 24; i++) {
+        const cl = clusters[i % 4];
+        const delta = cl === 'cl_d' ? -4.0 : 3.0; // Cluster cl_d regresses
+        pairs.push({
+          observationId: `p_ci_zero_${i}`,
+          context: { scenario_key: cl },
+          candidateScore: 80 + delta,
+          baselineScore: 80,
+        });
+      }
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: pairs,
+        minMeaningfulDelta: 1.0,
+      });
+      assert.ok((res.pairedComparison.meanDelta ?? 0) > 0);
+      assert.ok(res.uncertainty.ciLower <= 0);
+      assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR);
+    });
+
+    // Scenario 8: Candidate with a negative point estimate
+    it('F.8 returns NOT_SUPERIOR when candidate mean paired delta is negative', () => {
+      const pairs = createPairedObservations({
+        count: 20,
+        candScoreBase: 75.0,
+        baseScoreBase: 82.0, // Candidate is 7 points worse
+      });
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: pairs,
+      });
+      assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR);
+      assert.ok((res.pairedComparison.meanDelta ?? 0) < 0);
+    });
+
+    // Scenario 9: Candidate with a practically negligible effect
+    it('F.9 returns NOT_SUPERIOR when delta is positive but practically negligible (delta < epsilon)', () => {
+      const pairs = createPairedObservations({
+        count: 20,
+        candScoreBase: 80.4,
+        baseScoreBase: 80.0, // Delta = +0.4 pts < epsilon (1.0)
+      });
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: pairs,
+        minMeaningfulDelta: 1.0,
+      });
+      assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR);
+      assert.equal(res.pairedComparison.meetsPracticalImprovement, false);
+    });
+
+    // Scenario 10: Candidate with large apparent effect but small clusters (M < 5 flagged)
+    it('F.10 flags small cluster warning when 3 <= M < 5 clusters are used', () => {
+      const pairs = createPairedObservations({
+        count: 21,
+        clusters: ['cl_1', 'cl_2', 'cl_3'], // M = 3
+        candScoreBase: 90.0,
+        baseScoreBase: 80.0,
+      });
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: pairs,
+        minMeaningfulDelta: 1.0,
+      });
+      assert.equal(res.uncertainty.isSmallClusterSample, true);
+      assert.equal(res.uncertainty.uniqueMultisetsCount, 10);
+      assert.ok(res.uncertainty.disclaimer.includes('Small cluster count'));
+    });
+
+    // Scenario 11: Candidate with a hard feasibility violation
+    it('F.11 rejects candidate with hard feasibility violation even if objective score delta is huge', () => {
+      const pairs = [
+        {
+          observationId: 'infeasible_pair_1',
+          context: { scenario_key: 'cl_inf' },
+          candidateAlternative: {
+            cycleDetected: true, // Hard cycle!
+            metrics: { totalTasks: 10, onTimeTasksCount: 10, capacityUtilizationPct: 100 },
+          },
+          baselineAlternative: {
+            cycleDetected: false,
+            metrics: { totalTasks: 10, onTimeTasksCount: 8, capacityUtilizationPct: 75 },
+          },
+        },
+      ];
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: pairs,
+      });
+      assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.INFEASIBLE);
+      assert.equal(res.feasibilityGate.passed, false);
+      assert.ok(res.feasibilityGate.candidateViolations.includes('candidate_dependency_cycle'));
+    });
+
+    // Scenario 12: Invalid or stale candidate snapshot
+    it('F.12 rejects evaluation when candidate snapshot has corrupted checksum or schema', () => {
+      const corruptedSnapshot = {
+        snapshotId: 'snap_corrupt',
+        timestamp: Date.now(),
+        integrityChecksum: 'bad_hash',
+      };
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        candidateSnapshot: corruptedSnapshot,
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: createPairedObservations(),
+      });
+      assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.equal(res.rollbackReadinessGate.snapshotValid, false);
+    });
+
+    // Scenario 13: Invalid factory snapshot or failed rollback preflight
+    it('F.13 rejects evaluation when rollback preflight fails or factory snapshot is missing', () => {
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: {
+          success: false,
+          verified: false,
+          factorySnapshotAvailable: false,
+          error: 'Persistent factory snapshot not found',
+        },
+        pairedObservations: createPairedObservations(),
+      });
+      assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.equal(res.rollbackReadinessGate.rollbackPreflightVerified, false);
+    });
+
+    // Scenario 14: Non-finite or inconsistent score components (INSUFFICIENT_METHODOLOGY)
+    it('F.14 assigns INSUFFICIENT_METHODOLOGY when scoring function is invalid or produces non-finite outputs', () => {
+      const resInvalidScoring = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: createPairedObservations(),
+        scoringFn: null, // Invalid function!
+      });
+      assert.equal(resInvalidScoring.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_METHODOLOGY);
+      assert.ok(resInvalidScoring.reasons.some((r) => r.includes('Invalid schedule objective scoring function')));
+
+      const resInvalidEpsilon = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: createPairedObservations(),
+        minMeaningfulDelta: -1.0, // Non-positive epsilon!
+      });
+      assert.equal(resInvalidEpsilon.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_METHODOLOGY);
+    });
+
+    // Scenario 15: Deterministic repeat evaluation with the same seed
+    it('F.15 produces exact identical bootstrap bounds and statistics on repeat evaluation with same seed', () => {
+      const pairs = createPairedObservations({ count: 24 });
+      const runA = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: pairs,
+        randomSeed: 42,
+      });
+      const runB = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: pairs,
+        randomSeed: 42,
+      });
+      assert.equal(runA.uncertainty.ciLower, runB.uncertainty.ciLower);
+      assert.equal(runA.uncertainty.ciUpper, runB.uncertainty.ciUpper);
+      assert.equal(runA.uncertainty.standardError, runB.uncertainty.standardError);
+    });
+
+    // Scenario 16: Naive unclustered analysis appears more confident than cluster-aware analysis
+    it('F.16 demonstrates that naive unclustered CI is narrower than cluster-aware bootstrap under correlated data', () => {
+      // Create cluster-correlated observations where within-cluster observations are identical
+      // but across clusters the effect differs:
+      // Cluster A: delta = +10 (all 8 observations)
+      // Cluster B: delta = +5 (all 8 observations)
+      // Cluster C: delta = -1 (all 8 observations)
+      const correlatedPairs = [];
+      const clusterDeltas = { cl_a: 10, cl_b: 5, cl_c: -1 };
+      for (const [cl, delta] of Object.entries(clusterDeltas)) {
+        for (let j = 0; j < 8; j++) {
+          correlatedPairs.push({
+            observationId: `${cl}_obs_${j}`,
+            context: { scenario_key: cl },
+            candidateScore: 80 + delta,
+            baselineScore: 80,
+          });
+        }
+      }
+
+      const res = evaluateActivationGate({
+        candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        pairedObservations: correlatedPairs,
+        randomSeed: 42,
+      });
+
+      assert.equal(res.uncertainty.canEstimateUncertainty, true);
+      const naiveSE = res.uncertainty.naiveUnclustered.standardError;
+      const clusterSE = res.uncertainty.standardError;
+
+      // Cluster-aware standard error accounts for cluster dependence and is larger than naive SE
+      assert.ok(clusterSE > naiveSE, `Expected cluster SE (${clusterSE}) > naive SE (${naiveSE})`);
+
+      const naiveWidth = res.uncertainty.naiveUnclustered.ciUpper - res.uncertainty.naiveUnclustered.ciLower;
+      const clusterWidth = res.uncertainty.ciUpper - res.uncertainty.ciLower;
+      assert.ok(clusterWidth > naiveWidth, `Expected cluster CI width (${clusterWidth}) > naive CI width (${naiveWidth})`);
+    });
+
+    // Additional Objective Validity & Normalization Checks (Audit A)
+    it('Audit A: computeScheduleObjectiveScore returns 0.0 for empty task sets, clamps rates, and handles non-finite metrics', () => {
+      // Empty task set
+      const emptySchedule = { metrics: { totalTasks: 0, onTimeTasksCount: 0 } };
+      assert.equal(computeScheduleObjectiveScore(emptySchedule), 0.0);
+
+      // Non-object
+      assert.equal(computeScheduleObjectiveScore(null), -Infinity);
+
+      // Clamp rates when corrupted metrics exceed [0, 1]
+      const overflowSchedule = {
+        metrics: {
+          totalTasks: 10,
+          onTimeTasksCount: 15, // > totalTasks!
+          capacityUtilizationPct: 150, // > 100%!
+          churnRate: 2.5, // > 1.0!
+        },
+      };
+      const score = computeScheduleObjectiveScore(overflowSchedule);
+      // onTimeRate clamped to 1.0 (100 pts), utilFraction clamped to 1.0 (+10 pts), churn clamped to 1.0 (-20 pts) => 90 pts
+      assert.equal(score, 90.0);
     });
   });
 });

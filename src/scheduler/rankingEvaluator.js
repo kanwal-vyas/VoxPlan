@@ -54,17 +54,29 @@ export function computeScheduleObjectiveScore(alternative) {
   // Feasibility penalty
   const hasCycle = Boolean(metrics.cycleDetected || alternative.cycleDetected);
   const infeasibleCount = Number(metrics.infeasiblePlacementsCount ?? alternative.infeasiblePlacementsCount ?? 0);
-  if (hasCycle || infeasibleCount > 0) {
+  const hasConstraintViolation =
+    alternative.isConstraintCompliant === false ||
+    alternative.isFeasible === false ||
+    metrics.isConstraintCompliant === false ||
+    metrics.isFeasible === false;
+
+  if (hasCycle || infeasibleCount > 0 || hasConstraintViolation) {
     return -10000 - (infeasibleCount * 100);
   }
 
-  const onTimeRate = totalTasks > 0 ? (onTimeTasks / totalTasks) : 1.0;
-  const avgDelayDays = delayedTasks > 0 ? (totalDelayDays / delayedTasks) : 0.0;
-  const utilFraction = Math.max(0, Math.min(1.0, capacityUtilPct / 100.0));
+  // If there are no tasks in the schedule or backlog, the schedule quality is degenerate (0.0)
+  if (totalTasks <= 0 || !isFinite(totalTasks)) {
+    return 0.0;
+  }
 
-  // Balanced schedule objective utility
+  const onTimeRate = Math.max(0.0, Math.min(1.0, onTimeTasks / totalTasks));
+  const avgDelayDays = delayedTasks > 0 ? Math.max(0.0, totalDelayDays / delayedTasks) : 0.0;
+  const utilFraction = Math.max(0.0, Math.min(1.0, isFinite(capacityUtilPct) ? capacityUtilPct / 100.0 : 0.0));
+  const normalizedChurn = Math.max(0.0, Math.min(1.0, isFinite(churnRate) ? churnRate : 0.0));
+
+  // Balanced schedule objective utility:
   // +100 for on-time rate, -15 per avg delay day, +10 for balanced utilization, -20 for churn
-  const score = (100.0 * onTimeRate) - (15.0 * avgDelayDays) + (10.0 * utilFraction) - (20.0 * churnRate);
+  const score = (100.0 * onTimeRate) - (15.0 * avgDelayDays) + (10.0 * utilFraction) - (20.0 * normalizedChurn);
 
   return isFinite(score) ? score : -Infinity;
 }

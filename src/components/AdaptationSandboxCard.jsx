@@ -2001,6 +2001,8 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                 ? 'Candidate scheduler weights satisfy all documented evidence, feasibility, superiority, and rollback criteria for supervised human review. Note: Production activation remains completely disabled.'
                 : activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.INFEASIBLE
                 ? 'Candidate configuration violates hard scheduling constraints (e.g. DAG cycle, capacity overrun, or invalid weights) and is strictly disqualified.'
+                : activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_METHODOLOGY
+                ? 'Evaluation cannot proceed: scoring methodology, parameter thresholds, or cluster provenance definitions are invalid or missing.'
                 : activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR
                 ? 'Candidate weights do not demonstrate statistically defensible quality superiority over canonical factory baseline (delta < epsilon or confidence interval crosses zero).'
                 : 'Current evidence does not yet satisfy operational readiness thresholds (>= 20 decisions, >= 15 completions) or requires >= 15 paired observations across >= 3 scenario clusters.'}
