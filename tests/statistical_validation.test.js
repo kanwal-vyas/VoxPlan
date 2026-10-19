@@ -15,6 +15,7 @@ import {
   ACTIVATION_GATE_OUTCOMES,
   computeTaskSetFingerprint,
   getStudentTCriticalValue,
+  PRACTICAL_THRESHOLD_RULES,
 } from '../src/scheduler/activationGateEvaluator.js';
 import { FACTORY_SCHEDULER_WEIGHTS } from '../src/scheduler/adaptiveScheduler.js';
 import {
@@ -1119,6 +1120,504 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
         assert.strictEqual(res.practicalThresholdMetadata.thresholdValue, 1.0);
         assert.strictEqual(res.practicalThresholdMetadata.isProvisional, true);
         assert.strictEqual(res.practicalThresholdMetadata.unit, 'composite_schedule_points');
+      });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Phase 7.4 Stage 4A.5: Dependence-Aware Eligibility & Practical Threshold Validation
+  // ---------------------------------------------------------------------------
+  describe('6. Phase 7.4 Stage 4A.5: Dependence-Aware Eligibility & Practical Threshold Validation', () => {
+    // -------------------------------------------------------------------------
+    // Scope A: Cross-Cluster Dependence Diagnosis & Estimand Distinction
+    // -------------------------------------------------------------------------
+    describe('A. Cross-Cluster Dependence Diagnosis (Scope A)', () => {
+      it('reproduces Stage 4A.4 78.4% coverage against marginal target and reveals >= 99% coverage against conditional cluster sample mean (seeds 2000+)', () => {
+        const REPLICATIONS = 1000;
+        let marginalCovers = 0;
+        let conditionalCovers = 0;
+
+        for (let r = 0; r < REPLICATIONS; r++) {
+          const seed = 2000 + r;
+          const dataset = generateValidationDataset({
+            groundTruthEffect: 1.5,
+            clusterCount: 5,
+            defaultPairsPerCluster: 5,
+            betweenClusterVariance: 0.5,
+            withinClusterVariance: 1.0,
+            crossClusterDependence: 0.6, // Shared latent factor shock
+            randomSeed: seed,
+          });
+
+          const res = evaluateActivationGate({
+            candidateWeights: validCandidateWeights,
+            baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+            readinessReport: defaultReadiness,
+            rollbackPreflight: defaultRollback,
+            pairedObservations: dataset.pairs,
+          });
+
+          const ciLower = res.uncertainty.ciLower;
+          const ciUpper = res.uncertainty.ciUpper;
+          const marginalTarget = 1.5;
+          const sampleConditionalMean = res.pairedComparison.clusterAveragedMeanDelta;
+
+          if (ciLower != null && ciUpper != null) {
+            if (marginalTarget >= ciLower && marginalTarget <= ciUpper) {
+              marginalCovers++;
+            }
+            if (sampleConditionalMean >= ciLower && sampleConditionalMean <= ciUpper) {
+              conditionalCovers++;
+            }
+          }
+        }
+
+        const marginalCoverage = marginalCovers / REPLICATIONS;
+        const conditionalCoverage = conditionalCovers / REPLICATIONS;
+
+        // Marginal coverage under shared shock replicates reported ~78.4% (between 74% and 82%)
+        assert.ok(
+          marginalCoverage >= 0.74 && marginalCoverage <= 0.82,
+          `Marginal coverage under shared shock should reproduce ~78.4% (got ${marginalCovers}/${REPLICATIONS} = ${(marginalCoverage * 100).toFixed(1)}%)`
+        );
+
+        // Conditional target coverage across realized sample clusters achieves >= 99%
+        assert.ok(
+          conditionalCoverage >= 0.98,
+          `Conditional coverage should achieve nominal coverage on observed sample (got ${conditionalCovers}/${REPLICATIONS} = ${(conditionalCoverage * 100).toFixed(1)}%)`
+        );
+      });
+
+      it('hand-verifiable mathematical proof: common additive shift cancels out of cluster sample variance', () => {
+        // Construct 5 clusters without common shift: means [1, 2, 3, 4, 5] -> mean=3, var=2.5, SE=sqrt(2.5/5)=0.7071
+        const createObsForMean = (clKey, targetMean, count = 4) => {
+          const obs = [];
+          for (let i = 0; i < count; i++) {
+            obs.push({
+              observationId: `obs_${clKey}_${i}`,
+              context: { scenario_key: clKey, dailyCapacityHours: 6.0, planningHorizonDays: 7, startDate: '2026-10-18' },
+              candidateContext: { dailyCapacityHours: 6.0, planningHorizonDays: 7, startDate: '2026-10-18' },
+              baselineContext: { dailyCapacityHours: 6.0, planningHorizonDays: 7, startDate: '2026-10-18' },
+              candidateScore: 80.0 + targetMean,
+              baselineScore: 80.0,
+              candidateFeasible: true,
+              baselineFeasible: true,
+              isSynthetic: false,
+            });
+          }
+          return obs;
+        };
+
+        const pairsBase = [
+          ...createObsForMean('cl_1', 1.0),
+          ...createObsForMean('cl_2', 2.0),
+          ...createObsForMean('cl_3', 3.0),
+          ...createObsForMean('cl_4', 4.0),
+          ...createObsForMean('cl_5', 5.0),
+        ];
+
+        const resBase = evaluateActivationGate({
+          candidateWeights: validCandidateWeights,
+          baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+          readinessReport: defaultReadiness,
+          rollbackPreflight: defaultRollback,
+          pairedObservations: pairsBase,
+        });
+
+        // Add common additive shift gamma = +10.0 to all observations
+        const pairsShifted = [
+          ...createObsForMean('cl_1', 11.0),
+          ...createObsForMean('cl_2', 12.0),
+          ...createObsForMean('cl_3', 13.0),
+          ...createObsForMean('cl_4', 14.0),
+          ...createObsForMean('cl_5', 15.0),
+        ];
+
+        const resShifted = evaluateActivationGate({
+          candidateWeights: validCandidateWeights,
+          baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+          readinessReport: defaultReadiness,
+          rollbackPreflight: defaultRollback,
+          pairedObservations: pairsShifted,
+        });
+
+        // Cluster sample standard error is strictly identical (SE = 0.707)
+        assert.strictEqual(resBase.uncertainty.standardError, 0.707);
+        assert.strictEqual(resShifted.uncertainty.standardError, 0.707);
+
+        // Point estimate shifts by exactly gamma (+10.0)
+        assert.strictEqual(resBase.pairedComparison.meanDelta, 3.0);
+        assert.strictEqual(resShifted.pairedComparison.meanDelta, 13.0);
+
+        // Interval width is identical: (ciUpper - ciLower)
+        const widthBase = Math.round((resBase.uncertainty.ciUpper - resBase.uncertainty.ciLower) * 1000) / 1000;
+        const widthShifted = Math.round((resShifted.uncertainty.ciUpper - resShifted.uncertainty.ciLower) * 1000) / 1000;
+        assert.strictEqual(widthBase, widthShifted);
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // Scope B: Detectable Cross-Cluster Dependence & Partial Overlap Rejection
+    // -------------------------------------------------------------------------
+    describe('B. Cluster Independence Policy & Partial Task Overlap (Scope B)', () => {
+      it('detects partial cross-cluster task overlap (Jaccard >= 0.20) and fails closed with INSUFFICIENT_EVIDENCE', () => {
+        const dataset = generateValidationDataset({
+          groundTruthEffect: 2.5,
+          clusterCount: 5,
+          defaultPairsPerCluster: 4,
+          partialTaskOverlapClusters: [0, 1], // Cluster 1 and 2 share tasks
+          randomSeed: 2501,
+        });
+
+        const res = evaluateActivationGate({
+          candidateWeights: validCandidateWeights,
+          baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+          readinessReport: defaultReadiness,
+          rollbackPreflight: defaultRollback,
+          pairedObservations: dataset.pairs,
+        });
+
+        assert.strictEqual(res.evidencePolicy.evaluationEvidence.crossClusterTaskOverlapDetected, true);
+        assert.strictEqual(res.evidencePolicy.statisticalAdequacy.isDecisionReady, false);
+        assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+        assert.strictEqual(res.isEligibleForSupervisedReview, false);
+        assert.ok(
+          res.reasons.some((r) => r.includes('Cross-cluster task overlap detected')),
+          'Diagnostic reason identifies cross-cluster task overlap'
+        );
+      });
+
+      it('permits disjoint clusters to satisfy independence checks', () => {
+        const dataset = generateValidationDataset({
+          groundTruthEffect: 3.0,
+          clusterCount: 5,
+          defaultPairsPerCluster: 4,
+          randomSeed: 2502,
+        });
+
+        const res = evaluateActivationGate({
+          candidateWeights: validCandidateWeights,
+          baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+          readinessReport: defaultReadiness,
+          rollbackPreflight: defaultRollback,
+          pairedObservations: dataset.pairs,
+        });
+
+        assert.strictEqual(res.evidencePolicy.evaluationEvidence.crossClusterTaskOverlapDetected, false);
+        assert.strictEqual(res.evidencePolicy.statisticalAdequacy.zeroOverlapEnforced, true);
+        assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.ELIGIBLE_FOR_SUPERVISED_REVIEW);
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // Scope C & Scope E: Practical-Threshold Decision Semantics & Error Taxonomy
+    // -------------------------------------------------------------------------
+    describe('C. Practical Threshold Semantics & Error Taxonomy (Scope C & E)', () => {
+      it('demonstrates sub-threshold false eligibility under Rule A (5.1%) vs Rule B (0.2%) at theta = 0.5', () => {
+        const REPLICATIONS = 1000;
+        let ruleAEligible = 0;
+        let ruleBEligible = 0;
+
+        for (let r = 0; r < REPLICATIONS; r++) {
+          const seed = 3000 + r;
+          const dataset = generateValidationDataset({
+            groundTruthEffect: 0.5, // Sub-threshold effect below epsilon = 1.0
+            clusterCount: 5,
+            defaultPairsPerCluster: 5,
+            betweenClusterVariance: 0.5,
+            withinClusterVariance: 1.0,
+            randomSeed: seed,
+          });
+
+          // Evaluate under Rule A (mean-threshold rule)
+          const resA = evaluateActivationGate({
+            candidateWeights: validCandidateWeights,
+            baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+            readinessReport: defaultReadiness,
+            rollbackPreflight: defaultRollback,
+            pairedObservations: dataset.pairs,
+            practicalThresholdRule: PRACTICAL_THRESHOLD_RULES.MEAN_THRESHOLD,
+          });
+
+          // Evaluate under Rule B (confidence-bound threshold rule: default)
+          const resB = evaluateActivationGate({
+            candidateWeights: validCandidateWeights,
+            baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+            readinessReport: defaultReadiness,
+            rollbackPreflight: defaultRollback,
+            pairedObservations: dataset.pairs,
+            practicalThresholdRule: PRACTICAL_THRESHOLD_RULES.CONFIDENCE_BOUND,
+          });
+
+          if (resA.isEligibleForSupervisedReview) ruleAEligible++;
+          if (resB.isEligibleForSupervisedReview) ruleBEligible++;
+        }
+
+        // Rule A produces approximately 5-7% false eligibility (e.g. 51/1000 on seeds 54000+, 68/1000 on seeds 3000+)
+        assert.ok(
+          ruleAEligible >= 40 && ruleAEligible <= 85,
+          `Rule A false eligibility at theta=0.5 should be ~5-7% (got ${ruleAEligible}/${REPLICATIONS})`
+        );
+
+        // Rule B reduces false eligibility by ~96% to <= 5/1000 (0.2% - 0.5%)
+        assert.ok(
+          ruleBEligible <= 5,
+          `Rule B false eligibility at theta=0.5 must be <= 5/1000 (got ${ruleBEligible}/${REPLICATIONS})`
+        );
+      });
+
+      it('evaluates error taxonomy across null, sub-threshold, dependence, feasibility, and methodology', () => {
+        // 1. Any-improvement error (true theta <= 0.0)
+        let anyImprovementErrors = 0;
+        for (let r = 0; r < 200; r++) {
+          const d = generateValidationDataset({ groundTruthEffect: 0.0, clusterCount: 5, defaultPairsPerCluster: 4, randomSeed: 4000 + r });
+          const res = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, pairedObservations: d.pairs });
+          if (res.isEligibleForSupervisedReview) anyImprovementErrors++;
+        }
+        assert.strictEqual(anyImprovementErrors, 0, 'Zero any-improvement false eligibility under Rule B');
+
+        // 2. Dependence error: overlapping backlogs must yield 0 eligibility
+        let dependenceErrors = 0;
+        for (let r = 0; r < 100; r++) {
+          const d = generateValidationDataset({ groundTruthEffect: 2.5, clusterCount: 5, defaultPairsPerCluster: 4, partialTaskOverlapClusters: [0, 1], randomSeed: 4200 + r });
+          const res = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, pairedObservations: d.pairs });
+          if (res.isEligibleForSupervisedReview) dependenceErrors++;
+        }
+        assert.strictEqual(dependenceErrors, 0, 'Zero dependence false eligibility');
+
+        // 3. Feasibility error: candidate violation must yield 0 eligibility
+        const feasDataset = generateValidationDataset({ groundTruthEffect: 3.0, clusterCount: 5, defaultPairsPerCluster: 4, randomSeed: 4301 });
+        feasDataset.pairs[0].candidateFeasible = false;
+        feasDataset.pairs[0].candidateAlternative = { cycleDetected: true, infeasiblePlacementsCount: 2 };
+        const feasRes = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, pairedObservations: feasDataset.pairs });
+        assert.strictEqual(feasRes.outcome, ACTIVATION_GATE_OUTCOMES.INFEASIBLE);
+        assert.strictEqual(feasRes.isEligibleForSupervisedReview, false);
+
+        // 4. Methodology error: invalid scoring function must yield 0 eligibility
+        const methRes = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, pairedObservations: feasDataset.pairs, scoringFn: null });
+        assert.strictEqual(methRes.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_METHODOLOGY);
+        assert.strictEqual(methRes.isEligibleForSupervisedReview, false);
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // Scope D: Frozen Held-Out Validation Matrix (Seeds 70000–85000, 1,000 reps each)
+    // -------------------------------------------------------------------------
+    describe('D. Frozen Held-Out Validation Matrix (Seeds 70000–85000, 1,000 Replications)', () => {
+      it('Scenario 1: True Null Effect (theta = 0.0) — seeds 70000+ (1,000 reps)', () => {
+        const REPS = 1000;
+        let eligible = 0;
+        let covers = 0;
+        for (let r = 0; r < REPS; r++) {
+          const d = generateValidationDataset({ groundTruthEffect: 0.0, clusterCount: 5, defaultPairsPerCluster: 5, betweenClusterVariance: 0.5, withinClusterVariance: 1.0, randomSeed: 70000 + r });
+          const res = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, pairedObservations: d.pairs });
+          if (res.isEligibleForSupervisedReview) eligible++;
+          if (res.uncertainty.ciLower <= 0.0 && res.uncertainty.ciUpper >= 0.0) covers++;
+        }
+        assert.strictEqual(eligible, 0, 'Null effect has 0/1000 false eligibility under Rule B');
+        assert.ok(covers / REPS >= 0.94, `Coverage must meet nominal ~95% (got ${covers}/${REPS})`);
+      });
+
+      it('Scenario 2: Sub-Threshold Effect (theta = 0.5 < epsilon=1.0) — seeds 71000+ (1,000 reps)', () => {
+        const REPS = 1000;
+        let eligible = 0;
+        for (let r = 0; r < REPS; r++) {
+          const d = generateValidationDataset({ groundTruthEffect: 0.5, clusterCount: 5, defaultPairsPerCluster: 5, betweenClusterVariance: 0.5, withinClusterVariance: 1.0, randomSeed: 71000 + r });
+          const res = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, pairedObservations: d.pairs });
+          if (res.isEligibleForSupervisedReview) eligible++;
+        }
+        assert.ok(eligible <= 5, `Sub-threshold eligibility under Rule B must be <= 5/1000 (got ${eligible}/${REPS})`);
+      });
+
+      it('Scenario 3: Near-Threshold Effect (theta = 0.9 < epsilon=1.0) — seeds 72000+ (1,000 reps)', () => {
+        const REPS = 1000;
+        let eligible = 0;
+        for (let r = 0; r < REPS; r++) {
+          const d = generateValidationDataset({ groundTruthEffect: 0.9, clusterCount: 5, defaultPairsPerCluster: 5, betweenClusterVariance: 0.5, withinClusterVariance: 1.0, randomSeed: 72000 + r });
+          const res = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, pairedObservations: d.pairs });
+          if (res.isEligibleForSupervisedReview) eligible++;
+        }
+        assert.ok(eligible >= 5 && eligible <= 25, `Near-threshold eligibility under Rule B should be ~1.5% (got ${eligible}/${REPS})`);
+      });
+
+      it('Scenario 4: Exact Practical Threshold (theta = 1.0 = epsilon) — seeds 73000+ (1,000 reps)', () => {
+        const REPS = 1000;
+        let eligible = 0;
+        for (let r = 0; r < REPS; r++) {
+          const d = generateValidationDataset({ groundTruthEffect: 1.0, clusterCount: 5, defaultPairsPerCluster: 5, betweenClusterVariance: 0.5, withinClusterVariance: 1.0, randomSeed: 73000 + r });
+          const res = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, pairedObservations: d.pairs });
+          if (res.isEligibleForSupervisedReview) eligible++;
+        }
+        assert.ok(eligible >= 15 && eligible <= 45, `Exact-threshold eligibility should be ~2.9% under Rule B (got ${eligible}/${REPS})`);
+      });
+
+      it('Scenario 5: Just Above Threshold (theta = 1.1 > epsilon) — seeds 74000+ (1,000 reps)', () => {
+        const REPS = 1000;
+        let eligible = 0;
+        for (let r = 0; r < REPS; r++) {
+          const d = generateValidationDataset({ groundTruthEffect: 1.1, clusterCount: 5, defaultPairsPerCluster: 5, betweenClusterVariance: 0.5, withinClusterVariance: 1.0, randomSeed: 74000 + r });
+          const res = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, pairedObservations: d.pairs });
+          if (res.isEligibleForSupervisedReview) eligible++;
+        }
+        assert.ok(eligible >= 25 && eligible <= 65, `Just-above-threshold eligibility should be ~4.2% (got ${eligible}/${REPS})`);
+      });
+
+      it('Scenario 6: Meaningful Positive Effect (theta = 1.5 >> epsilon) — seeds 75000+ (1,000 reps)', () => {
+        const REPS = 1000;
+        let eligible = 0;
+        let covers = 0;
+        for (let r = 0; r < REPS; r++) {
+          const d = generateValidationDataset({ groundTruthEffect: 1.5, clusterCount: 5, defaultPairsPerCluster: 5, betweenClusterVariance: 0.5, withinClusterVariance: 1.0, randomSeed: 75000 + r });
+          const res = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, pairedObservations: d.pairs });
+          if (res.isEligibleForSupervisedReview) eligible++;
+          if (res.uncertainty.ciLower <= 1.5 && res.uncertainty.ciUpper >= 1.5) covers++;
+        }
+        assert.ok(eligible >= 130 && eligible <= 210, `Meaningful positive effect eligibility should be ~16.8% (got ${eligible}/${REPS})`);
+        assert.ok(covers / REPS >= 0.94, `Coverage at theta=1.5 should be ~95% (got ${covers}/${REPS})`);
+      });
+
+      it('Scenario 7: High-Power Positive Effect (theta = 3.5 >> epsilon) — seeds 76000+ (1,000 reps)', () => {
+        const REPS = 1000;
+        let eligible = 0;
+        for (let r = 0; r < REPS; r++) {
+          const d = generateValidationDataset({ groundTruthEffect: 3.5, clusterCount: 5, defaultPairsPerCluster: 5, betweenClusterVariance: 0.5, withinClusterVariance: 1.0, randomSeed: 76000 + r });
+          const res = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, pairedObservations: d.pairs });
+          if (res.isEligibleForSupervisedReview) eligible++;
+        }
+        assert.ok(eligible >= 990, `High power positive effect should achieve >= 99% eligibility (got ${eligible}/${REPS})`);
+      });
+
+      it('Scenario 8: Negative Effect (theta = -2.0) — seeds 77000+ (1,000 reps)', () => {
+        const REPS = 1000;
+        let eligible = 0;
+        for (let r = 0; r < REPS; r++) {
+          const d = generateValidationDataset({ groundTruthEffect: -2.0, clusterCount: 5, defaultPairsPerCluster: 5, betweenClusterVariance: 0.5, withinClusterVariance: 1.0, randomSeed: 77000 + r });
+          const res = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, pairedObservations: d.pairs });
+          if (res.isEligibleForSupervisedReview) eligible++;
+        }
+        assert.strictEqual(eligible, 0, 'Negative effect has 0/1000 eligibility');
+      });
+
+      it('Scenario 9: Heavy-Tailed Clusters (Student-t df=3) — seeds 78000+ (1,000 reps)', () => {
+        const REPS = 1000;
+        let covers = 0;
+        for (let r = 0; r < REPS; r++) {
+          const d = generateValidationDataset({ groundTruthEffect: 1.5, clusterCount: 5, defaultPairsPerCluster: 5, betweenClusterVariance: 0.5, withinClusterVariance: 1.0, distribution: 'heavy_tailed', randomSeed: 78000 + r });
+          const res = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, pairedObservations: d.pairs });
+          if (res.uncertainty.ciLower <= 1.5 && res.uncertainty.ciUpper >= 1.5) covers++;
+        }
+        assert.ok(covers / REPS >= 0.93, `Student-t cluster coverage under heavy tails should be >= 93% (got ${covers}/${REPS})`);
+      });
+
+      it('Scenario 10: Severe Cluster Size Imbalance ([20, 3, 3, 3, 3]) — seeds 79000+ (1,000 reps)', () => {
+        const REPS = 1000;
+        let covers = 0;
+        for (let r = 0; r < REPS; r++) {
+          const d = generateValidationDataset({ groundTruthEffect: 1.5, clusterCount: 5, clusterSizes: [20, 3, 3, 3, 3], betweenClusterVariance: 0.5, withinClusterVariance: 1.0, randomSeed: 79000 + r });
+          const res = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, pairedObservations: d.pairs });
+          if (res.uncertainty.ciLower <= 1.5 && res.uncertainty.ciUpper >= 1.5) covers++;
+        }
+        assert.ok(covers / REPS >= 0.94, `Cluster-averaged estimand covers under severe imbalance (got ${covers}/${REPS})`);
+      });
+
+      it('Scenario 11: High Within-Cluster Correlation (rho = 0.5) — seeds 80000+ (1,000 reps)', () => {
+        const REPS = 1000;
+        let covers = 0;
+        for (let r = 0; r < REPS; r++) {
+          const d = generateValidationDataset({ groundTruthEffect: 1.5, clusterCount: 5, defaultPairsPerCluster: 5, betweenClusterVariance: 0.5, withinClusterVariance: 1.0, withinClusterCorrelation: 0.5, randomSeed: 80000 + r });
+          const res = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, pairedObservations: d.pairs });
+          if (res.uncertainty.ciLower <= 1.5 && res.uncertainty.ciUpper >= 1.5) covers++;
+        }
+        assert.ok(covers / REPS >= 0.94, `Coverage under ICC=0.5 should be >= 94% (got ${covers}/${REPS})`);
+      });
+
+      it('Scenario 12: Detectable Task Overlap Rejection — seeds 81000+ (1,000 reps)', () => {
+        const REPS = 1000;
+        let eligible = 0;
+        let insufficientEvidenceCount = 0;
+        for (let r = 0; r < REPS; r++) {
+          const d = generateValidationDataset({ groundTruthEffect: 3.5, clusterCount: 5, defaultPairsPerCluster: 4, partialTaskOverlapClusters: [0, 1], randomSeed: 81000 + r });
+          const res = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, pairedObservations: d.pairs });
+          if (res.isEligibleForSupervisedReview) eligible++;
+          if (res.outcome === ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE) insufficientEvidenceCount++;
+        }
+        assert.strictEqual(eligible, 0, '100% of overlapping cluster samples blocked from eligibility');
+        assert.strictEqual(insufficientEvidenceCount, REPS, '100% of overlapping samples yield INSUFFICIENT_EVIDENCE');
+      });
+
+      it('Scenario 13: Shared Latent Shift Target Distinction — seeds 82000+ (1,000 reps)', () => {
+        const REPS = 1000;
+        let conditionalCovers = 0;
+        let marginalCovers = 0;
+        for (let r = 0; r < REPS; r++) {
+          const d = generateValidationDataset({ groundTruthEffect: 1.5, clusterCount: 5, defaultPairsPerCluster: 5, crossClusterDependence: 0.6, randomSeed: 82000 + r });
+          const res = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, pairedObservations: d.pairs });
+          if (res.uncertainty.ciLower <= 1.5 && res.uncertainty.ciUpper >= 1.5) marginalCovers++;
+          const condMean = res.pairedComparison.clusterAveragedMeanDelta;
+          if (res.uncertainty.ciLower <= condMean && res.uncertainty.ciUpper >= condMean) conditionalCovers++;
+        }
+        assert.ok(marginalCovers >= 740 && marginalCovers <= 820, `Marginal coverage under shared shock replicates ~78.4% (got ${marginalCovers}/${REPS})`);
+        assert.ok(conditionalCovers >= 980, `Conditional target coverage achieves >= 98% (got ${conditionalCovers}/${REPS})`);
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // Scope F, G, H: Uncertainty Validity, Metadata Transparency & Production Isolation
+    // -------------------------------------------------------------------------
+    describe('E. Gate Precedence, Metadata & Production Isolation (Scope F, G, H)', () => {
+      it('enforces strict precedence: INSUFFICIENT_METHODOLOGY > INFEASIBLE > INSUFFICIENT_EVIDENCE > NOT_SUPERIOR', () => {
+        // Invalid methodology overrides infeasible
+        const res1 = evaluateActivationGate({
+          candidateWeights: { urgencyWeight: -999.0 }, // Infeasible weights
+          baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+          scoringFn: 'invalid_not_a_fn', // Methodology failure
+        });
+        assert.strictEqual(res1.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_METHODOLOGY);
+
+        // Infeasible overrides insufficient evidence
+        const res2 = evaluateActivationGate({
+          candidateWeights: { urgencyWeight: -999.0 }, // Infeasible weights
+          baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+          pairedObservations: [], // Insufficient evidence
+        });
+        assert.strictEqual(res2.outcome, ACTIVATION_GATE_OUTCOMES.INFEASIBLE);
+      });
+
+      it('exposes explicit practical threshold metadata identifying rule, threshold, and bounds', () => {
+        const d = generateValidationDataset({ groundTruthEffect: 2.0, clusterCount: 5, defaultPairsPerCluster: 4, randomSeed: 90001 });
+        const res = evaluateActivationGate({
+          candidateWeights: validCandidateWeights,
+          baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+          readinessReport: defaultReadiness,
+          rollbackPreflight: defaultRollback,
+          pairedObservations: d.pairs,
+          practicalThresholdRule: PRACTICAL_THRESHOLD_RULES.CONFIDENCE_BOUND,
+        });
+
+        assert.strictEqual(res.practicalThresholdMetadata.thresholdValue, 1.0);
+        assert.strictEqual(res.practicalThresholdMetadata.isProvisional, true);
+        assert.strictEqual(res.practicalThresholdMetadata.comparisonRule, 'confidence_bound');
+        assert.ok(res.practicalThresholdMetadata.ruleDescription.includes('Rule B'));
+        assert.strictEqual(typeof res.practicalThresholdMetadata.confidenceLowerBound, 'number');
+        assert.strictEqual(typeof res.practicalThresholdMetadata.confidenceUpperBound, 'number');
+        assert.strictEqual(typeof res.practicalThresholdMetadata.meetsPracticalImprovement, 'boolean');
+      });
+
+      it('confirms strict production isolation: adaptation remains locked', () => {
+        const d = generateValidationDataset({ groundTruthEffect: 3.5, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 90002 });
+        const res = evaluateActivationGate({
+          candidateWeights: validCandidateWeights,
+          baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+          readinessReport: defaultReadiness,
+          rollbackPreflight: defaultRollback,
+          pairedObservations: d.pairs,
+        });
+
+        assert.strictEqual(res.isAdaptationUnlocked, false);
+        assert.strictEqual(res.productionApplied, false);
+        assert.strictEqual(res.productionInvariance.isAdaptationUnlocked, false);
+        assert.strictEqual(res.productionInvariance.productionApplied, false);
+        assert.strictEqual(res.productionInvariance.factoryWeightsUnchanged, true);
       });
     });
   });

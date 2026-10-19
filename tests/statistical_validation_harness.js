@@ -152,6 +152,7 @@ export function generateValidationDataset(config = {}) {
     distribution = 'normal', // 'normal' | 'heavy_tailed' | 'skewed'
     overlappingBacklogsCount = 0, // Number of clusters sharing identical taskSetId
     repeatedBacklogsRelabeled = false, // Share taskSetFingerprint with different IDs
+    partialTaskOverlapClusters = null, // e.g. [0, 1] for clusters sharing partial task IDs
     invalidEvidenceType = null, // 'non_finite' | 'cycle' | 'unpaired_constraints' | null
     componentMetrics = null, // Custom on-time, delay, util, churn adjustments
     randomSeed = 42,
@@ -247,6 +248,8 @@ export function generateValidationDataset(config = {}) {
       let taskIds = null;
       let taskSetFingerprint = null;
 
+      const isPartialOverlapCluster = Array.isArray(partialTaskOverlapClusters) && partialTaskOverlapClusters.includes(c);
+
       if (repeatedBacklogsRelabeled) {
         // Different taskSetId but identical underlying task fingerprint
         taskSetId = `relabeled_taskset_${clKey}_${i + 1}`;
@@ -255,6 +258,11 @@ export function generateValidationDataset(config = {}) {
       } else if (isOverlappingCluster) {
         taskSetFingerprint = 'overlapping_backlog_fingerprint';
         taskIds = ['shared_task_1', 'shared_task_2'];
+      } else if (isPartialOverlapCluster) {
+        // Shared subset of tasks across clusters with distinct fingerprints and backlog IDs
+        taskIds = [`shared_task_overlap_${i % 2}`, `task_${clKey}_${i}_unique`];
+        taskSetId = `partial_overlap_${clKey}_${i + 1}`;
+        taskSetFingerprint = `fp_${taskIds.slice().sort().join('__')}`;
       } else {
         taskIds = [`task_${clKey}_${i}_a`, `task_${clKey}_${i}_b`];
         taskSetFingerprint = `fp_${taskIds.join('__')}`;

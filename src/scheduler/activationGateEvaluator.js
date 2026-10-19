@@ -62,6 +62,16 @@ export const DEFAULT_THRESHOLD_DISCLAIMER =
   'Threshold epsilon = 1.0 is a provisional operational heuristic combining timeliness, delay, utilization, and churn; it is NOT an empirically validated minimum clinically important difference (MCID) and does not guarantee user satisfaction.';
 
 /**
+ * Practical improvement comparison rules (Scope C).
+ */
+export const PRACTICAL_THRESHOLD_RULES = Object.freeze({
+  CONFIDENCE_BOUND: 'confidence_bound', // Rule B: CI_lower >= epsilon (Conservative & decision-ready)
+  MEAN_THRESHOLD: 'mean_threshold',     // Rule A: meanDelta >= epsilon && CI_lower > 0
+});
+
+export const DEFAULT_PRACTICAL_THRESHOLD_RULE = PRACTICAL_THRESHOLD_RULES.CONFIDENCE_BOUND;
+
+/**
  * Minimum sample policy constants for statistical evaluation.
  *
  * Operational Heuristics vs Statistical Decision Floors:
@@ -93,6 +103,9 @@ export const METHODOLOGY_DISCLOSURES = Object.freeze([
   'The five-cluster threshold (M >= 5) is an operational safeguard against extreme small-sample degeneracy, not an asymptotic statistical guarantee of nominal 95% confidence interval coverage.',
   'Candidate eligibility requires consistency across scenario clusters; positive grand mean deltas driven by an outlier cluster while the majority of clusters regress are disqualified from supervised review.',
   'Composite score gains must not mask critical metric regressions: candidates that cause an unacceptable degradation in primary on-time completion (> 5%) or task delay are disqualified.',
+  'Unobserved latent shocks or common environment factors (e.g. shared organizational shifts) affect all clusters equally and cancel out of cluster sample variance. The cluster Student-t interval estimates the conditional treatment effect for the observed regime; it cannot detect or hedge against unobserved common latent shifts without longitudinal inter-regime evidence.',
+  'Practical superiority under Rule B requires the 95% confidence interval lower bound to meet or exceed epsilon (CI_lower >= epsilon), protecting against approving candidates whose true effect is below the provisional threshold.',
+  'Cross-cluster task overlap (Jaccard similarity >= 0.20 or overlap coefficient >= 0.30) violates cluster exchangeability and invalidates decision readiness, resulting in conservative insufficient evidence.',
 ]);
 
 /**
@@ -181,6 +194,43 @@ export function computeTaskSetFingerprint(observation) {
   }
 
   return null;
+}
+
+/**
+ * Extracts a Set of normalized task IDs from an observation or its context.
+ *
+ * @param {Object} observation
+ * @returns {Set<string>}
+ */
+export function extractObservationTaskIds(observation) {
+  const ids = new Set();
+  if (!observation || typeof observation !== 'object') return ids;
+
+  const rawTasks =
+    observation.tasks ||
+    observation.context?.tasks ||
+    observation.candidateAlternative?.tasks ||
+    observation.candidateAlternative?.schedule ||
+    observation.baselineAlternative?.tasks ||
+    observation.baselineAlternative?.schedule;
+
+  if (Array.isArray(rawTasks)) {
+    for (const t of rawTasks) {
+      if (t != null) {
+        const id = typeof t === 'object' ? (t.id ?? t.taskId ?? t.title) : t;
+        if (id != null) ids.add(String(id).trim());
+      }
+    }
+  }
+
+  const taskIds = observation.taskIds || observation.context?.taskIds;
+  if (Array.isArray(taskIds)) {
+    for (const id of taskIds) {
+      if (id != null) ids.add(String(id).trim());
+    }
+  }
+
+  return ids;
 }
 
 /**
@@ -573,6 +623,8 @@ export function runClusteredBootstrap(
  * @param {Function} [params.scoringFn=computeScheduleObjectiveScore] - Schedule objective scoring function.
  * @param {boolean} [params.isSyntheticData=false] - If true, marks evidence synthetic and halts review eligibility.
  * @param {number} [params.randomSeed=42] - Seed for deterministic clustered bootstrap resampling.
+ * @param {number} [params.bootstrapIterations=DEFAULT_BOOTSTRAP_ITERATIONS] - Bootstrap iteration count.
+ * @param {string} [params.practicalThresholdRule=DEFAULT_PRACTICAL_THRESHOLD_RULE] - Comparison rule (confidence_bound or mean_threshold).
  * @returns {Object} Comprehensive, structured activation gate assessment report.
  */
 export function evaluateActivationGate({
@@ -587,6 +639,7 @@ export function evaluateActivationGate({
   isSyntheticData = false,
   randomSeed = 42,
   bootstrapIterations = DEFAULT_BOOTSTRAP_ITERATIONS,
+  practicalThresholdRule = DEFAULT_PRACTICAL_THRESHOLD_RULE,
 } = {}) {
   const reasons = [];
 
@@ -702,6 +755,7 @@ export function evaluateActivationGate({
   const seenPairKeys = new Set();
   const seenContentKeys = new Set();
   const taskSetClusterMap = new Map();
+  const clusterTaskIdsMap = new Map();
   let crossClusterLeakageDetected = false;
 
   let concordantCount = 0;
@@ -818,6 +872,18 @@ export function evaluateActivationGate({
       continue;
     }
 
+    // Accumulate task IDs for cluster independence & overlap auditing (Scope B)
+    const obsTaskIds = extractObservationTaskIds(rawObs);
+    if (obsTaskIds.size > 0 && evalRes.clusterKey) {
+      if (!clusterTaskIdsMap.has(evalRes.clusterKey)) {
+        clusterTaskIdsMap.set(evalRes.clusterKey, new Set());
+      }
+      const cSet = clusterTaskIdsMap.get(evalRes.clusterKey);
+      for (const id of obsTaskIds) {
+        cSet.add(id);
+      }
+    }
+
     eligiblePairs.push(evalRes);
     sumDelta += evalRes.delta;
     sumCandScore += evalRes.candidateScore;
@@ -865,6 +931,54 @@ export function evaluateActivationGate({
 
   const eligibleCount = eligiblePairs.length;
   const distinctClustersCount = clustersMap.size;
+
+  // Detect cross-cluster task set overlap (Scope B)
+  let crossClusterTaskOverlapDetected = false;
+  let maxCrossClusterTaskJaccard = 0;
+  const crossClusterOverlapPairs = [];
+
+  const clusterKeysWithTasks = Array.from(clusterTaskIdsMap.keys());
+  for (let i = 0; i < clusterKeysWithTasks.length; i++) {
+    const c1 = clusterKeysWithTasks[i];
+    const set1 = clusterTaskIdsMap.get(c1);
+    if (!set1 || set1.size === 0) continue;
+
+    for (let j = i + 1; j < clusterKeysWithTasks.length; j++) {
+      const c2 = clusterKeysWithTasks[j];
+      const set2 = clusterTaskIdsMap.get(c2);
+      if (!set2 || set2.size === 0) continue;
+
+      let intersectionCount = 0;
+      for (const id of set1) {
+        if (set2.has(id)) intersectionCount++;
+      }
+
+      if (intersectionCount > 0) {
+        const unionCount = set1.size + set2.size - intersectionCount;
+        const jaccard = unionCount > 0 ? intersectionCount / unionCount : 0;
+        const overlapCoeff = Math.min(set1.size, set2.size) > 0 ? intersectionCount / Math.min(set1.size, set2.size) : 0;
+
+        if (jaccard > maxCrossClusterTaskJaccard) {
+          maxCrossClusterTaskJaccard = Math.round(jaccard * 1000) / 1000;
+        }
+
+        // Flag if distinct clusters share >= 20% Jaccard or >= 30% overlap coefficient
+        if (jaccard >= 0.20 || overlapCoeff >= 0.30) {
+          crossClusterTaskOverlapDetected = true;
+          crossClusterOverlapPairs.push({
+            clusterA: c1,
+            clusterB: c2,
+            sharedCount: intersectionCount,
+            jaccard: Math.round(jaccard * 1000) / 1000,
+            overlapCoefficient: Math.round(overlapCoeff * 1000) / 1000,
+          });
+          reasons.push(
+            `Cross-cluster task overlap detected: cluster "${c1}" and "${c2}" share ${intersectionCount} task(s) (Jaccard similarity ${(jaccard * 100).toFixed(1)}%, overlap ${(overlapCoeff * 100).toFixed(1)}%), violating cluster independence.`
+          );
+        }
+      }
+    }
+  }
 
   // Compute cluster-level summaries
   const clusterSummaries = [];
@@ -949,6 +1063,7 @@ export function evaluateActivationGate({
     eligibleCount >= MIN_PAIRED_OBSERVATIONS &&
     distinctClustersCount >= MIN_DECISION_CLUSTERS &&
     !crossClusterLeakageDetected &&
+    !crossClusterTaskOverlapDetected &&
     !isSyntheticData;
 
   // -------------------------------------------------------------------------
@@ -994,7 +1109,9 @@ export function evaluateActivationGate({
   // -------------------------------------------------------------------------
   // 7. Practical Significance & Uncertainty Estimation (Policy Pillar 3)
   // -------------------------------------------------------------------------
-  const meetsPracticalImprovement = meanDelta != null && meanDelta >= epsilon;
+  const activePracticalRule = Object.values(PRACTICAL_THRESHOLD_RULES).includes(practicalThresholdRule)
+    ? practicalThresholdRule
+    : DEFAULT_PRACTICAL_THRESHOLD_RULE;
 
   let canEstimateUncertainty = false;
   let bootstrapResult = null;
@@ -1053,6 +1170,11 @@ export function evaluateActivationGate({
       'Cross-cluster backlog leakage detected; overlapping backlogs violate cluster independence and invalidate decision readiness.'
     );
   }
+  if (crossClusterTaskOverlapDetected) {
+    reasons.push(
+      'Cross-cluster task overlap detected; shared task sets across distinct clusters violate cluster independence and invalidate decision readiness.'
+    );
+  }
 
   // Estimation runs if eligibleCount >= MIN_PAIRED_OBSERVATIONS and distinctClustersCount >= MIN_EXPLORATORY_CLUSTERS
   if (eligibleCount >= MIN_PAIRED_OBSERVATIONS && distinctClustersCount >= MIN_EXPLORATORY_CLUSTERS) {
@@ -1067,12 +1189,13 @@ export function evaluateActivationGate({
       isCiPositive = ciLower != null && ciLower > 0;
 
       const isDecisionClusterCount = distinctClustersCount >= MIN_DECISION_CLUSTERS;
-      const isDecisionReadyForInference = isDecisionClusterCount && !crossClusterLeakageDetected;
+      const isDecisionReadyForInference =
+        isDecisionClusterCount && !crossClusterLeakageDetected && !crossClusterTaskOverlapDetected;
 
       if (!isDecisionReadyForInference) {
-        uncertaintyDisclaimer = `Cluster-level Student-t interval (${degreesOfFreedom} df, t_crit = ${tCritical}) across ${distinctClustersCount} clusters: 95% CI is [${ciLower}, ${ciUpper}] (EXPLORATORY ONLY — Not Decision-Ready). Warning: Small cluster count (M=${distinctClustersCount} < ${MIN_DECISION_CLUSTERS}) or cross-cluster leakage invalidates independent cluster inference.`;
+        uncertaintyDisclaimer = `Cluster-level Student-t interval (${degreesOfFreedom} df, t_crit = ${tCritical}) across ${distinctClustersCount} clusters: 95% CI is [${ciLower}, ${ciUpper}] (EXPLORATORY ONLY — Not Decision-Ready). Warning: Small cluster count (M=${distinctClustersCount} < ${MIN_DECISION_CLUSTERS}), cross-cluster leakage, or task overlap invalidates independent cluster inference.`;
       } else {
-        uncertaintyDisclaimer = `Cluster-level Student-t interval (${degreesOfFreedom} df, t_crit = ${tCritical}) across ${distinctClustersCount} clusters: 95% CI is [${ciLower}, ${ciUpper}]. Assumes cluster-level exchangeability and independence across distinct scenario units. Decision-ready under minimum-evidence policy.`;
+        uncertaintyDisclaimer = `Cluster-level Student-t interval (${degreesOfFreedom} df, t_crit = ${tCritical}) across ${distinctClustersCount} clusters: 95% CI is [${ciLower}, ${ciUpper}]. Assumes cluster-level exchangeability and conditional independence across distinct scenario units. Decision-ready under minimum-evidence policy.`;
       }
     } catch (err) {
       uncertaintyDisclaimer = `Failed to estimate clustered uncertainty: ${err.message}`;
@@ -1080,10 +1203,21 @@ export function evaluateActivationGate({
     }
   }
 
+  // Practical improvement evaluation under configured comparison rule (Scope C)
+  let meetsPracticalImprovement = false;
+  if (activePracticalRule === PRACTICAL_THRESHOLD_RULES.CONFIDENCE_BOUND) {
+    // Rule B: Confidence-bound threshold rule: CI lower bound must meet or exceed epsilon
+    meetsPracticalImprovement = ciLower != null && ciLower >= epsilon;
+  } else {
+    // Rule A: Mean-threshold rule: Estimated mean effect must meet or exceed epsilon
+    meetsPracticalImprovement = meanDelta != null && meanDelta >= epsilon;
+  }
+
   const isDecisionReady =
     canEstimateUncertainty &&
     distinctClustersCount >= MIN_DECISION_CLUSTERS &&
     !crossClusterLeakageDetected &&
+    !crossClusterTaskOverlapDetected &&
     eligibleCount >= MIN_PAIRED_OBSERVATIONS &&
     operationalReadinessPassed &&
     rollbackPreflightPassed &&
@@ -1095,10 +1229,16 @@ export function evaluateActivationGate({
     isFinite(ciUpper);
 
   // Check statistical superiority conditions (applicable when decision evidence is met)
-  if (evaluationEvidencePassed && meanDelta != null && !meetsPracticalImprovement) {
-    reasons.push(
-      `Mean paired score improvement (${meanDelta}) is below the practical significance threshold (epsilon = ${epsilon}).`
-    );
+  if (evaluationEvidencePassed && !meetsPracticalImprovement) {
+    if (activePracticalRule === PRACTICAL_THRESHOLD_RULES.CONFIDENCE_BOUND) {
+      reasons.push(
+        `Uncertainty interval lower bound (${ciLower ?? 'N/A'}) is below the practical significance threshold (epsilon = ${epsilon}); practical superiority not established under Rule B (confidence-bound threshold rule).`
+      );
+    } else {
+      reasons.push(
+        `Mean paired score improvement (${meanDelta}) is below the practical significance threshold (epsilon = ${epsilon}) under Rule A (mean-threshold rule).`
+      );
+    }
   }
   if (evaluationEvidencePassed && canEstimateUncertainty && !isCiPositive) {
     reasons.push(
@@ -1184,6 +1324,9 @@ export function evaluateActivationGate({
         excludedObservationsCount: excludedPairs.length,
         excludedPairs,
         crossClusterLeakageDetected,
+        crossClusterTaskOverlapDetected,
+        maxCrossClusterTaskJaccard,
+        crossClusterOverlapPairs,
         isSyntheticData,
       },
       statisticalAdequacy: {
@@ -1194,6 +1337,7 @@ export function evaluateActivationGate({
         meetsClusterThreshold: distinctClustersCount >= MIN_DECISION_CLUSTERS,
         meetsSampleThreshold: eligibleCount >= MIN_PAIRED_OBSERVATIONS,
         zeroLeakageEnforced: !crossClusterLeakageDetected,
+        zeroOverlapEnforced: !crossClusterTaskOverlapDetected,
         uncertaintyMethod: canEstimateUncertainty ? 'cluster_level_t_interval_95' : null,
         degreesOfFreedom,
         tCritical,
@@ -1221,6 +1365,8 @@ export function evaluateActivationGate({
       hasSufficientPairs: eligibleCount >= MIN_PAIRED_OBSERVATIONS,
       hasSufficientClusters: distinctClustersCount >= MIN_DECISION_CLUSTERS,
       crossClusterLeakageDetected,
+      crossClusterTaskOverlapDetected,
+      maxCrossClusterTaskJaccard,
       isDecisionReady,
     },
     thresholdPolicy: {
@@ -1232,6 +1378,15 @@ export function evaluateActivationGate({
       thresholdValue: epsilon,
       isProvisional: true,
       status: THRESHOLD_STATUS.PROVISIONAL_OPERATIONAL_HEURISTIC,
+      comparisonRule: activePracticalRule,
+      ruleDescription:
+        activePracticalRule === PRACTICAL_THRESHOLD_RULES.CONFIDENCE_BOUND
+          ? 'Rule B (Confidence-bound threshold): Uncertainty interval lower bound (ciLower) must be >= epsilon'
+          : 'Rule A (Mean-threshold): Estimated effect (meanDelta) must be >= epsilon with positive lower bound (ciLower > 0)',
+      estimatedEffect: meanDelta,
+      confidenceLowerBound: ciLower,
+      confidenceUpperBound: ciUpper,
+      meetsPracticalImprovement,
       unit: 'composite_schedule_points',
       disclaimer: DEFAULT_THRESHOLD_DISCLAIMER,
     },
@@ -1244,6 +1399,7 @@ export function evaluateActivationGate({
       thresholdStatus: THRESHOLD_STATUS.PROVISIONAL_OPERATIONAL_HEURISTIC,
       thresholdDisclaimer: DEFAULT_THRESHOLD_DISCLAIMER,
       meetsPracticalImprovement,
+      practicalThresholdRule: activePracticalRule,
       candidateMeanScore,
       baselineMeanScore,
       concordantCount,
@@ -1290,8 +1446,10 @@ export function evaluateActivationGate({
       },
       estimand: {
         primary: 'cluster_averaged_paired_difference',
+        targetScope: 'conditional_on_observed_sample_regime',
         clusterAveragedMeanDelta,
         observationWeightedMeanDelta,
+        note: 'Interval estimates the conditional treatment effect across the observed cluster sample. Unobserved cross-cluster latent shifts cancel out in cluster-level variance and are not bounded by observational cluster sampling alone.',
       },
     },
     feasibilityGate: {

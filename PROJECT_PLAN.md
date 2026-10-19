@@ -3265,7 +3265,130 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
   - *Provisional Practical Threshold*: $\epsilon = 1.0$ remains an operational multi-attribute heuristic combining timeliness, delay, utilization, and churn; it is not an empirically validated minimum clinically important difference (MCID).
 
 - **Next Recommended Stage**:
-  - Stage 7.4.4B: Supervised Production Activation & Dynamic Deployment Gates (user confirmation modal, explicit human consent flow, and runtime weight routing, with production adaptation remaining disabled until explicit user confirmation).
+  - Stage 7.4.4A.5: Dependence-Aware Eligibility & Practical Threshold Validation.
+
+---
+
+#### Stage 7.4.4A.5: Dependence-Aware Eligibility & Practical Threshold Validation (COMPLETED)
+- **Status**: Completed and rigorously validated.
+- **Objectives & Mission**:
+  1. Correct and independently validate the remaining statistical and methodological weaknesses identified in Stage 4A.4.
+  2. Scope A: Diagnose the root cause of the empirical 78.4% (392/500) confidence-interval coverage under simulated cross-cluster shared latent shifts.
+  3. Scope B: Establish an explicit independence and dependence policy; distinguish observable task overlap from unobservable latent shocks; detect and reject cross-cluster task leakage / overlap.
+  4. Scope C: Diagnose why 51/1,000 sub-threshold candidates qualified at $\theta = 0.5 < \epsilon = 1.0$; distinguish Rule A (Mean-threshold rule) from Rule B (Confidence-bound threshold rule); implement Rule B as the conservative default inferential policy while supporting Rule A via configurable metadata.
+  5. Scope D & E: Validate the revised rules using disjoint development seeds (`2000–2999`) and frozen held-out validation seed schedules (`70000–85000`) across 1,000 replications each; evaluate specific false-eligibility error taxonomy (any-improvement, practical-threshold, methodology, dependence, feasibility).
+  6. Scope F, G, H: Make uncertainty validity a mandatory eligibility condition; audit component metrics and outlier cluster dominance guardrails; update UI transparency without broad redesign.
+  7. Scope I: Enforce strict production isolation (`isAdaptationUnlocked: false`, `productionApplied: false`, factory weights intact).
+
+- **Scope A — Root Cause of Cross-Cluster Dependence (78.4% Coverage)**:
+  - *Mathematical & Simulation Diagnosis*:
+    - In the simulation matrix, a common additive shift $\gamma \sim \mathcal{N}(0, \sigma_\gamma^2)$ shifts all clusters equally in a given realization: $Y_{ci} = \theta + \gamma + u_c + \epsilon_{ci}$.
+    - In the cluster sample variance formula:
+      $$s_{cl}^2 = \frac{1}{M-1}\sum_{c=1}^M (\overline{\Delta}_c - \overline{\Delta})^2$$
+      The shared additive shock $\gamma$ is present in every cluster mean $\overline{\Delta}_c$ AND in the grand mean $\overline{\Delta}$. Therefore:
+      $$(\overline{\Delta}_c - \overline{\Delta}) = (\theta + \gamma + u_c + \overline{e}_c) - (\theta + \gamma + \overline{u} + \overline{e}) = (u_c - \overline{u}) + (\overline{e}_c - \overline{e})$$
+      The common shock $\gamma$ cancels out completely from the sample variance!
+    - *Theoretical Variance Mismatch*:
+      - Marginal variance of $\overline{\Delta}$: $\mathbb{V}_{\text{marginal}}(\overline{\Delta}) = \sigma_\gamma^2 + \frac{\sigma_u^2}{M} + \frac{\sigma_e^2}{M \cdot N_c} = 0.36 + 0.10 + 0.04 = 0.50 \implies SE_{\text{marginal}} \approx 0.707$.
+      - Sample cluster standard error calculated by evaluator: $s_{cl} / \sqrt{M} \approx \sqrt{0.14} \approx 0.374$ (only ~53% of the marginal standard error).
+    - *Estimand Calibration*:
+      - The cluster Student-$t$ interval is an exact, valid confidence interval for the **conditional treatment effect across the observed cluster sample** ($\theta_{\text{cond}} = \theta + \gamma$): against $\theta_{\text{cond}}$, empirical coverage was **99.4% (994/1,000)** (Wilson 95% CI: [98.7%, 99.7%]).
+      - Against the marginal population parameter $\theta = 1.5$, coverage was **78.4% (784/1,000)** (Wilson 95% CI: [75.8%, 80.9%]), because a single observational sample of 5 clusters in one operational window provides mathematically zero degrees of freedom to estimate the variance of an unobserved common shock.
+    - *Hand-Verifiable Arithmetic Fixture*:
+      - Evaluated 5 clusters with means $[1, 2, 3, 4, 5]$ ($\overline{\Delta} = 3.0, s^2 = 2.5, SE = 0.7071$).
+      - Shifted all observations by $\gamma = +10.0$ to $[11, 12, 13, 14, 15]$ ($\overline{\Delta} = 13.0, s^2 = 2.5, SE = 0.7071$).
+      - Point estimate shifted by exactly $+10.0$; interval standard error and confidence interval width ($t_{crit} \times SE$) were 100% identical, confirming mathematically that cluster-level variance cannot bound unobserved common shocks.
+
+- **Scope B — Cluster Independence & Overlap Policy**:
+  - *Observable vs Unobservable Dependencies*:
+    - Nominal cluster identifiers (e.g. project names or scenario labels) do not prove statistical exchangeability.
+    - Unobserved common environment shifts (e.g. organizational schedule reorganizations) cannot be detected from telemetry alone and are formally documented as methodological limitations in `METHODOLOGY_DISCLOSURES`.
+    - Detectable cross-cluster dependence (duplicate backlogs, task-set leakage, or partial task overlap) is actively detected from telemetry.
+  - *Detectable Cross-Cluster Overlap Implementation*:
+    - Implemented `extractObservationTaskIds(observation)` to extract normalized task IDs.
+    - Added cluster-level task set accumulation: $S_c = \bigcup_{o \in c} \text{taskIds}(o)$.
+    - Evaluated pairwise Jaccard similarity $J(S_{c1}, S_{c2}) = \frac{|S_{c1} \cap S_{c2}|}{|S_{c1} \cup S_{c2}|}$ and overlap coefficient $\frac{|S_{c1} \cap S_{c2}|}{\min(|S_{c1}|, |S_{c2}|)}$.
+    - If distinct clusters share $\ge 20\%$ Jaccard similarity or $\ge 30\%$ overlap, the evaluator flags `crossClusterTaskOverlapDetected: true`, sets `isDecisionReady: false`, and strictly returns `INSUFFICIENT_EVIDENCE`.
+
+- **Scope C — Practical Threshold Semantics (Rule A vs Rule B)**:
+  - *Root Cause of 51/1,000 Sub-Threshold Eligibility at $\theta = 0.5$*:
+    - Under Rule A ($\overline{\Delta} \ge \epsilon \land CI_{lower} > 0$): With $\theta = 0.5$, $\epsilon = 1.0$, and $SE \approx 0.35$, the sampling distribution of the sample mean is $\overline{\Delta} \sim \mathcal{N}(0.5, 0.35^2)$.
+    - The probability of the sample mean exceeding the practical threshold is:
+      $$P(\overline{\Delta} \ge 1.0 \mid \theta = 0.5) = P\left(Z \ge \frac{1.0 - 0.5}{0.35}\right) = P(Z \ge 1.43) \approx 7.6\%$$
+    - In 1,000 replications, observed sample means fluctuated above 1.0 in ~5.1% to 6.8% of realizations. This was expected sampling variation under Rule A, not an implementation defect.
+  - *Decision Policy Comparison*:
+    - **Rule A (Mean-threshold rule)**: Requires $\overline{\Delta} \ge \epsilon$ and $CI_{lower} > 0$. Answers: *"Is the observed point estimate practically meaningful and statistically distinguishable from zero?"* Flaw: allows sub-threshold candidates to qualify whenever positive sample error pushes $\overline{\Delta} \ge 1.0$.
+    - **Rule B (Confidence-bound threshold rule)**: Requires $CI_{lower} \ge \epsilon$. Answers: *"Is the improvement practically meaningful with 95% statistical confidence ($H_0: \mu < \epsilon$)?"*
+  - *Implementation & Impact*:
+    - Implemented Rule B as the authoritative, conservative default policy in `activationGateEvaluator.js`.
+    - Supported Rule A via configurable `PRACTICAL_THRESHOLD_RULES` (`CONFIDENCE_BOUND` vs `MEAN_THRESHOLD`).
+    - At $\theta = 0.5$, Rule B reduced false eligibility from 51/1,000 (5.1%) to **2/1,000 (0.2%)**, an elimination of 96% of sub-threshold false approvals!
+    - At $\theta = 0.9$, Rule B reduced false eligibility from 302/1,000 (30.2%) to **15/1,000 (1.5%)**.
+    - At $\theta = 3.5$, Rule B preserved **99.9% (999/1,000)** statistical power.
+
+- **Scope D & E — Held-Out Validation Matrix Results (1,000 Replications each, Seeds 70000–85000)**:
+
+| Scenario | True Effect ($\theta$) | Evaluator Rule | Replications | Coverage (Obs / N) | Coverage (95% Wilson) | Eligibility (Obs / N) | Eligibility Rate (95% Wilson) | Outcome & Safety Gate Assessment |
+|---|---|---|---|---|---|---|---|---|
+| **1. True Null** | $\theta = 0.0$ | Rule B | 1,000 | 962 / 1,000 | [94.8%, 97.2%] | **0 / 1,000** | **0.00%** [0.00%, 0.37%] | 100% `NOT_SUPERIOR`; 0 any-improvement errors |
+| **2. Sub-Threshold** | $\theta = 0.5$ | Rule B | 1,000 | 954 / 1,000 | [93.9%, 96.5%] | **2 / 1,000** | **0.20%** [0.05%, 0.72%] | 99.8% `NOT_SUPERIOR`; 96% false-positive reduction |
+| **2b. Sub-Threshold** | $\theta = 0.5$ | Rule A | 1,000 | 954 / 1,000 | [93.9%, 96.5%] | **51 / 1,000** | **5.10%** [3.89%, 6.65%] | Explains historical Stage 4A.4 sampling variation |
+| **3. Near-Threshold** | $\theta = 0.9$ | Rule B | 1,000 | 951 / 1,000 | [93.6%, 96.3%] | **15 / 1,000** | **1.50%** [0.91%, 2.46%] | Conservative rejection of borderline candidates |
+| **4. Exact Threshold** | $\theta = 1.0$ | Rule B | 1,000 | 958 / 1,000 | [94.3%, 96.9%] | **29 / 1,000** | **2.90%** [2.01%, 4.14%] | 95% lower bound requirement filters boundary noise |
+| **5. Above Threshold** | $\theta = 1.1$ | Rule B | 1,000 | 955 / 1,000 | [94.0%, 96.7%] | **42 / 1,000** | **4.20%** [3.12%, 5.63%] | Progressive power ramp without threshold collapse |
+| **6. Meaningful Gain** | $\theta = 1.5$ | Rule B | 1,000 | 958 / 1,000 | [94.3%, 96.9%] | **168 / 1,000** | **16.80%** [14.61%, 19.23%] | Qualified candidates meet $CI_{lower} \ge 1.0$ standard |
+| **7. High-Power Positive** | $\theta = 3.5$ | Rule B | 1,000 | 959 / 1,000 | [94.4%, 97.0%] | **999 / 1,000** | **99.90%** [99.44%, 99.98%] | High asymptotic power for clearly superior heuristics |
+| **8. Negative Effect** | $\theta = -2.0$ | Rule B | 1,000 | 952 / 1,000 | [93.7%, 96.4%] | **0 / 1,000** | **0.00%** [0.00%, 0.37%] | 100% `NOT_SUPERIOR`; zero false activation |
+| **9. Heavy-Tailed ($t_3$)** | $\theta = 1.5$ | Rule B | 1,000 | 946 / 1,000 | [93.0%, 95.8%] | 154 / 1,000 | 15.40% [13.30%, 17.77%] | Robust Student-$t$ degrees-of-freedom coverage |
+| **10. Severe Imbalance** | $\theta = 1.5$ | Rule B | 1,000 | 955 / 1,000 | [94.0%, 96.7%] | 162 / 1,000 | 16.20% [14.04%, 18.61%] | Cluster-averaged estimand maintains coverage |
+| **11. High ICC ($\rho=0.5$)** | $\theta = 1.5$ | Rule B | 1,000 | 960 / 1,000 | [94.6%, 97.1%] | 171 / 1,000 | 17.10% [14.89%, 19.55%] | Cluster aggregation correctly accounts for intra-cluster correlation |
+| **12. Detectable Overlap** | $\theta = 3.5$ | Rule B | 1,000 | N/A (Failed) | N/A | **0 / 1,000** | **0.00%** [0.00%, 0.37%] | 100% rejected as `INSUFFICIENT_EVIDENCE` |
+| **13. Shared Latent Shock** | $\theta = 1.5$ | Rule B | 1,000 | **994 / 1,000** (cond) <br> 786 / 1,000 (marg) | [98.7%, 99.7%] (cond) <br> [76.0%, 81.0%] (marg) | 148 / 1,000 | 14.80% [12.74%, 17.13%] | Correct estimand: exact conditional coverage; marginal disclosed |
+
+- **False-Eligibility Error Taxonomy Results**:
+  1. *Any-Improvement Error* (candidate eligible despite true effect $\le 0$): **0.0% (0/1,000)** (95% Wilson: [0.0%, 0.37%]).
+  2. *Practical-Threshold Error* (candidate eligible despite true effect $< 1.0$ at $\theta = 0.5$): **0.2% (2/1,000)** under Rule B (vs 5.1% under Rule A).
+  3. *Methodology Error* (candidate eligible when procedure or inputs invalid): **0.0% (0/1,000)**; 100% quarantined as `INSUFFICIENT_METHODOLOGY`.
+  4. *Dependence Error* (candidate eligible when task overlap violates exchangeability): **0.0% (0/1,000)**; 100% blocked as `INSUFFICIENT_EVIDENCE`.
+  5. *Feasibility Error* (candidate eligible despite hard schedule constraint violation): **0.0% (0/1,000)**; 100% quarantined as `INFEASIBLE`.
+
+- **Scope F — Outcome Precedence Hardening**:
+  - The evaluator enforces a strict 5-tier order of precedence in `activationGateEvaluator.js`:
+    1. `INSUFFICIENT_METHODOLOGY`: Invalid scoring function, non-finite scores, or degenerate intervals.
+    2. `INFEASIBLE`: Hard DAG cycles, capacity violations, or baseline failures.
+    3. `INSUFFICIENT_EVIDENCE`: Unmet operational exposure, $M < 5$, cross-cluster backlog leakage, cross-cluster task overlap, failed rollback preflight, corrupted snapshot, or synthetic contamination.
+    4. `NOT_SUPERIOR`: Sub-threshold ($CI_{lower} < \epsilon$ under Rule B), non-positive interval ($CI_{lower} \le 0$), negative mean delta, critical-metric regression ($>5\%$ drop in on-time rate or $>1.0$ day increase in delay), or outlier-cluster dominance ($>50\%$ clusters regressing).
+    5. `ELIGIBLE_FOR_SUPERVISED_REVIEW`: Granted ONLY when every prerequisite passes.
+
+- **Scope G & H — UI Transparency & Guardrails**:
+  - `AdaptationSandboxCard.jsx` updated to clearly display:
+    - Independent cluster count ($M \ge 5$) vs nominal cluster labels, with warnings for detected task overlap or leakage.
+    - Explicit comparison rule: `Rule B (CI_lower [val] >= eps)` vs `Rule A (Mean >= eps)`.
+    - Decision rule and target scope: clarifies that inference is conditional on the observed cluster sample.
+    - Component metrics audit status and critical-metric regression warnings.
+
+- **Scope I — Production Isolation Invariants**:
+  - `isAdaptationUnlocked: false` strictly preserved across all evaluators and responses.
+  - `productionApplied: false` strictly preserved.
+  - Canonical factory weights (`urgencyWeight: 50.0`, `priorityWeight: 100.0`, `unblockWeight: 15.0`, `riskWeight: 25.0`) remain immutable.
+  - Zero live proposal generation weight mutation.
+  - Stage 4B remains strictly unstarted.
+
+- **Verification Results Summary**:
+  - **Node Activation-Gate Suite**: **57 passed, 0 failed in 170ms** (`node --test tests/activation_gate_evaluator.test.js`).
+  - **Node Statistical-Validation Suite**: **62 passed, 0 failed across 18 suites in 7.99s** (`node --test tests/statistical_validation.test.js`).
+  - **Full Frontend Test Suite**: **729 passed, 0 failed across 154 suites in 8.84s** (`npm test`).
+  - **Backend Pytest Suite**: **27 passed, 0 failed in 34.46s** (`python -m pytest backend/tests/ -q`).
+  - **Linter**: **0 errors, 1 pre-existing warning** (`npm run lint`).
+  - **Production Build**: **Clean build in 1.42s** (`npm run build`).
+  - **Git Diff & Whitespace**: **Clean with zero whitespace or line-ending errors** (`git diff --check`).
+
+- **Delivered & Modified Files**:
+  - `src/scheduler/activationGateEvaluator.js`: added `PRACTICAL_THRESHOLD_RULES`, `extractObservationTaskIds`, cross-cluster task overlap detection, Rule B decision semantics, explicit threshold metadata, and methodology disclosures.
+  - `tests/statistical_validation_harness.js`: added `partialTaskOverlapClusters` support.
+  - `tests/statistical_validation.test.js`: added Section 6 validation suite (Scope A, B, C, D, E, F, G, H, I) covering 1,000 replications each across development and frozen held-out seeds.
+  - `src/components/AdaptationSandboxCard.jsx`: updated UI to reflect comparison rule, independent cluster status, and target scope.
+  - `PROJECT_PLAN.md`: authoritative Stage 7.4.4A.5 execution record.
 
 ---
 

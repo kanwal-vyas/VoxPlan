@@ -2056,7 +2056,10 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                 {activeActivationGate.pairedComparison.minMeaningfulDelta} pts
               </span>
               <span style={styles.rankingStatSub}>
-                {activeActivationGate.pairedComparison.meetsPracticalImprovement ? '✓ Met' : '✕ Unmet'} (Operational Heuristic)
+                {activeActivationGate.pairedComparison.meetsPracticalImprovement ? '✓ Met' : '✕ Unmet'} ·{' '}
+                {activeActivationGate.practicalThresholdMetadata?.comparisonRule === 'confidence_bound'
+                  ? `Rule B (CI_lower ${activeActivationGate.uncertainty?.ciLower != null ? `[${activeActivationGate.uncertainty.ciLower}]` : ''} ≥ ε)`
+                  : 'Rule A (Mean ≥ ε)'}
               </span>
             </div>
             <div style={styles.rankingStatCard}>
@@ -2069,12 +2072,18 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
               </span>
             </div>
             <div style={styles.rankingStatCard}>
-              <span style={styles.rankingStatLabel}>Distinct Scenario Clusters</span>
+              <span style={styles.rankingStatLabel}>Independent Clusters</span>
               <span style={styles.rankingStatValue}>
                 {activeActivationGate.evidenceAssessment.distinctClustersCount} / {activeActivationGate.evidenceAssessment.minDecisionClustersRequired ?? 5}
               </span>
               <span style={styles.rankingStatSub}>
-                {activeActivationGate.evidenceAssessment.distinctClustersCount >= 5 ? '✓ Operational Floor Met (M ≥ 5)' : '✕ Inadequate (< 5 Clusters)'}
+                {activeActivationGate.evidenceAssessment.crossClusterTaskOverlapDetected
+                  ? '⚠️ Task Overlap Detected'
+                  : activeActivationGate.evidenceAssessment.crossClusterLeakageDetected
+                  ? '⚠️ Backlog Leakage Detected'
+                  : activeActivationGate.evidenceAssessment.distinctClustersCount >= 5
+                  ? '✓ Independent Floor Met (M ≥ 5)'
+                  : '✕ Inadequate (< 5 Clusters)'}
               </span>
             </div>
           </div>
@@ -2099,6 +2108,14 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                     : 'N/A (Sparse Evidence)'}
                 </span>
               </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', fontSize: '12px' }}>
+                <span style={{ fontWeight: 600, color: '#374151' }}>Decision Rule & Target Scope:</span>
+                <span style={{ color: '#1F2937' }}>
+                  {activeActivationGate.practicalThresholdMetadata?.comparisonRule === 'confidence_bound'
+                    ? 'Rule B: CI_lower ≥ ε (Conditional on observed clusters)'
+                    : 'Rule A: Mean ≥ ε (Conditional on observed clusters)'}
+                </span>
+              </div>
               {activeActivationGate.uncertainty.bootstrapPercentile?.ciLower != null && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', fontSize: '12px' }}>
                   <span style={{ fontWeight: 600, color: '#374151' }}>Bootstrap Percentile (Exploratory):</span>
@@ -2119,7 +2136,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
               )}
               {activeActivationGate.uncertainty.isExploratoryOnly && (
                 <div style={{ marginTop: '8px', padding: '6px 10px', backgroundColor: '#FFFBEB', borderRadius: '4px', border: '1px solid #FDE68A', fontSize: '11px', color: '#92400E' }}>
-                  ⚠️ <strong>Exploratory Simulation Diagnostic Only:</strong> Small cluster sample (M &lt; 5). Degrees of freedom are too sparse to support decision eligibility or confirm superiority.
+                  ⚠️ <strong>Exploratory Simulation Diagnostic Only:</strong> Small cluster sample (M &lt; 5), task overlap, or leakage. Degrees of freedom are too sparse to support decision eligibility or confirm superiority.
                 </div>
               )}
               <p style={{ margin: '8px 0 0 0', fontSize: '11px', color: '#6B7280', lineHeight: '1.4' }}>
