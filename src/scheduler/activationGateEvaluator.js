@@ -399,6 +399,67 @@ export function evaluateSinglePairedObservation(observation, scoringFn = compute
 }
 
 /**
+ * Two-sided 95% critical values for the Student-t distribution across degrees of freedom (df = M - 1).
+ * Source: Standard statistical tables (Fisher & Yates / NIST).
+ */
+export const STUDENT_T_CRITICAL_95 = Object.freeze({
+  1: 12.706,
+  2: 4.303, // M=3
+  3: 3.182, // M=4
+  4: 2.776, // M=5
+  5: 2.571, // M=6
+  6: 2.447, // M=7
+  7: 2.365, // M=8
+  8: 2.306, // M=9
+  9: 2.262, // M=10
+  10: 2.228,
+  11: 2.201,
+  12: 2.179,
+  13: 2.160,
+  14: 2.145,
+  15: 2.131,
+  16: 2.120,
+  17: 2.110,
+  18: 2.101,
+  19: 2.093,
+  20: 2.086,
+  21: 2.080,
+  22: 2.074,
+  23: 2.069,
+  24: 2.064,
+  25: 2.060,
+  26: 2.056,
+  27: 2.052,
+  28: 2.048,
+  29: 2.045,
+  30: 2.042,
+});
+
+/**
+ * Obtains the two-sided critical value for the Student-t distribution.
+ * For df <= 30, uses exact tabulated critical values.
+ * For df > 30, uses high-order Cornish-Fisher asymptotic expansion.
+ *
+ * @param {number} df - Degrees of freedom (M - 1)
+ * @param {number} [confidence=0.95] - Two-sided confidence level
+ * @returns {number|null} Critical multiplier t_{crit}
+ */
+export function getStudentTCriticalValue(df, confidence = 0.95) {
+  if (typeof df !== 'number' || df <= 0 || !isFinite(df)) return null;
+  const roundedDf = Math.round(df);
+  if (confidence === 0.95) {
+    if (roundedDf in STUDENT_T_CRITICAL_95) {
+      return STUDENT_T_CRITICAL_95[roundedDf];
+    }
+    const z = 1.959964;
+    const term1 = (z * z * z + z) / (4 * roundedDf);
+    const term2 = (5 * Math.pow(z, 5) + 16 * Math.pow(z, 3) + 3 * z) / (96 * roundedDf * roundedDf);
+    return Math.round((z + term1 + term2) * 1000) / 1000;
+  }
+  return 1.96;
+}
+
+/**
  * Runs clustered bootstrap resampling to estimate uncertainty in mean paired score difference.
  *
  * @param {Map<string, Array<{ delta: number }>>} clustersMap - Map of clusterKey -> observations.
@@ -525,6 +586,7 @@ export function evaluateActivationGate({
   scoringFn = computeScheduleObjectiveScore,
   isSyntheticData = false,
   randomSeed = 42,
+  bootstrapIterations = DEFAULT_BOOTSTRAP_ITERATIONS,
 } = {}) {
   const reasons = [];
 
@@ -803,7 +865,31 @@ export function evaluateActivationGate({
 
   const eligibleCount = eligiblePairs.length;
   const distinctClustersCount = clustersMap.size;
-  const meanDelta = eligibleCount > 0 ? Math.round((sumDelta / eligibleCount) * 1000) / 1000 : null;
+
+  // Compute cluster-level summaries
+  const clusterSummaries = [];
+  for (const [clKey, clObs] of clustersMap.entries()) {
+    const clSum = clObs.reduce((acc, o) => acc + o.delta, 0);
+    const clMean = clObs.length > 0 ? clSum / clObs.length : 0.0;
+    clusterSummaries.push({
+      clusterKey: clKey,
+      count: clObs.length,
+      meanDelta: clMean,
+    });
+  }
+
+  // Cluster-averaged mean delta (primary statistical estimand for clustered inference)
+  const clusterAveragedMeanDelta = clusterSummaries.length > 0
+    ? Math.round((clusterSummaries.reduce((acc, c) => acc + c.meanDelta, 0) / clusterSummaries.length) * 1000) / 1000
+    : null;
+
+  // Observation-weighted mean delta
+  const observationWeightedMeanDelta = eligibleCount > 0
+    ? Math.round((sumDelta / eligibleCount) * 1000) / 1000
+    : null;
+
+  // Primary estimand used for gate superiority check
+  const meanDelta = clusterAveragedMeanDelta;
   const candidateMeanScore = eligibleCount > 0 ? Math.round((sumCandScore / eligibleCount) * 1000) / 1000 : null;
   const baselineMeanScore = eligibleCount > 0 ? Math.round((sumBaseScore / eligibleCount) * 1000) / 1000 : null;
   const concordanceProportion = eligibleCount > 0 ? Math.round((concordantCount / eligibleCount) * 1000) / 1000 : null;
@@ -815,10 +901,18 @@ export function evaluateActivationGate({
     ? Math.round((sumDelayDelta / pairsWithComponentsCount) * 1000) / 1000
     : null;
 
-  // Critical metric regression guardrail (Scope F):
+  // Audit component metrics availability (Scope G)
+  const componentMetricsAudited = pairsWithComponentsCount >= 5;
+  if (eligibleCount >= MIN_PAIRED_OBSERVATIONS && pairsWithComponentsCount === 0) {
+    reasons.push(
+      'Component metrics (on-time rate and task delay) were not supplied in schedule alternatives; primary non-regression guardrails could not be verified at the component level.'
+    );
+  }
+
+  // Critical metric regression guardrail (Scope F & G):
   // If candidate drops on-time rate by >5% or increases average delay by >1.0 days despite composite gain, flag regression
   let criticalMetricRegressionDetected = false;
-  if (pairsWithComponentsCount >= 5) {
+  if (componentMetricsAudited) {
     if (meanOnTimeDelta != null && meanOnTimeDelta < -0.05) {
       criticalMetricRegressionDetected = true;
       reasons.push(
@@ -837,10 +931,8 @@ export function evaluateActivationGate({
   let outlierClusterDominanceDetected = false;
   if (distinctClustersCount >= MIN_DECISION_CLUSTERS && meanDelta != null && meanDelta > 0) {
     let negativeClusterCount = 0;
-    for (const [, clObs] of clustersMap.entries()) {
-      const clSum = clObs.reduce((acc, o) => acc + o.delta, 0);
-      const clMean = clObs.length > 0 ? clSum / clObs.length : 0;
-      if (clMean < 0) {
+    for (const c of clusterSummaries) {
+      if (c.meanDelta < 0) {
         negativeClusterCount++;
       }
     }
@@ -911,15 +1003,34 @@ export function evaluateActivationGate({
   let isCiPositive = false;
   let uncertaintyDisclaimer = '';
 
+  let clusterVariance = null;
+  let clusterStandardError = null;
+  let tCritical = null;
+  let tCiLower = null;
+  let tCiUpper = null;
+  const degreesOfFreedom = distinctClustersCount > 1 ? distinctClustersCount - 1 : null;
+
+  // Compute cluster-level Student-t interval on cluster-aggregated means (Scope B)
+  if (distinctClustersCount > 1 && clusterAveragedMeanDelta != null) {
+    const sumSq = clusterSummaries.reduce((acc, c) => acc + Math.pow(c.meanDelta - clusterAveragedMeanDelta, 2), 0);
+    clusterVariance = sumSq / (distinctClustersCount - 1);
+    clusterStandardError = Math.round((Math.sqrt(Math.max(0, clusterVariance)) / Math.sqrt(distinctClustersCount)) * 1000) / 1000;
+    tCritical = getStudentTCriticalValue(degreesOfFreedom, 0.95);
+    if (tCritical != null && clusterStandardError != null) {
+      tCiLower = Math.round((clusterAveragedMeanDelta - tCritical * clusterStandardError) * 1000) / 1000;
+      tCiUpper = Math.round((clusterAveragedMeanDelta + tCritical * clusterStandardError) * 1000) / 1000;
+    }
+  }
+
   // Naive unclustered interval for methodology comparison (Audit F.16)
   let naiveStandardError = null;
   let naiveCiLower = null;
   let naiveCiUpper = null;
-  if (eligibleCount > 1 && meanDelta != null) {
-    const sampleVar = eligiblePairs.reduce((acc, p) => acc + Math.pow(p.delta - meanDelta, 2), 0) / (eligibleCount - 1);
+  if (eligibleCount > 1 && observationWeightedMeanDelta != null) {
+    const sampleVar = eligiblePairs.reduce((acc, p) => acc + Math.pow(p.delta - observationWeightedMeanDelta, 2), 0) / (eligibleCount - 1);
     naiveStandardError = Math.round((Math.sqrt(sampleVar) / Math.sqrt(eligibleCount)) * 1000) / 1000;
-    naiveCiLower = Math.round((meanDelta - 1.96 * naiveStandardError) * 1000) / 1000;
-    naiveCiUpper = Math.round((meanDelta + 1.96 * naiveStandardError) * 1000) / 1000;
+    naiveCiLower = Math.round((observationWeightedMeanDelta - 1.96 * naiveStandardError) * 1000) / 1000;
+    naiveCiUpper = Math.round((observationWeightedMeanDelta + 1.96 * naiveStandardError) * 1000) / 1000;
   }
 
   if (eligibleCount < MIN_PAIRED_OBSERVATIONS) {
@@ -933,7 +1044,7 @@ export function evaluateActivationGate({
       uncertaintyDisclaimer = clusterDisclaimer;
     }
   } else if (distinctClustersCount < MIN_DECISION_CLUSTERS) {
-    const smallClusterDisclaimer = `Distinct scenario clusters (${distinctClustersCount}) below decision eligibility minimum (${MIN_DECISION_CLUSTERS}); small cluster count has restricted combinatorial support and cannot support supervised review qualification.`;
+    const smallClusterDisclaimer = `Distinct scenario clusters (${distinctClustersCount}) below decision eligibility minimum (${MIN_DECISION_CLUSTERS}); small cluster count has restricted degrees of freedom (${degreesOfFreedom ?? 0} df) and cannot support supervised review qualification.`;
     reasons.push(smallClusterDisclaimer);
   }
 
@@ -943,23 +1054,25 @@ export function evaluateActivationGate({
     );
   }
 
-  // Exploratory bootstrap can run if eligibleCount >= MIN_PAIRED_OBSERVATIONS and distinctClustersCount >= MIN_EXPLORATORY_CLUSTERS
+  // Estimation runs if eligibleCount >= MIN_PAIRED_OBSERVATIONS and distinctClustersCount >= MIN_EXPLORATORY_CLUSTERS
   if (eligibleCount >= MIN_PAIRED_OBSERVATIONS && distinctClustersCount >= MIN_EXPLORATORY_CLUSTERS) {
     try {
       const prng = createMulberry32(randomSeed);
-      bootstrapResult = runClusteredBootstrap(clustersMap, DEFAULT_BOOTSTRAP_ITERATIONS, prng);
+      bootstrapResult = runClusteredBootstrap(clustersMap, bootstrapIterations, prng);
       canEstimateUncertainty = true;
-      ciLower = bootstrapResult.ciLower;
-      ciUpper = bootstrapResult.ciUpper;
-      isCiPositive = ciLower > 0;
+
+      // Primary decision-ready interval: Cluster-level Student-t interval
+      ciLower = tCiLower;
+      ciUpper = tCiUpper;
+      isCiPositive = ciLower != null && ciLower > 0;
 
       const isDecisionClusterCount = distinctClustersCount >= MIN_DECISION_CLUSTERS;
-      const isDecisionReadyForBootstrap = isDecisionClusterCount && !crossClusterLeakageDetected;
+      const isDecisionReadyForInference = isDecisionClusterCount && !crossClusterLeakageDetected;
 
-      if (!isDecisionReadyForBootstrap) {
-        uncertaintyDisclaimer = `Deterministic clustered bootstrap (${DEFAULT_BOOTSTRAP_ITERATIONS} resamples across ${distinctClustersCount} clusters). 95% CI on mean paired difference is [${ciLower}, ${ciUpper}] (EXPLORATORY ONLY — Not Decision-Ready). Warning: Small cluster count (M=${distinctClustersCount} < ${MIN_DECISION_CLUSTERS}) or cross-cluster leakage restricts combinatorial support (${bootstrapResult.uniqueMultisetsCount ?? 'restricted'} multisets); empirical percentile coverage cannot be guaranteed.`;
+      if (!isDecisionReadyForInference) {
+        uncertaintyDisclaimer = `Cluster-level Student-t interval (${degreesOfFreedom} df, t_crit = ${tCritical}) across ${distinctClustersCount} clusters: 95% CI is [${ciLower}, ${ciUpper}] (EXPLORATORY ONLY — Not Decision-Ready). Warning: Small cluster count (M=${distinctClustersCount} < ${MIN_DECISION_CLUSTERS}) or cross-cluster leakage invalidates independent cluster inference.`;
       } else {
-        uncertaintyDisclaimer = `Deterministic clustered bootstrap (${DEFAULT_BOOTSTRAP_ITERATIONS} resamples across ${distinctClustersCount} clusters). 95% CI on mean paired difference is [${ciLower}, ${ciUpper}]. Assumes cluster-level exchangeability. Decision-ready under minimum-evidence policy.`;
+        uncertaintyDisclaimer = `Cluster-level Student-t interval (${degreesOfFreedom} df, t_crit = ${tCritical}) across ${distinctClustersCount} clusters: 95% CI is [${ciLower}, ${ciUpper}]. Assumes cluster-level exchangeability and independence across distinct scenario units. Decision-ready under minimum-evidence policy.`;
       }
     } catch (err) {
       uncertaintyDisclaimer = `Failed to estimate clustered uncertainty: ${err.message}`;
@@ -975,7 +1088,11 @@ export function evaluateActivationGate({
     operationalReadinessPassed &&
     rollbackPreflightPassed &&
     snapshotValid &&
-    !isSyntheticData;
+    !isSyntheticData &&
+    ciLower != null &&
+    isFinite(ciLower) &&
+    ciUpper != null &&
+    isFinite(ciUpper);
 
   // Check statistical superiority conditions (applicable when decision evidence is met)
   if (evaluationEvidencePassed && meanDelta != null && !meetsPracticalImprovement) {
@@ -994,10 +1111,11 @@ export function evaluateActivationGate({
   // -------------------------------------------------------------------------
   let outcome;
 
-  // Rule 1: Invalid evaluation methodology / scoring / parameters
+  // Rule 1: Invalid evaluation methodology / scoring / parameters / degenerate interval
   if (
     !methodologyValid ||
-    (rawPairs.length > 0 && eligibleCount === 0 && excludedPairs.every((p) => p.reason?.includes('Non-finite')))
+    (rawPairs.length > 0 && eligibleCount === 0 && excludedPairs.every((p) => p.reason?.includes('Non-finite'))) ||
+    (canEstimateUncertainty && (ciLower == null || !isFinite(ciLower) || ciUpper == null || !isFinite(ciUpper)))
   ) {
     outcome = ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_METHODOLOGY;
   }
@@ -1076,7 +1194,10 @@ export function evaluateActivationGate({
         meetsClusterThreshold: distinctClustersCount >= MIN_DECISION_CLUSTERS,
         meetsSampleThreshold: eligibleCount >= MIN_PAIRED_OBSERVATIONS,
         zeroLeakageEnforced: !crossClusterLeakageDetected,
-        uncertaintyMethod: canEstimateUncertainty ? 'clustered_bootstrap_percentile_95' : null,
+        uncertaintyMethod: canEstimateUncertainty ? 'cluster_level_t_interval_95' : null,
+        degreesOfFreedom,
+        tCritical,
+        standardError: clusterStandardError,
         bootstrapIterations: canEstimateUncertainty ? (bootstrapResult?.iterations ?? DEFAULT_BOOTSTRAP_ITERATIONS) : null,
         ciLower,
         ciUpper,
@@ -1107,9 +1228,18 @@ export function evaluateActivationGate({
       disclaimer: DEFAULT_THRESHOLD_DISCLAIMER,
       epsilon,
     },
+    practicalThresholdMetadata: {
+      thresholdValue: epsilon,
+      isProvisional: true,
+      status: THRESHOLD_STATUS.PROVISIONAL_OPERATIONAL_HEURISTIC,
+      unit: 'composite_schedule_points',
+      disclaimer: DEFAULT_THRESHOLD_DISCLAIMER,
+    },
     pairedComparison: {
       primaryEndpoint: 'paired_schedule_quality_score_difference',
       meanDelta,
+      clusterAveragedMeanDelta,
+      observationWeightedMeanDelta,
       minMeaningfulDelta: epsilon,
       thresholdStatus: THRESHOLD_STATUS.PROVISIONAL_OPERATIONAL_HEURISTIC,
       thresholdDisclaimer: DEFAULT_THRESHOLD_DISCLAIMER,
@@ -1125,11 +1255,15 @@ export function evaluateActivationGate({
       meanDelayDelta,
       criticalMetricRegressionDetected,
       outlierClusterDominanceDetected,
+      componentMetricsAudited,
+      pairsWithComponentsCount,
     },
     uncertainty: {
-      method: canEstimateUncertainty ? 'clustered_bootstrap_percentile_95' : null,
+      method: canEstimateUncertainty ? 'cluster_level_t_interval_95' : null,
       clusterUnit: 'scenario_or_project_group',
-      bootstrapIterations: canEstimateUncertainty ? (bootstrapResult?.iterations ?? DEFAULT_BOOTSTRAP_ITERATIONS) : null,
+      degreesOfFreedom,
+      tCritical,
+      standardError: clusterStandardError,
       ciLower,
       ciUpper,
       confidenceLevel: 0.95,
@@ -1142,13 +1276,23 @@ export function evaluateActivationGate({
       distinctClustersCount,
       minDecisionClustersRequired: MIN_DECISION_CLUSTERS,
       minExploratoryClustersRequired: MIN_EXPLORATORY_CLUSTERS,
-      standardError: bootstrapResult?.standardError ?? null,
+      disclaimer: uncertaintyDisclaimer,
+      bootstrapPercentile: {
+        ciLower: bootstrapResult?.ciLower ?? null,
+        ciUpper: bootstrapResult?.ciUpper ?? null,
+        standardError: bootstrapResult?.standardError ?? null,
+        iterations: bootstrapResult?.iterations ?? null,
+      },
       naiveUnclustered: {
         standardError: naiveStandardError,
         ciLower: naiveCiLower,
         ciUpper: naiveCiUpper,
       },
-      disclaimer: uncertaintyDisclaimer,
+      estimand: {
+        primary: 'cluster_averaged_paired_difference',
+        clusterAveragedMeanDelta,
+        observationWeightedMeanDelta,
+      },
     },
     feasibilityGate: {
       passed: feasibilityPassed,

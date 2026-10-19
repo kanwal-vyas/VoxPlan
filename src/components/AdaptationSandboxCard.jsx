@@ -2040,13 +2040,15 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
           {/* Endpoint Metrics Grid */}
           <div style={styles.rankingStatsGrid}>
             <div style={styles.rankingStatCard}>
-              <span style={styles.rankingStatLabel}>Mean Paired Quality Delta</span>
+              <span style={styles.rankingStatLabel}>Mean Paired Quality Delta (Cluster-Avg)</span>
               <span style={{ ...styles.rankingStatValue, color: (activeActivationGate.pairedComparison.meanDelta ?? 0) > 0 ? '#1B5E3C' : '#4B5563' }}>
                 {activeActivationGate.pairedComparison.meanDelta != null
                   ? `${activeActivationGate.pairedComparison.meanDelta > 0 ? '+' : ''}${activeActivationGate.pairedComparison.meanDelta} pts`
                   : 'N/A'}
               </span>
-              <span style={styles.rankingStatSub}>Primary Endpoint: S(W_c) - S(W_f)</span>
+              <span style={styles.rankingStatSub}>
+                Harmonized Estimand: 1/M Σ Δ_c {activeActivationGate.pairedComparison.observationWeightedMeanDelta != null ? `(Obs-wt: ${activeActivationGate.pairedComparison.observationWeightedMeanDelta > 0 ? '+' : ''}${activeActivationGate.pairedComparison.observationWeightedMeanDelta} pts)` : ''}
+              </span>
             </div>
             <div style={styles.rankingStatCard}>
               <span style={styles.rankingStatLabel}>Practical Threshold (ε, Provisional)</span>
@@ -2062,7 +2064,9 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
               <span style={styles.rankingStatValue}>
                 {activeActivationGate.evidenceAssessment.eligibleObservationsCount}
               </span>
-              <span style={styles.rankingStatSub}>Minimum 15 Required</span>
+              <span style={styles.rankingStatSub}>
+                Min 15 Required · {activeActivationGate.pairedComparison.componentMetricsAudited ? '✓ Component Metrics Audited' : '⚠️ No Component Breakdown'}
+              </span>
             </div>
             <div style={styles.rankingStatCard}>
               <span style={styles.rankingStatLabel}>Distinct Scenario Clusters</span>
@@ -2075,32 +2079,38 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
             </div>
           </div>
 
-          {/* Uncertainty & Clustered Bootstrap Panel */}
+          {/* Uncertainty & Rigor Panel */}
           <div style={{ ...styles.rankingDetailCard, marginTop: '16px' }}>
             <h4 style={styles.rankingDetailTitle}>📊 Clustered Uncertainty & Statistical Rigor</h4>
             <div style={styles.uncertaintyContent}>
-              <div style={styles.uncertaintyStatRow}>
-                <span style={styles.uncertaintyLabel}>Uncertainty Estimation Method:</span>
-                <span style={styles.uncertaintyValue}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', fontSize: '12px' }}>
+                <span style={{ fontWeight: 600, color: '#374151' }}>Uncertainty Estimation Method:</span>
+                <span style={{ color: '#1F2937' }}>
                   {activeActivationGate.uncertainty.canEstimateUncertainty
-                    ? activeActivationGate.uncertainty.isDecisionReady
-                      ? 'Clustered Bootstrap Resampling (95% CI — Operational Safeguard Floor)'
-                      : 'Clustered Bootstrap Resampling (95% CI — Exploratory Only)'
+                    ? (activeActivationGate.uncertainty.method || 'Cluster-Level Student-t Interval (95% CI)')
                     : 'Insufficient Observations or Clusters'}
                 </span>
               </div>
-              <div style={styles.uncertaintyStatRow}>
-                <span style={styles.uncertaintyLabel}>95% Bootstrap Confidence Interval:</span>
-                <span style={styles.uncertaintyValue}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', fontSize: '12px' }}>
+                <span style={{ fontWeight: 600, color: '#374151' }}>95% Confidence Interval (Student-t):</span>
+                <span style={{ color: '#1F2937', fontWeight: 600 }}>
                   {activeActivationGate.uncertainty.canEstimateUncertainty
-                    ? `[${activeActivationGate.uncertainty.ciLower}, ${activeActivationGate.uncertainty.ciUpper}] pts`
+                    ? `[${activeActivationGate.uncertainty.ciLower}, ${activeActivationGate.uncertainty.ciUpper}] pts (df = ${activeActivationGate.uncertainty.degreesOfFreedom ?? 'N/A'}, SE = ${activeActivationGate.uncertainty.standardError ?? 'N/A'})`
                     : 'N/A (Sparse Evidence)'}
                 </span>
               </div>
+              {activeActivationGate.uncertainty.bootstrapPercentile?.ciLower != null && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', fontSize: '12px' }}>
+                  <span style={{ fontWeight: 600, color: '#374151' }}>Bootstrap Percentile (Exploratory):</span>
+                  <span style={{ color: '#4B5563' }}>
+                    [{activeActivationGate.uncertainty.bootstrapPercentile.ciLower}, {activeActivationGate.uncertainty.bootstrapPercentile.ciUpper}] pts
+                  </span>
+                </div>
+              )}
               {activeActivationGate.evidencePolicy && (
-                <div style={styles.uncertaintyStatRow}>
-                  <span style={styles.uncertaintyLabel}>Evidence Policy Pillars:</span>
-                  <span style={styles.uncertaintyValue}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', fontSize: '12px' }}>
+                  <span style={{ fontWeight: 600, color: '#374151' }}>Evidence Policy Pillars:</span>
+                  <span style={{ color: '#1F2937' }}>
                     Exposure: {activeActivationGate.evidencePolicy.operationalExposurePassed ? '✓' : '✕'} |
                     Evidence: {activeActivationGate.evidencePolicy.evaluationEvidencePassed ? '✓' : '✕'} |
                     Statistical: {activeActivationGate.evidencePolicy.statisticalAdequacyPassed ? '✓' : '✕'}
@@ -2109,7 +2119,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
               )}
               {activeActivationGate.uncertainty.isExploratoryOnly && (
                 <div style={{ marginTop: '8px', padding: '6px 10px', backgroundColor: '#FFFBEB', borderRadius: '4px', border: '1px solid #FDE68A', fontSize: '11px', color: '#92400E' }}>
-                  ⚠️ <strong>Exploratory Simulation Diagnostic Only:</strong> Small cluster sample (M &lt; 5). Combinatorial cluster permutations are too sparse to support decision eligibility or confirm superiority.
+                  ⚠️ <strong>Exploratory Simulation Diagnostic Only:</strong> Small cluster sample (M &lt; 5). Degrees of freedom are too sparse to support decision eligibility or confirm superiority.
                 </div>
               )}
               <p style={{ margin: '8px 0 0 0', fontSize: '11px', color: '#6B7280', lineHeight: '1.4' }}>

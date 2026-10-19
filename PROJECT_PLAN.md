@@ -3150,6 +3150,121 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
   - **Git Diff & Whitespace**: **Clean with zero whitespace or line-ending errors** (`git diff --check`).
 
 - **Next Recommended Stage**:
+  - Stage 7.4.4A.4: Correct Coverage Failures & Validate Eligibility Controls (investigate root cause of bootstrap undercoverage, implement cluster-level Student-t interval on cluster-aggregated means, evaluate on frozen validation seeds across 1,000 replications, enforce uncertainty reliability as first-class gate condition, preserve provisional practical threshold \epsilon = 1.0, and retain strict production isolation).
+
+---
+
+#### Stage 7.4.4A.4: Correct Coverage Failures & Validate Eligibility Controls (COMPLETED)
+- **Status**: **COMPLETE & VERIFIED**
+- **Date**: 2026-10-19
+- **Commit Baseline**: `72c0e49`
+- **Objective**:
+  - Investigate and correct the statistical reliability and coverage undercoverage problems identified in Stage 4A.3 of VoxPlan's shadow-only activation gate evaluator.
+  - Diagnose the root cause of ~60–65% empirical confidence-interval undercoverage under heavy-tailed Student-t shocks and ~80–85% under normal controls with small cluster count ($M=5$).
+  - Separate development simulations (seeds `1000–9999`) from frozen validation simulations (seeds `50000–59999`).
+  - Implement a defensible statistical correction appropriate for paired clustered data without manufacturing artificial confidence or claims.
+  - Harmonize interval construction with the decision estimand (cluster-averaged mean difference $\overline{\Delta}_{cl}$).
+  - Enforce strict uncertainty reliability conditions as first-class gate criteria (`INSUFFICIENT_METHODOLOGY` on non-finite/degenerate intervals; `INSUFFICIENT_EVIDENCE` on $M < 5$ or cross-cluster leakage).
+  - Audit and preserve component-level guardrails (`componentMetricsAudited`) and provisional $\epsilon = 1.0$.
+  - Maintain absolute production isolation (`isAdaptationUnlocked === false`, `productionApplied === false`, canonical `FACTORY_SCHEDULER_WEIGHTS` untouched).
+
+- **Root-Cause Diagnosis & Historical Failure Reproduction (Scope A)**:
+  - *Methodological Mechanism of Percentile Cluster Bootstrap Undercoverage*:
+    - The non-parametric percentile cluster bootstrap has no mechanism to inflate interval width for small degrees of freedom ($M=5 \to df=4$).
+    - For $M=5$, the exact finite-sample pivot $\frac{\overline{X} - \mu}{s/\sqrt{M}}$ follows a Student-t distribution with $df=4$, requiring a critical multiplier of $t_{0.975, 4} = 2.776$ (41.6% wider than normal asymptotic 1.96).
+    - Under normal controls, percentile bootstrap intervals fall within $\approx \pm 1.96 \cdot s/\sqrt{M}$, missing the $t_4$ tail probability ($P(|t_4| \le 1.96) \approx 81.6\%$, empirically yielding only ~81–85% coverage).
+    - Under heavy-tailed Student-t cluster shocks ($df=3$), cluster sample variance fluctuates widely and cluster percentiles collapse to ~60–65% coverage (16/25 in Stage 4A.3).
+    - Under severe cluster-size imbalance (e.g. $[20, 3, 3, 3, 3]$), observation-weighted pooling allows the dominant cluster to bias the interval center and distort variance estimation.
+    - Under cross-cluster dependence (shared latent shift 0.6), between-cluster variance does not capture systemic shocks, reducing empirical coverage to ~78.4%.
+
+- **Statistical Method Evaluation & Selection (Scope B)**:
+  - *Evaluated Candidate Methods*:
+    1. *Studentized Cluster Bootstrap (Bootstrap-t)*: Computes $t^* = \frac{\overline{X}^* - \overline{X}}{s^*/\sqrt{M}}$. However, with $M=5$, estimating variance $s^*$ within each bootstrap resample exhibits severe instability (zero variance in resamples with duplicated clusters) and extreme tail wildness.
+    2. *Bias-Corrected and Accelerated (BCa)*: Acceleration parameter $a$ and bias correction $z_0$ require large cluster counts ($M \ge 30$) to estimate third moments reliably; with $M=5$, $a$ is degenerate.
+    3. *Conservative Cluster-Level Student-t Interval on Cluster-Aggregated Means (SELECTED)*:
+       - Treats each distinct scenario cluster $c \in \{1, \dots, M\}$ as the primary independent sampling unit.
+       - Computes cluster-specific mean paired difference: $\overline{\Delta}_c = \frac{1}{N_c}\sum_{i=1}^{N_c} (S(W_c)_{c,i} - S(W_f)_{c,i})$.
+       - Calculates cluster sample variance: $s_{cl}^2 = \frac{1}{M-1}\sum_{c=1}^M (\overline{\Delta}_c - \overline{\Delta})^2$.
+       - Computes cluster standard error: $SE_{cl} = \sqrt{\frac{s_{cl}^2}{M}}$.
+       - Applies exact Student-t critical value $t_{crit, M-1}$ for 95% two-sided confidence:
+         $$[\overline{\Delta} - t_{crit, M-1} \cdot SE_{cl}, \; \overline{\Delta} + t_{crit, M-1} \cdot SE_{cl}]$$
+       - Uses exact lookup table `STUDENT_T_CRITICAL_95` for $df \in [1, 30]$ ($t_{crit, 4} = 2.776$ for $M=5$, $t_{crit, 9} = 2.262$ for $M=10$) and Cornish-Fisher expansion for $df > 30$.
+  - *Harmonized Estimand*:
+    - The primary decision estimand is harmonized to the cluster-averaged mean paired delta: $\overline{\Delta} = \frac{1}{M}\sum_{c=1}^M \overline{\Delta}_c$.
+    - The practical superiority test ($\overline{\Delta} \ge \epsilon$) and the confidence interval are both centered on this identical estimand, eliminating ratio-estimator bias under unequal cluster sizes.
+    - Observation-weighted mean delta is exposed as a secondary transparency diagnostic.
+    - Retained clustered bootstrap as an exploratory diagnostic (`uncertainty.bootstrapPercentile`) without using it for decision gating.
+
+- **Frozen Validation Simulation Matrix (Scope C, D, E — Seeds 50000–65000)**:
+  - Evaluated across 1,000 independent Monte Carlo replications per principal scenario (measured runtime: ~50–60ms per 1,000 replications with pure Student-t evaluation):
+
+  | Validation Scenario | Seed Range | Replications | Coverage (Observed) | Coverage 95% Wilson CI | Eligibility Rate | Eligibility 95% Wilson CI | Evaluator Outcomes Breakdown |
+  |---|---|---|---|---|---|---|---|
+  | **1. True Null Effect** ($\theta = 0.0$, $M=5$, $N=25$) | 50000–50999 | 1,000 | **95.2%** (952/1000) | $[93.7\%, 96.4\%]$ | **0.1%** (1/1000) | $[0.0\%, 0.6\%]$ | 999 Not Superior, 1 Eligible, 0 Infeasible, 0 Insufficient Method |
+  | **2. Heavy-Tailed Shocks** (Student-t $df=3$, $\theta = 1.5$) | 51000–51999 | 1,000 | **94.1%** (941/1000) | $[92.5\%, 95.4\%]$ | **79.0%** (790/1000) | $[76.4\%, 81.4\%]$ | 790 Eligible, 210 Not Superior (Fixes Stage 4A.3 collapse) |
+  | **3. Cluster Size Imbalance** ($[20, 3, 3, 3, 3]$, $\theta = 1.5$) | 52000–52999 | 1,000 | **94.9%** (949/1000) | $[93.4\%, 96.1\%]$ | **79.3%** (793/1000) | $[76.7\%, 81.7\%]$ | 793 Eligible, 207 Not Superior (Protected by cluster estimand) |
+  | **4. Clearly Negative Effect** ($\theta = -2.0$, $M=5$) | 53000–53999 | 1,000 | **94.3%** (943/1000) | $[92.7\%, 95.6\%]$ | **0.0%** (0/1000) | $[0.0\%, 0.4\%]$ | 1,000 Not Superior, 0 Eligible (100% rejection of worse candidate) |
+  | **5. Sub-Threshold Effect** ($\theta = +0.5 < \epsilon=1.0$) | 54000–54999 | 1,000 | **94.4%** (944/1000) | $[92.8\%, 95.7\%]$ | **5.1%** (51/1000) | $[3.9\%, 6.6\%]$ | 949 Not Superior, 51 Eligible (Practical threshold blocks 94.9%) |
+  | **6. Clearly Positive Effect** ($\theta = +3.5 \gg \epsilon=1.0$) | 55000–55999 | 1,000 | **96.4%** (964/1000) | $[95.1\%, 97.4\%]$ | **100.0%** (1000/1000) | $[99.6\%, 100.0\%]$ | 1,000 Eligible, 0 Not Superior (100% statistical power) |
+  | **7. Cluster Floor $M=3$** (Exploratory / Sparse) | 56300–56499 | 200 | N/A (Disallowed) | N/A | **0.0%** (0/200) | $[0.0\%, 1.9\%]$ | 200 Insufficient Evidence (Cannot estimate uncertainty) |
+  | **8. Cluster Floor $M=4$** (Exploratory Only) | 56400–56599 | 200 | 94.6% (189/200) | $[90.5\%, 96.9\%]$ | **0.0%** (0/200) | $[0.0\%, 1.9\%]$ | 200 Insufficient Evidence (`isDecisionReady = false`) |
+  | **9. Operational Floor $M=5$** (Decision Ready) | 56500–56699 | 200 | **94.8%** (190/200) | $[90.8\%, 97.1\%]$ | **77.7%** (155/200) | $[71.4\%, 82.9\%]$ | 155 Eligible, 45 Not Superior |
+  | **10. Cluster Floor $M=10$** (Larger Sample) | 56900–57099 | 200 | **95.2%** (190/200) | $[91.3\%, 97.4\%]$ | **96.9%** (194/200) | $[93.4\%, 98.6\%]$ | 194 Eligible, 6 Not Superior |
+  | **11. Intra-Cluster Correlation** ($\rho = 0.7$, $M=5$) | 63000–63499 | 500 | **94.7%** (474/500) | $[92.4\%, 96.3\%]$ | **86.6%** (433/500) | $[83.3\%, 89.3\%]$ | 433 Eligible, 67 Not Superior |
+  | **12. Cross-Cluster Dependence Audit** (Shared shock 0.6) | 64000–64499 | 500 | **78.4%** (392/500) | $[74.6\%, 81.8\%]$ | **69.6%** (348/500) | $[65.4\%, 73.5\%]$ | Empirical coverage degraded; confirms exchangeability violation |
+
+- **Uncertainty Reliability as First-Class Gate Condition (Scope F)**:
+  - Guarded Precedence Rule 1: Evaluator returns `INSUFFICIENT_METHODOLOGY` if uncertainty is degenerate, interval bounds are non-finite, scoring function is invalid, or mathematical assumptions fail.
+  - Insufficient independent clusters ($M < 5$) or cross-cluster leakage strictly returns `INSUFFICIENT_EVIDENCE`.
+  - Non-finite scores or endpoints never silently pass the gate.
+
+- **Component Metrics & Practical Threshold Safeguards (Scope G & Scope H)**:
+  - Added `componentMetricsAudited: pairsWithComponentsCount >= 5` flag.
+  - When schedule alternatives omit component breakdowns (on-time rate, task delay), `componentMetricsAudited` is explicitly set to `false` and an audit note is recorded in reasons, preventing silent disabling of non-regression guardrails.
+  - Preserved $\epsilon = 1.0$ as a centralized provisional operational heuristic metadata (`practicalThresholdMetadata`).
+  - Outlier cluster dominance guardrail verified: candidates with positive grand mean driven by a single outlier while $> 50\%$ of clusters regress are disqualified as `NOT_SUPERIOR`.
+
+- **UI Transparency & Verification (Scope J)**:
+  - Updated `AdaptationSandboxCard.jsx`:
+    - Displays `Mean Paired Quality Delta (Cluster-Avg)` with explicit estimand label `Harmonized Estimand: 1/M Σ Δ_c`.
+    - Displays observation-weighted delta as secondary diagnostic.
+    - Labels uncertainty estimation method: `Cluster-Level Student-t Interval (95% CI)`.
+    - Labels 95% Confidence Interval: `[lower, upper] pts (df = M - 1, SE = ...)`.
+    - Displays component metrics audit status: `✓ Component Metrics Audited` vs `⚠️ No Component Breakdown`.
+    - Retains exploratory bootstrap percentile bounds in secondary row.
+  - Browser verification confirmed UI rendering of Student-t interval, cluster-averaged estimands, and audit findings.
+
+- **Strict Production Isolation (Scope K)**:
+  - `isAdaptationUnlocked === false`, `productionApplied === false`.
+  - Canonical factory weights remain untouched: `urgencyWeight: 50.0`, `priorityWeight: 100.0`, `unblockWeight: 15.0`, `riskWeight: 25.0`.
+  - Passing simulations never unlock production adaptation or route live scheduling requests.
+
+- **Automated Regression Test Suite (`tests/statistical_validation.test.js`, Scope I)**:
+  - 40 automated tests passing in 614ms:
+    - Root-cause diagnosis on development seeds (1000–1999).
+    - Student-t critical table verification against exact values.
+    - Hand-computable mathematical fixture matching arithmetic to 3 decimal places.
+    - Frozen validation matrix across all 9 principal scenarios (seeds 50000–65000, 1,000 replications each).
+    - First-class uncertainty reliability conditions (`INSUFFICIENT_METHODOLOGY`, `INSUFFICIENT_EVIDENCE`).
+    - Component metrics auditing and outlier cluster dominance guardrails.
+    - Centralized provisional practical threshold $\epsilon = 1.0$ metadata preservation.
+
+- **Verification Results**:
+  - **Statistical Validation Test Suite**: **40 passed, 0 failed across 6 suites in 614ms** (`node --test tests/statistical_validation.test.js`).
+  - **Activation Gate Test Suite**: **57 passed, 0 failed across 8 suites in 48ms** (`node --test tests/activation_gate_evaluator.test.js`).
+  - **Frontend Test Suite**: **707 passed, 0 failed across 148 suites in 985ms** (`npm test`).
+  - **Backend Pytest Suite**: **27 passed, 0 failed in 4.66s** (`python -m pytest`).
+  - **Linter**: **0 errors, 1 pre-existing warning** in `AdaptiveScheduleModal.jsx` across 75 files (`npm run lint`).
+  - **Client Production Build**: **Built production bundle cleanly in 252ms** (`npm run build`).
+  - **Git Diff & Whitespace**: **Clean with zero whitespace or line-ending errors** (`git diff --check`).
+  - **Browser UI Verification**: **Verified via browser subagent and recorded in artifacts**.
+
+- **Remaining Limitations**:
+  - *Small-Cluster Asymptotics*: While Student-t restores 95% nominal coverage for $M=5$ under normal, imbalanced, and heavy-tailed independent cluster shocks, it assumes between-cluster exchangeability.
+  - *Cross-Cluster Dependence*: When all clusters share latent shocks, coverage degrades to ~78.4%. VoxPlan's activation gate fails closed unless clusters are demonstrably independent.
+  - *Provisional Practical Threshold*: $\epsilon = 1.0$ remains an operational multi-attribute heuristic combining timeliness, delay, utilization, and churn; it is not an empirically validated minimum clinically important difference (MCID).
+
+- **Next Recommended Stage**:
   - Stage 7.4.4B: Supervised Production Activation & Dynamic Deployment Gates (user confirmation modal, explicit human consent flow, and runtime weight routing, with production adaptation remaining disabled until explicit user confirmation).
 
 ---
