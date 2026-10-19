@@ -14,12 +14,19 @@
  * 4. Hard-Constraint Verification: Both baseline and candidate runs verify topological DAG ordering,
  *    cycle absence, and capacity feasibility. Infeasible candidates cannot be promoted as improvements.
  * 5. Deterministic & Reproducible: Identical inputs and configurations produce identical schedules.
+ * 6. Metric Semantics Integrity (Stage 2 Audit):
+ *    - "Planned Deadline Compliance": Strictly evaluates planned placement dates against deadlines.
+ *      Does NOT claim observed completion or future satisfaction.
+ *    - Tasks without deadlines are excluded from the deadline compliance denominator.
+ *    - Parent tasks with multiple chunks are evaluated as a single unique task entity.
+ *    - Lateness is calculated against the date of the last scheduled chunk.
  */
 
 import {
   generateAdaptiveSchedule,
   FACTORY_SCHEDULER_WEIGHTS,
   parseDateISO,
+  formatDateISO,
 } from './adaptiveScheduler.js';
 
 /**
@@ -207,8 +214,14 @@ export const SIMULATION_SCENARIOS = Object.freeze({
 
 /**
  * Calculates calendar day difference (dateB - dateA) in integer days.
+ * Immune to timezone shifts by operating on ISO date boundaries.
+ *
+ * @param {string|null} dateStrA - Start date (YYYY-MM-DD).
+ * @param {string|null} dateStrB - End date (YYYY-MM-DD).
+ * @returns {number} Integer day difference (positive if B is after A).
  */
-function dayDiff(dateStrA, dateStrB) {
+export function dayDiff(dateStrA, dateStrB) {
+  if (!dateStrA || !dateStrB) return 0;
   const a = parseDateISO(dateStrA);
   const b = parseDateISO(dateStrB);
   if (!a || !b) return 0;
@@ -216,87 +229,315 @@ function dayDiff(dateStrA, dateStrB) {
 }
 
 /**
- * Extracts schedule performance metrics from a raw scheduler output.
+ * Formal Methodology and Metric Definitions Disclosure (Phase 7.4 Stage 2 Audit).
  */
-function extractMetricsFromSchedule(scheduleResult) {
+export const METRIC_METHODOLOGY_DISCLOSURE = Object.freeze({
+  coverageRate: Object.freeze({
+    name: 'Scheduled Tasks Coverage',
+    type: 'planned_simulation_property',
+    formula: 'scheduledTasksCount / totalTasks',
+    denominator: 'totalTasks (unique uncompleted tasks in backlog)',
+    notes: 'Measures the proportion of backlog tasks successfully allocated to a calendar slot within the planning horizon.',
+  }),
+  plannedCompliance: Object.freeze({
+    name: 'Planned Deadline Compliance Rate',
+    type: 'planned_simulation_property',
+    formula: 'plannedCompliantCount / scheduledTasksWithDeadlineCount',
+    denominator: 'scheduledTasksWithDeadlineCount (scheduled tasks with an explicit deadline)',
+    notes: 'Strictly evaluates planned placement dates against deadlines. Does NOT claim actual completion or predict user compliance. Tasks without deadlines are excluded from the denominator. Unavailable if no scheduled tasks have deadlines.',
+  }),
+  plannedDelayDays: Object.freeze({
+    name: 'Cumulative Planned Delay Days',
+    type: 'planned_simulation_property',
+    formula: 'sum(max(0, plannedCompletionDate - dueDate))',
+    denominator: 'N/A (cumulative integer days across scheduled tasks with deadlines)',
+    notes: 'Measures total planned slippage past deadlines. Multi-day chunked tasks are evaluated as single parent tasks using the date of their final chunk to prevent double-counting.',
+  }),
+  capacityUtilization: Object.freeze({
+    name: 'Capacity Utilization Rate',
+    type: 'planned_simulation_property',
+    formula: 'scheduledWorkloadHours / totalCapacityHours',
+    denominator: 'totalCapacityHours (sum of daily capacity across working days in horizon)',
+    notes: 'Calculated over working days only. Both baseline and candidate receive equivalent horizons and capacity hours. Unavailable if capacity is zero.',
+  }),
+  scheduleChurn: Object.freeze({
+    name: 'Schedule Churn (Shifted Placements)',
+    type: 'comparative_structural_metric',
+    formula: 'count(placements with date or status delta vs baseline)',
+    denominator: 'total placements',
+    notes: 'Measures placement displacement relative to the factory baseline. It is a structural stability metric, NOT a measure of user dissatisfaction or schedule quality.',
+  }),
+  hardConstraintFeasibility: Object.freeze({
+    name: 'Hard Constraint Feasibility',
+    type: 'invariant_verification',
+    formula: 'cycleDetected === false && blockedTasksCount === 0 && capacityOverrun === false',
+    denominator: 'N/A (binary feasibility boolean)',
+    notes: 'Infeasible candidates are disqualified from promotion. A high score cannot override a hard constraint violation.',
+  }),
+});
+
+/**
+ * Extracts audited schedule performance metrics from raw scheduler output and input tasks.
+ *
+ * Implements Stage 2 Semantic Corrections:
+ * - Group placements by unique taskId to ensure chunked tasks are never double-counted.
+ * - Multi-day chunked tasks are evaluated as a single parent task using the date of their last chunk.
+ * - Tasks without deadlines are strictly excluded from the planned compliance denominator.
+ * - Missing deadlines produce honest 'unavailable' states rather than manufactured 0% or 100%.
+ *
+ * @param {Object} scheduleResult - Output from generateAdaptiveSchedule.
+ * @param {Array<Object>} [inputTasks=[]] - Input task snapshots.
+ * @param {Object} [options={}] - Standard scheduler options.
+ * @returns {Object} Audited metrics with parent-task deduplication and honest denominators.
+ */
+export function extractMetricsFromSchedule(scheduleResult, inputTasks = [], options = {}) {
   const placements = scheduleResult?.placements || [];
   const summary = scheduleResult?.summary || {};
   const dayAllocations = scheduleResult?.dayAllocations || [];
+  const horizonStartDate = options.startDate || summary.startDate || '2026-10-19';
 
-  let onTimeTasksCount = 0;
-  let delayedTasksCount = 0;
-  let totalDelayDays = 0;
-  let infeasiblePlacementsCount = 0;
-  let unscheduledPlacementsCount = 0;
-
-  for (const pl of placements) {
-    if (
-      pl.status === 'blocked_by_dependency' ||
-      pl.status === 'oversized_exceeds_capacity' ||
-      pl.status === 'unscheduled' ||
-      !pl.proposedDate
-    ) {
-      infeasiblePlacementsCount++;
-      if (pl.status === 'unscheduled' || !pl.proposedDate) {
-        unscheduledPlacementsCount++;
-      }
-      continue;
+  // 1. Group placements by unique taskId to prevent multi-chunk inflation
+  const taskPlacementsMap = new Map();
+  for (const p of placements) {
+    if (!p || !p.taskId) continue;
+    if (!taskPlacementsMap.has(p.taskId)) {
+      taskPlacementsMap.set(p.taskId, []);
     }
+    taskPlacementsMap.get(p.taskId).push(p);
+  }
 
-    if (pl.proposedDate && pl.originalDueDate) {
-      const diff = dayDiff(pl.originalDueDate, pl.proposedDate);
-      if (diff > 0) {
-        delayedTasksCount++;
-        totalDelayDays += diff;
-      } else {
-        onTimeTasksCount++;
-      }
-    } else if (pl.proposedDate) {
-      onTimeTasksCount++;
+  // 2. Build input task lookup
+  const inputTaskMap = new Map();
+  for (const t of inputTasks) {
+    if (t && t.id) {
+      inputTaskMap.set(t.id, t);
     }
   }
 
+  // Combine unique task IDs from input tasks and placements
+  const allTaskIds = new Set([...inputTaskMap.keys(), ...taskPlacementsMap.keys()]);
+  const totalTasks = allTaskIds.size;
+
+  let scheduledTasksCount = 0;
+  let fullyScheduledTasksCount = 0;
+  let unscheduledTasksCount = 0;
+  let tasksWithDeadlineCount = 0;
+  let scheduledTasksWithDeadlineCount = 0;
+  let plannedCompliantCount = 0;
+  let plannedDelayedCount = 0;
+  let overdueAtStartCount = 0;
+  let tasksWithoutDeadlineCount = 0;
+  let totalPlannedDelayDays = 0;
+  let infeasiblePlacementsCount = 0;
+
+  const auditedTaskSummaries = new Map();
+
+  for (const taskId of allTaskIds) {
+    const taskObj = inputTaskMap.get(taskId);
+    const taskPls = taskPlacementsMap.get(taskId) || [];
+
+    // Derive canonical deadline (from taskObj or placement)
+    const rawDue = taskObj?.dueDate || taskPls[0]?.originalDueDate || null;
+    const dueDate = rawDue ? formatDateISO(rawDue) : null;
+    const hasDeadline = Boolean(dueDate);
+
+    if (hasDeadline) {
+      tasksWithDeadlineCount++;
+    } else {
+      tasksWithoutDeadlineCount++;
+    }
+
+    // Identify scheduled vs unscheduled chunks
+    const scheduledChunks = taskPls.filter(
+      (p) => p.proposedDate !== null &&
+             p.status !== 'blocked_by_dependency' &&
+             p.status !== 'oversized_exceeds_capacity' &&
+             p.status !== 'unscheduled'
+    );
+    const unscheduledChunks = taskPls.filter(
+      (p) => !p.proposedDate ||
+             p.status === 'blocked_by_dependency' ||
+             p.status === 'oversized_exceeds_capacity' ||
+             p.status === 'unscheduled'
+    );
+
+    const isScheduled = scheduledChunks.length > 0;
+    const isFullyScheduled = scheduledChunks.length > 0 && unscheduledChunks.length === 0;
+
+    if (isScheduled) {
+      scheduledTasksCount++;
+      if (isFullyScheduled) fullyScheduledTasksCount++;
+    } else {
+      unscheduledTasksCount++;
+    }
+
+    if (unscheduledChunks.length > 0) {
+      infeasiblePlacementsCount += unscheduledChunks.length;
+    }
+
+    // Planned completion date: the date of the LAST scheduled chunk
+    let plannedCompletionDate = null;
+    if (isScheduled) {
+      const dates = scheduledChunks.map((c) => c.proposedDate).filter(Boolean);
+      dates.sort();
+      plannedCompletionDate = dates[dates.length - 1] || null;
+    }
+
+    // Evaluate planned lateness & compliance per unique parent task
+    let plannedStatus = 'unscheduled';
+    let plannedLatenessDays = 0;
+
+    if (!isScheduled) {
+      const firstUn = unscheduledChunks[0];
+      if (firstUn?.status === 'blocked_by_dependency') {
+        plannedStatus = 'blocked';
+      } else if (firstUn?.status === 'oversized_exceeds_capacity') {
+        plannedStatus = 'oversized';
+      } else {
+        plannedStatus = 'unscheduled';
+      }
+    } else if (hasDeadline) {
+      scheduledTasksWithDeadlineCount++;
+      const diff = dayDiff(dueDate, plannedCompletionDate);
+
+      // Check if task deadline was already in the past prior to schedule start
+      const wasOverdue = scheduledChunks.some((c) => c.status === 'overdue_at_start') ||
+        (dayDiff(horizonStartDate, dueDate) < 0);
+
+      if (wasOverdue) {
+        overdueAtStartCount++;
+        plannedStatus = 'overdue_at_start';
+        // Overdue prior to start contributes to planned delayed count and delay days
+        if (diff > 0) {
+          plannedDelayedCount++;
+          plannedLatenessDays = diff;
+          totalPlannedDelayDays += diff;
+        } else {
+          plannedCompliantCount++;
+        }
+      } else if (diff > 0) {
+        plannedDelayedCount++;
+        plannedStatus = 'planned_past_deadline';
+        plannedLatenessDays = diff;
+        totalPlannedDelayDays += diff;
+      } else {
+        plannedCompliantCount++;
+        plannedStatus = 'planned_compliant';
+      }
+    } else {
+      plannedStatus = 'flexible_no_deadline';
+    }
+
+    auditedTaskSummaries.set(taskId, {
+      taskId,
+      title: taskPls[0]?.taskTitle || taskObj?.title || taskId,
+      priority: taskPls[0]?.taskPriority || taskObj?.priority || 'medium',
+      dueDate,
+      hasDeadline,
+      isScheduled,
+      isFullyScheduled,
+      plannedCompletionDate,
+      plannedStatus,
+      plannedLatenessDays,
+      chunksCount: taskPls.length,
+      scheduledChunksCount: scheduledChunks.length,
+      totalHours: taskPls.reduce((sum, p) => sum + (p.effectiveHours || 0), 0),
+      explanation: taskPls[0]?.explanation || '',
+      conflicts: taskPls.flatMap((p) => p.conflicts || []),
+      firstPlacement: taskPls[0] || null,
+    });
+  }
+
+  // 3. Accurate Capacity Utilization Denominator
   let totalCapacity = 0;
   let totalAllocated = 0;
   for (const day of dayAllocations) {
-    if (day.isWorkingDay && day.capacityHours > 0) {
+    if (day.isWorkingDay && typeof day.capacityHours === 'number' && day.capacityHours > 0) {
       totalCapacity += day.capacityHours;
-      totalAllocated += (day.capacityHours - (day.remainingHours || 0));
+      const allocated = typeof day.totalHours === 'number'
+        ? day.totalHours
+        : (day.capacityHours - (day.remainingHours || 0));
+      totalAllocated += allocated;
     }
   }
-  const capacityUtilizationPct = totalCapacity > 0
+
+  const capacityUtilizationAvailable = totalCapacity > 0;
+  const capacityUtilizationPct = capacityUtilizationAvailable
     ? Math.round((totalAllocated / totalCapacity) * 1000) / 10
-    : 0.0;
+    : null;
 
-  const totalTasks = placements.length;
-  const scheduledTasks = summary.scheduledTasksCount ?? summary.scheduledCount ?? (totalTasks - unscheduledPlacementsCount);
-  const onTimeRatePct = scheduledTasks > 0
-    ? Math.round((onTimeTasksCount / scheduledTasks) * 1000) / 10
-    : 0.0;
+  // 4. Planned Deadline Compliance Rate (Honest Denominator)
+  const plannedComplianceAvailable = scheduledTasksWithDeadlineCount > 0;
+  const plannedComplianceRatePct = plannedComplianceAvailable
+    ? Math.round((plannedCompliantCount / scheduledTasksWithDeadlineCount) * 1000) / 10
+    : null;
 
+  // 5. Backlog Coverage Rate
+  const coverageRatePct = totalTasks > 0
+    ? Math.round((scheduledTasksCount / totalTasks) * 1000) / 10
+    : null;
+
+  // 6. Placement Map for Detailed Timeline & Churn Diffing
   const placementsMap = new Map();
   for (const p of placements) {
     const key = p.placementId || `${p.taskId}_${p.chunkIndex ?? 0}`;
     placementsMap.set(key, {
+      placementId: key,
       taskId: p.taskId,
       title: p.taskTitle || p.title || p.taskId,
+      priority: p.taskPriority || 'medium',
       proposedDate: p.proposedDate || null,
+      startTime: p.startTime || null,
+      endTime: p.endTime || null,
+      effectiveHours: p.effectiveHours || 0,
+      isChunk: Boolean(p.isChunk || p.chunkIndex !== undefined),
+      chunkIndex: p.chunkIndex ?? 0,
+      totalChunks: p.totalChunks ?? 1,
       status: p.status,
+      originalDueDate: p.originalDueDate || null,
+      inFocusWindow: Boolean(p.inFocusWindow),
+      focusWindowLabel: p.focusWindowLabel || null,
+      conflicts: p.conflicts || [],
     });
   }
 
+  const cycleDetected = Boolean(
+    scheduleResult?.cycleDetected ||
+    summary?.cycleDetected ||
+    (summary?.cycles && summary.cycles.length > 0)
+  );
+
   return {
     totalTasks,
-    scheduledTasks,
-    unscheduledPlacementsCount,
-    cycleDetected: Boolean(scheduleResult?.cycleDetected),
-    infeasiblePlacementsCount,
-    onTimeTasksCount,
-    delayedTasksCount,
-    totalDelayDays,
-    onTimeRatePct,
+    scheduledTasks: scheduledTasksCount,
+    fullyScheduledTasks: fullyScheduledTasksCount,
+    unscheduledTasks: unscheduledTasksCount,
+    coverageRatePct,
+    tasksWithDeadlineCount,
+    scheduledTasksWithDeadlineCount,
+    tasksWithoutDeadlineCount,
+    plannedComplianceAvailable,
+    plannedComplianceRatePct,
+    plannedCompliantCount,
+    plannedDelayedCount,
+    overdueAtStartCount,
+    totalPlannedDelayDays,
+    capacityUtilizationAvailable,
     capacityUtilizationPct,
+    totalCapacityHours: Math.round(totalCapacity * 10) / 10,
+    scheduledWorkloadHours: Math.round(totalAllocated * 10) / 10,
+    cycleDetected,
+    infeasiblePlacementsCount,
     placementsMap,
+    auditedTaskSummaries,
+    // Backward-compatible aliases for existing tests & consumers
+    onTimeTasksCount: plannedCompliantCount,
+    onTimeTasks: plannedCompliantCount,
+    delayedTasksCount: plannedDelayedCount,
+    delayedTasks: plannedDelayedCount,
+    totalDelayDays: totalPlannedDelayDays,
+    onTimeRatePct: plannedComplianceRatePct !== null ? plannedComplianceRatePct : 0.0,
+    unscheduledPlacementsCount: unscheduledTasksCount,
   };
 }
 
@@ -308,7 +549,7 @@ function extractMetricsFromSchedule(scheduleResult) {
  * @param {Array<Object>} [params.tasks=[]] - Current active tasks (used when scenarioKey is 'active_backlog').
  * @param {Object} [params.candidateWeights=FACTORY_SCHEDULER_WEIGHTS] - Candidate parameters to simulate.
  * @param {Object} [params.options={}] - Standard scheduler options (startDate, dailyCapacityHours, etc.).
- * @returns {Object} Comprehensive simulation report.
+ * @returns {Object} Comprehensive simulation report with preview data and audited metrics.
  */
 export function runScheduleSimulation({
   scenarioKey = 'deadline_vs_priority',
@@ -334,6 +575,9 @@ export function runScheduleSimulation({
       candidateMetrics: null,
       comparison: null,
       tradeOffAnalysis: null,
+      baselineSchedule: null,
+      candidateSchedule: null,
+      methodology: METRIC_METHODOLOGY_DISCLOSURE,
     };
   }
 
@@ -360,6 +604,9 @@ export function runScheduleSimulation({
         candidateMetrics: null,
         comparison: null,
         tradeOffAnalysis: null,
+        baselineSchedule: null,
+        candidateSchedule: null,
+        methodology: METRIC_METHODOLOGY_DISCLOSURE,
       };
     }
   } else {
@@ -380,6 +627,7 @@ export function runScheduleSimulation({
     startDate: options.startDate || '2026-10-19',
     dailyCapacityHours: options.dailyCapacityHours || 6.0,
     horizonDays: options.horizonDays || 14,
+    enableIntraday: options.enableIntraday ?? true,
     ...options,
   };
 
@@ -388,14 +636,14 @@ export function runScheduleSimulation({
     ...standardOptions,
     weights: FACTORY_SCHEDULER_WEIGHTS,
   });
-  const baselineMetrics = extractMetricsFromSchedule(baselineSchedule);
+  const baselineMetrics = extractMetricsFromSchedule(baselineSchedule, baselineTasks, standardOptions);
 
   // 4. Generate Candidate Schedule (Isolated Shadow Weights)
   const candidateSchedule = generateAdaptiveSchedule(candidateTasks, {
     ...standardOptions,
     weights: validation.validatedWeights,
   });
-  const candidateMetrics = extractMetricsFromSchedule(candidateSchedule);
+  const candidateMetrics = extractMetricsFromSchedule(candidateSchedule, candidateTasks, standardOptions);
 
   // 5. Evaluate Schedule Churn & Placement Shifts
   let churnCount = 0;
@@ -403,16 +651,28 @@ export function runScheduleSimulation({
 
   for (const [key, baseItem] of baselineMetrics.placementsMap.entries()) {
     const candItem = candidateMetrics.placementsMap.get(key);
-    if (!candItem || baseItem.proposedDate !== candItem.proposedDate) {
+    const dateChanged = baseItem.proposedDate !== (candItem?.proposedDate || null);
+    const statusChanged = baseItem.status !== (candItem?.status || 'unscheduled');
+
+    if (!candItem || dateChanged || statusChanged) {
       churnCount++;
       shiftedPlacements.push({
         placementKey: key,
         taskId: baseItem.taskId,
         title: baseItem.title,
+        priority: baseItem.priority,
         baselineDate: baseItem.proposedDate,
         candidateDate: candItem?.proposedDate || null,
+        baselineStartTime: baseItem.startTime,
+        candidateStartTime: candItem?.startTime || null,
+        baselineEndTime: baseItem.endTime,
+        candidateEndTime: candItem?.endTime || null,
         baselineStatus: baseItem.status,
         candidateStatus: candItem?.status || 'unscheduled',
+        effectiveHours: baseItem.effectiveHours,
+        isChunk: baseItem.isChunk,
+        chunkIndex: baseItem.chunkIndex,
+        totalChunks: baseItem.totalChunks,
       });
     }
   }
@@ -433,13 +693,22 @@ export function runScheduleSimulation({
     );
   }
 
-  const isFeasible = violations.length === 0 && !candidateMetrics.cycleDetected && candidateMetrics.infeasiblePlacementsCount === 0;
+  const isFeasible = violations.length === 0 &&
+    !candidateMetrics.cycleDetected &&
+    candidateMetrics.infeasiblePlacementsCount === 0;
 
   // 7. Plain-Language Trade-Off Analysis
-  const onTimeDelta = candidateMetrics.onTimeTasksCount - baselineMetrics.onTimeTasksCount;
-  const delayedDelta = candidateMetrics.delayedTasksCount - baselineMetrics.delayedTasksCount;
-  const delayDaysDelta = candidateMetrics.totalDelayDays - baselineMetrics.totalDelayDays;
-  const utilDeltaPct = Math.round((candidateMetrics.capacityUtilizationPct - baselineMetrics.capacityUtilizationPct) * 10) / 10;
+  const onTimeDelta = candidateMetrics.plannedCompliantCount - baselineMetrics.plannedCompliantCount;
+  const delayedDelta = candidateMetrics.plannedDelayedCount - baselineMetrics.plannedDelayedCount;
+  const delayDaysDelta = candidateMetrics.totalPlannedDelayDays - baselineMetrics.totalPlannedDelayDays;
+
+  const utilDeltaPct = (candidateMetrics.capacityUtilizationPct !== null && baselineMetrics.capacityUtilizationPct !== null)
+    ? Math.round((candidateMetrics.capacityUtilizationPct - baselineMetrics.capacityUtilizationPct) * 10) / 10
+    : 0.0;
+
+  const complianceRateDeltaPct = (candidateMetrics.plannedComplianceRatePct !== null && baselineMetrics.plannedComplianceRatePct !== null)
+    ? Math.round((candidateMetrics.plannedComplianceRatePct - baselineMetrics.plannedComplianceRatePct) * 10) / 10
+    : null;
 
   let tradeOffSummary = '';
   if (validation.isIdenticalToBaseline) {
@@ -449,15 +718,15 @@ export function runScheduleSimulation({
   } else {
     const points = [];
     if (onTimeDelta > 0) {
-      points.push(`schedules ${onTimeDelta} more task(s) on-time`);
+      points.push(`plans ${onTimeDelta} more task(s) compliant with deadlines`);
     } else if (onTimeDelta < 0) {
-      points.push(`schedules ${Math.abs(onTimeDelta)} fewer task(s) on-time`);
+      points.push(`plans ${Math.abs(onTimeDelta)} fewer task(s) compliant with deadlines`);
     }
 
     if (delayDaysDelta < 0) {
-      points.push(`reduces cumulative delay by ${Math.abs(delayDaysDelta)} day(s)`);
+      points.push(`reduces cumulative planned delay by ${Math.abs(delayDaysDelta)} day(s)`);
     } else if (delayDaysDelta > 0) {
-      points.push(`increases cumulative delay by ${delayDaysDelta} day(s)`);
+      points.push(`increases cumulative planned delay by ${delayDaysDelta} day(s)`);
     }
 
     if (Math.abs(utilDeltaPct) >= 0.5) {
@@ -491,32 +760,63 @@ export function runScheduleSimulation({
     baselineMetrics: {
       totalTasks: baselineMetrics.totalTasks,
       scheduledTasks: baselineMetrics.scheduledTasks,
-      unscheduledTasks: baselineMetrics.unscheduledPlacementsCount,
-      onTimeTasks: baselineMetrics.onTimeTasksCount,
-      onTimeRatePct: baselineMetrics.onTimeRatePct,
-      delayedTasks: baselineMetrics.delayedTasksCount,
-      totalDelayDays: baselineMetrics.totalDelayDays,
+      fullyScheduledTasks: baselineMetrics.fullyScheduledTasks,
+      unscheduledTasks: baselineMetrics.unscheduledTasks,
+      coverageRatePct: baselineMetrics.coverageRatePct,
+      tasksWithDeadlineCount: baselineMetrics.tasksWithDeadlineCount,
+      scheduledTasksWithDeadlineCount: baselineMetrics.scheduledTasksWithDeadlineCount,
+      tasksWithoutDeadlineCount: baselineMetrics.tasksWithoutDeadlineCount,
+      plannedComplianceAvailable: baselineMetrics.plannedComplianceAvailable,
+      plannedComplianceRatePct: baselineMetrics.plannedComplianceRatePct,
+      plannedCompliantCount: baselineMetrics.plannedCompliantCount,
+      plannedDelayedCount: baselineMetrics.plannedDelayedCount,
+      overdueAtStartCount: baselineMetrics.overdueAtStartCount,
+      totalPlannedDelayDays: baselineMetrics.totalPlannedDelayDays,
+      capacityUtilizationAvailable: baselineMetrics.capacityUtilizationAvailable,
       capacityUtilizationPct: baselineMetrics.capacityUtilizationPct,
+      totalCapacityHours: baselineMetrics.totalCapacityHours,
+      scheduledWorkloadHours: baselineMetrics.scheduledWorkloadHours,
       cycleDetected: baselineMetrics.cycleDetected,
       infeasiblePlacementsCount: baselineMetrics.infeasiblePlacementsCount,
+      // Backward-compatibility aliases
+      onTimeTasks: baselineMetrics.onTimeTasks,
+      onTimeRatePct: baselineMetrics.onTimeRatePct,
+      delayedTasks: baselineMetrics.delayedTasks,
+      totalDelayDays: baselineMetrics.totalDelayDays,
     },
     candidateMetrics: {
       totalTasks: candidateMetrics.totalTasks,
       scheduledTasks: candidateMetrics.scheduledTasks,
-      unscheduledTasks: candidateMetrics.unscheduledPlacementsCount,
-      onTimeTasks: candidateMetrics.onTimeTasksCount,
-      onTimeRatePct: candidateMetrics.onTimeRatePct,
-      delayedTasks: candidateMetrics.delayedTasksCount,
-      totalDelayDays: candidateMetrics.totalDelayDays,
+      fullyScheduledTasks: candidateMetrics.fullyScheduledTasks,
+      unscheduledTasks: candidateMetrics.unscheduledTasks,
+      coverageRatePct: candidateMetrics.coverageRatePct,
+      tasksWithDeadlineCount: candidateMetrics.tasksWithDeadlineCount,
+      scheduledTasksWithDeadlineCount: candidateMetrics.scheduledTasksWithDeadlineCount,
+      tasksWithoutDeadlineCount: candidateMetrics.tasksWithoutDeadlineCount,
+      plannedComplianceAvailable: candidateMetrics.plannedComplianceAvailable,
+      plannedComplianceRatePct: candidateMetrics.plannedComplianceRatePct,
+      plannedCompliantCount: candidateMetrics.plannedCompliantCount,
+      plannedDelayedCount: candidateMetrics.plannedDelayedCount,
+      overdueAtStartCount: candidateMetrics.overdueAtStartCount,
+      totalPlannedDelayDays: candidateMetrics.totalPlannedDelayDays,
+      capacityUtilizationAvailable: candidateMetrics.capacityUtilizationAvailable,
       capacityUtilizationPct: candidateMetrics.capacityUtilizationPct,
+      totalCapacityHours: candidateMetrics.totalCapacityHours,
+      scheduledWorkloadHours: candidateMetrics.scheduledWorkloadHours,
       cycleDetected: candidateMetrics.cycleDetected,
       infeasiblePlacementsCount: candidateMetrics.infeasiblePlacementsCount,
+      // Backward-compatibility aliases
+      onTimeTasks: candidateMetrics.onTimeTasks,
+      onTimeRatePct: candidateMetrics.onTimeRatePct,
+      delayedTasks: candidateMetrics.delayedTasks,
+      totalDelayDays: candidateMetrics.totalDelayDays,
     },
     comparison: {
       onTimeDelta,
       delayedDelta,
       delayDaysDelta,
       utilizationDeltaPct: utilDeltaPct,
+      complianceRateDeltaPct,
       churnCount,
       shiftedPlacements,
     },
@@ -525,5 +825,19 @@ export function runScheduleSimulation({
       isFeasible,
       hasViolations: violations.length > 0,
     },
+    // Raw schedule outputs for schedule preview
+    baselineSchedule: {
+      dayAllocations: baselineSchedule.dayAllocations || [],
+      placements: baselineSchedule.placements || [],
+      summary: baselineSchedule.summary || {},
+      taskSummaries: Array.from(baselineMetrics.auditedTaskSummaries?.values() || []),
+    },
+    candidateSchedule: {
+      dayAllocations: candidateSchedule.dayAllocations || [],
+      placements: candidateSchedule.placements || [],
+      summary: candidateSchedule.summary || {},
+      taskSummaries: Array.from(candidateMetrics.auditedTaskSummaries?.values() || []),
+    },
+    methodology: METRIC_METHODOLOGY_DISCLOSURE,
   };
 }

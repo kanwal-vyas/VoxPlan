@@ -17,6 +17,7 @@ import {
   SIMULATION_SCENARIOS,
   SIMULATION_WEIGHT_BOUNDS,
   validateCandidateWeights,
+  METRIC_METHODOLOGY_DISCLOSURE,
 } from '../scheduler/scheduleSimulator';
 import { telemetry } from '../telemetry/telemetryManager';
 
@@ -51,6 +52,8 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
   });
   const [preferenceFeedback, setPreferenceFeedback] = useState(null);
   const [simValidationErrors, setSimValidationErrors] = useState([]);
+  const [simViewMode, setSimViewMode] = useState('split'); // 'split' | 'baseline' | 'candidate'
+  const [showMethodologyDisclosure, setShowMethodologyDisclosure] = useState(false);
 
   // Authoritative real-evidence evaluation
   const realAnalysis = useMemo(() => {
@@ -723,8 +726,13 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
 
               {/* Side-by-Side Comparison Metrics Table */}
               <div style={styles.simTableCard}>
-                <div style={styles.simTableTitle}>
-                  📊 Side-by-Side Schedule Comparison: Factory Baseline vs. Candidate Configuration
+                <div style={styles.simTableTitleRow}>
+                  <span style={styles.simTableTitle}>
+                    📊 Comparative Schedule Metrics (Factory Baseline vs. Candidate Configuration)
+                  </span>
+                  <span style={styles.simAuditNoticeBadge}>
+                    ✓ Audited Metric Definitions
+                  </span>
                 </div>
                 <table style={styles.simTable}>
                   <thead>
@@ -737,63 +745,499 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                   </thead>
                   <tbody>
                     <tr style={styles.simTr}>
-                      <td style={styles.simTd}>Scheduled Tasks Coverage</td>
-                      <td style={styles.simTd}>{simulationResult.baselineMetrics.scheduledTasks} / {simulationResult.baselineMetrics.totalTasks}</td>
-                      <td style={styles.simTd}>{simulationResult.candidateMetrics.scheduledTasks} / {simulationResult.candidateMetrics.totalTasks}</td>
-                      <td style={styles.simTd}>{simulationResult.candidateMetrics.scheduledTasks - simulationResult.baselineMetrics.scheduledTasks === 0 ? 'Identical (0)' : `${simulationResult.candidateMetrics.scheduledTasks - simulationResult.baselineMetrics.scheduledTasks > 0 ? '+' : ''}${simulationResult.candidateMetrics.scheduledTasks - simulationResult.baselineMetrics.scheduledTasks}`}</td>
-                    </tr>
-                    <tr style={styles.simTr}>
-                      <td style={styles.simTd}>Deadline On-Time Adherence</td>
-                      <td style={styles.simTd}>{simulationResult.baselineMetrics.onTimeTasks} tasks ({simulationResult.baselineMetrics.onTimeRatePct}%)</td>
-                      <td style={styles.simTd}>{simulationResult.candidateMetrics.onTimeTasks} tasks ({simulationResult.candidateMetrics.onTimeRatePct}%)</td>
-                      <td style={{ ...styles.simTd, fontWeight: 700, color: simulationResult.comparison.onTimeDelta >= 0 ? '#166534' : '#991B1B' }}>
-                        {simulationResult.comparison.onTimeDelta > 0 ? `+${simulationResult.comparison.onTimeDelta} on-time` : simulationResult.comparison.onTimeDelta < 0 ? `${simulationResult.comparison.onTimeDelta} on-time` : '0 delta'}
-                      </td>
-                    </tr>
-                    <tr style={styles.simTr}>
-                      <td style={styles.simTd}>Delayed Tasks Count</td>
-                      <td style={styles.simTd}>{simulationResult.baselineMetrics.delayedTasks} tasks</td>
-                      <td style={styles.simTd}>{simulationResult.candidateMetrics.delayedTasks} tasks</td>
-                      <td style={{ ...styles.simTd, fontWeight: 700, color: simulationResult.comparison.delayedDelta <= 0 ? '#166534' : '#991B1B' }}>
-                        {simulationResult.comparison.delayedDelta > 0 ? `+${simulationResult.comparison.delayedDelta} delayed` : simulationResult.comparison.delayedDelta < 0 ? `${simulationResult.comparison.delayedDelta} delayed` : '0 delta'}
-                      </td>
-                    </tr>
-                    <tr style={styles.simTr}>
-                      <td style={styles.simTd}>Cumulative Delay Days</td>
-                      <td style={styles.simTd}>{simulationResult.baselineMetrics.totalDelayDays} days</td>
-                      <td style={styles.simTd}>{simulationResult.candidateMetrics.totalDelayDays} days</td>
-                      <td style={{ ...styles.simTd, fontWeight: 700, color: simulationResult.comparison.delayDaysDelta <= 0 ? '#166534' : '#991B1B' }}>
-                        {simulationResult.comparison.delayDaysDelta > 0 ? `+${simulationResult.comparison.delayDaysDelta}d` : simulationResult.comparison.delayDaysDelta < 0 ? `${simulationResult.comparison.delayDaysDelta}d` : '0d'}
-                      </td>
-                    </tr>
-                    <tr style={styles.simTr}>
-                      <td style={styles.simTd}>Capacity Utilization Rate</td>
-                      <td style={styles.simTd}>{simulationResult.baselineMetrics.capacityUtilizationPct}%</td>
-                      <td style={styles.simTd}>{simulationResult.candidateMetrics.capacityUtilizationPct}%</td>
                       <td style={styles.simTd}>
-                        {simulationResult.comparison.utilizationDeltaPct > 0 ? `+${simulationResult.comparison.utilizationDeltaPct}%` : simulationResult.comparison.utilizationDeltaPct < 0 ? `${simulationResult.comparison.utilizationDeltaPct}%` : '0.0%'}
+                        <strong>Scheduled Tasks Coverage</strong>
+                        <div style={styles.metricSubtext}>Unique backlog tasks scheduled within planning window</div>
+                      </td>
+                      <td style={styles.simTd}>
+                        {simulationResult.baselineMetrics.scheduledTasks} / {simulationResult.baselineMetrics.totalTasks} tasks ({simulationResult.baselineMetrics.coverageRatePct ?? 0}%)
+                      </td>
+                      <td style={styles.simTd}>
+                        {simulationResult.candidateMetrics.scheduledTasks} / {simulationResult.candidateMetrics.totalTasks} tasks ({simulationResult.candidateMetrics.coverageRatePct ?? 0}%)
+                      </td>
+                      <td style={styles.simTd}>
+                        {simulationResult.candidateMetrics.scheduledTasks - simulationResult.baselineMetrics.scheduledTasks === 0
+                          ? 'Identical (0)'
+                          : `${simulationResult.candidateMetrics.scheduledTasks - simulationResult.baselineMetrics.scheduledTasks > 0 ? '+' : ''}${simulationResult.candidateMetrics.scheduledTasks - simulationResult.baselineMetrics.scheduledTasks} tasks`}
                       </td>
                     </tr>
                     <tr style={styles.simTr}>
-                      <td style={styles.simTd}>Schedule Churn (Shifted Placements)</td>
-                      <td style={styles.simTd}>Reference Baseline</td>
-                      <td style={styles.simTd}>{simulationResult.comparison.churnCount} placements shifted</td>
                       <td style={styles.simTd}>
-                        {simulationResult.comparison.churnCount === 0 ? '✓ Identical Calendar' : `⚠️ ${simulationResult.comparison.churnCount} date shifts`}
+                        <strong>Planned Deadline Compliance</strong>
+                        <div style={styles.metricSubtext}>Tasks scheduled on or before explicit calendar deadline</div>
+                      </td>
+                      <td style={styles.simTd}>
+                        {simulationResult.baselineMetrics.plannedComplianceAvailable ? (
+                          `${simulationResult.baselineMetrics.plannedCompliantCount} / ${simulationResult.baselineMetrics.scheduledTasksWithDeadlineCount} tasks (${simulationResult.baselineMetrics.plannedComplianceRatePct}%)`
+                        ) : (
+                          <span style={{ color: '#64748B', fontStyle: 'italic' }}>Unavailable (No tasks have deadlines)</span>
+                        )}
+                      </td>
+                      <td style={styles.simTd}>
+                        {simulationResult.candidateMetrics.plannedComplianceAvailable ? (
+                          `${simulationResult.candidateMetrics.plannedCompliantCount} / ${simulationResult.candidateMetrics.scheduledTasksWithDeadlineCount} tasks (${simulationResult.candidateMetrics.plannedComplianceRatePct}%)`
+                        ) : (
+                          <span style={{ color: '#64748B', fontStyle: 'italic' }}>Unavailable (No tasks have deadlines)</span>
+                        )}
+                      </td>
+                      <td style={{
+                        ...styles.simTd,
+                        fontWeight: 700,
+                        color: simulationResult.comparison.onTimeDelta >= 0 ? '#166534' : '#991B1B'
+                      }}>
+                        {simulationResult.comparison.complianceRateDeltaPct !== null ? (
+                          `${simulationResult.comparison.onTimeDelta > 0 ? `+${simulationResult.comparison.onTimeDelta}` : simulationResult.comparison.onTimeDelta} tasks (${simulationResult.comparison.complianceRateDeltaPct > 0 ? `+${simulationResult.comparison.complianceRateDeltaPct}%` : `${simulationResult.comparison.complianceRateDeltaPct}%`})`
+                        ) : (
+                          'N/A (No deadlines)'
+                        )}
                       </td>
                     </tr>
                     <tr style={styles.simTr}>
-                      <td style={styles.simTd}>Hard Constraint Compliance</td>
-                      <td style={styles.simTd}>✓ 100% Valid (0 Cycles, 0 Overruns)</td>
                       <td style={styles.simTd}>
-                        {simulationResult.isFeasible ? '✓ 100% Valid' : '❌ Violated'}
+                        <strong>Planned Delayed Tasks</strong>
+                        <div style={styles.metricSubtext}>Tasks scheduled after their explicit calendar deadline</div>
                       </td>
-                      <td style={{ ...styles.simTd, fontWeight: 700, color: simulationResult.isFeasible ? '#166534' : '#991B1B' }}>
-                        {simulationResult.isFeasible ? '✓ Passed' : '❌ Infeasible'}
+                      <td style={styles.simTd}>
+                        {simulationResult.baselineMetrics.plannedDelayedCount} tasks
+                        {simulationResult.baselineMetrics.overdueAtStartCount > 0 && ` (${simulationResult.baselineMetrics.overdueAtStartCount} overdue prior to start)`}
+                      </td>
+                      <td style={styles.simTd}>
+                        {simulationResult.candidateMetrics.plannedDelayedCount} tasks
+                        {simulationResult.candidateMetrics.overdueAtStartCount > 0 && ` (${simulationResult.candidateMetrics.overdueAtStartCount} overdue prior to start)`}
+                      </td>
+                      <td style={{
+                        ...styles.simTd,
+                        fontWeight: 700,
+                        color: simulationResult.comparison.delayedDelta <= 0 ? '#166534' : '#991B1B'
+                      }}>
+                        {simulationResult.comparison.delayedDelta > 0
+                          ? `+${simulationResult.comparison.delayedDelta} delayed`
+                          : simulationResult.comparison.delayedDelta < 0
+                            ? `${simulationResult.comparison.delayedDelta} delayed`
+                            : '0 delta'}
+                      </td>
+                    </tr>
+                    <tr style={styles.simTr}>
+                      <td style={styles.simTd}>
+                        <strong>Cumulative Planned Delay</strong>
+                        <div style={styles.metricSubtext}>Sum of integer days planned past deadline across all tasks</div>
+                      </td>
+                      <td style={styles.simTd}>
+                        {simulationResult.baselineMetrics.totalPlannedDelayDays} days
+                      </td>
+                      <td style={styles.simTd}>
+                        {simulationResult.candidateMetrics.totalPlannedDelayDays} days
+                      </td>
+                      <td style={{
+                        ...styles.simTd,
+                        fontWeight: 700,
+                        color: simulationResult.comparison.delayDaysDelta <= 0 ? '#166534' : '#991B1B'
+                      }}>
+                        {simulationResult.comparison.delayDaysDelta > 0
+                          ? `+${simulationResult.comparison.delayDaysDelta}d`
+                          : simulationResult.comparison.delayDaysDelta < 0
+                            ? `${simulationResult.comparison.delayDaysDelta}d`
+                            : '0d'}
+                      </td>
+                    </tr>
+                    <tr style={styles.simTr}>
+                      <td style={styles.simTd}>
+                        <strong>Capacity Utilization Rate</strong>
+                        <div style={styles.metricSubtext}>Scheduled hours / total working capacity in horizon</div>
+                      </td>
+                      <td style={styles.simTd}>
+                        {simulationResult.baselineMetrics.capacityUtilizationAvailable ? (
+                          `${simulationResult.baselineMetrics.capacityUtilizationPct}% (${simulationResult.baselineMetrics.scheduledWorkloadHours}h / ${simulationResult.baselineMetrics.totalCapacityHours}h)`
+                        ) : (
+                          <span style={{ color: '#64748B', fontStyle: 'italic' }}>Unavailable (Zero capacity)</span>
+                        )}
+                      </td>
+                      <td style={styles.simTd}>
+                        {simulationResult.candidateMetrics.capacityUtilizationAvailable ? (
+                          `${simulationResult.candidateMetrics.capacityUtilizationPct}% (${simulationResult.candidateMetrics.scheduledWorkloadHours}h / ${simulationResult.candidateMetrics.totalCapacityHours}h)`
+                        ) : (
+                          <span style={{ color: '#64748B', fontStyle: 'italic' }}>Unavailable (Zero capacity)</span>
+                        )}
+                      </td>
+                      <td style={styles.simTd}>
+                        {simulationResult.comparison.utilizationDeltaPct > 0
+                          ? `+${simulationResult.comparison.utilizationDeltaPct}%`
+                          : simulationResult.comparison.utilizationDeltaPct < 0
+                            ? `${simulationResult.comparison.utilizationDeltaPct}%`
+                            : '0.0%'}
+                      </td>
+                    </tr>
+                    <tr style={styles.simTr}>
+                      <td style={styles.simTd}>
+                        <strong>Schedule Churn (Shifted Placements)</strong>
+                        <div style={styles.metricSubtext}>Structural placement displacement relative to factory baseline</div>
+                      </td>
+                      <td style={styles.simTd}>
+                        <em>Reference Baseline</em>
+                      </td>
+                      <td style={styles.simTd}>
+                        {simulationResult.comparison.churnCount} placements shifted
+                      </td>
+                      <td style={styles.simTd}>
+                        {simulationResult.comparison.churnCount === 0
+                          ? '✓ Identical Calendar (0 Churn)'
+                          : `⚠️ ${simulationResult.comparison.churnCount} placement shifts`}
+                      </td>
+                    </tr>
+                    <tr style={styles.simTr}>
+                      <td style={styles.simTd}>
+                        <strong>Hard Constraint Compliance</strong>
+                        <div style={styles.metricSubtext}>DAG acyclicity, capacity ceilings, and dependency order</div>
+                      </td>
+                      <td style={styles.simTd}>
+                        ✓ 100% Feasible (0 Cycles, 0 Overruns)
+                      </td>
+                      <td style={styles.simTd}>
+                        {simulationResult.isFeasible ? '✓ 100% Feasible' : '❌ Infeasible (Violations)'}
+                      </td>
+                      <td style={{
+                        ...styles.simTd,
+                        fontWeight: 700,
+                        color: simulationResult.isFeasible ? '#166534' : '#991B1B'
+                      }}>
+                        {simulationResult.isFeasible ? '✓ Passed Feasibility' : '❌ Infeasible Candidate'}
                       </td>
                     </tr>
                   </tbody>
                 </table>
+              </div>
+
+              {/* READ-ONLY CANDIDATE SCHEDULE PREVIEW (Part C & D) */}
+              <div style={styles.simPreviewCard}>
+                <div style={styles.simPreviewHeader}>
+                  <div>
+                    <h5 style={styles.simPreviewTitle}>📅 Read-Only Schedule Timeline Preview</h5>
+                    <p style={styles.simPreviewSubtitle}>
+                      Inspect day-by-day placements, multi-day work sessions, deadlines, and date shifts.
+                    </p>
+                  </div>
+                  <span style={styles.simReadOnlyBadge}>
+                    🔒 READ-ONLY PREVIEW — ISOLATED FROM PRODUCTION
+                  </span>
+                </div>
+
+                {/* Layout View Mode Switcher */}
+                <div style={styles.simViewToggleBar}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>
+                    Preview Layout:
+                  </span>
+                  <div style={styles.simViewBtnGroup} role="tablist" aria-label="Schedule Preview Layout">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={simViewMode === 'split'}
+                      onClick={() => setSimViewMode('split')}
+                      style={simViewMode === 'split' ? styles.simViewBtnActive : styles.simViewBtn}
+                    >
+                      📊 Side-by-Side (Split)
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={simViewMode === 'baseline'}
+                      onClick={() => setSimViewMode('baseline')}
+                      style={simViewMode === 'baseline' ? styles.simViewBtnActive : styles.simViewBtn}
+                    >
+                      🛡️ Factory Baseline Only
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={simViewMode === 'candidate'}
+                      onClick={() => setSimViewMode('candidate')}
+                      style={simViewMode === 'candidate' ? styles.simViewBtnActive : styles.simViewBtn}
+                    >
+                      🔬 Candidate Simulation Only
+                    </button>
+                  </div>
+                </div>
+
+                {/* Timeline Columns Container */}
+                <div style={styles.simColumnsWrap}>
+                  {/* Column 1: Factory Baseline */}
+                  {(simViewMode === 'split' || simViewMode === 'baseline') && (
+                    <div style={styles.simCol}>
+                      <div style={styles.simColHeader}>
+                        <div>
+                          <div style={styles.simColTitle}>🛡️ Factory Baseline (Active)</div>
+                          <div style={styles.simColWeightsText}>
+                            Urgency: 50 | Priority: 100 | Unblock: 15 | Risk: 25
+                          </div>
+                        </div>
+                        <span style={styles.simFeasibleBadge}>
+                          {simulationResult.baselineMetrics.scheduledTasks} / {simulationResult.baselineMetrics.totalTasks} Scheduled
+                        </span>
+                      </div>
+
+                      {/* Day by Day List */}
+                      <div style={styles.simDaysScroll}>
+                        {(simulationResult.baselineSchedule?.dayAllocations || [])
+                          .filter((d) => d.tasks?.length > 0 || d.isWorkingDay)
+                          .slice(0, 14)
+                          .map((day) => {
+                            const utilColor = (day.utilizationPercent || 0) > 100 ? '#DC2626' : '#16A34A';
+                            return (
+                              <div key={day.date} style={styles.simDayBlock}>
+                                <div style={styles.simDayBlockHeader}>
+                                  <span style={styles.simDayDate}>
+                                    {day.date} • {day.dayName}
+                                  </span>
+                                  <span style={styles.simDayWorkloadPill}>
+                                    {(day.totalHours || 0).toFixed(1)}h / {(day.capacityHours || 0).toFixed(1)}h ({day.utilizationPercent || 0}%)
+                                  </span>
+                                </div>
+                                <div style={styles.simProgressBarTrack}>
+                                  <div
+                                    style={{
+                                      ...styles.simProgressBarFill,
+                                      width: `${Math.min(100, day.utilizationPercent || 0)}%`,
+                                      backgroundColor: utilColor,
+                                    }}
+                                  />
+                                </div>
+
+                                <div style={styles.simTaskList}>
+                                  {(!day.tasks || day.tasks.length === 0) ? (
+                                    <div style={{ fontSize: '11px', color: '#94A3B8', fontStyle: 'italic' }}>
+                                      No tasks scheduled
+                                    </div>
+                                  ) : (
+                                    day.tasks.map((tAlloc, tIdx) => {
+                                      const pInfo = simulationResult.baselineSchedule?.placements?.find(
+                                        (p) => p.taskId === tAlloc.taskId && p.proposedDate === day.date
+                                      );
+                                      const pColor = (pInfo?.taskPriority === 'high' || pInfo?.priority === 'high')
+                                        ? '#DC2626'
+                                        : (pInfo?.taskPriority === 'medium' || pInfo?.priority === 'medium')
+                                          ? '#D97706'
+                                          : '#64748B';
+
+                                      return (
+                                        <div
+                                          key={tIdx}
+                                          style={{
+                                            ...styles.simTaskCard,
+                                            borderLeftColor: pColor,
+                                          }}
+                                        >
+                                          <div style={styles.simTaskTitleRow}>
+                                            <span style={styles.simTaskTitle}>{tAlloc.taskTitle || tAlloc.taskId}</span>
+                                            {pInfo?.isChunk && (
+                                              <span style={styles.simTaskChunkBadge}>
+                                                Session {pInfo.chunkIndex + 1} of {pInfo.totalChunks}
+                                              </span>
+                                            )}
+                                            {pInfo?.inFocusWindow && (
+                                              <span style={styles.simTaskFocusBadge}>
+                                                🎯 {pInfo.focusWindowLabel || 'Focus'}
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div style={styles.simTaskMetaRow}>
+                                            <span>
+                                              {tAlloc.startTime && tAlloc.endTime
+                                                ? `⏰ ${tAlloc.startTime} – ${tAlloc.endTime}`
+                                                : '📅 Day Allocation'}
+                                            </span>
+                                            <span>⏱️ {(tAlloc.hours || 0).toFixed(1)}h</span>
+                                            {pInfo?.originalDueDate ? (
+                                              <span
+                                                style={{
+                                                  ...styles.simTaskDeadlinePill,
+                                                  backgroundColor: pInfo.status === 'on_time' ? '#DCFCE7' : '#FEE2E2',
+                                                  color: pInfo.status === 'on_time' ? '#166534' : '#991B1B',
+                                                  borderColor: pInfo.status === 'on_time' ? '#86EFAC' : '#FCA5A5',
+                                                }}
+                                              >
+                                                {pInfo.status === 'on_time' ? '✓ On-Time' : '⚠️ Late'} (Due: {pInfo.originalDueDate})
+                                              </span>
+                                            ) : (
+                                              <span style={{ ...styles.simTaskDeadlinePill, backgroundColor: '#F1F5F9', color: '#64748B', borderColor: '#CBD5E1' }}>
+                                                Flexible (No Due Date)
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    })
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+
+                      {/* Unscheduled Tasks in Baseline */}
+                      {simulationResult.baselineMetrics.unscheduledTasks > 0 && (
+                        <div style={styles.simUnscheduledBox}>
+                          <strong>⚠️ Unscheduled Backlog Tasks ({simulationResult.baselineMetrics.unscheduledTasks}):</strong>
+                          <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                            {(simulationResult.baselineSchedule?.taskSummaries || [])
+                              .filter((t) => !t.isScheduled)
+                              .map((uTask) => (
+                                <li key={uTask.taskId}>
+                                  <strong>{uTask.title}</strong> ({(uTask.totalHours || 0).toFixed(1)}h) — {uTask.plannedStatus === 'blocked' ? 'Blocked by dependency' : 'Exceeds horizon capacity'}
+                                </li>
+                              ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Column 2: Candidate Simulation */}
+                  {(simViewMode === 'split' || simViewMode === 'candidate') && (
+                    <div style={styles.simCol}>
+                      <div style={styles.simColHeader}>
+                        <div>
+                          <div style={styles.simColTitle}>🔬 Candidate Simulation (Shadow)</div>
+                          <div style={styles.simColWeightsText}>
+                            Urgency: {simulationResult.candidateWeights?.urgencyWeight} | Priority: {simulationResult.candidateWeights?.priorityWeight} | Unblock: {simulationResult.candidateWeights?.unblockWeight} | Risk: {simulationResult.candidateWeights?.riskWeight}
+                          </div>
+                        </div>
+                        <span style={simulationResult.isFeasible ? styles.simFeasibleBadge : styles.simInfeasibleBadge}>
+                          {simulationResult.candidateMetrics.scheduledTasks} / {simulationResult.candidateMetrics.totalTasks} Scheduled ({simulationResult.isFeasible ? 'Feasible' : 'Infeasible'})
+                        </span>
+                      </div>
+
+                      {/* Day by Day List */}
+                      <div style={styles.simDaysScroll}>
+                        {(simulationResult.candidateSchedule?.dayAllocations || [])
+                          .filter((d) => d.tasks?.length > 0 || d.isWorkingDay)
+                          .slice(0, 14)
+                          .map((day) => {
+                            const utilColor = (day.utilizationPercent || 0) > 100 ? '#DC2626' : '#16A34A';
+                            return (
+                              <div key={day.date} style={styles.simDayBlock}>
+                                <div style={styles.simDayBlockHeader}>
+                                  <span style={styles.simDayDate}>
+                                    {day.date} • {day.dayName}
+                                  </span>
+                                  <span style={styles.simDayWorkloadPill}>
+                                    {(day.totalHours || 0).toFixed(1)}h / {(day.capacityHours || 0).toFixed(1)}h ({day.utilizationPercent || 0}%)
+                                  </span>
+                                </div>
+                                <div style={styles.simProgressBarTrack}>
+                                  <div
+                                    style={{
+                                      ...styles.simProgressBarFill,
+                                      width: `${Math.min(100, day.utilizationPercent || 0)}%`,
+                                      backgroundColor: utilColor,
+                                    }}
+                                  />
+                                </div>
+
+                                <div style={styles.simTaskList}>
+                                  {(!day.tasks || day.tasks.length === 0) ? (
+                                    <div style={{ fontSize: '11px', color: '#94A3B8', fontStyle: 'italic' }}>
+                                      No tasks scheduled
+                                    </div>
+                                  ) : (
+                                    day.tasks.map((tAlloc, tIdx) => {
+                                      const pInfo = simulationResult.candidateSchedule?.placements?.find(
+                                        (p) => p.taskId === tAlloc.taskId && p.proposedDate === day.date
+                                      );
+                                      const basePlacement = simulationResult.baselineSchedule?.placements?.find(
+                                        (p) => p.taskId === tAlloc.taskId && (p.chunkIndex ?? 0) === (pInfo?.chunkIndex ?? 0)
+                                      );
+                                      const isShifted = basePlacement && basePlacement.proposedDate !== day.date;
+
+                                      const pColor = (pInfo?.taskPriority === 'high' || pInfo?.priority === 'high')
+                                        ? '#DC2626'
+                                        : (pInfo?.taskPriority === 'medium' || pInfo?.priority === 'medium')
+                                          ? '#D97706'
+                                          : '#64748B';
+
+                                      return (
+                                        <div
+                                          key={tIdx}
+                                          style={{
+                                            ...styles.simTaskCard,
+                                            borderLeftColor: pColor,
+                                            ...(isShifted ? { backgroundColor: '#FFFBEB', borderColor: '#FDE68A' } : {}),
+                                          }}
+                                        >
+                                          <div style={styles.simTaskTitleRow}>
+                                            <span style={styles.simTaskTitle}>{tAlloc.taskTitle || tAlloc.taskId}</span>
+                                            {pInfo?.isChunk && (
+                                              <span style={styles.simTaskChunkBadge}>
+                                                Session {pInfo.chunkIndex + 1} of {pInfo.totalChunks}
+                                              </span>
+                                            )}
+                                            {pInfo?.inFocusWindow && (
+                                              <span style={styles.simTaskFocusBadge}>
+                                                🎯 {pInfo.focusWindowLabel || 'Focus'}
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div style={styles.simTaskMetaRow}>
+                                            <span>
+                                              {tAlloc.startTime && tAlloc.endTime
+                                                ? `⏰ ${tAlloc.startTime} – ${tAlloc.endTime}`
+                                                : '📅 Day Allocation'}
+                                            </span>
+                                            <span>⏱️ {(tAlloc.hours || 0).toFixed(1)}h</span>
+                                            {pInfo?.originalDueDate ? (
+                                              <span
+                                                style={{
+                                                  ...styles.simTaskDeadlinePill,
+                                                  backgroundColor: pInfo.status === 'on_time' ? '#DCFCE7' : '#FEE2E2',
+                                                  color: pInfo.status === 'on_time' ? '#166534' : '#991B1B',
+                                                  borderColor: pInfo.status === 'on_time' ? '#86EFAC' : '#FCA5A5',
+                                                }}
+                                              >
+                                                {pInfo.status === 'on_time' ? '✓ On-Time' : '⚠️ Late'} (Due: {pInfo.originalDueDate})
+                                              </span>
+                                            ) : (
+                                              <span style={{ ...styles.simTaskDeadlinePill, backgroundColor: '#F1F5F9', color: '#64748B', borderColor: '#CBD5E1' }}>
+                                                Flexible (No Due Date)
+                                              </span>
+                                            )}
+                                          </div>
+                                          {isShifted ? (
+                                            <div>
+                                              <span style={styles.simTaskShiftBadge}>
+                                                ⇄ Shifted from Baseline: {basePlacement.proposedDate || 'Unscheduled'}
+                                              </span>
+                                            </div>
+                                          ) : (
+                                            <div style={{ fontSize: '10px', color: '#16A34A', fontWeight: 600 }}>
+                                              ✓ Same date as factory baseline
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+
+                      {/* Unscheduled Tasks in Candidate */}
+                      {simulationResult.candidateMetrics.unscheduledTasks > 0 && (
+                        <div style={styles.simUnscheduledBox}>
+                          <strong>⚠️ Unscheduled Backlog Tasks ({simulationResult.candidateMetrics.unscheduledTasks}):</strong>
+                          <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                            {(simulationResult.candidateSchedule?.taskSummaries || [])
+                              .filter((t) => !t.isScheduled)
+                              .map((uTask) => (
+                                <li key={uTask.taskId}>
+                                  <strong>{uTask.title}</strong> ({(uTask.totalHours || 0).toFixed(1)}h) — {uTask.plannedStatus === 'blocked' ? 'Blocked by dependency' : 'Exceeds horizon capacity'}
+                                </li>
+                              ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Shifted Placements Details Drawer */}
@@ -814,6 +1258,31 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                   </div>
                 </div>
               )}
+
+              {/* SIMULATION METHODOLOGY & LIMITATIONS DISCLOSURE (Part E) */}
+              <div style={styles.simDisclosureBox}>
+                <button
+                  type="button"
+                  onClick={() => setShowMethodologyDisclosure(!showMethodologyDisclosure)}
+                  style={styles.simDisclosureBtn}
+                  aria-expanded={showMethodologyDisclosure}
+                >
+                  <span>ℹ️ Simulation Methodology & Limitations Disclosure</span>
+                  <span>{showMethodologyDisclosure ? '▲ Hide Details' : '▼ View Assumptions & Formulas'}</span>
+                </button>
+                {showMethodologyDisclosure && (
+                  <div style={styles.simDisclosureContent}>
+                    {Object.entries(METRIC_METHODOLOGY_DISCLOSURE).map(([key, item]) => (
+                      <div key={key} style={styles.simDisclosureItem}>
+                        <strong>{item.name}</strong> [{item.type}]: <code>{item.formula}</code> (Denominator: <em>{item.denominator}</em>) — {item.notes}
+                      </div>
+                    ))}
+                    <div style={styles.simDisclosureItem}>
+                      <strong>🔒 Simulation Isolation Guarantee:</strong> Baseline uses factory weights (Urgency: 50, Priority: 100, Unblock: 15, Risk: 25). Candidate uses isolated bounded weights. Both run the exact same deterministic topological heuristic scheduler. All simulation calculations occur strictly in memory without modifying production scheduler weights or active task dates.
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Strict No-Application Guarantee Notice */}
               <div style={styles.simIsolationNotice}>
@@ -2270,6 +2739,299 @@ const styles = {
     fontSize: '12px',
     color: '#475569',
     lineHeight: 1.45,
+  },
+  simTableTitleRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '8px',
+    marginBottom: '12px',
+  },
+  simAuditNoticeBadge: {
+    fontSize: '11px',
+    fontWeight: 700,
+    backgroundColor: '#EEF2FF',
+    color: '#4338CA',
+    border: '1px solid #C7D2FE',
+    padding: '2px 8px',
+    borderRadius: '4px',
+  },
+  metricSubtext: {
+    fontSize: '10px',
+    color: '#64748B',
+    fontWeight: 400,
+    marginTop: '2px',
+  },
+  // Schedule Preview Styles
+  simPreviewCard: {
+    backgroundColor: '#FFFFFF',
+    border: '1.5px solid #E2E8F0',
+    borderRadius: '10px',
+    padding: '16px 20px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '14px',
+  },
+  simPreviewHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '10px',
+  },
+  simPreviewTitle: {
+    fontSize: '14px',
+    fontWeight: 700,
+    color: '#1E293B',
+    margin: 0,
+  },
+  simPreviewSubtitle: {
+    fontSize: '12px',
+    color: '#64748B',
+    margin: '3px 0 0 0',
+  },
+  simReadOnlyBadge: {
+    fontSize: '11px',
+    fontWeight: 700,
+    backgroundColor: '#F1F5F9',
+    color: '#475569',
+    border: '1px solid #CBD5E1',
+    padding: '3px 8px',
+    borderRadius: '6px',
+  },
+  simViewToggleBar: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: '8px',
+    padding: '8px 12px',
+    backgroundColor: '#F8FAFC',
+    borderRadius: '8px',
+    border: '1px solid #E2E8F0',
+  },
+  simViewBtnGroup: {
+    display: 'flex',
+    gap: '6px',
+    flexWrap: 'wrap',
+  },
+  simViewBtn: {
+    padding: '5px 10px',
+    fontSize: '11px',
+    fontWeight: 600,
+    borderRadius: '5px',
+    border: '1px solid #CBD5E1',
+    backgroundColor: '#FFFFFF',
+    color: '#475569',
+    cursor: 'pointer',
+  },
+  simViewBtnActive: {
+    padding: '5px 10px',
+    fontSize: '11px',
+    fontWeight: 700,
+    borderRadius: '5px',
+    border: '1px solid #3B82F6',
+    backgroundColor: '#EFF6FF',
+    color: '#1D4ED8',
+    cursor: 'pointer',
+  },
+  simColumnsWrap: {
+    display: 'flex',
+    gap: '16px',
+    flexWrap: 'wrap',
+  },
+  simCol: {
+    flex: '1 1 320px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    backgroundColor: '#F8FAFC',
+    border: '1px solid #E2E8F0',
+    borderRadius: '8px',
+    padding: '14px',
+    minWidth: '280px',
+  },
+  simColHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: '8px',
+    borderBottom: '1px solid #E2E8F0',
+    flexWrap: 'wrap',
+    gap: '6px',
+  },
+  simColTitle: {
+    fontSize: '13px',
+    fontWeight: 700,
+    color: '#1E293B',
+  },
+  simColWeightsText: {
+    fontSize: '10px',
+    color: '#64748B',
+    fontFamily: 'monospace',
+  },
+  simDaysScroll: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    maxHeight: '520px',
+    overflowY: 'auto',
+    paddingRight: '4px',
+  },
+  simDayBlock: {
+    backgroundColor: '#FFFFFF',
+    border: '1px solid #CBD5E1',
+    borderRadius: '6px',
+    padding: '10px 12px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  simDayBlockHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  simDayDate: {
+    fontSize: '12px',
+    fontWeight: 700,
+    color: '#0F172A',
+  },
+  simDayWorkloadPill: {
+    fontSize: '10px',
+    fontWeight: 600,
+    padding: '2px 6px',
+    borderRadius: '4px',
+    backgroundColor: '#F1F5F9',
+    color: '#334155',
+  },
+  simProgressBarTrack: {
+    width: '100%',
+    height: '4px',
+    backgroundColor: '#E2E8F0',
+    borderRadius: '2px',
+    overflow: 'hidden',
+  },
+  simProgressBarFill: {
+    height: '100%',
+    borderRadius: '2px',
+    transition: 'width 0.2s ease',
+  },
+  simTaskList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+  },
+  simTaskCard: {
+    backgroundColor: '#F8FAFC',
+    border: '1px solid #E2E8F0',
+    borderLeftWidth: '4px',
+    borderRadius: '5px',
+    padding: '8px 10px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    fontSize: '11px',
+  },
+  simTaskTitleRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    flexWrap: 'wrap',
+  },
+  simTaskTitle: {
+    fontWeight: 600,
+    color: '#1E293B',
+    fontSize: '12px',
+  },
+  simTaskChunkBadge: {
+    fontSize: '9px',
+    fontWeight: 700,
+    backgroundColor: '#EEF2FF',
+    color: '#4338CA',
+    border: '1px solid #C7D2FE',
+    borderRadius: '3px',
+    padding: '1px 4px',
+  },
+  simTaskFocusBadge: {
+    fontSize: '9px',
+    fontWeight: 700,
+    backgroundColor: '#FEF3C7',
+    color: '#92400E',
+    border: '1px solid #FCD34D',
+    borderRadius: '3px',
+    padding: '1px 4px',
+  },
+  simTaskMetaRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    color: '#64748B',
+    fontSize: '10px',
+    flexWrap: 'wrap',
+  },
+  simTaskDeadlinePill: {
+    fontSize: '10px',
+    fontWeight: 600,
+    padding: '1px 6px',
+    borderRadius: '4px',
+    border: '1px solid transparent',
+  },
+  simTaskShiftBadge: {
+    fontSize: '10px',
+    fontWeight: 700,
+    padding: '2px 6px',
+    borderRadius: '4px',
+    backgroundColor: '#FEF3C7',
+    color: '#B45309',
+    border: '1px solid #FCD34D',
+    display: 'inline-block',
+    marginTop: '2px',
+  },
+  simUnscheduledBox: {
+    backgroundColor: '#FFFBEB',
+    border: '1px solid #FDE68A',
+    borderRadius: '6px',
+    padding: '8px 12px',
+    fontSize: '11px',
+  },
+  // Methodology Disclosure Styles
+  simDisclosureBox: {
+    backgroundColor: '#FFFFFF',
+    border: '1.5px solid #E2E8F0',
+    borderRadius: '10px',
+    overflow: 'hidden',
+  },
+  simDisclosureBtn: {
+    width: '100%',
+    padding: '12px 18px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    border: 'none',
+    borderBottom: '1px solid #E2E8F0',
+    cursor: 'pointer',
+    textAlign: 'left',
+    fontSize: '12px',
+    fontWeight: 700,
+    color: '#334155',
+  },
+  simDisclosureContent: {
+    padding: '14px 18px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    fontSize: '11px',
+    color: '#475569',
+    lineHeight: 1.5,
+  },
+  simDisclosureItem: {
+    backgroundColor: '#F8FAFC',
+    border: '1px solid #E2E8F0',
+    borderRadius: '6px',
+    padding: '8px 12px',
   },
   simEmptyBacklogAlert: {
     backgroundColor: '#FEF3C7',

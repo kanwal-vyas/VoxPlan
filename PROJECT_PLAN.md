@@ -2594,7 +2594,83 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
   - Real user explicit preference telemetry remains cold-start locked.
   - Stage 7.4.2 (Adaptive Weight Activation Gates & One-Click Rollback Mechanism) remains strictly unstarted.
 
-#### Stage 7.4.2: Adaptive Weight Activation Gates & One-Click Rollback Mechanism (UNSTARTED)
+#### Stage 7.4.2: Simulation Metric Integrity & Read-Only Candidate Schedule Preview (COMPLETED)
+- **Status**: **COMPLETED**.
+- **Scope & Mission**:
+  - Independent audit and corrective hardening of schedule simulation metric semantics and formulas in `src/scheduler/scheduleSimulator.js` and `src/components/AdaptationSandboxCard.jsx`.
+  - Provide an accessible, responsive, read-only calendar and timeline preview comparing factory baseline with candidate simulation.
+  - **NON-NEGOTIABLE PRODUCTION SAFETY ENFORCED**:
+    - `FACTORY_SCHEDULER_WEIGHTS` strictly preserved and immutable: `urgencyWeight: 50.0`, `priorityWeight: 100.0`, `unblockWeight: 15.0`, `riskWeight: 25.0`.
+    - `isAdaptationUnlocked: false` and `productionApplied: false` permanently enforced.
+    - Zero fitted or learned weights applied to production. Production schedule generation remains 100% bit-for-bit invariant.
+    - Zero external network requests, remote AI models, or cloud dependencies.
+    - Simulation is strictly read-only and memory-isolated; tasks, event histories, and scheduler configurations are never mutated.
+    - No candidate weights can be applied to production schedules; no production activation button exists.
+
+- **Metric Semantics Audited & Corrected**:
+  1. **Planned Deadline Compliance vs. Observed Completion**:
+     - *Defect Corrected*: Previous UI and docs labeled this metric "On-Time Adherence %" and described it as tasks completing before deadline. A planned schedule date is not an observed historical completion date or a validated prediction of future completion.
+     - *Audited Metric*: Renamed to `plannedComplianceRatePct` ("Planned Deadline Compliance").
+     - *Formula*: $(\text{Scheduled Tasks with Deadlines Planned On-Time} / \text{Scheduled Tasks with Deadlines}) \times 100\%$.
+     - *Denominator Integrity*: Tasks without explicit deadlines (`hasDeadline === false`) are strictly excluded from the compliance denominator. If no scheduled tasks have deadlines (`scheduledTasksWithDeadlineCount === 0`), the metric is marked unavailable (`plannedComplianceAvailable: false`, `rate: null`), displaying "Unavailable (No deadlines in scheduled set)" rather than manufacturing a misleading 100% or 0% rate.
+     - *Overdue at Schedule Start*: Tasks whose deadline precedes the schedule start date are tracked in `overdueAtStartCount` and flagged distinctly in the preview.
+  2. **Multi-Day Chunk Parent Task Deduplication**:
+     - *Defect Corrected*: Previous implementations counted individual chunk placements (`taskId_chunkIndex`) as separate tasks, inflating task coverage and distorting compliance and delay statistics.
+     - *Audited Metric*: Evaluated strictly at the parent task level (`taskId`), grouping chunks by parent identity. A multi-day task's planned completion is defined by the placement date of its *final chunk*. Delay days are calculated once per parent task.
+  3. **Total Planned Delay Days**:
+     - *Audited Metric*: Cumulative calendar days past explicit deadline across scheduled parent tasks with deadlines placed past deadline. Tasks with missing deadlines are never counted as zero-day delay.
+  4. **Backlog Coverage**:
+     - *Audited Metric*: $(\text{Unique Scheduled Parent Tasks} / \text{Total Valid Backlog Tasks}) \times 100\%$. Unscheduled tasks remain visible and listed with diagnostic reason codes (`oversized_exceeds_capacity`, `capacity_exhausted`, `blocked_by_dependency`).
+  5. **Capacity Utilization**:
+     - *Audited Metric*: $(\text{Total Scheduled Effort Hours} / \text{Total Horizon Available Capacity Hours}) \times 100\%$. Both baseline and candidate evaluate against the identical available capacity horizon. If horizon capacity is zero, returns `capacityUtilizationAvailable: false`.
+  6. **Schedule Churn**:
+     - *Audited Metric*: Count of placement shifts between baseline and candidate schedules using stable placement keys (`placementId || taskId_chunkIndex`). Missing historical schedule is marked unavailable. UI explicitly notes churn measures schedule volatility, not user dissatisfaction.
+  7. **Hard-Constraint Feasibility**:
+     - *Audited Metric*: Validates Kahn DAG topological dependency ordering, cycle prevention, and capacity overruns. Any hard constraint violation marks the schedule as `Infeasible`, disqualifying it from being presented as an improvement regardless of other metrics.
+
+- **Read-Only Candidate Schedule Preview Architecture**:
+  - Implemented in `src/components/AdaptationSandboxCard.jsx` (`#schedule-simulation-preview-card`):
+    - **View Mode Selector**: Keyboard-operable view mode switcher supporting `Side-by-Side (Split)` comparison, `Factory Baseline Only`, and `Candidate Simulation Only`.
+    - **Day Allocation Blocks**: Visual day columns displaying date, day index, and workload-vs-capacity progress bar (`X.Xh / Y.Yh`, `%`).
+    - **Structured Task Cards**: Priority left border (Urgent/High Red, Medium Amber, Low/None Slate), session chunk badges (`Part M of N`), time slot/day block, deadline status pill (`Planned On-Time`, `Planned Past Deadline (+Nd)`, `Overdue at Start`), and candidate placement shift highlight (`⇄ Shifted from Baseline`).
+    - **Unscheduled Tasks Tray**: Explicitly lists unscheduled tasks per scenario with specific reason badges.
+    - **Safety Badge**: Prominently displays `🔒 READ-ONLY PREVIEW — ISOLATED FROM PRODUCTION`.
+    - **Methodology & Limitations Disclosure**: Collapsible accordion rendered from `METRIC_METHODOLOGY_DISCLOSURE` documenting formulas, input sources, denominators, and limitations for every metric.
+
+- **Verification Results**:
+  - **Frontend Test Suite**: **574 passed, 0 failed across 122 suites** (`npm test`).
+    - Added 8 targeted unit and regression tests in `tests/schedule_simulation_controls.test.js` validating:
+      1. Tasks without deadlines return `plannedComplianceAvailable: false`.
+      2. Compliance denominator includes only tasks with explicit deadlines.
+      3. Multi-day chunked tasks are evaluated as single parent tasks using the final chunk completion date.
+      4. Overdue tasks prior to schedule start are tracked in `overdueAtStartCount`.
+      5. Zero capacity horizon returns `capacityUtilizationAvailable: false`.
+      6. Methodology disclosure contains all 6 core metrics with explicit denominators.
+      7. Schedule preview outputs day allocations, placements, and task summaries for both baseline and candidate.
+      8. Simulation inputs remain deeply immutable before and after execution.
+  - **Backend Pytest Suite**: **27 passed, 1 warning in 7.39s** (`python -m pytest backend/tests/ -q`).
+  - **Linter**: **0 errors, 1 pre-existing warning** (`set-state-in-effect` in `AdaptiveScheduleModal.jsx`) across 69 files (`npm run lint` / `oxlint`).
+  - **Production Build**: Clean client bundle built in 398ms (`npm run build`).
+  - **Browser Verification**: Subagent session (`simulation_preview_demo_1792386720904.webp`) verified:
+    1. Read-only timeline preview card rendered below metrics table.
+    2. View mode switching (Split, Baseline, Candidate) functions smoothly.
+    3. Shift indicators (`⇄ Shifted from Baseline`), deadline badges (`Planned Past Deadline +1d`), and workload bars render accurately.
+    4. Unscheduled tasks tray renders diagnostic reasons.
+    5. Methodology disclosure accordion expands with complete metric formulas and denominators.
+    6. Production schedule and task persistence remain completely unaffected.
+
+- **Delivered & Modified Files**:
+  - `src/scheduler/scheduleSimulator.js`: Audited metric formulas, parent deduplication, denominator integrity, `METRIC_METHODOLOGY_DISCLOSURE`, and preview schedule packaging.
+  - `src/components/AdaptationSandboxCard.jsx`: Read-only schedule preview with split/single views, day allocation bars, shift badges, and methodology disclosure accordion.
+  - `tests/schedule_simulation_controls.test.js`: Comprehensive metric audit and preview integrity test suites.
+  - `PROJECT_PLAN.md`: Authoritative Stage 7.4.2 audit and implementation record.
+
+- **Known Limitations & Next Roadmap Stage**:
+  - Previews reflect date-level placement and time block reservations; exact intraday minute-by-minute calendar blocks depend on time-blocking options.
+  - Production model activation and rollback deployment remain strictly unstarted.
+  - Next planned stage: Stage 7.4.3 (Adaptive Weight Activation Gates & One-Click Rollback Mechanism).
+
+#### Stage 7.4.3: Adaptive Weight Activation Gates & One-Click Rollback Mechanism (UNSTARTED)
 - **Scope & Expected Deliverables**:
   - Strict production activation gate (requiring verified readiness + $\ge 15$ eligible preference comparisons + superior concordance).
   - Snapshot engine and one-click rollback button restoring baseline weights immediately.

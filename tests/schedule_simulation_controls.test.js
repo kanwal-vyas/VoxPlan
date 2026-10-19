@@ -19,6 +19,8 @@ import {
   validateCandidateWeights,
   SIMULATION_SCENARIOS,
   runScheduleSimulation,
+  METRIC_METHODOLOGY_DISCLOSURE,
+  extractMetricsFromSchedule,
 } from '../src/scheduler/scheduleSimulator.js';
 import {
   FACTORY_SCHEDULER_WEIGHTS,
@@ -498,6 +500,190 @@ describe('Phase 7.4, Stage 1: User Controls, Schedule Simulation & Shadow-Only E
       assert.equal(sim.productionScheduleUnchanged, true);
       assert.equal(FACTORY_SCHEDULER_WEIGHTS.urgencyWeight, 50.0);
       assert.equal(FACTORY_SCHEDULER_WEIGHTS.priorityWeight, 100.0);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 7. Stage 2 Metric Correctness & Denominator Audits
+  // ---------------------------------------------------------------------------
+  describe('7. Stage 2 Metric Correctness & Denominator Audits', () => {
+    it('returns plannedComplianceAvailable = false and null rate when tasks have no deadlines', () => {
+      const tasksWithoutDeadlines = [
+        { id: 'nd_1', title: 'Routine Research', estimatedEffort: 2.0, priority: 'medium', dueDate: null },
+        { id: 'nd_2', title: 'Internal Cleanup', estimatedEffort: 1.5, priority: 'low', dueDate: '' },
+      ];
+
+      const sim = runScheduleSimulation({
+        scenarioKey: 'active_backlog',
+        tasks: tasksWithoutDeadlines,
+        candidateWeights: FACTORY_SCHEDULER_WEIGHTS,
+        options: { startDate: '2026-10-19', dailyCapacityHours: 6.0 },
+      });
+
+      assert.equal(sim.status, 'success');
+      assert.equal(sim.baselineMetrics.tasksWithDeadlineCount, 0);
+      assert.equal(sim.baselineMetrics.scheduledTasksWithDeadlineCount, 0);
+      assert.equal(sim.baselineMetrics.tasksWithoutDeadlineCount, 2);
+      assert.equal(sim.baselineMetrics.plannedComplianceAvailable, false);
+      assert.equal(sim.baselineMetrics.plannedComplianceRatePct, null);
+      assert.equal(sim.baselineMetrics.totalPlannedDelayDays, 0);
+      assert.equal(sim.comparison.complianceRateDeltaPct, null);
+    });
+
+    it('calculates planned compliance using scheduledTasksWithDeadlineCount as denominator', () => {
+      const mixedTasks = [
+        // 1. Scheduled On-Time with deadline
+        { id: 'mix_1', title: 'Due Tomorrow', estimatedEffort: 2.0, priority: 'high', dueDate: '2026-10-20' },
+        // 2. Scheduled Late past deadline (effort 3.0h > 2.0h remaining on day 1, fits on day 2)
+        { id: 'mix_2', title: 'Due Yesterday', estimatedEffort: 3.0, priority: 'low', dueDate: '2026-10-19' },
+        // 3. Scheduled Flexible without deadline (MUST NOT inflate compliance denominator!)
+        { id: 'mix_3', title: 'Flexible Task', estimatedEffort: 2.0, priority: 'medium', dueDate: null },
+      ];
+
+      const sim = runScheduleSimulation({
+        scenarioKey: 'active_backlog',
+        tasks: mixedTasks,
+        candidateWeights: FACTORY_SCHEDULER_WEIGHTS,
+        options: { startDate: '2026-10-19', dailyCapacityHours: 4.0 }, // 4h daily capacity forces mix_2 to day 2
+      });
+
+      assert.equal(sim.status, 'success');
+      assert.equal(sim.baselineMetrics.totalTasks, 3);
+      assert.equal(sim.baselineMetrics.tasksWithDeadlineCount, 2);
+      assert.equal(sim.baselineMetrics.tasksWithoutDeadlineCount, 1);
+      assert.equal(sim.baselineMetrics.plannedComplianceAvailable, true);
+
+      // Denominator must be exactly tasks with deadlines (2), NOT all 3 tasks!
+      assert.equal(sim.baselineMetrics.scheduledTasksWithDeadlineCount, 2);
+      // mix_1 is on-time (1), mix_2 is scheduled on day 2 so late by 1d
+      assert.equal(sim.baselineMetrics.plannedCompliantCount, 1);
+      assert.equal(sim.baselineMetrics.plannedDelayedCount, 1);
+      assert.equal(sim.baselineMetrics.plannedComplianceRatePct, 50.0); // 1 / 2 = 50.0%
+      assert.equal(sim.baselineMetrics.totalPlannedDelayDays >= 1, true);
+    });
+
+    it('evaluates multi-day chunked tasks as a single parent entity using the last chunk date', () => {
+      // An 8-hour task on 6h/day capacity will be chunked into 2 sessions
+      const chunkedTask = [
+        { id: 'chunk_parent_1', title: 'Major Document Rewrite', estimatedEffort: 8.0, priority: 'high', dueDate: '2026-10-20' },
+      ];
+
+      const sim = runScheduleSimulation({
+        scenarioKey: 'active_backlog',
+        tasks: chunkedTask,
+        candidateWeights: FACTORY_SCHEDULER_WEIGHTS,
+        options: { startDate: '2026-10-19', dailyCapacityHours: 6.0, enableChunking: true },
+      });
+
+      assert.equal(sim.status, 'success');
+      // Parent task counted once
+      assert.equal(sim.baselineMetrics.totalTasks, 1);
+      assert.equal(sim.baselineMetrics.scheduledTasks, 1);
+      assert.equal(sim.baselineMetrics.tasksWithDeadlineCount, 1);
+      assert.equal(sim.baselineMetrics.scheduledTasksWithDeadlineCount, 1);
+
+      // Day 1: 6h on Oct 19. Day 2: 2h on Oct 20 (due date).
+      // Last chunk is on Oct 20 <= due date Oct 20 => Planned Compliant!
+      assert.equal(sim.baselineMetrics.plannedCompliantCount, 1);
+      assert.equal(sim.baselineMetrics.plannedDelayedCount, 0);
+      assert.equal(sim.baselineMetrics.plannedComplianceRatePct, 100.0);
+      assert.equal(sim.baselineMetrics.totalPlannedDelayDays, 0);
+    });
+
+    it('tracks overdueAtStartCount when task deadline was already in past prior to schedule start', () => {
+      const overdueTask = [
+        { id: 'od_1', title: 'Past Deadline Task', estimatedEffort: 2.0, priority: 'high', dueDate: '2026-10-15' },
+      ];
+
+      const sim = runScheduleSimulation({
+        scenarioKey: 'active_backlog',
+        tasks: overdueTask,
+        candidateWeights: FACTORY_SCHEDULER_WEIGHTS,
+        options: { startDate: '2026-10-19', dailyCapacityHours: 6.0 },
+      });
+
+      assert.equal(sim.status, 'success');
+      assert.equal(sim.baselineMetrics.overdueAtStartCount, 1);
+      assert.equal(sim.baselineMetrics.plannedDelayedCount, 1);
+      assert.equal(sim.baselineMetrics.totalPlannedDelayDays >= 4, true); // 2026-10-19 vs 2026-10-15 = 4 days
+    });
+
+    it('marks capacityUtilizationAvailable = false when horizon capacity is zero', () => {
+      const scheduleResultWithZeroCap = {
+        placements: [],
+        summary: { totalEligibleTasks: 0 },
+        dayAllocations: [
+          { isWorkingDay: false, capacityHours: 0, totalHours: 0 },
+        ],
+      };
+
+      const metrics = extractMetricsFromSchedule(scheduleResultWithZeroCap, []);
+      assert.equal(metrics.capacityUtilizationAvailable, false);
+      assert.equal(metrics.capacityUtilizationPct, null);
+    });
+
+    it('methodology disclosure provides formal definitions for all audited metrics', () => {
+      assert.notEqual(METRIC_METHODOLOGY_DISCLOSURE, null);
+      assert.equal(Boolean(METRIC_METHODOLOGY_DISCLOSURE.coverageRate), true);
+      assert.equal(Boolean(METRIC_METHODOLOGY_DISCLOSURE.plannedCompliance), true);
+      assert.equal(Boolean(METRIC_METHODOLOGY_DISCLOSURE.plannedDelayDays), true);
+      assert.equal(Boolean(METRIC_METHODOLOGY_DISCLOSURE.capacityUtilization), true);
+      assert.equal(Boolean(METRIC_METHODOLOGY_DISCLOSURE.scheduleChurn), true);
+      assert.equal(Boolean(METRIC_METHODOLOGY_DISCLOSURE.hardConstraintFeasibility), true);
+      assert.equal(Object.isFrozen(METRIC_METHODOLOGY_DISCLOSURE), true);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 8. Read-Only Schedule Preview Data Integrity
+  // ---------------------------------------------------------------------------
+  describe('8. Read-Only Schedule Preview Data Integrity', () => {
+    it('returns structured schedule data for both baseline and candidate previews', () => {
+      const sim = runScheduleSimulation({
+        scenarioKey: 'deadline_vs_priority',
+        candidateWeights: { urgencyWeight: 55.0, priorityWeight: 95.0, unblockWeight: 14.0, riskWeight: 26.0 },
+        options: { startDate: '2026-10-19', dailyCapacityHours: 6.0 },
+      });
+
+      assert.equal(sim.status, 'success');
+      assert.notEqual(sim.baselineSchedule, null);
+      assert.notEqual(sim.candidateSchedule, null);
+
+      // Verify dayAllocations structure
+      assert.equal(Array.isArray(sim.baselineSchedule.dayAllocations), true);
+      assert.equal(Array.isArray(sim.candidateSchedule.dayAllocations), true);
+      assert.equal(sim.baselineSchedule.dayAllocations.length > 0, true);
+
+      // Verify taskSummaries structure
+      assert.equal(Array.isArray(sim.baselineSchedule.taskSummaries), true);
+      assert.equal(Array.isArray(sim.candidateSchedule.taskSummaries), true);
+      assert.equal(sim.baselineSchedule.taskSummaries.length, 5);
+      assert.equal(sim.candidateSchedule.taskSummaries.length, 5);
+
+      const firstSummary = sim.baselineSchedule.taskSummaries[0];
+      assert.notEqual(firstSummary.taskId, undefined);
+      assert.notEqual(firstSummary.title, undefined);
+      assert.notEqual(firstSummary.plannedStatus, undefined);
+      assert.notEqual(firstSummary.hasDeadline, undefined);
+    });
+
+    it('schedule preview generation produces bit-for-bit immutable results and zero side-effects', () => {
+      const inputTasks = [
+        { id: 'prev_1', title: 'Task A', estimatedEffort: 3.0, dueDate: '2026-10-20', priority: 'high' },
+        { id: 'prev_2', title: 'Task B', estimatedEffort: 2.0, dueDate: '2026-10-21', priority: 'low' },
+      ];
+      const snapshot = JSON.parse(JSON.stringify(inputTasks));
+
+      const sim = runScheduleSimulation({
+        scenarioKey: 'active_backlog',
+        tasks: inputTasks,
+        candidateWeights: { urgencyWeight: 45.0, priorityWeight: 110.0, unblockWeight: 15.0, riskWeight: 25.0 },
+      });
+
+      assert.deepEqual(inputTasks, snapshot);
+      assert.equal(sim.isShadowOnly, true);
+      assert.equal(sim.productionApplied, false);
+      assert.equal(sim.productionScheduleUnchanged, true);
     });
   });
 });
