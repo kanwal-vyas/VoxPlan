@@ -2670,11 +2670,123 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
   - Production model activation and rollback deployment remain strictly unstarted.
   - Next planned stage: Stage 7.4.3 (Adaptive Weight Activation Gates & One-Click Rollback Mechanism).
 
-#### Stage 7.4.3: Adaptive Weight Activation Gates & One-Click Rollback Mechanism (UNSTARTED)
+#### Stage 7.4.3: Configuration Snapshots, Rollback Foundation & Activation-Gate Audit (COMPLETED)
+- **Status**: **COMPLETED**.
+- **Scope & Mission**:
+  - Implement a deterministic, thoroughly tested versioned configuration snapshot and rollback foundation for the Phase 7 adaptive scheduling system.
+  - **NON-NEGOTIABLE PRODUCTION SAFETY ENFORCED**:
+    - `FACTORY_SCHEDULER_WEIGHTS` strictly preserved and immutable: `urgencyWeight: 50.0`, `priorityWeight: 100.0`, `unblockWeight: 15.0`, `riskWeight: 25.0`.
+    - `isAdaptationUnlocked: false` and `productionApplied: false` permanently enforced.
+    - Zero learned weights applied to production. Production schedule generation remains 100% bit-for-bit invariant.
+    - Zero external network requests, remote AI models, or cloud dependencies.
+    - Saving, reading, rolling back, or restoring configuration snapshots NEVER enables learned weights as a side effect.
+    - No UI control, API, local-storage flag, query parameter, or edited snapshot can unlock production adaptation.
+
+- **Delivered Capabilities & Architecture**:
+  1. **Versioned Configuration Snapshot Module** (`src/scheduler/configurationSnapshot.js`):
+     - **Schema Version**: `SNAPSHOT_SCHEMA_VERSION = '1.0.0'`.
+     - **Snapshot Structure**: Stable `snapshotId`, ISO-8601 `createdAt`, positive integer `revision`, `provenance` (`factory_baseline`, `manual_simulation`, `candidate_tuning`, `rollback_restoration`), validated `weights`, frozen `factoryBaseline` identity, and `integrityChecksum`.
+     - **Strict Bound & Type Validation**:
+       - Rejects missing keys, extra keys, non-finite values (`NaN`, $\pm\infty$), non-numeric values.
+       - Enforces strict $\pm 20\%$ relative bounds against factory baseline:
+         - `urgencyWeight`: [40.0, 60.0]
+         - `priorityWeight`: [80.0, 120.0]
+         - `unblockWeight`: [12.0, 18.0]
+         - `riskWeight`: [20.0, 30.0]
+     - **Canonical Serialization & Integrity Verification**:
+       - Deterministic recursive alphabetical key sorting (`canonicalJsonStringify`).
+       - 32-bit FNV-1a checksum digest (`computeFnv1a32`) computed over content payload.
+       - **Integrity Guarantee**: Detects accidental data corruption, serialization truncation, partial writes, and manual weight edits where the checksum was not recomputed.
+       - **Threat Model Limitation Disclosed**: The checksum is an integrity check, NOT a cryptographic signature. It does not protect against an attacker with write access to browser storage who rewrites both payload and checksum.
+     - **Privacy Guard**: Snapshots contain zero task titles, personal notes, calendar contents, or telemetry history.
+  2. **Safe Persistence & Rollback Engine**:
+     - **Storage Keys**: `SNAPSHOT_STORAGE_KEY = 'voxplan_adaptive_config_snapshots_v1'`, `ACTIVE_CONFIG_RECORD_KEY = 'voxplan_adaptive_active_config_v1'`.
+     - **Validation-Before-Persistence**: `saveSnapshot` validates schema, bounds, and checksum before writing to storage.
+     - **Validation-Before-Restoration**: `getSnapshot` and `rollbackToSnapshot` strictly validate target snapshots before touching the active configuration record.
+     - **Optimistic Concurrency Protection**: `expectedRevision` check prevents stale or concurrent rollback operations from overwriting newer configurations.
+     - **Atomic Safe Failure**: Failed validations or storage exceptions abort cleanly, leaving the active configuration record 100% unmodified.
+     - **Canonical Factory Restoration**: `restoreFactoryConfiguration` restores canonical factory baseline defaults without requiring candidate snapshots to be trusted first.
+     - **Storage Abstraction**: Accepts injectable storage adapters, defaulting to `window.localStorage` in browser or in-memory `Map` fallback in tests.
+  3. **User-Facing Rollback UI Panel**:
+     - Added compact, accessible **Configuration Snapshots & Rollback Safety** panel in Section 05 (`src/components/AdaptationSandboxCard.jsx`).
+     - Distinct status badges: `Active Record: Factory Baseline (Rev X)` and `🔒 Production Adaptation Disabled`.
+     - Real-time display of active weights in record and source provenance.
+     - Functional, safe actions:
+       - `📸 Save Candidate Snapshot`: Saves current simulation slider weights as a validated snapshot.
+       - `↺ Rollback to Snapshot`: Restores selected snapshot into active configuration record with revision tracking.
+       - `⏮ Restore Factory Defaults`: Prompts confirmation and restores canonical factory defaults.
+     - Transparent feedback toasts reporting exact revision and status.
+
+- **Scope E — Future Activation-Gate Specification & Methodological Audit**:
+  The current repository logic was audited to establish a sound future activation-gate specification:
+  1. **Minimum Data Sufficiency (Operational Thresholds vs Statistical Guarantees)**:
+     - Current thresholds: $\ge 20$ decided proposals, $\ge 15$ verified task completions, $\ge 3$ distinct categories, $\ge 14$ active telemetry days.
+     - *Audit Finding*: These are operational heuristic thresholds establishing baseline engagement, NOT formal statistical sufficiency proofs. They ensure the user has interacted across multiple categories and days before evaluation is permitted.
+  2. **Evidence Quality & Independence**:
+     - *Audit Finding*: In pairwise comparisons, observations from the same user on similar task backlogs are not independent and identically distributed (i.i.d.).
+     - *Scenario Grouping*: Holdout partitioning must enforce $\ge 3$ distinct verified scenario groups (`scenario_key`, `scenario_id`) to prevent backlog leakage across train/test splits.
+     - *Wilson Score Interval Limitation*: The Wilson 95% CI measures small-sample variance under an independent Bernoulli assumption; it does NOT adjust for scenario correlation, selection bias, or user behavioral shifts.
+  3. **Candidate vs. Baseline Comparison & Minimum Effect Size**:
+     - Any future activation candidate must be evaluated in a paired, identical-backlog comparison against the factory baseline.
+     - Concordance with the multi-attribute quality objective ($S$) must demonstrate a statistically meaningful improvement ($\Delta > 0$ with lower bound of 95% CI $> 50\%$).
+     - Pairwise concordance with an objective function is evidence of multi-attribute alignment, NOT conclusive proof of universal superiority or future user satisfaction.
+  4. **Hard Scheduling Feasibility Gate**:
+     - A candidate must produce 0 Kahn DAG cycle violations, 0 capacity overruns, and 0 duplicate placements.
+     - Any hard-constraint violation marks the candidate strictly `Infeasible` and halts any activation workflow.
+  5. **Operational Safety & Rollback Readiness Gate**:
+     - A validated canonical factory snapshot must exist in persistent storage.
+     - Rollback round-trip must be verified prior to any activation.
+     - Telemetry clear history actions must automatically reset active configuration to factory defaults.
+  6. **Human Approval Requirement**:
+     - Production model activation must require explicit, conscious user consent (e.g. an explicit confirmation modal displaying deltas, trade-offs, and rollback instructions). Automatic unprompted promotion is strictly prohibited.
+  7. **Unresolved Methodological Limitations**:
+     - No continuous likelihood model exists yet to map discrete task postponement into scheduler heuristic points.
+     - Generalization to novel or out-of-distribution task categories cannot be guaranteed from small historical samples.
+
+- **Verification Results**:
+  - **Frontend Test Suite**: **603 passed, 0 failed across 127 suites** (`npm test`).
+    - Added 29 comprehensive unit and regression tests in `tests/configuration_snapshot_rollback.test.js` validating:
+      1. Canonical serialization and alphabetical key sorting at all nesting levels.
+      2. Deterministic 32-bit FNV-1a checksum calculation and sensitivity to content changes.
+      3. Valid factory baseline and bounded candidate snapshot validation.
+      4. Rejection of missing parameters, unexpected extra keys, and non-numeric values (`NaN`, $\pm\infty$).
+      5. Rejection of weights outside permitted $\pm 20\%$ relative bounds.
+      6. Rejection of unsupported schema versions, invalid timestamps, and blank IDs.
+      7. Rejection of corrupted snapshots with checksum mismatches.
+      8. Rejection of factory baseline identity mismatches.
+      9. Snapshot saving, retrieval, and listing in persistent storage.
+      10. Graceful handling of corrupted storage records and missing snapshots.
+      11. Rollback to validated candidate snapshot with revision increment.
+      12. Preservation of active configuration when target snapshot is invalid or missing.
+      13. Concurrency protection via expectedRevision conflict detection.
+      14. Safe handling of simulated storage write failures during rollback.
+      15. Restoration of canonical factory baseline defaults from any state.
+      16. Hard production safety invariants: `FACTORY_SCHEDULER_WEIGHTS` immutability, zero adaptation unlocking, production scheduling invariance, and readiness gate independence.
+  - **Backend Pytest Suite**: **27 passed, 1 warning in 5.84s** (`python -m pytest backend/tests/ -q`).
+  - **Linter**: **0 errors, 1 pre-existing warning** (`set-state-in-effect` in `AdaptiveScheduleModal.jsx`) across 71 files (`npm run lint` / `oxlint`).
+  - **Production Build**: Clean client bundle built in 395ms (`npm run build` / `vite build`).
+  - **Browser Verification**: Subagent session (`rollback_foundation_demo_1792391511426.webp`) and screenshot (`configuration_snapshots_final_state_1792391597827.png`) verified:
+    1. Initial active record displays `Factory Baseline (Rev 1)` with `Production Adaptation Disabled`.
+    2. Clicked `📸 Save Candidate Snapshot`, verified success toast and dropdown update.
+    3. Selected candidate snapshot and clicked `↺ Rollback to Snapshot`, verified active record updated to `Rev 2`.
+    4. Clicked `⏮ Restore Factory Defaults`, verified confirmation prompt, and confirmed restoration to `Factory Baseline (Rev 3)`.
+    5. Confirmed production scheduler remains 100% locked to factory weights.
+
+- **Delivered & Modified Files**:
+  - Created: `src/scheduler/configurationSnapshot.js` (core snapshot, validation, serialization, persistence, and rollback engine)
+  - Created: `tests/configuration_snapshot_rollback.test.js` (29 automated unit and regression tests)
+  - Modified: `src/components/AdaptationSandboxCard.jsx` (added Configuration Snapshots & Rollback Safety UI panel)
+  - Modified: `PROJECT_PLAN.md` (authoritative Stage 7.4.3 record and future activation-gate audit)
+
+- **Known Limitations & Next Roadmap Stage**:
+  - Production activation remains explicitly locked and unstarted.
+  - Next planned stage: Stage 7.4.4 (Supervised Adaptive Weight Activation & Dynamic Deployment Gates).
+
+#### Stage 7.4.4: Supervised Adaptive Weight Activation & Dynamic Deployment Gates (UNSTARTED)
 - **Scope & Expected Deliverables**:
-  - Strict production activation gate (requiring verified readiness + $\ge 15$ eligible preference comparisons + superior concordance).
-  - Snapshot engine and one-click rollback button restoring baseline weights immediately.
-  - Telemetry clear history triggers automatic parameter reset.
+  - Implement the supervised production activation workflow requiring verified readiness + $\ge 15$ eligible preference comparisons + superior concordance + 0 hard constraint violations + explicit user confirmation.
+  - Automatic parameter reset on telemetry clearing.
+  - Runtime verification of active weights in proposal generation.
 
 ---
 

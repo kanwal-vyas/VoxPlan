@@ -19,6 +19,14 @@ import {
   validateCandidateWeights,
   METRIC_METHODOLOGY_DISCLOSURE,
 } from '../scheduler/scheduleSimulator';
+import {
+  createConfigurationSnapshot,
+  saveSnapshot,
+  listSnapshots,
+  getActiveConfigRecord,
+  rollbackToSnapshot,
+  restoreFactoryConfiguration,
+} from '../scheduler/configurationSnapshot';
 import { telemetry } from '../telemetry/telemetryManager';
 
 /**
@@ -54,6 +62,11 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
   const [simValidationErrors, setSimValidationErrors] = useState([]);
   const [simViewMode, setSimViewMode] = useState('split'); // 'split' | 'baseline' | 'candidate'
   const [showMethodologyDisclosure, setShowMethodologyDisclosure] = useState(false);
+  const [activeConfigRecord, setActiveConfigRecord] = useState(() => getActiveConfigRecord());
+  const [snapshotsList, setSnapshotsList] = useState(() => listSnapshots());
+  const [selectedSnapshotId, setSelectedSnapshotId] = useState('');
+  const [snapshotFeedback, setSnapshotFeedback] = useState(null);
+  const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
 
   // Authoritative real-evidence evaluation
   const realAnalysis = useMemo(() => {
@@ -109,6 +122,93 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
       setPreferenceFeedback({
         type: 'error',
         text: '⚠️ Failed to save preference collection setting to local storage.',
+      });
+    }
+  };
+
+  // Handle saving current candidate weights as a versioned snapshot (Phase 7.4 Stage 3)
+  const handleSaveSnapshot = () => {
+    try {
+      const snap = createConfigurationSnapshot({
+        weights: simCandidateWeights,
+        provenance: 'manual_simulation',
+      });
+      const res = saveSnapshot(snap);
+      if (res.success) {
+        const updatedList = listSnapshots();
+        setSnapshotsList(updatedList);
+        setSelectedSnapshotId(snap.snapshotId);
+        setSnapshotFeedback({
+          type: 'success',
+          text: `✓ Saved configuration snapshot "${snap.snapshotId}" (Rev ${snap.revision}, Checksum: ${snap.integrityChecksum}). Production adaptation remains disabled.`,
+        });
+        setTimeout(() => setSnapshotFeedback(null), 6000);
+      } else {
+        setSnapshotFeedback({
+          type: 'error',
+          text: `⚠️ Failed to save snapshot: ${res.error || 'Validation error'}`,
+        });
+      }
+    } catch (err) {
+      setSnapshotFeedback({
+        type: 'error',
+        text: `⚠️ Snapshot error: ${err.message}`,
+      });
+    }
+  };
+
+  // Handle rollback of active configuration record to selected snapshot
+  const handleRollback = () => {
+    if (!selectedSnapshotId) {
+      setSnapshotFeedback({
+        type: 'error',
+        text: '⚠️ Please select a snapshot to rollback to.',
+      });
+      return;
+    }
+
+    const res = rollbackToSnapshot(selectedSnapshotId, {
+      expectedRevision: activeConfigRecord.revision,
+    });
+
+    if (res.success) {
+      setActiveConfigRecord(res.activeConfig);
+      // Synchronize candidate sliders with rolled back weights
+      setSimCandidateWeights({ ...res.restoredWeights });
+      setSnapshotFeedback({
+        type: 'success',
+        text: `✓ Rolled back configuration record to "${selectedSnapshotId}" (Revision ${res.activeConfig.revision}). Note: Production scheduler remains locked to factory weights.`,
+      });
+      setTimeout(() => setSnapshotFeedback(null), 6000);
+    } else {
+      setSnapshotFeedback({
+        type: 'error',
+        text: `⚠️ Rollback failed: ${res.error || 'Validation or revision conflict'}`,
+      });
+    }
+  };
+
+  // Handle factory configuration restoration
+  const handleRestoreFactory = () => {
+    const res = restoreFactoryConfiguration({
+      expectedRevision: activeConfigRecord.revision,
+    });
+
+    if (res.success) {
+      setActiveConfigRecord(res.activeConfig);
+      setSnapshotsList(listSnapshots());
+      // Reset candidate sliders to factory defaults
+      setSimCandidateWeights({ ...FACTORY_SCHEDULER_WEIGHTS });
+      setShowRestoreConfirm(false);
+      setSnapshotFeedback({
+        type: 'success',
+        text: `✓ Restored configuration record to canonical factory defaults (Revision ${res.activeConfig.revision}). Production scheduler remains locked to factory weights.`,
+      });
+      setTimeout(() => setSnapshotFeedback(null), 6000);
+    } else {
+      setSnapshotFeedback({
+        type: 'error',
+        text: `⚠️ Factory restore failed: ${res.error || 'Storage or revision error'}`,
       });
     }
   };
@@ -494,6 +594,126 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
             role="status"
           >
             {preferenceFeedback.text}
+          </div>
+        )}
+
+        {/* SECTION: Configuration Snapshots & Rollback Safety Foundation (Scope B & Scope 9) */}
+        <div style={styles.configRollbackBox} aria-label="Configuration Snapshots & Rollback Safety">
+          <div style={styles.prefControlLeft}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '15px' }}>🛡️</span>
+              <strong style={{ fontSize: '13px', color: '#1E293B' }}>Configuration Snapshots & Rollback Safety</strong>
+              <span style={activeConfigRecord.isFactoryBaseline ? styles.tagActive : styles.tagCandidate}>
+                {activeConfigRecord.isFactoryBaseline
+                  ? `Active Record: Factory Baseline (Rev ${activeConfigRecord.revision})`
+                  : `Active Record: Candidate ${activeConfigRecord.sourceSnapshotId.slice(0, 14)}... (Rev ${activeConfigRecord.revision})`}
+              </span>
+              <span style={styles.statusPillLocked} title="Production adaptation remains locked">
+                🔒 Production Adaptation Disabled
+              </span>
+            </div>
+            <div style={styles.prefControlDesc}>
+              Provides deterministic versioned snapshots, checksum integrity verification, and instant rollback to canonical factory defaults.
+              {' '}<strong>Production Invariant:</strong> Saving or restoring configuration records does <em>not</em> activate learned weights. Production scheduling continues using 100% factory defaults.
+            </div>
+            <div style={styles.configDetailsRow}>
+              <span style={styles.configDetailLabel}>Active Weights in Record:</span>
+              <span style={styles.configDetailCode}>
+                Urgency: {activeConfigRecord.activeWeights?.urgencyWeight} · Priority: {activeConfigRecord.activeWeights?.priorityWeight} · Unblock: {activeConfigRecord.activeWeights?.unblockWeight} · Risk: {activeConfigRecord.activeWeights?.riskWeight}
+              </span>
+              <span style={styles.configDetailMeta}>
+                Source: <code>{activeConfigRecord.sourceSnapshotId}</code> ({activeConfigRecord.provenance})
+              </span>
+            </div>
+          </div>
+
+          <div style={styles.configControlsRight}>
+            <div style={styles.configActionsRow}>
+              {snapshotsList.length > 0 && (
+                <select
+                  id="snapshot-selector"
+                  value={selectedSnapshotId}
+                  onChange={(e) => setSelectedSnapshotId(e.target.value)}
+                  style={styles.snapshotSelect}
+                  aria-label="Select configuration snapshot"
+                >
+                  <option value="">-- Select Saved Snapshot ({snapshotsList.length}) --</option>
+                  {snapshotsList.map(({ snapshot, isValid }) => (
+                    <option key={snapshot.snapshotId} value={snapshot.snapshotId}>
+                      {snapshot.snapshotId} (Rev {snapshot.revision}) {isValid ? '✓' : '⚠️ Invalid'}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              <button
+                type="button"
+                id="save-config-snapshot-btn"
+                onClick={handleSaveSnapshot}
+                style={styles.saveSnapshotBtn}
+                title="Save current candidate slider weights as a validated versioned snapshot"
+              >
+                📸 Save Candidate Snapshot
+              </button>
+
+              {snapshotsList.length > 0 && selectedSnapshotId && (
+                <button
+                  type="button"
+                  id="rollback-config-btn"
+                  onClick={handleRollback}
+                  style={styles.rollbackBtn}
+                  title="Roll back active configuration record to selected snapshot"
+                >
+                  ↺ Rollback to Snapshot
+                </button>
+              )}
+
+              {!showRestoreConfirm ? (
+                <button
+                  type="button"
+                  id="restore-factory-config-btn"
+                  onClick={() => setShowRestoreConfirm(true)}
+                  style={styles.restoreFactoryBtn}
+                  title="Restore active configuration to canonical factory baseline defaults"
+                >
+                  ⏮ Restore Factory Defaults
+                </button>
+              ) : (
+                <div style={styles.confirmRestoreGroup}>
+                  <span style={styles.confirmRestorePrompt}>Restore canonical factory defaults?</span>
+                  <button
+                    type="button"
+                    id="confirm-restore-factory-btn"
+                    onClick={handleRestoreFactory}
+                    style={styles.confirmRestoreBtn}
+                  >
+                    Confirm Restore
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowRestoreConfirm(false)}
+                    style={styles.cancelRestoreBtn}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {snapshotFeedback && (
+          <div
+            style={{
+              ...styles.preferenceFeedbackToast,
+              backgroundColor: snapshotFeedback.type === 'error' ? '#FEE2E2' : '#EFF6FF',
+              color: snapshotFeedback.type === 'error' ? '#991B1B' : '#1E40AF',
+              borderColor: snapshotFeedback.type === 'error' ? '#FCA5A5' : '#BFDBFE',
+              marginTop: '10px',
+            }}
+            role="status"
+          >
+            {snapshotFeedback.text}
           </div>
         )}
       </div>
@@ -2453,6 +2673,141 @@ const styles = {
     border: '1px solid',
     fontSize: '12px',
     fontWeight: 600,
+  },
+  configRollbackBox: {
+    backgroundColor: '#F8FAFC',
+    border: '1.5px solid #CBD5E1',
+    borderRadius: '8px',
+    padding: '14px 16px',
+    marginTop: '12px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '16px',
+  },
+  tagCandidate: {
+    fontSize: '10px',
+    fontWeight: 700,
+    backgroundColor: '#E0E7FF',
+    color: '#3730A3',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    border: '1px solid #C7D2FE',
+  },
+  configDetailsRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexWrap: 'wrap',
+    fontSize: '11px',
+    color: '#475569',
+    marginTop: '6px',
+  },
+  configDetailLabel: {
+    fontWeight: 700,
+    color: '#1E293B',
+  },
+  configDetailCode: {
+    fontFamily: 'monospace',
+    fontSize: '11px',
+    backgroundColor: '#FFFFFF',
+    border: '1px solid #E2E8F0',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    color: '#0F172A',
+  },
+  configDetailMeta: {
+    fontSize: '11px',
+    color: '#64748B',
+  },
+  configControlsRight: {
+    display: 'flex',
+    alignItems: 'center',
+  },
+  configActionsRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexWrap: 'wrap',
+  },
+  snapshotSelect: {
+    padding: '6px 10px',
+    fontSize: '11px',
+    fontWeight: 600,
+    backgroundColor: '#FFFFFF',
+    border: '1.5px solid #CBD5E1',
+    borderRadius: '6px',
+    color: '#1E293B',
+    cursor: 'pointer',
+    maxWidth: '240px',
+  },
+  saveSnapshotBtn: {
+    padding: '6px 12px',
+    fontSize: '11px',
+    fontWeight: 700,
+    backgroundColor: '#FFFFFF',
+    color: '#1E293B',
+    border: '1.5px solid #CBD5E1',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    transition: 'background-color 0.15s ease',
+  },
+  rollbackBtn: {
+    padding: '6px 12px',
+    fontSize: '11px',
+    fontWeight: 700,
+    backgroundColor: '#EFF6FF',
+    color: '#1D4ED8',
+    border: '1.5px solid #BFDBFE',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    transition: 'background-color 0.15s ease',
+  },
+  restoreFactoryBtn: {
+    padding: '6px 12px',
+    fontSize: '11px',
+    fontWeight: 700,
+    backgroundColor: '#FFFBEB',
+    color: '#B45309',
+    border: '1.5px solid #FDE68A',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    transition: 'background-color 0.15s ease',
+  },
+  confirmRestoreGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    backgroundColor: '#FEF2F2',
+    border: '1.5px solid #FCA5A5',
+    padding: '4px 8px',
+    borderRadius: '6px',
+  },
+  confirmRestorePrompt: {
+    fontSize: '11px',
+    fontWeight: 700,
+    color: '#991B1B',
+  },
+  confirmRestoreBtn: {
+    padding: '4px 8px',
+    fontSize: '11px',
+    fontWeight: 700,
+    backgroundColor: '#DC2626',
+    color: '#FFFFFF',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+  },
+  cancelRestoreBtn: {
+    padding: '4px 8px',
+    fontSize: '11px',
+    fontWeight: 600,
+    backgroundColor: '#FFFFFF',
+    color: '#475569',
+    border: '1px solid #CBD5E1',
+    borderRadius: '4px',
+    cursor: 'pointer',
   },
   // Simulation Tab Styles
   simHeaderBanner: {
