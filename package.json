@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "oxlint",
     "test": "node --test tests/**/*.test.js",
+    "demo": "node scripts/demoLauncher.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

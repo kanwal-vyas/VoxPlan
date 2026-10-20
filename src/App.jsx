@@ -42,6 +42,8 @@ import {
   generateIcsCalendar,
   downloadIcsFile,
 } from './scheduler/icalExporter';
+import { saveEvent, clearEventsByProfile } from './telemetry/indexedDbStore';
+import { applyDemoSeed, clearDemoSeed, hasExistingUserData } from './utils/demoDataSeeder';
 
 const STORAGE_KEY = 'voxplan_tasks';
 
@@ -236,6 +238,64 @@ export default function App() {
   const personalDurationModel = useMemo(() => {
     return buildPersonalDurationModel(telemetryEvents, tasks);
   }, [telemetryEvents, tasks]);
+
+  // Live Demonstration Seeding & Teardown Handlers
+  const handleSeedDemo = useCallback(async () => {
+    if (hasExistingUserData()) {
+      const ok = typeof window !== 'undefined' && window.confirm
+        ? window.confirm(
+            'Load Showcase Demo Profile?\n\nThis will replace active tasks with a calibrated demonstration dataset (8 completed tasks + 4 active tasks) for presenting behavioral habit insights and duration estimation.\n\nClick OK to confirm.'
+          )
+        : true;
+      if (!ok) return;
+    }
+    const res = await applyDemoSeed({
+      confirmOverwrite: true,
+      saveEventFn: (ev) => saveEvent(ev),
+    });
+    if (res.success) {
+      setTasks(loadSavedTasks());
+      setAcceptedSchedule(null);
+      await telemetry.init();
+      setFeedback({ type: 'success', message: res.message });
+    } else {
+      setFeedback({ type: 'error', message: res.message });
+    }
+  }, []);
+
+  const handleClearDemo = useCallback(async () => {
+    const ok = typeof window !== 'undefined' && window.confirm
+      ? window.confirm(
+          'Reset to Clean Default State?\n\nThis will clear the demonstration tasks and restore clean welcome tasks with fresh telemetry.\n\nClick OK to confirm.'
+        )
+      : true;
+    if (!ok) return;
+    const res = await clearDemoSeed({
+      clearEventsFn: (pId) => clearEventsByProfile(pId),
+    });
+    if (res.success) {
+      setTasks(loadSavedTasks());
+      setAcceptedSchedule(null);
+      await telemetry.init();
+      setFeedback({ type: 'info', message: res.message });
+    }
+  }, []);
+
+  // Expose global developer helper for live demo walk-throughs & automated tests
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.voxplanDemo = {
+        seed: handleSeedDemo,
+        clear: handleClearDemo,
+        hasExistingUserData,
+      };
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        delete window.voxplanDemo;
+      }
+    };
+  }, [handleSeedDemo, handleClearDemo]);
 
   // ML State (truthfully initialized to empty/untrained state, without fabricated metrics)
   const [isBackendOnline, setIsBackendOnline] = useState(false);
@@ -1194,6 +1254,8 @@ export default function App() {
           isBackendOnline={isBackendOnline}
           modelMetadata={modelStatus}
           onScrollToSection={handleScrollToSection}
+          onSeedDemo={handleSeedDemo}
+          onClearDemo={handleClearDemo}
         />
 
         {/* Playful Hero */}

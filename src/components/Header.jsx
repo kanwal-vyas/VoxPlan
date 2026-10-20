@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
 
-export default function Header({ isBackendOnline, modelMetadata, onScrollToSection }) {
+export default function Header({
+  isBackendOnline,
+  modelMetadata,
+  onScrollToSection,
+  onSeedDemo,
+  onClearDemo,
+}) {
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -90,6 +96,35 @@ export default function Header({ isBackendOnline, modelMetadata, onScrollToSecti
               : 'VoxPlan is resting'}
           </span>
         </div>
+
+        {/* Development & Demo Seeding Quick Action */}
+        {(onSeedDemo || onClearDemo) && (
+          <div style={styles.demoControls}>
+            {onSeedDemo && (
+              <button
+                type="button"
+                id="demo-seed-profile-btn"
+                onClick={onSeedDemo}
+                title="Load calibrated demo profile (8 completed tasks + 4 active tasks)"
+                style={styles.demoSeedBtn}
+              >
+                <span>⚡</span>
+                <span>Demo Seed</span>
+              </button>
+            )}
+            {onClearDemo && (
+              <button
+                type="button"
+                id="demo-clear-profile-btn"
+                onClick={onClearDemo}
+                title="Reset to clean default welcome state"
+                style={styles.demoClearBtn}
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </header>
   );
@@ -193,5 +228,40 @@ const styles = {
     fontSize: '12px',
     fontWeight: '600',
     color: '#4A4852',
+  },
+  demoControls: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    marginLeft: '4px',
+  },
+  demoSeedBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '6px 12px',
+    fontSize: '11px',
+    fontWeight: '600',
+    fontFamily: 'inherit',
+    color: '#684200',
+    backgroundColor: '#FFE58A',
+    border: '1px solid rgba(104, 66, 0, 0.2)',
+    borderRadius: '9999px',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+  },
+  demoClearBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '6px 10px',
+    fontSize: '11px',
+    fontWeight: '500',
+    fontFamily: 'inherit',
+    color: '#625F69',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    border: '1px solid rgba(37, 36, 42, 0.12)',
+    borderRadius: '9999px',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
   },
 };

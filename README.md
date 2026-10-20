@@ -7,7 +7,42 @@ VoxPlan is being evolved from a student/sprint task tracker into an independent,
 
 ---
 
-## Current Architecture & System State (Phase 4, Stage 1)
+## Quick Start & Demo Launch Orchestration
+
+VoxPlan provides an automated launcher that validates runtime dependencies (Node 18+, Python 3.10+), detects port conflicts, connects to already running services without spawning duplicates, polls service health until fully ready, and opens the application in your browser.
+
+```bash
+# Automated Launch (Node.js script or Windows batch wrapper)
+npm run demo
+# or on Windows:
+.\run-demo.bat
+
+# Launch flags:
+npm run demo -- --no-open    # Start services without automatically opening browser
+npm run demo -- --help       # Show all orchestration options
+```
+
+### Manual Individual Commands (Traditional Development)
+```bash
+# 1. FastAPI Machine Learning Backend (Terminal 1)
+.venv\Scripts\activate
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+
+# 2. Vite React Frontend (Terminal 2)
+npm run dev
+# Browser opens at: http://localhost:5173
+```
+
+### Verified Test Suites & Quality Metrics
+- **Frontend Test Suite**: **832 / 832 passing** across 166 test suites (`npm test`).
+- **Backend Test Suite**: **27 / 27 passing** across REST and ML endpoints (`python -m pytest backend/tests/`).
+- **Linter**: Zero errors (`npm run lint`).
+- **Production Build**: Clean compilation in ~270ms (`npm run build`).
+- **Authoritative Scope Document**: See [PROJECT_SCOPE.md](file:///c:/Users/kaval%20vyas/OneDrive/Desktop/Projects/VoxPlan/PROJECT_SCOPE.md) for full classification (Categories A through F).
+
+---
+
+## Current Architecture & System State (Phase 7 Stage 4A Verified, Demo Ready)
 
 ```
 BROWSER WEB SPEECH API / TEXT INPUT
@@ -97,12 +132,12 @@ FASTAPI ML BACKEND (scikit-learn Pipeline & Batch Endpoints)
 - **Phase 4, Stage 4 (Completed)**: Evidence-driven scheduler optimization: replaced topological depth penalty with bounded downstream unblocking bonus (`+ min(45, unblockCount * 15)`), eliminating critical-path bottlenecks without penalizing ready dependents (reduced churn on satisfied dependencies from 40% to 0%, overall average churn from 24% to 16%); multi-tier deterministic tie-breaking (score $\to$ due date $\to$ Shortest Processing Time $\to$ task ID); evaluator metric honesty reporting `schedulableOnTimeRate` and `schedulerDaysDelayed` to separate impossible deadlines and pre-existing delays; enriched placement explainability; 99 automated tests passing across 20 suites.
 - **Phase 4, Stage 5 (Completed)**: Local Schedule Feedback & Outcome Tracking: versioned privacy-preserving telemetry schema (`SCHEMA_VERSION = 2`) recording proposal generation, acceptance, and discard actions; single-action deduplication in `telemetryManager`; subsequent manual date override detection (postponed vs advanced shift tracking); unaltered completion outcome matching (excluding tasks manually moved prior to finish); pure local feedback module (`src/scheduler/scheduleFeedback.js`); focused modal feedback tab with explicit denominators and insufficient-data guards (< 3 observations); strict cautious learning boundary (no automatic weight retuning); and 110 automated tests passing across 27 suites.
 - **Phase 4, Stage 6 (Completed)**: Schedule Feedback Integrity & Attribution Audit: stable session-scoped proposal identities; durable deduplication surviving page reloads without backend dependency (hydrating index from cached IndexedDB events on `telemetry.init()`); multi-proposal interval-based outcome attribution (`[acceptedAt, supersededAt)`); task lifecycle hardening (excluding reopened incomplete tasks and active backlog tasks from completion outcomes); isolation of conflicting proposal decisions; standardized unique task denominators; real-time attribution diagnostics in feedback UI; and 115 automated tests passing across 30 suites.
-- **Phase 5 (Planned)**: Conversational Planning, Multi-Turn Dialog & Voice Experience (4 stages): contextual dialog state machine, safety confirmations for destructive actions, natural language rescheduling engine, accessible Web Speech voice synthesis and typed fallback symmetry, and constraint debriefing.
-- **Phase 6 (Planned)**: Calendar-Aware Time-Blocking & Multi-Day Workload Modeling (4 stages): multi-day task chunking for oversized work, intra-day focus blocks and meeting buffer constraints, interactive visual proposal editing canvas, and RFC 5545 iCalendar (`.ics`) standard export.
-- **Phase 7 (Planned)**: Evidence-Gated Schedule Adaptation & Preference Learning (4 stages): longitudinal feedback maturity gating ($\ge 20$ decisions, $\ge 15$ completions), empirical friction profiling, bounded Bayesian weight adaptation ($\pm 20\%$) anchored to factory baseline, and one-click rollback dashboard.
-- **Phase 8 (Planned)**: Production Hardening, Accessibility, Security & Release Readiness (4 stages): WCAG 2.1 AA accessibility compliance, keyboard navigation, schema-versioned data governance and client-encrypted JSON backup, bundle code-splitting ($< 250\text{ kB}$ gzip), PWA offline service worker, and end-to-end CI release pipeline.
+- **Phase 5 (Completed & Verified)**: Conversational Planning, Multi-Turn Dialog & Voice Experience: 4 stages delivering contextual dialog state machine, safety confirmations for destructive actions, natural language rescheduling engine, Web Speech voice synthesis with typed fallback symmetry, and constraint debriefing.
+- **Phase 6 (Completed & Verified)**: Calendar-Aware Time-Blocking & Multi-Day Workload Modeling: 4 stages delivering multi-day task chunking for oversized work, intra-day focus blocks and meeting buffer constraints, interactive visual proposal editing canvas with drag/override support, and RFC 5545 iCalendar (`.ics`) standard export.
+- **Phase 7 (Completed & Verified - Stage 4B Locked)**: Evidence-Gated Schedule Adaptation & Preference Learning: 4 stages delivering Bayesian weight shrinkage, shadow evaluation sandbox, explicit synthetic evidence rejection, and fail-closed production activation gates (`isAdaptationUnlocked: false`, `productionApplied: false`). Supervised live deployment (Stage 7.4.4B) is intentionally unstarted and locked until genuine longitudinal evidence anchors are established.
+- **Phase 8 (Deferred Post-Demo)**: Production Hardening, Accessibility, Security & Release Readiness: PWA offline service worker, full automated WCAG 2.1 AA audit, client-side encrypted backup, and CI release pipeline are scheduled for post-demo execution.
 
-*(For detailed architectural specifications, dependencies, and exit criteria for all planned phases, refer to `PROJECT_PLAN.md`.)*
+*(For the complete, authoritative deliverable breakdown across Categories A through F, consult [PROJECT_SCOPE.md](file:///c:/Users/kaval%20vyas/OneDrive/Desktop/Projects/VoxPlan/PROJECT_SCOPE.md). For detailed historical engineering stage logs, refer to [PROJECT_PLAN.md](file:///c:/Users/kaval%20vyas/OneDrive/Desktop/Projects/VoxPlan/PROJECT_PLAN.md).)*
 
 ---
 
@@ -341,9 +376,14 @@ VoxPlan/
 │   │   ├── personalModel.js     # Duration model (weighted median + shrinkage) & walk-forward eval
 │   │   ├── personalRiskModel.js # Guarded hybrid completion-risk personalization
 │   │   └── telemetryManager.js  # Profile ID manager, timer persistence & event logger
+│   ├── utils/
+│   │   └── demoDataSeeder.js    # Calibrated demo dataset, Schema v2 events & safe teardown
 │   ├── App.jsx                  # State orchestrator, telemetry integration & Web Speech
-│   │   ├── App.css              # Highlighters, animations & typography styles
-│   │   └── main.jsx
+│   ├── App.css                  # Highlighters, animations & typography styles
+│   └── main.jsx
+│
+├── scripts/
+│   └── demoLauncher.mjs         # Windows/Cross-platform demo orchestrator with health checks
 │
 ├── tests/
 │   ├── telemetry.test.js          # 14 unit tests for schema, IndexedDB, stats & timers
@@ -351,6 +391,8 @@ VoxPlan/
 │   └── adaptive_scheduler.test.js # 19 unit tests for scheduling engine, DAG, limits & safety
 │
 ├── voxplan_architecture_audit.md # Full architecture audit and transformation plan
+├── run-demo.bat                 # Windows one-click demo launch wrapper
+├── PROJECT_SCOPE.md             # Authoritative scope register (Categories A-F & boundaries)
 ├── PROJECT_PLAN.md              # Living implementation roadmap & phase tracking
 └── README.md
 ```

@@ -19,10 +19,10 @@ This document tracks the phased evolution of VoxPlan from a static task tracker 
 | **Phase 4, Stage 4** | Evidence-Driven Scheduler Optimization | **COMPLETED** | Rigorous baseline benchmark audit; replaced artificial depth penalty with bounded downstream unblocking bonus (`+ min(45, unblockCount * 15)`); eliminated unnecessary perturbation churn on satisfied dependencies (40% -> 0%, overall 24% -> 16%); multi-tier deterministic tie-breaking (score -> dueDate -> Shortest Processing Time -> taskId); evaluator metric honesty reporting `schedulableOnTimeRate` and `schedulerDaysDelayed`; enriched placement explainability; and 99 automated tests passing across 20 suites. |
 | **Phase 4, Stage 5** | Local Schedule Feedback & Outcome Tracking | **COMPLETED** | Versioned privacy-preserving telemetry schema (`SCHEMA_VERSION = 2`) recording proposal generation, acceptance, and discard actions; single-action deduplication; subsequent manual override detection (postponed vs advanced shifts); unaltered completion outcome matching; pure feedback analytics module (`scheduleFeedback.js`); modal feedback tab with explicit denominators and insufficient-data guards (< 3 observations); strict cautious learning boundary; and 110 automated tests across 27 suites. |
 | **Phase 4, Stage 6** | Schedule Feedback Integrity & Attribution Audit | **COMPLETED** | Stable session-scoped proposal identities; durable deduplication surviving page reloads without backend dependency (hydrating index from cached IndexedDB events on `telemetry.init()`); multi-proposal interval-based outcome attribution (`[acceptedAt, supersededAt)`); task lifecycle hardening (excluding reopened incomplete tasks & active backlog tasks); isolation of conflicting proposal decisions; standardized unique task denominators; privacy-preserving observability diagnostics; and 115 automated tests across 30 suites. |
-| **Phase 5** | Conversational Planning, Multi-Turn Dialog & Voice Experience | **IN PROGRESS (Stages 5.1 & 5.2 Completed)** | Multi-turn planning state machine, clarification dialog, natural language batch rescheduling & negotiation, conversational schedule debriefing, accessible Web Speech voice synthesis and typed fallback symmetry. |
+| **Phase 5** | Conversational Planning, Multi-Turn Dialog & Voice Experience | **COMPLETED** | Multi-turn planning state machine, clarification dialog, natural language batch rescheduling & negotiation, conversational schedule debriefing, accessible Web Speech voice synthesis and typed fallback symmetry (4 stages). |
 | **Phase 6** | Calendar-Aware Time-Blocking & Multi-Day Workload Modeling | **COMPLETED** | Multi-day task chunking for oversized work, calendar focus time-blocking, meeting buffer constraints, interactive proposal canvas editing, and local RFC 5545 iCalendar (.ics) export (4 stages). |
-| **Phase 7** | Evidence-Gated Schedule Adaptation & Preference Learning | **IN PROGRESS (Stages 7.1, 7.2, 7.3, and 7.4.4A.1–7.4.4A.3 Completed)** | Longitudinal feedback maturity gate (20+ decisions, 15+ outcomes), empirical friction analysis, bounded heuristic weight tuning (±20%) with Bayesian shrinkage, simulation sandbox, one-click rollback, shadow-only activation gate evaluator, minimum-evidence policy, and independent statistical validation (4 stages). |
-| **Phase 8** | Production Hardening, Accessibility, Security & Release Readiness | **PLANNED** | Full WCAG 2.1 AA accessibility compliance, keyboard navigation, schema-versioned data lifecycle & encrypted backup, bundle code-splitting, PWA offline resilience, and CI/CD release verification (4 stages). |
+| **Phase 7** | Evidence-Gated Schedule Adaptation & Preference Learning | **COMPLETED (Stage 4B Locked)** | Longitudinal feedback maturity gate (20+ decisions, 15+ outcomes), empirical friction analysis, bounded heuristic weight tuning (±20%) with Bayesian shrinkage, simulation sandbox, one-click rollback, shadow-only activation gate evaluator, minimum-evidence policy, synthetic rejection, and independent statistical validation (Stages 7.1–7.4A completed; Stage 7.4.4B intentionally locked). |
+| **Phase 8** | Production Hardening, Accessibility, Security & Release Readiness | **DEFERRED POST-DEMO** | Full WCAG 2.1 AA accessibility compliance, keyboard navigation, schema-versioned data lifecycle & encrypted backup, bundle code-splitting, PWA offline resilience, and CI/CD release verification (4 stages; deferred post-demo). |
 
 ---
 
@@ -4039,3 +4039,44 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
 | **M2** | Phase 6: Time-Blocking & Workload | Multi-day task chunking, intra-day focus blocks, `.ics` calendar export | Oversized tasks scheduled cleanly; 0 time-slot collisions; valid RFC 5545 export. |
 | **M3** | Phase 7: Schedule Adaptation | Longitudinal readiness gate, bounded weight tuning ($\pm 20\%$), one-click rollback | $\ge 20$ decisions / $\ge 15$ completions gate enforced; zero hard constraint violations; instant rollback. |
 | **M4** | Phase 8: Production Readiness | WCAG 2.1 AA a11y, encrypted backup, PWA offline service worker, bundle $<250$kB | Lighthouse $\ge 90$ across all categories; 100% test pass rate; v1.0 release tagged. |
+
+---
+
+## Demo Reliability, Launch Orchestration & Authoritative Scope Audit Execution Record
+
+### Objective
+Ensure VoxPlan is 100% reliable to launch and demonstrate for the 48–72 hour milestone, establish a deterministic demo-profile seeding and reset mechanism, build cross-platform launch orchestration with active health checking, verify the end-to-end user journey in a live browser, and establish an authoritative, evidence-backed project scope register ([PROJECT_SCOPE.md](file:///c:/Users/kaval%20vyas/OneDrive/Desktop/Projects/VoxPlan/PROJECT_SCOPE.md)).
+
+### Implementation Summary
+1. **Calibrated Demo-Data Seeding & Teardown (`src/utils/demoDataSeeder.js`)**:
+   - Deterministic 12-task dataset: 8 completed tasks spanning 4 categories (`backend`, `frontend`, `research`, `design`) with realistic tracking modalities (stopwatch, manual, none) and 4 active tasks with DAG dependencies and multi-day chunking.
+   - Generates authentic Schema v2 behavioral telemetry events (`task_created`, `timer_started`, `timer_stopped`, `task_completed`, `schedule_proposal_generated`, `schedule_proposal_accepted`).
+   - Grounded behavioral habit metrics (280 tracked minutes, 87.5% completion rate, 3.2 tasks/day velocity).
+   - Satisfies walk-forward holdout validation threshold ($N = 8 \ge 8$, 3 train / 5 held-out).
+   - Strict synthetic provenance tagging (`isSyntheticData: true`, `isDemoSeed: true`, `provenanceSource: 'demo_seeding_utility'`).
+   - Overwrite protection via `hasExistingUserData()` confirmation prompt and clean reset via `clearDemoSeed()`.
+   - Guaranteed safety invariant preservation: factory scheduler weights (`50.0`, `100.0`, `15.0`, `25.0`), `isAdaptationUnlocked: false`, and `productionApplied: false`.
+2. **Demo Launch Orchestration (`scripts/demoLauncher.mjs` & `run-demo.bat`)**:
+   - Validates Node.js (v18+) and Python (v3.10+) runtimes and environments.
+   - Detects occupied ports (8000 for backend, 5173 for frontend) and safely connects to existing running services without launching duplicates or killing unrelated tasks.
+   - Active readiness polling: checks backend `/health` and `/api/model/status`, and frontend HTTP root.
+   - Cross-platform support handling Windows paths with spaces and automated browser launch (with `--no-open` override).
+   - Clean signal handling (SIGINT/SIGTERM) for child processes.
+   - Packaged as `npm run demo` and `run-demo.bat`.
+3. **UI Integration (`src/App.jsx`, `src/components/Header.jsx`)**:
+   - Added pastel-styled `⚡ Demo Seed` and `Reset` quick-action buttons in header with confirmation dialogs.
+   - Exposed global browser helper `window.voxplanDemo = { seed, clear, hasExistingUserData }` for automated testing and manual presentations.
+4. **End-to-End Browser Journey Verification**:
+   - Recorded full browser interaction walkthrough artifact (`demo_journey_audit_1792503194269.webp`).
+   - Verified task creation, dependency DAG scheduling, personal duration estimation, holdout metrics, RFC 5545 `.ics` export, and fail-closed activation gate rejection of synthetic evidence.
+5. **Authoritative Scope Register (`PROJECT_SCOPE.md`)**:
+   - Formally categorized all features into Categories A through F.
+   - Evaluated 14 specific scope boundaries with rationales and approval statuses.
+   - Defined testable completion criteria and a 48–72h vs post-demo risk completion matrix.
+
+### Automated Test Verification
+- **Frontend Test Suite**: **832 / 832 passing** (166 test files).
+  - Added `tests/demo_data_seeder.test.js`: 8/8 tests passing.
+- **Backend Test Suite**: **27 / 27 passing** (`python -m pytest backend/tests/`).
+- **Linter**: Zero errors (`npm run lint`).
+- **Production Build**: 70 modules transformed in ~270ms (`npm run build`).
