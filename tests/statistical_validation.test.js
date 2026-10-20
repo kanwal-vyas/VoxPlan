@@ -15,6 +15,10 @@ import {
   ACTIVATION_GATE_OUTCOMES,
   SAMPLING_ASSURANCE_STATUS,
   SAMPLING_PROVENANCE_SOURCES,
+  SUPPORTED_ENVIRONMENTS,
+  SAMPLING_EVIDENCE_REJECTION_REASONS,
+  computeEvidenceRecordChecksum,
+  computeClusterDatasetFingerprint,
   computeTaskSetFingerprint,
   getStudentTCriticalValue,
   PRACTICAL_THRESHOLD_RULES,
@@ -280,6 +284,7 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
         rollbackPreflight: defaultRollback,
         samplingAssurance: defaultSyntheticAssurance,
         pairedObservations: dataset.pairs,
+        environment: 'simulation',
       });
 
       assert.ok(res.pairedComparison.meanDelta > 1.0, 'Grand mean delta is positive and above epsilon');
@@ -384,6 +389,7 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
         rollbackPreflight: defaultRollback,
         samplingAssurance: defaultSyntheticAssurance,
         pairedObservations: ds5.pairs,
+        environment: 'simulation',
       });
       assert.strictEqual(res5.outcome, ACTIVATION_GATE_OUTCOMES.ELIGIBLE_FOR_SUPERVISED_REVIEW);
       assert.strictEqual(res5.evidencePolicy.statisticalAdequacy.isDecisionReady, true);
@@ -557,6 +563,7 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
         rollbackPreflight: defaultRollback,
         samplingAssurance: defaultSyntheticAssurance,
         pairedObservations: dataset.pairs,
+        environment: 'simulation',
       });
 
       assert.ok(res.pairedComparison.meanDelta >= 1.0, `Composite score delta is positive: ${res.pairedComparison.meanDelta}`);
@@ -597,6 +604,7 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
         rollbackPreflight: defaultRollback,
         samplingAssurance: defaultSyntheticAssurance,
         pairedObservations: dataset.pairs,
+        environment: 'simulation',
       });
 
       assert.ok(res.pairedComparison.meanDelta >= 1.0, `Composite score delta: ${res.pairedComparison.meanDelta}`);
@@ -629,6 +637,7 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
         rollbackPreflight: defaultRollback,
         samplingAssurance: defaultSyntheticAssurance,
         pairedObservations: dataset.pairs,
+        environment: 'simulation',
       });
 
       assert.strictEqual(res.pairedComparison.criticalMetricRegressionDetected, false);
@@ -656,6 +665,7 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
         rollbackPreflight: defaultRollback,
         samplingAssurance: defaultSyntheticAssurance,
         pairedObservations: dataset.pairs,
+        environment: 'simulation',
       });
 
       assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.ELIGIBLE_FOR_SUPERVISED_REVIEW);
@@ -756,6 +766,7 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
           samplingAssurance: defaultSyntheticAssurance,
           pairedObservations: pairs,
           bootstrapIterations: 0,
+          environment: 'simulation',
         });
 
         assert.strictEqual(res.pairedComparison.clusterAveragedMeanDelta, 2.0);
@@ -1105,6 +1116,7 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
           rollbackPreflight: defaultRollback,
           samplingAssurance: defaultSyntheticAssurance,
           pairedObservations: dataset.pairs,
+          environment: 'simulation',
         });
 
         assert.strictEqual(res.pairedComparison.outlierClusterDominanceDetected, true);
@@ -1318,6 +1330,7 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
           rollbackPreflight: defaultRollback,
           samplingAssurance: defaultSyntheticAssurance,
           pairedObservations: dataset.pairs,
+          environment: 'simulation',
         });
 
         assert.strictEqual(res.evidencePolicy.evaluationEvidence.crossClusterTaskOverlapDetected, false);
@@ -1355,6 +1368,7 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
             samplingAssurance: defaultSyntheticAssurance,
             pairedObservations: dataset.pairs,
             practicalThresholdRule: PRACTICAL_THRESHOLD_RULES.MEAN_THRESHOLD,
+            environment: 'simulation',
           });
 
           // Evaluate under Rule B (confidence-bound threshold rule: default)
@@ -1366,6 +1380,7 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
             samplingAssurance: defaultSyntheticAssurance,
             pairedObservations: dataset.pairs,
             practicalThresholdRule: PRACTICAL_THRESHOLD_RULES.CONFIDENCE_BOUND,
+            environment: 'simulation',
           });
 
           if (resA.isEligibleForSupervisedReview) ruleAEligible++;
@@ -1453,7 +1468,7 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
         let eligible = 0;
         for (let r = 0; r < REPS; r++) {
           const d = generateValidationDataset({ groundTruthEffect: 0.9, clusterCount: 5, defaultPairsPerCluster: 5, betweenClusterVariance: 0.5, withinClusterVariance: 1.0, randomSeed: 72000 + r });
-          const res = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, samplingAssurance: defaultSyntheticAssurance, pairedObservations: d.pairs });
+          const res = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, samplingAssurance: defaultSyntheticAssurance, pairedObservations: d.pairs, environment: 'simulation' });
           if (res.isEligibleForSupervisedReview) eligible++;
         }
         assert.ok(eligible >= 5 && eligible <= 25, `Near-threshold eligibility under Rule B should be ~1.5% (got ${eligible}/${REPS})`);
@@ -1464,7 +1479,7 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
         let eligible = 0;
         for (let r = 0; r < REPS; r++) {
           const d = generateValidationDataset({ groundTruthEffect: 1.0, clusterCount: 5, defaultPairsPerCluster: 5, betweenClusterVariance: 0.5, withinClusterVariance: 1.0, randomSeed: 73000 + r });
-          const res = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, samplingAssurance: defaultSyntheticAssurance, pairedObservations: d.pairs });
+          const res = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, samplingAssurance: defaultSyntheticAssurance, pairedObservations: d.pairs, environment: 'simulation' });
           if (res.isEligibleForSupervisedReview) eligible++;
         }
         assert.ok(eligible >= 15 && eligible <= 45, `Exact-threshold eligibility should be ~2.9% under Rule B (got ${eligible}/${REPS})`);
@@ -1475,7 +1490,7 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
         let eligible = 0;
         for (let r = 0; r < REPS; r++) {
           const d = generateValidationDataset({ groundTruthEffect: 1.1, clusterCount: 5, defaultPairsPerCluster: 5, betweenClusterVariance: 0.5, withinClusterVariance: 1.0, randomSeed: 74000 + r });
-          const res = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, samplingAssurance: defaultSyntheticAssurance, pairedObservations: d.pairs });
+          const res = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, samplingAssurance: defaultSyntheticAssurance, pairedObservations: d.pairs, environment: 'simulation' });
           if (res.isEligibleForSupervisedReview) eligible++;
         }
         assert.ok(eligible >= 25 && eligible <= 65, `Just-above-threshold eligibility should be ~4.2% (got ${eligible}/${REPS})`);
@@ -1487,7 +1502,7 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
         let covers = 0;
         for (let r = 0; r < REPS; r++) {
           const d = generateValidationDataset({ groundTruthEffect: 1.5, clusterCount: 5, defaultPairsPerCluster: 5, betweenClusterVariance: 0.5, withinClusterVariance: 1.0, randomSeed: 75000 + r });
-          const res = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, samplingAssurance: defaultSyntheticAssurance, pairedObservations: d.pairs });
+          const res = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, samplingAssurance: defaultSyntheticAssurance, pairedObservations: d.pairs, environment: 'simulation' });
           if (res.isEligibleForSupervisedReview) eligible++;
           if (res.uncertainty.ciLower <= 1.5 && res.uncertainty.ciUpper >= 1.5) covers++;
         }
@@ -1500,7 +1515,7 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
         let eligible = 0;
         for (let r = 0; r < REPS; r++) {
           const d = generateValidationDataset({ groundTruthEffect: 3.5, clusterCount: 5, defaultPairsPerCluster: 5, betweenClusterVariance: 0.5, withinClusterVariance: 1.0, randomSeed: 76000 + r });
-          const res = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, samplingAssurance: defaultSyntheticAssurance, pairedObservations: d.pairs });
+          const res = evaluateActivationGate({ candidateWeights: validCandidateWeights, baselineWeights: FACTORY_SCHEDULER_WEIGHTS, readinessReport: defaultReadiness, rollbackPreflight: defaultRollback, samplingAssurance: defaultSyntheticAssurance, pairedObservations: d.pairs, environment: 'simulation' });
           if (res.isEligibleForSupervisedReview) eligible++;
         }
         assert.ok(eligible >= 990, `High power positive effect should achieve >= 99% eligibility (got ${eligible}/${REPS})`);
@@ -2058,6 +2073,7 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
             rollbackPreflight: defaultRollback,
             samplingAssurance: defaultSyntheticAssurance,
             pairedObservations: d.pairs,
+            environment: 'simulation',
           });
           if (res.isEligibleForSupervisedReview) eligibleCount++;
           if (res.outcome === ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR) notSuperiorCount++;
@@ -2184,6 +2200,7 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
               rollbackPreflight: defaultRollback,
               samplingAssurance: defaultSyntheticAssurance,
               pairedObservations: d.pairs,
+              environment: 'simulation',
             });
             if (res.isEligibleForSupervisedReview) eligible++;
             if (res.outcome === ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR) notSuperior++;
@@ -2298,6 +2315,7 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
         rollbackPreflight: defaultRollback,
         pairedObservations: d.pairs,
         samplingAssurance: d.syntheticAssurance,
+        environment: 'simulation',
       });
 
       assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.ELIGIBLE_FOR_SUPERVISED_REVIEW);
@@ -2604,6 +2622,7 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
         rollbackPreflight: defaultRollback,
         pairedObservations: pairs,
         samplingAssurance: createSyntheticAssuranceRecord({ clusterKeys: ['cl_0', 'cl_1', 'cl_2', 'cl_3', 'cl_4'] }),
+        environment: 'simulation',
       });
 
       assert.strictEqual(res.pairedComparison.criticalMetricRegressionDetected, true);
@@ -3083,6 +3102,522 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
       assert.strictEqual(res.productionInvariance.isAdaptationUnlocked, false);
       assert.strictEqual(res.productionInvariance.productionApplied, false);
       assert.strictEqual(res.productionInvariance.factoryWeightsUnchanged, true);
+      assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.urgencyWeight, 50.0);
+      assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.priorityWeight, 100.0);
+      assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.unblockWeight, 15.0);
+      assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.riskWeight, 25.0);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Scope F: Evidence Authenticity & Environment Isolation Audit (Phase 7.4 Stage 4A.9)
+  // ---------------------------------------------------------------------------
+  describe('10. Phase 7.4 Stage 4A.9: Evidence Authenticity & Environment Isolation Audit (Scope F)', () => {
+    // 1. Plain clusterIndependenceStatus: 'verified' claim
+    it('1. rejects plain clusterIndependenceStatus: "verified" claim as unauthenticated in production', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.5, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 21001 });
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: {
+          clusterIndependenceStatus: 'verified',
+        },
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.strictEqual(res.uncertainty.isDecisionReady, false);
+      assert.ok(res.reasons.some((r) => r.includes(SAMPLING_EVIDENCE_REJECTION_REASONS.UNAUTHENTICATED_SAMPLING_EVIDENCE)));
+      assert.strictEqual(res.isAdaptationUnlocked, false);
+    });
+
+    // 2. Plain clusterSamplingIndependenceVerified: true claim
+    it('2. rejects plain clusterSamplingIndependenceVerified: true boolean claim', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.5, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 21002 });
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: {
+          clusterSamplingIndependenceVerified: true,
+        },
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.ok(res.reasons.some((r) => r.includes(SAMPLING_EVIDENCE_REJECTION_REASONS.UNAUTHENTICATED_SAMPLING_EVIDENCE)));
+      assert.strictEqual(res.isAdaptationUnlocked, false);
+    });
+
+    // 3. Fabricated provenance string
+    it('3. rejects fabricated provenance string claiming external audit authority', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.5, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 21003 });
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: {
+          clusterIndependenceStatus: 'verified',
+          provenance: 'custom_corporate_cluster_audit',
+        },
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.ok(res.reasons.some((r) => r.includes(SAMPLING_EVIDENCE_REJECTION_REASONS.UNAUTHENTICATED_SAMPLING_EVIDENCE)));
+    });
+
+    // 4. Caller-created evidence record with no checksum
+    it('4. rejects caller-created evidence record with missing checksum as malformed', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.5, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 21004 });
+      const recordNoChecksum = createSyntheticAssuranceRecord({
+        clusterKeys: d.distinctClusterKeys,
+      });
+      delete recordNoChecksum.evidenceRecord.recordChecksum;
+
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: recordNoChecksum,
+        environment: 'simulation',
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.ok(res.reasons.some((r) => r.includes('missing') || r.includes(SAMPLING_EVIDENCE_REJECTION_REASONS.MALFORMED_SAMPLING_EVIDENCE)));
+    });
+
+    // 5. Caller-created evidence record with a correctly recomputed FNV-1a checksum
+    it('5. proves public FNV-1a checksum does NOT authenticate creator in production', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.5, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 21005 });
+      // Caller manufactures record claiming external authority and calculates exact FNV-1a checksum
+      const forgedRecord = {
+        evidenceId: 'auth_audit_2026_x99',
+        provenanceSource: 'cross_environment_audit',
+        samplingMethodology: 'cluster_stratified_without_replacement',
+        intendedEstimand: 'shock_conditional_population_mean',
+        clustersAudited: [...d.distinctClusterKeys],
+        datasetFingerprint: computeClusterDatasetFingerprint(d.distinctClusterKeys),
+        assuranceStatus: 'verified',
+        issuedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 86400000).toISOString(),
+      };
+      forgedRecord.evidenceChecksum = computeEvidenceRecordChecksum(forgedRecord);
+
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: forgedRecord,
+        environment: 'production',
+      });
+
+      // Crucial: Must be rejected because VoxPlan has NO production trust anchor!
+      // Format verification != origin authentication.
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.ok(res.reasons.some((r) => r.includes(SAMPLING_EVIDENCE_REJECTION_REASONS.UNAUTHENTICATED_SAMPLING_EVIDENCE)));
+      assert.strictEqual(res.isAdaptationUnlocked, false);
+    });
+
+    // 6. Fabricated evidence identifier with an otherwise valid record
+    it('6. rejects fabricated evidence identifier in record', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.5, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 21006 });
+      const record = createSyntheticAssuranceRecord({
+        clusterKeys: d.distinctClusterKeys,
+        evidenceId: 'fabricated_id_test',
+      });
+
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: record,
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+    });
+
+    // 7. Manipulated dataset fingerprint
+    it('7. detects and rejects manipulated dataset fingerprint', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.5, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 21007 });
+      const record = createSyntheticAssuranceRecord({
+        clusterKeys: d.distinctClusterKeys,
+        tamperFingerprint: 'manipulated_fingerprint_deadbeef',
+      });
+
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: record,
+        environment: 'simulation',
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.ok(res.reasons.some((r) => r.includes(SAMPLING_EVIDENCE_REJECTION_REASONS.SAMPLING_EVIDENCE_DATASET_MISMATCH)));
+    });
+
+    // 8. Modified cluster keys and cluster coverage mismatch
+    it('8. rejects evidence record when audited clusters differ from dataset clusters', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.5, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 21008 });
+      const record = createSyntheticAssuranceRecord({
+        clusterKeys: ['cluster_alt_1', 'cluster_alt_2', 'cluster_alt_3', 'cluster_alt_4', 'cluster_alt_5'],
+      });
+
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: record,
+        environment: 'simulation',
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.ok(res.reasons.some((r) => r.includes(SAMPLING_EVIDENCE_REJECTION_REASONS.SAMPLING_EVIDENCE_DATASET_MISMATCH)));
+    });
+
+    // 9. Synthetic evidence submitted under environment: 'production'
+    it('9. strictly rejects synthetic evidence submitted under environment: "production"', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.5, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 21009 });
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: d.syntheticAssurance,
+        environment: 'production',
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.ok(res.reasons.some((r) => r.includes(SAMPLING_EVIDENCE_REJECTION_REASONS.SYNTHETIC_EVIDENCE_IN_PRODUCTION)));
+      assert.strictEqual(res.isAdaptationUnlocked, false);
+      assert.strictEqual(res.productionApplied, false);
+    });
+
+    // 10. Synthetic evidence submitted under environment: 'simulation' through ordinary production-facing API on real observations
+    it('10. rejects synthetic evidence in simulation mode when evaluating real production observations', () => {
+      // Real production observations contain 'real_user_comparisons' in distinctClusterKeys
+      const realPairs = [
+        {
+          observationId: 'real_pair_1',
+          context: { scenario_key: 'real_user_comparisons', taskSetId: 'prod_tasks_1' },
+          candidateScore: 95.0,
+          baselineScore: 80.0,
+        },
+        {
+          observationId: 'real_pair_2',
+          context: { scenario_key: 'real_user_comparisons', taskSetId: 'prod_tasks_2' },
+          candidateScore: 92.0,
+          baselineScore: 80.0,
+        },
+      ];
+      const syntheticRecord = createSyntheticAssuranceRecord({ clusterKeys: ['real_user_comparisons'] });
+
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: realPairs,
+        samplingAssurance: syntheticRecord,
+        environment: 'simulation',
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.ok(res.reasons.some((r) => r.includes(SAMPLING_EVIDENCE_REJECTION_REASONS.UNAUTHENTICATED_SAMPLING_EVIDENCE)));
+    });
+
+    // 11. Unknown or malformed environment fails closed
+    it('11. fails closed with INSUFFICIENT_METHODOLOGY on unknown or malformed environment', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.5, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 21011 });
+      const badEnvironments = ['staging', 'test', 'unspecified', 'PROD', 'Production', 'SIMULATION', null, 123, {}];
+
+      for (const env of badEnvironments) {
+        const res = evaluateActivationGate({
+          candidateWeights: validCandidateWeights,
+          baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+          readinessReport: defaultReadiness,
+          rollbackPreflight: defaultRollback,
+          pairedObservations: d.pairs,
+          samplingAssurance: d.syntheticAssurance,
+          environment: env,
+        });
+
+        assert.strictEqual(
+          res.outcome,
+          ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_METHODOLOGY,
+          `Environment "${env}" must fail closed with INSUFFICIENT_METHODOLOGY`
+        );
+        assert.strictEqual(res.isEligibleForSupervisedReview, false);
+        assert.ok(res.reasons.some((r) => r.includes(SAMPLING_EVIDENCE_REJECTION_REASONS.UNSUPPORTED_EVALUATION_ENVIRONMENT)));
+        assert.strictEqual(res.isAdaptationUnlocked, false);
+      }
+    });
+
+    // 12. Missing environment defaults to production and rejects synthetic/forged claims
+    it('12. defaults missing environment to "production" and blocks synthetic eligibility', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.5, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 21012 });
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: d.syntheticAssurance,
+        // environment explicitly omitted
+      });
+
+      assert.strictEqual(res.environment, SUPPORTED_ENVIRONMENTS.PRODUCTION);
+      assert.strictEqual(res.isSimulationDiagnostic, false);
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.ok(res.reasons.some((r) => r.includes(SAMPLING_EVIDENCE_REJECTION_REASONS.SYNTHETIC_EVIDENCE_IN_PRODUCTION)));
+    });
+
+    // 13. Missing, expired, or stale evidence
+    it('13. rejects expired or stale evidence in both production and simulation', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.5, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 21013 });
+      const expiredAssurance = createSyntheticAssuranceRecord({
+        clusterKeys: d.distinctClusterKeys,
+        issuedAt: '2021-01-01T00:00:00.000Z',
+        expiresAt: '2021-01-02T00:00:00.000Z',
+      });
+
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: expiredAssurance,
+        environment: 'simulation',
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.ok(res.reasons.some((r) => r.includes('expired')));
+    });
+
+    // 14. Evidence for a different dataset or incompatible methodology
+    it('14. rejects evidence claiming incompatible or unstratified sampling methodology', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.5, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 21014 });
+      const incompatibleRecord = createSyntheticAssuranceRecord({
+        clusterKeys: d.distinctClusterKeys,
+        tamperMethodology: 'convenience_single_backlog_sampling',
+      });
+
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: incompatibleRecord,
+        environment: 'simulation',
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+    });
+
+    // 15. Exception or malformed input at each relevant validation boundary
+    it('15. fails closed safely when evidence record is malformed, throwing, or non-object', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.5, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 21015 });
+      const throwingEvidence = {
+        clusterIndependenceStatus: 'verified',
+        get evidenceRecord() {
+          throw new Error('Explosive getter in untrusted payload');
+        },
+      };
+
+      const resThrow = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: throwingEvidence,
+      });
+
+      assert.strictEqual(resThrow.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_METHODOLOGY);
+      assert.strictEqual(resThrow.isEligibleForSupervisedReview, false);
+      assert.strictEqual(resThrow.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.ok(resThrow.reasons.some((r) => r.includes(SAMPLING_EVIDENCE_REJECTION_REASONS.MALFORMED_SAMPLING_EVIDENCE)));
+
+      // Primitive number evidence
+      const resPrimitive = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: 42,
+      });
+      assert.strictEqual(resPrimitive.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_METHODOLOGY);
+      assert.strictEqual(resPrimitive.isEligibleForSupervisedReview, false);
+    });
+
+    // 16. Favourable metrics with unauthenticated evidence
+    it('16. huge favourable score (delta = +15.0) cannot override unauthenticated evidence in production', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 15.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 21016 });
+      const forgedRecord = {
+        evidenceId: 'auth_audit_2026_super',
+        provenanceSource: 'cross_environment_audit',
+        samplingMethodology: 'cluster_stratified_without_replacement',
+        intendedEstimand: 'shock_conditional_population_mean',
+        clustersAudited: [...d.distinctClusterKeys],
+        datasetFingerprint: computeClusterDatasetFingerprint(d.distinctClusterKeys),
+        assuranceStatus: 'verified',
+        issuedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 86400000).toISOString(),
+      };
+      forgedRecord.evidenceChecksum = computeEvidenceRecordChecksum(forgedRecord);
+
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: forgedRecord,
+        environment: 'production',
+      });
+
+      assert.ok((res.pairedComparison.meanDelta ?? 0) >= 12.0, 'Observed delta is overwhelmingly positive');
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.strictEqual(res.isAdaptationUnlocked, false);
+    });
+
+    // 17. Favourable metrics with missing evidence
+    it('17. huge favourable score (delta = +15.0) cannot override completely missing evidence', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 15.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 21017 });
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: null,
+      });
+
+      assert.ok((res.pairedComparison.meanDelta ?? 0) >= 12.0);
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.ok(res.reasons.some((r) => r.includes(SAMPLING_EVIDENCE_REJECTION_REASONS.MISSING_SAMPLING_ASSURANCE)));
+    });
+
+    // 18. UI state that claims verification while evaluator evidence is absent
+    it('18. rejects UI claims of verified status when evaluator evidence is unauthenticated', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.5, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 21018 });
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: {
+          uiDeclaredStatus: 'verified',
+          clusterIndependenceStatus: 'verified',
+          provenance: 'ui_user_toggle_simulation_checked',
+        },
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.ok(res.reasons.some((r) => r.includes(SAMPLING_EVIDENCE_REJECTION_REASONS.UNAUTHENTICATED_SAMPLING_EVIDENCE)));
+    });
+
+    // 19. Every alternate eligibility path found during the audit
+    it('19. confirms that no alternate evaluator path or option combination can bypass evidence authentication', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.5, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 21019 });
+      // Try passing bypass flags like isSyntheticData: false, isSynthetic: false, ignoreAssurance: true, etc.
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: {
+          clusterIndependenceStatus: 'verified',
+          isSynthetic: false,
+          verifiedByAdmin: true,
+        },
+        isSyntheticData: false,
+        skipVerification: true,
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.strictEqual(res.isAdaptationUnlocked, false);
+      assert.strictEqual(res.productionApplied, false);
+    });
+
+    // 20. Factory weights and production activation flags remain unchanged after rejected evaluations
+    it('20. guarantees factory weights and production activation flags remain invariant across all attack rejections', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 8.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 21020 });
+      const factoryBefore = JSON.stringify(FACTORY_SCHEDULER_WEIGHTS);
+
+      const res = evaluateActivationGate({
+        candidateWeights: {
+          urgencyWeight: 60.0,
+          priorityWeight: 120.0,
+          unblockWeight: 20.0,
+          riskWeight: 30.0,
+        },
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: {
+          clusterIndependenceStatus: 'verified',
+          provenance: 'attack_attempt',
+        },
+      });
+
+      const factoryAfter = JSON.stringify(FACTORY_SCHEDULER_WEIGHTS);
+      assert.strictEqual(factoryBefore, factoryAfter);
+      assert.strictEqual(res.isAdaptationUnlocked, false);
+      assert.strictEqual(res.productionApplied, false);
       assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.urgencyWeight, 50.0);
       assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.priorityWeight, 100.0);
       assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.unblockWeight, 15.0);

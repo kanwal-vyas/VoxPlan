@@ -2126,18 +2126,26 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', fontSize: '12px' }}>
+                <span style={{ fontWeight: 600, color: '#374151' }}>Evaluation Environment:</span>
+                <span style={{ color: '#1F2937', fontWeight: 600 }}>
+                  {activeActivationGate.environment === 'simulation' || activeActivationGate.isSimulationDiagnostic
+                    ? '🧪 Simulation (Offline Diagnostic Only)'
+                    : '🏢 Production (Live Application)'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', fontSize: '12px' }}>
                 <span style={{ fontWeight: 600, color: '#374151' }}>Claimed Sampling Status:</span>
                 <span style={{ color: '#4B5563', fontFamily: 'monospace', fontSize: '11px' }}>
                   {activeActivationGate.evidenceAssessment.samplingAssurance?.clusterIndependenceStatus || 'unspecified'}
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', fontSize: '12px' }}>
-                <span style={{ fontWeight: 600, color: '#374151' }}>Evidence Provenance & Validation:</span>
+                <span style={{ fontWeight: 600, color: '#374151' }}>Evidence Integrity & Authenticity:</span>
                 <span style={{ color: activeActivationGate.evidenceAssessment.evidenceValidation?.isValidated ? '#065F46' : '#92400E', fontWeight: 600 }}>
                   {activeActivationGate.evidenceAssessment.evidenceValidation?.isValidated
-                    ? `✓ Authenticated (${activeActivationGate.evidenceAssessment.evidenceValidation?.provenanceSource || 'Validated'})`
-                    : activeActivationGate.evidenceAssessment.evidenceValidation?.provenanceSource === 'production_telemetry'
-                    ? '⚠️ Unauthenticated (No Production Trust Anchor in Local Telemetry)'
+                    ? `✓ Integrity Verified (${activeActivationGate.evidenceAssessment.evidenceValidation?.provenanceSource || 'Validated'})`
+                    : (activeActivationGate.environment === 'production' || !activeActivationGate.environment)
+                    ? '⚠️ Unauthenticated (No Production Trust Anchor in Local Architecture)'
                     : `⚠️ Unauthenticated (${activeActivationGate.evidenceAssessment.evidenceValidation?.reason || 'No Evidence Record'})`}
                 </span>
               </div>

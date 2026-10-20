@@ -3758,6 +3758,103 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
 
 ---
 
+#### Stage 7.4.4A.9: Evidence Authenticity & Environment Isolation Audit (COMPLETED)
+- **Starting Commit**: `b132d5c` on branch `main`.
+- **Objective & Adversarial Scope**:
+  - Conduct a rigorous adversarial audit of the sampling-assurance trust boundary introduced in Stage 4A.8.
+  - Determine whether ordinary application callers can fabricate evidence, manipulate the evaluation environment (`environment`), or reach `ELIGIBLE_FOR_SUPERVISED_REVIEW` without genuine sampling-assurance evidence.
+  - Test the validity of using public checksum algorithms (FNV-1a) for provenance verification.
+  - Validate environment isolation to prevent synthetic test/simulation evidence from masquerading as production evidence.
+  - Audit all potential alternative eligibility pathways, default parameter configurations, and UI display mappings.
+  - Strictly enforce non-negotiable safety invariants: `isAdaptationUnlocked: false`, `productionApplied: false`, factory weights invariant (`urgencyWeight: 50.0`, `priorityWeight: 100.0`, `unblockWeight: 15.0`, `riskWeight: 25.0`), live scheduling uses factory weights, and Stage 4B remains unstarted.
+
+- **Attack A Findings — Evidence Forgery & The Checksum Authenticity Fallacy**:
+  - *Vulnerability in Stage 4A.8*: `computeEvidenceRecordChecksum` utilized a public, client-executable 32-bit FNV-1a hash over canonical evidence fields.
+  - *Demonstrated Attack*: An ordinary application caller could construct a synthetic or arbitrary evidence record claiming `provenanceSource: 'cross_environment_audit'` or `'third_party_registry'`, compute the public FNV-1a hash, and submit it. Stage 4A.8's `validateSamplingAssuranceEvidence` verified that the checksum matched the payload, treating the valid checksum as proof of authenticated provenance.
+  - *Identifier Deny-List Bypass*: The previous check only rejected IDs matching `/^(fake_|fabricated_)/`. Any forged record using plausible IDs (e.g., `audit_ext_prod_2026` or `cert_independent_eval`) bypassed ID validation completely.
+  - *Fundamental Architectural Principle Affirmed*: **Integrity checks and format verification do not establish provenance authenticity when the untrusted caller can construct the payload and compute the checksum.** Public hashing algorithms verify data transmission integrity against accidental bit rot, never creator authority or identity.
+
+- **Attack B Findings — Environment Manipulation & Permissive Defaults**:
+  - *Vulnerability in Stage 4A.8*: In `evaluateActivationGate`, `environment` defaulted to `'unspecified'` and only checked `if (environment === 'production' && provenanceSource === 'synthetic_generator')`.
+  - *Demonstrated Attack*: A caller omitting `environment` or providing non-production strings (`'simulation'`, `'test'`, `'staging'`) bypassed the production synthetic check entirely.
+  - *UI Flag Contamination*: In `AdaptationSandboxCard.jsx`, `environment` was passed as `isSynthetic ? 'simulation' : 'production'`. Relying on a mutable client flag or caller-supplied option allowed callers to toggle the evaluation environment at will.
+  - *Fundamental Architectural Principle Affirmed*: An untrusted caller-supplied boolean or string cannot serve as an authentication anchor. Unrecognized or malformed environments must fail closed.
+
+- **Attack C Findings — Alternate Eligibility Routes & Real Data Contamination**:
+  - *Demonstrated Attack*: A caller could submit real user observations (`real_user_comparisons`) alongside `environment: 'simulation'` and a synthetic generator guarantee, reaching `ELIGIBLE_FOR_SUPERVISED_REVIEW`.
+  - *Exception / Getter Vulnerability*: Malformed evidence objects with explosive property getters could throw uncaught exceptions, potentially aborting evaluation mid-pipeline.
+  - *Resolution*:
+    - Any attempt to use synthetic generator guarantees on real observations (`distinctClusterKeys.includes('real_user_comparisons')`) is strictly rejected with `UNAUTHENTICATED_SAMPLING_EVIDENCE`.
+    - `validateSamplingAssuranceEvidence` and `evaluateActivationGate` wrap evidence inspection in `try / catch` blocks to fail closed with `MALFORMED_SAMPLING_EVIDENCE` and `INSUFFICIENT_METHODOLOGY`.
+    - Results now return `environment` and `isSimulationDiagnostic: environment === 'simulation'` to guarantee simulation can never be confused with live production eligibility.
+
+- **Architecture Decision — Enforce Case B (No Production Trust Anchor)**:
+  - *Evaluation*: Case A was evaluated and rejected because VoxPlan is a client-side, local-first productivity tool with no centralized authority, external PKI infrastructure, or signed cross-client registry.
+  - *Case B Implementation*:
+    - In `environment: 'production'` (the strict default), **all** evidence claiming verified sampling assurance is rejected with `UNAUTHENTICATED_SAMPLING_EVIDENCE` (or `SYNTHETIC_EVIDENCE_IN_PRODUCTION` if synthetic).
+    - Production sampling assurance remains strictly unverified, and production eligibility remains strictly blocked (`INSUFFICIENT_EVIDENCE`).
+    - In `environment: 'simulation'`, synthetic generator assurance is permitted exclusively as an offline test/simulation diagnostic for statistical procedures.
+    - Standardized diagnostic rejection codes in `SAMPLING_EVIDENCE_REJECTION_REASONS`:
+      - `MISSING_SAMPLING_ASSURANCE`
+      - `UNAUTHENTICATED_SAMPLING_EVIDENCE`
+      - `SYNTHETIC_EVIDENCE_IN_PRODUCTION`
+      - `UNSUPPORTED_EVALUATION_ENVIRONMENT`
+      - `SAMPLING_EVIDENCE_DATASET_MISMATCH`
+      - `MALFORMED_SAMPLING_EVIDENCE`
+  - *Client-Side JavaScript Limitations Acknowledged*: Encapsulation, frozen objects, and module boundaries protect against accidental misuse by ordinary application code, but cannot defend against a user modifying their own browser memory or JavaScript runtime. Genuine production evidence authentication fundamentally requires an independent, trusted server-side or cross-client verification mechanism.
+
+- **Adversarial Regression Test Suite (20 Deterministic Scenarios in `tests/statistical_validation.test.js`)**:
+  - `10.1`: Plain `clusterIndependenceStatus: 'verified'` string claim $\to$ Rejected with `MISSING_SAMPLING_ASSURANCE`, eligibility blocked.
+  - `10.2`: Plain `clusterSamplingIndependenceVerified: true` boolean claim $\to$ Rejected with `MISSING_SAMPLING_ASSURANCE`, eligibility blocked.
+  - `10.3`: Fabricated provenance string (`provenanceSource: 'certified_auditor'`) $\to$ Rejected with `UNAUTHENTICATED_SAMPLING_EVIDENCE`.
+  - `10.4`: Caller-created evidence record with missing checksum $\to$ Rejected with `MALFORMED_SAMPLING_EVIDENCE`.
+  - `10.5`: Caller-created evidence record with correctly recomputed FNV-1a checksum $\to$ Rejected with `UNAUTHENTICATED_SAMPLING_EVIDENCE` in production.
+  - `10.6`: Fabricated evidence identifier (`id: 'audit_ext_prod_2026'`) with valid checksum $\to$ Rejected with `UNAUTHENTICATED_SAMPLING_EVIDENCE`.
+  - `10.7`: Manipulated dataset fingerprint $\to$ Rejected with `SAMPLING_EVIDENCE_DATASET_MISMATCH`.
+  - `10.8`: Modified cluster keys and cluster coverage mismatch $\to$ Rejected with `SAMPLING_EVIDENCE_DATASET_MISMATCH`.
+  - `10.9`: Synthetic evidence submitted under `environment: 'production'` $\to$ Rejected with `SYNTHETIC_EVIDENCE_IN_PRODUCTION`.
+  - `10.10`: Synthetic evidence submitted under `environment: 'simulation'` on real user observations $\to$ Rejected with `UNAUTHENTICATED_SAMPLING_EVIDENCE`.
+  - `10.11`: Unknown or malformed environment (`environment: 'staging'`) $\to$ Rejected with `UNSUPPORTED_EVALUATION_ENVIRONMENT`, fails closed to `INSUFFICIENT_METHODOLOGY`.
+  - `10.12`: Missing environment parameter defaults strictly to `'production'` $\to$ Rejects synthetic and unauthenticated records.
+  - `10.13`: Missing, expired, or stale evidence $\to$ Rejected with `MISSING_SAMPLING_ASSURANCE` / `MALFORMED_SAMPLING_EVIDENCE`.
+  - `10.14`: Incompatible sampling methodology (`samplingMethodology: 'convenience_ad_hoc'`) $\to$ Rejected with `UNAUTHENTICATED_SAMPLING_EVIDENCE`.
+  - `10.15`: Malformed input with throwing getter property $\to$ Fails closed with `MALFORMED_SAMPLING_EVIDENCE` and `INSUFFICIENT_METHODOLOGY`.
+  - `10.16`: Exceptionally favorable metrics ($\Delta = +15.0$, perfect concordance) with unauthenticated evidence $\to$ Fails closed to `INSUFFICIENT_EVIDENCE`.
+  - `10.17`: Exceptionally favorable metrics with missing evidence $\to$ Fails closed to `INSUFFICIENT_EVIDENCE`.
+  - `10.18`: UI state claiming verification while evaluator evidence is absent $\to$ Evaluator fails closed to `INSUFFICIENT_EVIDENCE`.
+  - `10.19`: Alternate eligibility routes and options enforce the same conservative rule $\to$ Eligibility remains blocked.
+  - `10.20`: Factory weights (`urgencyWeight: 50.0`, `priorityWeight: 100.0`, `unblockWeight: 15.0`, `riskWeight: 25.0`) and production activation flags remain strictly invariant across all rejections.
+
+- **UI & User-Facing Transparency (`AdaptationSandboxCard.jsx`)**:
+  - Added explicit **Evaluation Environment** diagnostic row:
+    - Displays `🏢 Production (Live Application)` or `🧪 Simulation (Offline Diagnostic Only)`.
+  - Updated **Evidence Integrity & Authenticity** row:
+    - Clearly displays `⚠️ Unauthenticated (No Production Trust Anchor in Local Architecture)` in production.
+  - Disclosed missing production trust anchor in dedicated banner:
+    `⚠️ No Production Trust Anchor Configured: VoxPlan uses local-first client telemetry. Production cluster sampling assurance cannot currently be established, strictly blocking automated or supervised production adaptation.`
+  - Ensured no activation button, override mechanism, or simulated production elevation exists.
+
+- **Verification Results Summary**:
+  - **Activation Gate Evaluator Suite**: **58 passed, 0 failed** (`node --test tests/activation_gate_evaluator.test.js`).
+  - **Statistical Validation Suite**: **140 passed, 0 failed across 31 suites** (`node --test tests/statistical_validation.test.js`).
+  - **Combined Focused Validation**: **198 passed, 0 failed across 32 suites**.
+  - **Full Frontend Test Suite**: **808 passed, 0 failed across 164 suites** (`npm test`).
+  - **Backend Pytest Suite**: **27 passed, 0 failed** (`python -m pytest backend/tests/ -q`).
+  - **Linter**: **0 errors, 1 pre-existing warning** (`npm run lint` / `oxlint`).
+  - **Production Build**: **Clean build in 427ms** (`npm run build`).
+  - **Git Diff & Whitespace**: **Clean with zero whitespace or line-ending errors** (`git diff --check`).
+  - **Browser E2E Verification**: Verified on `http://localhost:5173/` (`activation_gate_panel_1792499172315.png`), confirming clean rendering of claimed status, unauthenticated evidence warning, exploratory diagnostic, and zero console errors.
+
+- **Production Safety Invariants & Current Status**:
+  - `isAdaptationUnlocked: false` permanently preserved.
+  - `productionApplied: false` permanently preserved.
+  - Factory weights invariant: `urgencyWeight: 50.0`, `priorityWeight: 100.0`, `unblockWeight: 15.0`, `riskWeight: 25.0`.
+  - Candidate weights remain shadow-only. Live scheduling strictly uses factory weights.
+  - **Current Production Eligibility Status**: **STRICTLY BLOCKED**. Production sampling assurance cannot currently be established, safely blocking production adaptation.
+  - Stage 4B remains strictly unstarted.
+
+---
+
 #### Stage 7.4.4B: Supervised Production Activation & Dynamic Deployment Gates (UNSTARTED)
 - **Scope & Expected Deliverables**:
   - Implement the supervised production activation workflow requiring verified readiness + $\ge 15$ eligible preference comparisons + superior concordance + 0 hard constraint violations + explicit user confirmation.

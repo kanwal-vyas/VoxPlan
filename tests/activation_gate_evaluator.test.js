@@ -402,6 +402,7 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
         samplingAssurance: createPassingSamplingAssurance(),
         pairedObservations: pairs,
         minMeaningfulDelta: 1.0,
+        environment: 'simulation',
       });
 
       assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR);
@@ -434,6 +435,7 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
         pairedObservations: highVariancePairs,
         minMeaningfulDelta: 0.5,
         randomSeed: 42,
+        environment: 'simulation',
       });
 
       assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR);
@@ -619,6 +621,7 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
         pairedObservations: pairs,
         minMeaningfulDelta: 1.0,
         randomSeed: 42,
+        environment: 'simulation',
       });
 
       assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.ELIGIBLE_FOR_SUPERVISED_REVIEW);
@@ -844,6 +847,7 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
         samplingAssurance: createPassingSamplingAssurance(pairs),
         pairedObservations: pairs,
         minMeaningfulDelta: 1.0,
+        environment: 'simulation',
       });
       assert.ok((res.pairedComparison.meanDelta ?? 0) > 0);
       assert.ok(res.uncertainty.ciLower <= 0);
@@ -863,6 +867,7 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
         rollbackPreflight: createPassingRollbackPreflight(),
         samplingAssurance: createPassingSamplingAssurance(),
         pairedObservations: pairs,
+        environment: 'simulation',
       });
       assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR);
       assert.ok((res.pairedComparison.meanDelta ?? 0) < 0);
@@ -882,6 +887,7 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
         samplingAssurance: createPassingSamplingAssurance(),
         pairedObservations: pairs,
         minMeaningfulDelta: 1.0,
+        environment: 'simulation',
       });
       assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR);
       assert.equal(res.pairedComparison.meetsPracticalImprovement, false);
@@ -1236,6 +1242,7 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
         pairedObservations: pairs,
         minMeaningfulDelta: 1.0,
         randomSeed: 42,
+        environment: 'simulation',
       });
       assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.ELIGIBLE_FOR_SUPERVISED_REVIEW);
       assert.equal(res.isEligibleForSuperVISED_REVIEW ?? res.isEligibleForSupervisedReview, true);
@@ -1303,6 +1310,7 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
         samplingAssurance: createPassingSamplingAssurance(pairs),
         pairedObservations: pairs,
         minMeaningfulDelta: 1.0,
+        environment: 'simulation',
       });
       assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR);
       assert.equal(res.pairedComparison.meetsPracticalImprovement, false);
@@ -1331,6 +1339,7 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
         pairedObservations: pairs,
         minMeaningfulDelta: 1.0,
         randomSeed: 42,
+        environment: 'simulation',
       });
       assert.ok((res.pairedComparison.meanDelta ?? 0) >= 1.0);
       assert.ok(res.uncertainty.ciLower <= 0);
@@ -1350,6 +1359,7 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
         rollbackPreflight: createPassingRollbackPreflight(),
         samplingAssurance: createPassingSamplingAssurance(pairs),
         pairedObservations: pairs,
+        environment: 'simulation',
       });
       assert.ok(res.evidencePolicy);
       assert.equal(typeof res.evidencePolicy.operationalExposurePassed, 'boolean');
@@ -1397,6 +1407,7 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
           samplingAssurance: createPassingSamplingAssurance(pairs),
           pairedObservations: pairs,
           randomSeed: seed,
+          environment: 'simulation',
         });
         return res.outcome;
       });
