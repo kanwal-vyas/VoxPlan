@@ -21,6 +21,7 @@ import { FACTORY_SCHEDULER_WEIGHTS } from '../src/scheduler/adaptiveScheduler.js
 import {
   generateValidationDataset,
   evaluateCoverageExperiment,
+  auditEstimandIntegrity,
 } from './statistical_validation_harness.js';
 
 describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Provenance Audit', () => {
@@ -1618,6 +1619,647 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
         assert.strictEqual(res.productionInvariance.isAdaptationUnlocked, false);
         assert.strictEqual(res.productionInvariance.productionApplied, false);
         assert.strictEqual(res.productionInvariance.factoryWeightsUnchanged, true);
+      });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Phase 7.4 Stage 4A.6: Estimand Integrity & Independent Coverage Audit
+  // ---------------------------------------------------------------------------
+  describe('7. Phase 7.4 Stage 4A.6: Estimand Integrity & Independent Coverage Audit', () => {
+    // -------------------------------------------------------------------------
+    // Scope A & Scope B: Estimand Decomposition & Deterministic Hand-Checkable Fixture
+    // -------------------------------------------------------------------------
+    describe('A. Estimand Decomposition & Mathematical Distinction (Scope A & Scope B)', () => {
+      it('demonstrates that the 4 estimands represent distinct mathematical quantities when shared shocks and cluster effects are present', () => {
+        const dataset = generateValidationDataset({
+          groundTruthEffect: 2.0,
+          clusterCount: 5,
+          defaultPairsPerCluster: 4,
+          betweenClusterVariance: 0.8,
+          withinClusterVariance: 1.0,
+          crossClusterDependence: 1.2,
+          randomSeed: 5001,
+        });
+
+        // 1. Marginal Population Effect (theta)
+        assert.strictEqual(dataset.marginalPopulationEffect, 2.0);
+
+        // 2. Shock-Conditional Population Effect (theta + gamma)
+        const expectedShockCond = Math.round((2.0 + dataset.sharedShock) * 1000) / 1000;
+        assert.strictEqual(dataset.shockConditionalPopulationEffect, expectedShockCond);
+        assert.notStrictEqual(dataset.shockConditionalPopulationEffect, dataset.marginalPopulationEffect);
+
+        // 3. Finite Sampled-Cluster Target (1/M sum_c (theta + gamma + u_c))
+        const clMeans = Object.values(dataset.expectedClusterMeans);
+        const finiteSampleExpected = Math.round((clMeans.reduce((a, b) => a + b, 0) / clMeans.length) * 1000) / 1000;
+        assert.strictEqual(dataset.finiteSampleClusterTarget, finiteSampleExpected);
+
+        // 4. Observed Sample Estimate (empirical cluster-averaged mean delta)
+        assert.strictEqual(typeof dataset.observedSampleEstimate, 'number');
+
+        // Confirm metadata disclosures are attached
+        assert.strictEqual(dataset.scenarioMetadata.hasSharedShock, true);
+        assert.ok(dataset.scenarioMetadata.targetDefinitions.marginalPopulationEffect);
+        assert.ok(dataset.scenarioMetadata.targetDefinitions.shockConditionalPopulationEffect);
+        assert.ok(dataset.scenarioMetadata.targetDefinitions.finiteSampleClusterTarget);
+      });
+
+      it('hand-checkable deterministic fixture: cluster Student-t interval covers shock-conditional and finite targets but misses marginal effect under common shock', () => {
+        // Construct 5 clusters with M=5, N=4
+        // True base effect theta = 2.0
+        // Realized shared shock gamma = +3.0
+        // Realized cluster shocks u_c = [-2.0, -1.0, 0.0, 1.0, 2.0] (mean = 0.0)
+        // True cluster means = 2.0 + 3.0 + u_c = [3.0, 4.0, 5.0, 6.0, 7.0]
+        // Grand mean delta = 5.000
+        // Variance s^2 = [(-2)^2 + (-1)^2 + 0^2 + 1^2 + 2^2] / 4 = 10.0 / 4 = 2.500
+        // SE = sqrt(2.5 / 5) = sqrt(0.5) = 0.7071
+        // t_crit(df=4) = 2.776445...
+        // Margin = 2.776445 * 0.707107 = 1.96324
+        // ciLower = 5.000 - 1.96324 = 3.037
+        // ciUpper = 5.000 + 1.96324 = 6.963
+        const clusterMeans = [3.0, 4.0, 5.0, 6.0, 7.0];
+        const pairs = [];
+        let pId = 1;
+        for (let c = 0; c < clusterMeans.length; c++) {
+          const clKey = `fixture_cluster_${c + 1}`;
+          const targetMean = clusterMeans[c];
+          // Symmetric residuals: [-0.1, -0.05, +0.05, +0.1] -> mean of residuals = 0
+          const resOffsets = [-0.1, -0.05, 0.05, 0.1];
+          for (let i = 0; i < resOffsets.length; i++) {
+            pairs.push({
+              observationId: `fix_obs_${pId++}`,
+              context: { scenario_key: clKey, dailyCapacityHours: 6.0, planningHorizonDays: 7, startDate: '2026-10-18', taskSetId: `taskset_${clKey}_${i}` },
+              candidateScore: 80.0 + targetMean + resOffsets[i],
+              baselineScore: 80.0,
+              candidateFeasible: true,
+              baselineFeasible: true,
+              isSynthetic: false,
+            });
+          }
+        }
+
+        const res = evaluateActivationGate({
+          candidateWeights: validCandidateWeights,
+          baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+          readinessReport: defaultReadiness,
+          rollbackPreflight: defaultRollback,
+          pairedObservations: pairs,
+          bootstrapIterations: 0,
+        });
+
+        // Point estimate and variance checks
+        assert.strictEqual(res.pairedComparison.clusterAveragedMeanDelta, 5.0);
+        assert.strictEqual(res.uncertainty.degreesOfFreedom, 4);
+        assert.strictEqual(res.uncertainty.standardError, 0.707);
+        assert.strictEqual(res.uncertainty.ciLower, 3.037);
+        assert.strictEqual(res.uncertainty.ciUpper, 6.963);
+
+        const lo = res.uncertainty.ciLower;
+        const hi = res.uncertainty.ciUpper;
+
+        // Target 1: Marginal population effect theta = 2.0
+        // Because gamma = +3.0 shifted all clusters without being captured in sample variance,
+        // the interval [3.037, 6.963] FAILS to cover the marginal target (2.0 < 3.037)!
+        assert.strictEqual(2.0 < lo, true, 'Marginal target theta = 2.0 is NOT covered by the interval');
+
+        // Target 2: Shock-conditional population effect theta + gamma = 5.0
+        // The interval is exactly centered at 5.0 and covers it cleanly!
+        assert.ok(5.0 >= lo && 5.0 <= hi, 'Shock-conditional target theta + gamma = 5.0 IS covered');
+
+        // Target 3: Finite-sample cluster target (1/M sum clEffect = 5.0)
+        assert.ok(5.0 >= lo && 5.0 <= hi, 'Finite-sample cluster target IS covered');
+      });
+
+      it('hand-checkable asymmetric fixture: reveals mathematical difference between shock-conditional and finite targets', () => {
+        // Construct 5 clusters where realized cluster effects have non-zero sample mean:
+        // theta = 2.0, gamma = +3.0
+        // cluster shocks u_c = [1.0, 2.0, 1.0, 3.0, 3.0] -> mean(u_c) = +2.0
+        // true cluster means = 2.0 + 3.0 + u_c = [6.0, 7.0, 6.0, 8.0, 8.0]
+        // Grand mean delta = 7.000
+        // Variance s^2 = [(-1)^2 + 0^2 + (-1)^2 + 1^2 + 1^2] / 4 = 4.0 / 4 = 1.000
+        // SE = sqrt(1.0 / 5) = 0.4472
+        // Margin = 2.776445 * 0.447214 = 1.2416
+        // ciLower = 7.000 - 1.242 = 5.758
+        // ciUpper = 7.000 + 1.242 = 8.242
+        const clusterMeans = [6.0, 7.0, 6.0, 8.0, 8.0];
+        const pairs = [];
+        let pId = 1;
+        for (let c = 0; c < clusterMeans.length; c++) {
+          const clKey = `asym_cluster_${c + 1}`;
+          const targetMean = clusterMeans[c];
+          for (let i = 0; i < 4; i++) {
+            pairs.push({
+              observationId: `asym_obs_${pId++}`,
+              context: { scenario_key: clKey, dailyCapacityHours: 6.0, planningHorizonDays: 7, startDate: '2026-10-18', taskSetId: `taskset_${clKey}_${i}` },
+              candidateScore: 80.0 + targetMean,
+              baselineScore: 80.0,
+              candidateFeasible: true,
+              baselineFeasible: true,
+              isSynthetic: false,
+            });
+          }
+        }
+
+        const res = evaluateActivationGate({
+          candidateWeights: validCandidateWeights,
+          baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+          readinessReport: defaultReadiness,
+          rollbackPreflight: defaultRollback,
+          pairedObservations: pairs,
+          bootstrapIterations: 0,
+        });
+
+        assert.strictEqual(res.pairedComparison.clusterAveragedMeanDelta, 7.0);
+        assert.strictEqual(res.uncertainty.standardError, 0.447);
+        assert.strictEqual(res.uncertainty.ciLower, 5.759);
+        assert.strictEqual(res.uncertainty.ciUpper, 8.241);
+
+        const lo = res.uncertainty.ciLower;
+        const hi = res.uncertainty.ciUpper;
+
+        // Shock-conditional population effect: theta + gamma = 2.0 + 3.0 = 5.0
+        // In this realization where mean(u) was +2.0, 5.0 is OUTSIDE the interval [5.759, 8.241]!
+        assert.strictEqual(5.0 < lo, true, 'Shock-conditional population target 5.0 is outside the interval in this realization');
+
+        // Finite-sample cluster target: 1/M sum_c E[Y_c] = 7.0
+        // Finite-sample target is centered at 7.0 and covered!
+        assert.ok(7.0 >= lo && 7.0 <= hi, 'Finite-sample target 7.0 is inside the interval');
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // Scope B: Audit of Stage 4A.5 Experiment & Coverage Decomposition
+    // -------------------------------------------------------------------------
+    describe('B. Audit of Stage 4A.5 Shared-Shock Experiment (Scope B)', () => {
+      it('reproduces and resolves Stage 4A.5 coverage discrepancy (seeds 5000–5999, 1,000 replications)', () => {
+        const exp = evaluateCoverageExperiment({
+          scenarioConfig: {
+            groundTruthEffect: 1.5,
+            clusterCount: 5,
+            defaultPairsPerCluster: 5,
+            betweenClusterVariance: 0.5,
+            withinClusterVariance: 1.0,
+            crossClusterDependence: 0.6,
+          },
+          numReplications: 1000,
+          seedStart: 5000,
+          gateOptions: { bootstrapIterations: 0 },
+          targetEstimand: 'shock_conditional',
+        });
+
+        assert.strictEqual(exp.replicationsCount, 1000);
+        assert.strictEqual(exp.validCiEvaluationsCount, 1000);
+
+        // 1. Marginal coverage reproduces reported ~78.4% (between 75.0% and 82.0%)
+        const margRate = exp.byEstimand.marginal.rate;
+        assert.ok(
+          margRate >= 0.75 && margRate <= 0.82,
+          `Marginal coverage should reproduce ~78.4% (got ${exp.byEstimand.marginal.coveredCount}/1000 = ${(margRate * 100).toFixed(1)}%)`
+        );
+
+        // 2. Shock-Conditional Population Coverage achieves NOMINAL ~95% (between 93.5% and 96.5%)
+        const shockCondRate = exp.byEstimand.shockConditional.rate;
+        assert.ok(
+          shockCondRate >= 0.935 && shockCondRate <= 0.965,
+          `Shock-conditional coverage achieves nominal ~95% (got ${exp.byEstimand.shockConditional.coveredCount}/1000 = ${(shockCondRate * 100).toFixed(1)}%)`
+        );
+
+        // 3. Finite Sampled-Cluster Target Coverage achieves ~99.4% (between 98.5% and 99.8%)
+        // Resolves root cause: Stage 4A.5 evaluated against finite sampled cluster means, NOT the conditional population parameter!
+        const finiteRate = exp.byEstimand.finiteSample.rate;
+        assert.ok(
+          finiteRate >= 0.985 && finiteRate <= 0.998,
+          `Finite-sample target achieves ~99.4% due to conditioning on realized cluster effects (got ${exp.byEstimand.finiteSample.coveredCount}/1000 = ${(finiteRate * 100).toFixed(1)}%)`
+        );
+
+        // 4. Observed Sample Estimate achieves 100%
+        assert.strictEqual(exp.byEstimand.observedSample.rate, 1.0);
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // Scope D: Estimand Integrity & Mismatch Detection
+    // -------------------------------------------------------------------------
+    describe('C. Estimand Integrity & Mismatch Detection (Scope D)', () => {
+      it('detects estimand mismatch when marginal target is paired with cluster Student-t interval under shared shocks', () => {
+        const audit = auditEstimandIntegrity({
+          scenarioConfig: { crossClusterDependence: 0.6 },
+          targetEstimand: 'marginal',
+          empiricalCoverage: 0.784,
+        });
+
+        assert.strictEqual(audit.matched, false);
+        assert.strictEqual(audit.code, 'ESTIMAND_MISMATCH_MARGINAL_UNDER_SHARED_SHOCK');
+        assert.strictEqual(audit.nominalExpected, false);
+        assert.strictEqual(audit.validAuditedEstimand, 'shock_conditional');
+        assert.ok(audit.message.includes('sigma_gamma^2 cancels out'));
+      });
+
+      it('detects estimand mismatch when finite-sample cluster target is presented as population coverage', () => {
+        const audit = auditEstimandIntegrity({
+          scenarioConfig: { crossClusterDependence: 0.6 },
+          targetEstimand: 'finite_sample',
+          empiricalCoverage: 0.994,
+        });
+
+        assert.strictEqual(audit.matched, false);
+        assert.strictEqual(audit.code, 'ESTIMAND_MISMATCH_FINITE_SAMPLE_PRESENTED_AS_POPULATION');
+        assert.strictEqual(audit.nominalExpected, false);
+        assert.strictEqual(audit.validAuditedEstimand, 'shock_conditional');
+        assert.ok(audit.message.includes('over-dispersed'));
+      });
+
+      it('validates correct pairing for shock-conditional target under shared shocks', () => {
+        const audit = auditEstimandIntegrity({
+          scenarioConfig: { crossClusterDependence: 0.6 },
+          targetEstimand: 'shock_conditional',
+          empiricalCoverage: 0.952,
+        });
+
+        assert.strictEqual(audit.matched, true);
+        assert.strictEqual(audit.code, 'ESTIMAND_MATCH_SHOCK_CONDITIONAL');
+        assert.strictEqual(audit.nominalExpected, true);
+      });
+
+      it('validates correct pairing for marginal target when clusters are independent', () => {
+        const audit = auditEstimandIntegrity({
+          scenarioConfig: { crossClusterDependence: 0.0 },
+          targetEstimand: 'marginal',
+          empiricalCoverage: 0.950,
+        });
+
+        assert.strictEqual(audit.matched, true);
+        assert.strictEqual(audit.code, 'ESTIMAND_MATCH_INDEPENDENT_CLUSTERS');
+        assert.strictEqual(audit.nominalExpected, true);
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // Scope E: Independent Frozen Held-Out Validation Matrix (Seeds 100000–109999, 1,000 Replications each)
+    // -------------------------------------------------------------------------
+    describe('D. Independent Frozen Held-Out Validation Matrix (Seeds 100000–109999, 1,000 Replications)', () => {
+      it('Scenario 1: Independent Gaussian Cluster Effects — seeds 100000+ (1,000 reps)', () => {
+        const exp = evaluateCoverageExperiment({
+          scenarioConfig: {
+            groundTruthEffect: 1.5,
+            clusterCount: 5,
+            defaultPairsPerCluster: 5,
+            betweenClusterVariance: 0.5,
+            withinClusterVariance: 1.0,
+            crossClusterDependence: 0.0,
+          },
+          numReplications: 1000,
+          seedStart: 100000,
+          gateOptions: { bootstrapIterations: 0 },
+          targetEstimand: 'marginal',
+        });
+
+        assert.ok(exp.empiricalCoverage >= 0.925, `Independent Gaussian coverage >= 92.5%: got ${exp.empiricalCoverage}`);
+        assert.ok(exp.coverageWilsonCI.ciLower >= 0.910);
+      });
+
+      it('Scenario 2: Shared Additive Shock (Decomposed Targets) — seeds 101000+ (1,000 reps)', () => {
+        const exp = evaluateCoverageExperiment({
+          scenarioConfig: {
+            groundTruthEffect: 1.5,
+            clusterCount: 5,
+            defaultPairsPerCluster: 5,
+            betweenClusterVariance: 0.5,
+            withinClusterVariance: 1.0,
+            crossClusterDependence: 0.6,
+          },
+          numReplications: 1000,
+          seedStart: 101000,
+          gateOptions: { bootstrapIterations: 0 },
+          targetEstimand: 'shock_conditional',
+        });
+
+        // Shock-conditional coverage meets nominal 95% within Monte Carlo tolerance
+        assert.ok(
+          exp.byEstimand.shockConditional.rate >= 0.930 && exp.byEstimand.shockConditional.rate <= 0.975,
+          `Shock conditional rate in [0.93, 0.975]: got ${exp.byEstimand.shockConditional.rate}`
+        );
+        // Marginal coverage under shared shock degrades to ~78.4%
+        assert.ok(
+          exp.byEstimand.marginal.rate >= 0.750 && exp.byEstimand.marginal.rate <= 0.830,
+          `Marginal rate in [0.75, 0.83]: got ${exp.byEstimand.marginal.rate}`
+        );
+        // Finite-sample cluster target exhibits over-dispersion ~99.4%
+        assert.ok(
+          exp.byEstimand.finiteSample.rate >= 0.985 && exp.byEstimand.finiteSample.rate <= 1.0,
+          `Finite sample rate in [0.985, 1.0]: got ${exp.byEstimand.finiteSample.rate}`
+        );
+      });
+
+      it('Scenario 3: Heavy-Tailed Clusters (Student-t df=3) — seeds 102000+ (1,000 reps)', () => {
+        const exp = evaluateCoverageExperiment({
+          scenarioConfig: {
+            groundTruthEffect: 1.5,
+            clusterCount: 5,
+            defaultPairsPerCluster: 5,
+            betweenClusterVariance: 0.5,
+            withinClusterVariance: 1.0,
+            distribution: 'heavy_tailed',
+          },
+          numReplications: 1000,
+          seedStart: 102000,
+          gateOptions: { bootstrapIterations: 0 },
+        });
+
+        assert.ok(exp.empiricalCoverage >= 0.930, `Heavy-tailed coverage >= 93%: got ${exp.empiricalCoverage}`);
+      });
+
+      it('Scenario 4: Severe Cluster Size Imbalance ([20, 3, 3, 3, 3]) — seeds 103000+ (1,000 reps)', () => {
+        const exp = evaluateCoverageExperiment({
+          scenarioConfig: {
+            groundTruthEffect: 1.5,
+            clusterCount: 5,
+            clusterSizes: [20, 3, 3, 3, 3],
+            betweenClusterVariance: 0.5,
+            withinClusterVariance: 1.0,
+          },
+          numReplications: 1000,
+          seedStart: 103000,
+          gateOptions: { bootstrapIterations: 0 },
+        });
+
+        assert.ok(exp.empiricalCoverage >= 0.935, `Imbalanced coverage >= 93.5%: got ${exp.empiricalCoverage}`);
+      });
+
+      it('Scenario 5: High Within-Cluster Correlation (rho = 0.7) — seeds 104000+ (1,000 reps)', () => {
+        const exp = evaluateCoverageExperiment({
+          scenarioConfig: {
+            groundTruthEffect: 1.5,
+            clusterCount: 5,
+            defaultPairsPerCluster: 5,
+            betweenClusterVariance: 0.5,
+            withinClusterVariance: 1.0,
+            withinClusterCorrelation: 0.7,
+          },
+          numReplications: 1000,
+          seedStart: 104000,
+          gateOptions: { bootstrapIterations: 0 },
+        });
+
+        assert.ok(exp.empiricalCoverage >= 0.940, `High ICC coverage >= 94%: got ${exp.empiricalCoverage}`);
+      });
+
+      it('Scenario 6: Heterogeneous Cluster Effects — seeds 105000+ (1,000 reps)', () => {
+        const exp = evaluateCoverageExperiment({
+          scenarioConfig: {
+            heterogeneousClusterEffects: [3.0, 2.0, 1.5, 0.5, 0.5], // Mean = 1.5
+            clusterCount: 5,
+            defaultPairsPerCluster: 5,
+            betweenClusterVariance: 0.0,
+            withinClusterVariance: 1.0,
+          },
+          numReplications: 1000,
+          seedStart: 105000,
+          gateOptions: { bootstrapIterations: 0 },
+        });
+
+        assert.ok(exp.empiricalCoverage >= 0.930, `Heterogeneous coverage >= 93%: got ${exp.empiricalCoverage}`);
+      });
+
+      it('Scenario 7: Outlier Cluster Dominance Rejection — seeds 106000+ (1,000 reps)', () => {
+        let eligibleCount = 0;
+        let notSuperiorCount = 0;
+        for (let r = 0; r < 1000; r++) {
+          const d = generateValidationDataset({
+            clusterCount: 5,
+            defaultPairsPerCluster: 4,
+            heterogeneousClusterEffects: [15.0, -1.5, -2.0, -1.0, -0.5],
+            betweenClusterVariance: 0.0,
+            randomSeed: 106000 + r,
+          });
+          const res = evaluateActivationGate({
+            candidateWeights: validCandidateWeights,
+            baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+            readinessReport: defaultReadiness,
+            rollbackPreflight: defaultRollback,
+            pairedObservations: d.pairs,
+          });
+          if (res.isEligibleForSupervisedReview) eligibleCount++;
+          if (res.outcome === ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR) notSuperiorCount++;
+        }
+
+        assert.strictEqual(eligibleCount, 0, 'Zero outlier-dominated candidates eligible');
+        assert.strictEqual(notSuperiorCount, 1000, '100% disqualified as NOT_SUPERIOR');
+      });
+
+      it('Scenario 8: Detectable Cross-Cluster Task Overlap Rejection — seeds 107000+ (1,000 reps)', () => {
+        let eligibleCount = 0;
+        let insufficientEvidenceCount = 0;
+        for (let r = 0; r < 1000; r++) {
+          const d = generateValidationDataset({
+            groundTruthEffect: 3.5,
+            clusterCount: 5,
+            defaultPairsPerCluster: 4,
+            partialTaskOverlapClusters: [0, 1],
+            randomSeed: 107000 + r,
+          });
+          const res = evaluateActivationGate({
+            candidateWeights: validCandidateWeights,
+            baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+            readinessReport: defaultReadiness,
+            rollbackPreflight: defaultRollback,
+            pairedObservations: d.pairs,
+          });
+          if (res.isEligibleForSupervisedReview) eligibleCount++;
+          if (res.outcome === ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE) insufficientEvidenceCount++;
+        }
+
+        assert.strictEqual(eligibleCount, 0, 'Zero overlapping candidates eligible');
+        assert.strictEqual(insufficientEvidenceCount, 1000, '100% blocked as INSUFFICIENT_EVIDENCE');
+      });
+
+      it('Scenario 9: Missing or Invalid Cluster Provenance Rejection — seeds 108000+ (1,000 reps)', () => {
+        let eligibleCount = 0;
+        let insufficientEvidenceCount = 0;
+        for (let r = 0; r < 1000; r++) {
+          const d = generateValidationDataset({
+            groundTruthEffect: 3.5,
+            clusterCount: 5,
+            defaultPairsPerCluster: 4,
+            randomSeed: 108000 + r,
+          });
+          // Strip scenario_key and cluster identifiers
+          d.pairs.forEach((p) => {
+            delete p.context.scenario_key;
+            delete p.clusterKey;
+          });
+          const res = evaluateActivationGate({
+            candidateWeights: validCandidateWeights,
+            baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+            readinessReport: defaultReadiness,
+            rollbackPreflight: defaultRollback,
+            pairedObservations: d.pairs,
+          });
+          if (res.isEligibleForSupervisedReview) eligibleCount++;
+          if (res.outcome === ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE) insufficientEvidenceCount++;
+        }
+
+        assert.strictEqual(eligibleCount, 0, 'Zero missing-provenance observations eligible');
+        assert.strictEqual(insufficientEvidenceCount, 1000, '100% blocked as INSUFFICIENT_EVIDENCE');
+      });
+
+      it('Scenario 10: Invalid Scores or Uncertainty Inputs Quarantined — seeds 109000+ (1,000 reps)', () => {
+        let eligibleCount = 0;
+        let insufficientMethodologyCount = 0;
+        for (let r = 0; r < 1000; r++) {
+          const d = generateValidationDataset({
+            groundTruthEffect: 3.5,
+            clusterCount: 5,
+            defaultPairsPerCluster: 4,
+            randomSeed: 109000 + r,
+          });
+          // Inject non-finite candidate score across all pairs
+          d.pairs.forEach((p) => {
+            p.candidateScore = NaN;
+          });
+          const res = evaluateActivationGate({
+            candidateWeights: validCandidateWeights,
+            baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+            readinessReport: defaultReadiness,
+            rollbackPreflight: defaultRollback,
+            pairedObservations: d.pairs,
+          });
+          if (res.isEligibleForSupervisedReview) eligibleCount++;
+          if (res.outcome === ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_METHODOLOGY) insufficientMethodologyCount++;
+        }
+
+        assert.strictEqual(eligibleCount, 0, 'Zero invalid score candidates eligible');
+        assert.strictEqual(insufficientMethodologyCount, 1000, '100% quarantined as INSUFFICIENT_METHODOLOGY');
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // Scope F: Practical Threshold Decision Curve Revalidation across True Effects
+    // -------------------------------------------------------------------------
+    describe('E. Practical-Threshold Decision Curve Revalidation (Scope F)', () => {
+      it('revalidates Rule B across true effects {-2.0, 0.0, 0.5, 0.9, 1.0, 1.1, 1.5, 3.5} (seeds 110000+, 1,000 reps each)', () => {
+        const effects = [-2.0, 0.0, 0.5, 0.9, 1.0, 1.1, 1.5, 3.5];
+        const seedBases = [110000, 111000, 112000, 113000, 114000, 115000, 116000, 117000];
+        const results = [];
+
+        for (let idx = 0; idx < effects.length; idx++) {
+          const theta = effects[idx];
+          const seedStart = seedBases[idx];
+          let eligible = 0;
+          let notSuperior = 0;
+
+          for (let r = 0; r < 1000; r++) {
+            const d = generateValidationDataset({
+              groundTruthEffect: theta,
+              clusterCount: 5,
+              defaultPairsPerCluster: 5,
+              betweenClusterVariance: 0.5,
+              withinClusterVariance: 1.0,
+              randomSeed: seedStart + r,
+            });
+            const res = evaluateActivationGate({
+              candidateWeights: validCandidateWeights,
+              baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+              readinessReport: defaultReadiness,
+              rollbackPreflight: defaultRollback,
+              pairedObservations: d.pairs,
+            });
+            if (res.isEligibleForSupervisedReview) eligible++;
+            if (res.outcome === ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR) notSuperior++;
+          }
+
+          results.push({ theta, eligible, notSuperior });
+        }
+
+        // theta = -2.0: 0 eligible (100% rejection)
+        assert.strictEqual(results[0].eligible, 0);
+        // theta = 0.0: 0 eligible (100% rejection, 0 any-improvement error)
+        assert.strictEqual(results[1].eligible, 0);
+        // theta = 0.5: <= 5 eligible (<= 0.5% false eligibility under Rule B)
+        assert.ok(results[2].eligible <= 5, `theta=0.5 eligible <= 5: got ${results[2].eligible}`);
+        // theta = 0.9: ~15 eligible (~1.5%)
+        assert.ok(results[3].eligible >= 5 && results[3].eligible <= 30);
+        // theta = 1.0: ~29 eligible (~2.9%)
+        assert.ok(results[4].eligible >= 15 && results[4].eligible <= 45);
+        // theta = 1.1: ~42 eligible (~4.2%)
+        assert.ok(results[5].eligible >= 25 && results[5].eligible <= 65);
+        // theta = 1.5: ~168 eligible (~16.8%)
+        assert.ok(results[6].eligible >= 130 && results[6].eligible <= 210);
+        // theta = 3.5: >= 995 eligible (>= 99.5% power)
+        assert.ok(results[7].eligible >= 995);
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // Scope G, H, J: Assumption Verification, Precedence & Production Isolation
+    // -------------------------------------------------------------------------
+    describe('F. Assumptions, Outcome Precedence & Production Invariants (Scope G, H, J)', () => {
+      it('enforces strict precedence: INSUFFICIENT_METHODOLOGY > INFEASIBLE > INSUFFICIENT_EVIDENCE > NOT_SUPERIOR', () => {
+        // Invalid threshold rule yields INSUFFICIENT_METHODOLOGY
+        const resMethod = evaluateActivationGate({
+          candidateWeights: validCandidateWeights,
+          baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+          practicalThresholdRule: 'invalid_unsupported_rule',
+        });
+        assert.strictEqual(resMethod.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_METHODOLOGY);
+
+        // Infeasible overrides insufficient evidence
+        const resFeas = evaluateActivationGate({
+          candidateWeights: { urgencyWeight: -999.0 },
+          baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+          pairedObservations: [],
+        });
+        assert.strictEqual(resFeas.outcome, ACTIVATION_GATE_OUTCOMES.INFEASIBLE);
+      });
+
+      it('discloses unverified cluster independence and single-window common shock limitation', () => {
+        const d = generateValidationDataset({
+          groundTruthEffect: 2.5,
+          clusterCount: 5,
+          defaultPairsPerCluster: 4,
+          randomSeed: 50901,
+        });
+
+        const res = evaluateActivationGate({
+          candidateWeights: validCandidateWeights,
+          baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+          readinessReport: defaultReadiness,
+          rollbackPreflight: defaultRollback,
+          pairedObservations: d.pairs,
+        });
+
+        assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+        assert.strictEqual(res.evidenceAssessment.clusterIndependenceStatus, 'unverified_nominal_clusters');
+        assert.strictEqual(res.evidencePolicy.statisticalAdequacy.clusterSamplingIndependenceVerified, false);
+        assert.ok(res.evidencePolicy.statisticalAdequacy.unobservedSharedShockLimitation);
+      });
+
+      it('confirms strict production isolation: adaptation remains locked', () => {
+        const d = generateValidationDataset({
+          groundTruthEffect: 3.5,
+          clusterCount: 5,
+          defaultPairsPerCluster: 5,
+          randomSeed: 50902,
+        });
+
+        const res = evaluateActivationGate({
+          candidateWeights: validCandidateWeights,
+          baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+          readinessReport: defaultReadiness,
+          rollbackPreflight: defaultRollback,
+          pairedObservations: d.pairs,
+        });
+
+        assert.strictEqual(res.isAdaptationUnlocked, false);
+        assert.strictEqual(res.productionApplied, false);
+        assert.strictEqual(res.productionInvariance.isAdaptationUnlocked, false);
+        assert.strictEqual(res.productionInvariance.productionApplied, false);
+        assert.strictEqual(res.productionInvariance.factoryWeightsUnchanged, true);
+        assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.urgencyWeight, 50.0);
+        assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.priorityWeight, 100.0);
+        assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.unblockWeight, 15.0);
+        assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.riskWeight, 25.0);
       });
     });
   });

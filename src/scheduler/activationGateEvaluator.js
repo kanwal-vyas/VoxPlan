@@ -106,6 +106,9 @@ export const METHODOLOGY_DISCLOSURES = Object.freeze([
   'Unobserved latent shocks or common environment factors (e.g. shared organizational shifts) affect all clusters equally and cancel out of cluster sample variance. The cluster Student-t interval estimates the conditional treatment effect for the observed regime; it cannot detect or hedge against unobserved common latent shifts without longitudinal inter-regime evidence.',
   'Practical superiority under Rule B requires the 95% confidence interval lower bound to meet or exceed epsilon (CI_lower >= epsilon), protecting against approving candidates whose true effect is below the provisional threshold.',
   'Cross-cluster task overlap (Jaccard similarity >= 0.20 or overlap coefficient >= 0.30) violates cluster exchangeability and invalidates decision readiness, resulting in conservative insufficient evidence.',
+  'Estimand Distinction: The cluster Student-t interval targets the shock-conditional population effect (theta + gamma) for the observed operational regime. It does not target the marginal population effect (theta) across unobserved environment shocks, nor does it target the finite sampled-cluster mean (theta + gamma + mean(u)).',
+  'Single-Window Identification Limitation: A single operational window provides zero degrees of freedom to identify the variance of an unobserved common shock (sigma_gamma^2). Estimating marginal population uncertainty requires telemetry across multiple independent longitudinal operational windows or multi-environment randomized sampling.',
+  'Unverified Independence Policy: Distinct scenario cluster IDs and non-overlapping task backlogs confirm the absence of detectable task leakage, but DO NOT constitute mathematical proof of statistical independence. Independence across clusters remains unverified.',
 ]);
 
 /**
@@ -649,6 +652,7 @@ export function evaluateActivationGate({
   const scoringValid = typeof scoringFn === 'function';
   const epsilonValid = typeof minMeaningfulDelta === 'number' && isFinite(minMeaningfulDelta) && minMeaningfulDelta > 0;
   const epsilon = epsilonValid ? minMeaningfulDelta : DEFAULT_MIN_MEANINGFUL_DELTA;
+  const ruleValid = practicalThresholdRule == null || Object.values(PRACTICAL_THRESHOLD_RULES).includes(practicalThresholdRule);
 
   if (!scoringValid) {
     reasons.push('Invalid schedule objective scoring function provided (must be an executable function).');
@@ -658,8 +662,13 @@ export function evaluateActivationGate({
       `Invalid practical significance threshold (epsilon = ${minMeaningfulDelta}); must be a finite positive number.`
     );
   }
+  if (!ruleValid) {
+    reasons.push(
+      `Invalid practical threshold rule "${practicalThresholdRule}"; must be one of: ${Object.values(PRACTICAL_THRESHOLD_RULES).join(', ')}.`
+    );
+  }
 
-  const methodologyValid = scoringValid && epsilonValid;
+  const methodologyValid = scoringValid && epsilonValid && ruleValid;
 
   // -------------------------------------------------------------------------
   // 2. Candidate Configuration Validation (Audit Boundary)
@@ -1255,7 +1264,7 @@ export function evaluateActivationGate({
   if (
     !methodologyValid ||
     (rawPairs.length > 0 && eligibleCount === 0 && excludedPairs.every((p) => p.reason?.includes('Non-finite'))) ||
-    (canEstimateUncertainty && (ciLower == null || !isFinite(ciLower) || ciUpper == null || !isFinite(ciUpper)))
+    (canEstimateUncertainty && (ciLower == null || !isFinite(ciLower) || ciUpper == null || !isFinite(ciUpper) || ciLower > ciUpper))
   ) {
     outcome = ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_METHODOLOGY;
   }
@@ -1338,7 +1347,13 @@ export function evaluateActivationGate({
         meetsSampleThreshold: eligibleCount >= MIN_PAIRED_OBSERVATIONS,
         zeroLeakageEnforced: !crossClusterLeakageDetected,
         zeroOverlapEnforced: !crossClusterTaskOverlapDetected,
+        disjointTaskSetsVerified: !crossClusterTaskOverlapDetected && !crossClusterLeakageDetected,
+        clusterSamplingIndependenceVerified: false,
+        clusterIndependenceStatus: 'unverified_nominal_clusters',
+        unobservedSharedShockLimitation:
+          'Common environment shocks affecting all clusters equally cannot be identified from a single operational window; interval covers shock-conditional effect (theta + gamma), not marginal population effect.',
         uncertaintyMethod: canEstimateUncertainty ? 'cluster_level_t_interval_95' : null,
+        targetEstimandDescription: 'shock_conditional_regime_mean',
         degreesOfFreedom,
         tCritical,
         standardError: clusterStandardError,
@@ -1367,6 +1382,8 @@ export function evaluateActivationGate({
       crossClusterLeakageDetected,
       crossClusterTaskOverlapDetected,
       maxCrossClusterTaskJaccard,
+      clusterSamplingIndependenceVerified: false,
+      clusterIndependenceStatus: 'unverified_nominal_clusters',
       isDecisionReady,
     },
     thresholdPolicy: {

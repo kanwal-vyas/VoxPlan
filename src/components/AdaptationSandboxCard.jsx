@@ -2047,7 +2047,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                   : 'N/A'}
               </span>
               <span style={styles.rankingStatSub}>
-                Harmonized Estimand: 1/M Σ Δ_c {activeActivationGate.pairedComparison.observationWeightedMeanDelta != null ? `(Obs-wt: ${activeActivationGate.pairedComparison.observationWeightedMeanDelta > 0 ? '+' : ''}${activeActivationGate.pairedComparison.observationWeightedMeanDelta} pts)` : ''}
+                Harmonized Estimand: 1/M Σ Δ_c (Regime Shock-Conditional Target) {activeActivationGate.pairedComparison.observationWeightedMeanDelta != null ? `(Obs-wt: ${activeActivationGate.pairedComparison.observationWeightedMeanDelta > 0 ? '+' : ''}${activeActivationGate.pairedComparison.observationWeightedMeanDelta} pts)` : ''}
               </span>
             </div>
             <div style={styles.rankingStatCard}>
@@ -2072,7 +2072,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
               </span>
             </div>
             <div style={styles.rankingStatCard}>
-              <span style={styles.rankingStatLabel}>Independent Clusters</span>
+              <span style={styles.rankingStatLabel}>Scenario Clusters (Disjoint Backlogs)</span>
               <span style={styles.rankingStatValue}>
                 {activeActivationGate.evidenceAssessment.distinctClustersCount} / {activeActivationGate.evidenceAssessment.minDecisionClustersRequired ?? 5}
               </span>
@@ -2082,7 +2082,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                   : activeActivationGate.evidenceAssessment.crossClusterLeakageDetected
                   ? '⚠️ Backlog Leakage Detected'
                   : activeActivationGate.evidenceAssessment.distinctClustersCount >= 5
-                  ? '✓ Independent Floor Met (M ≥ 5)'
+                  ? '✓ M ≥ 5 Disjoint (Sampling Independence Unverified)'
                   : '✕ Inadequate (< 5 Clusters)'}
               </span>
             </div>
@@ -2112,8 +2112,8 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                 <span style={{ fontWeight: 600, color: '#374151' }}>Decision Rule & Target Scope:</span>
                 <span style={{ color: '#1F2937' }}>
                   {activeActivationGate.practicalThresholdMetadata?.comparisonRule === 'confidence_bound'
-                    ? 'Rule B: CI_lower ≥ ε (Conditional on observed clusters)'
-                    : 'Rule A: Mean ≥ ε (Conditional on observed clusters)'}
+                    ? 'Rule B: CI_lower ≥ ε (Regime shock-conditional θ + γ; Single-window cannot identify common shock variance)'
+                    : 'Rule A: Mean ≥ ε (Regime shock-conditional θ + γ; Single-window cannot identify common shock variance)'}
                 </span>
               </div>
               {activeActivationGate.uncertainty.bootstrapPercentile?.ciLower != null && (

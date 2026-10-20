@@ -175,6 +175,7 @@ export function generateValidationDataset(config = {}) {
   // Generate cluster-level random effects
   const expectedClusterMeans = {};
   const clusterRandomEffects = {};
+  const clusterEffects = {};
 
   for (let c = 0; c < clusterCount; c++) {
     const clKey = clusterKeys[c];
@@ -201,6 +202,11 @@ export function generateValidationDataset(config = {}) {
     const clEffect = clusterBaseEffect + clusterShock + sharedLatentShock;
     clusterRandomEffects[clKey] = clEffect;
     expectedClusterMeans[clKey] = Math.round(clEffect * 1000) / 1000;
+    clusterEffects[clKey] = {
+      baseEffect: clusterBaseEffect,
+      clusterShock: Math.round(clusterShock * 1000) / 1000,
+      combinedMean: Math.round(clEffect * 1000) / 1000,
+    };
   }
 
   const pairs = [];
@@ -342,10 +348,65 @@ export function generateValidationDataset(config = {}) {
     }
   }
 
+  // Compute estimands
+  const marginalPopulationEffect = Array.isArray(heterogeneousClusterEffects) && heterogeneousClusterEffects.length > 0
+    ? Math.round((heterogeneousClusterEffects.reduce((a, b) => a + b, 0) / heterogeneousClusterEffects.length) * 1000) / 1000
+    : groundTruthEffect;
+
+  const shockConditionalPopulationEffect = Math.round((marginalPopulationEffect + sharedLatentShock) * 1000) / 1000;
+
+  const expectedMeansList = Object.values(expectedClusterMeans);
+  const finiteSampleClusterTarget = expectedMeansList.length > 0
+    ? Math.round((expectedMeansList.reduce((a, b) => a + b, 0) / expectedMeansList.length) * 1000) / 1000
+    : groundTruthEffect;
+
+  const sharedShock = Math.round(sharedLatentShock * 1000) / 1000;
+
+  // Compute empirical cluster-averaged delta from generated pairs
+  const clusterDeltas = {};
+  for (const p of pairs) {
+    const k = p.context?.scenario_key || 'unknown';
+    if (!clusterDeltas[k]) clusterDeltas[k] = [];
+    clusterDeltas[k].push(p.candidateScore - p.baselineScore);
+  }
+  const clusterAveragedDeltas = Object.values(clusterDeltas).map((arr) =>
+    arr.reduce((a, b) => a + b, 0) / arr.length
+  );
+  const observedSampleEstimate = clusterAveragedDeltas.length > 0
+    ? Math.round((clusterAveragedDeltas.reduce((a, b) => a + b, 0) / clusterAveragedDeltas.length) * 1000) / 1000
+    : null;
+
   return {
     pairs,
     groundTruthEffect,
+    marginalPopulationEffect,
+    shockConditionalPopulationEffect,
+    finiteSampleClusterTarget,
+    observedSampleEstimate,
+    sharedShock,
+    clusterEffects,
     expectedClusterMeans,
+    scenarioMetadata: {
+      distribution,
+      clusterCount,
+      clusterSizes: sizes,
+      betweenClusterVariance,
+      withinClusterVariance,
+      withinClusterCorrelation,
+      crossClusterDependence,
+      hasSharedShock: crossClusterDependence > 0,
+      hasTaskOverlap: Boolean(
+        overlappingBacklogsCount > 0 ||
+        repeatedBacklogsRelabeled ||
+        (Array.isArray(partialTaskOverlapClusters) && partialTaskOverlapClusters.length > 0)
+      ),
+      targetDefinitions: {
+        marginalPopulationEffect: 'Expected effect E[Y] across superpopulation of clusters and latent shocks',
+        shockConditionalPopulationEffect: 'Expected effect E[Y | gamma] conditional on realized common shock gamma',
+        finiteSampleClusterTarget: 'Expected mean for the specific set of sampled clusters: 1/M sum_c E[Y_ci | c, gamma]',
+        observedSampleEstimate: 'Empirical cluster-averaged sample mean 1/M sum_c (1/N_c sum_i Y_ci)',
+      },
+    },
     generationConfig: config,
   };
 }
@@ -380,10 +441,13 @@ export function evaluateCoverageExperiment(options = {}) {
     numReplications = 100,
     seedStart = 1000,
     gateOptions = {},
+    targetEstimand = 'marginal', // 'marginal' | 'shock_conditional' | 'finite_sample'
   } = options;
 
-  const groundTruthEffect = scenarioConfig.groundTruthEffect ?? 0.0;
-  let coveredCount = 0;
+  let marginalCoveredCount = 0;
+  let shockCondCoveredCount = 0;
+  let finiteSampleCoveredCount = 0;
+  let observedCoveredCount = 0;
   let eligibilityCount = 0;
   let sumObservedDeltas = 0;
   let sumCiWidths = 0;
@@ -425,7 +489,7 @@ export function evaluateCoverageExperiment(options = {}) {
 
   for (let r = 0; r < numReplications; r++) {
     const seed = seedStart + r;
-    const { pairs } = generateValidationDataset({
+    const dataset = generateValidationDataset({
       ...scenarioConfig,
       randomSeed: seed,
     });
@@ -435,7 +499,7 @@ export function evaluateCoverageExperiment(options = {}) {
       baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
       readinessReport,
       rollbackPreflight,
-      pairedObservations: pairs,
+      pairedObservations: dataset.pairs,
       randomSeed: seed,
       ...gateOptions,
     });
@@ -461,11 +525,26 @@ export function evaluateCoverageExperiment(options = {}) {
         sumObservedDeltas += res.pairedComparison.meanDelta;
       }
 
-      // Check whether empirical interval covers known ground-truth effect
-      if (ciLower <= groundTruthEffect && groundTruthEffect <= ciUpper) {
-        coveredCount++;
-      }
+      // Check coverage against each distinct estimand
+      const mTarget = dataset.marginalPopulationEffect;
+      const scTarget = dataset.shockConditionalPopulationEffect;
+      const fsTarget = dataset.finiteSampleClusterTarget;
+      const obsTarget = dataset.observedSampleEstimate ?? res.pairedComparison.meanDelta;
+
+      if (ciLower <= mTarget && mTarget <= ciUpper) marginalCoveredCount++;
+      if (ciLower <= scTarget && scTarget <= ciUpper) shockCondCoveredCount++;
+      if (ciLower <= fsTarget && fsTarget <= ciUpper) finiteSampleCoveredCount++;
+      if (ciLower <= obsTarget && obsTarget <= ciUpper) observedCoveredCount++;
     }
+  }
+
+  // Primary covered count depends on requested targetEstimand
+  let coveredCount = marginalCoveredCount;
+  let groundTruthEffect = scenarioConfig.groundTruthEffect ?? 0.0;
+  if (targetEstimand === 'shock_conditional') {
+    coveredCount = shockCondCoveredCount;
+  } else if (targetEstimand === 'finite_sample') {
+    coveredCount = finiteSampleCoveredCount;
   }
 
   const empiricalCoverage = validCiEvaluationsCount > 0
@@ -492,13 +571,46 @@ export function evaluateCoverageExperiment(options = {}) {
     ? Math.round((sumStandardErrors / validCiEvaluationsCount) * 1000) / 1000
     : null;
 
+  const byEstimand = {
+    marginal: {
+      targetName: 'Marginal Population Effect (theta)',
+      coveredCount: marginalCoveredCount,
+      totalCount: validCiEvaluationsCount,
+      rate: validCiEvaluationsCount > 0 ? Math.round((marginalCoveredCount / validCiEvaluationsCount) * 1000) / 1000 : 0.0,
+      wilsonCI: computeWilsonScoreInterval(marginalCoveredCount, validCiEvaluationsCount, 0.95),
+    },
+    shockConditional: {
+      targetName: 'Shock-Conditional Population Effect (theta + gamma)',
+      coveredCount: shockCondCoveredCount,
+      totalCount: validCiEvaluationsCount,
+      rate: validCiEvaluationsCount > 0 ? Math.round((shockCondCoveredCount / validCiEvaluationsCount) * 1000) / 1000 : 0.0,
+      wilsonCI: computeWilsonScoreInterval(shockCondCoveredCount, validCiEvaluationsCount, 0.95),
+    },
+    finiteSample: {
+      targetName: 'Finite Sampled-Cluster Target (1/M sum_c E[Y_c])',
+      coveredCount: finiteSampleCoveredCount,
+      totalCount: validCiEvaluationsCount,
+      rate: validCiEvaluationsCount > 0 ? Math.round((finiteSampleCoveredCount / validCiEvaluationsCount) * 1000) / 1000 : 0.0,
+      wilsonCI: computeWilsonScoreInterval(finiteSampleCoveredCount, validCiEvaluationsCount, 0.95),
+    },
+    observedSample: {
+      targetName: 'Observed Sample Estimate (point estimate)',
+      coveredCount: observedCoveredCount,
+      totalCount: validCiEvaluationsCount,
+      rate: validCiEvaluationsCount > 0 ? Math.round((observedCoveredCount / validCiEvaluationsCount) * 1000) / 1000 : 0.0,
+      wilsonCI: computeWilsonScoreInterval(observedCoveredCount, validCiEvaluationsCount, 0.95),
+    },
+  };
+
   return {
     replicationsCount: numReplications,
     validCiEvaluationsCount,
     groundTruthEffect,
+    targetEstimand,
     coveredCount,
     empiricalCoverage,
     coverageWilsonCI,
+    byEstimand,
     eligibilityCount,
     eligibilityRate,
     eligibilityWilsonCI,
@@ -506,5 +618,88 @@ export function evaluateCoverageExperiment(options = {}) {
     meanObservedDelta,
     meanCiWidth,
     averageStandardError,
+  };
+}
+
+/**
+ * Audits whether a target estimand and interval procedure are legitimately paired,
+ * identifying invalid assumptions, unobserved shared-shock degradation, and
+ * inappropriate presentation of finite-sample cluster means as population coverage.
+ *
+ * @param {Object} options
+ * @param {Object} options.scenarioConfig - Generation configuration
+ * @param {string} options.targetEstimand - 'marginal' | 'shock_conditional' | 'finite_sample'
+ * @param {number} [options.empiricalCoverage] - Observed coverage rate
+ * @param {string} [options.intervalProcedure='cluster_student_t'] - Inferential procedure
+ * @returns {{
+ *   matched: boolean,
+ *   code: string,
+ *   message: string,
+ *   theoreticalExpectedCoverage: string,
+ *   nominalExpected: boolean,
+ *   validAuditedEstimand: string
+ * }}
+ */
+export function auditEstimandIntegrity({
+  scenarioConfig = {},
+  targetEstimand = 'marginal',
+  _empiricalCoverage = null,
+  intervalProcedure = 'cluster_student_t',
+} = {}) {
+  const hasSharedShock = (scenarioConfig.crossClusterDependence || 0) > 0;
+
+  if (intervalProcedure === 'cluster_student_t') {
+    if (hasSharedShock && targetEstimand === 'marginal') {
+      return {
+        matched: false,
+        code: 'ESTIMAND_MISMATCH_MARGINAL_UNDER_SHARED_SHOCK',
+        message:
+          'Estimand Mismatch: Cluster Student-t interval does not identify unobserved common shock variance (sigma_gamma^2 cancels out of cluster sample variance). It cannot guarantee nominal 95% coverage for the marginal population effect.',
+        theoreticalExpectedCoverage: 'degraded (~75-82%)',
+        nominalExpected: false,
+        validAuditedEstimand: 'shock_conditional',
+      };
+    }
+    if (targetEstimand === 'finite_sample') {
+      return {
+        matched: false,
+        code: 'ESTIMAND_MISMATCH_FINITE_SAMPLE_PRESENTED_AS_POPULATION',
+        message:
+          'Estimand Mismatch: Finite sampled-cluster target conditions on realized cluster effects. The cluster Student-t interval standard error accounts for cluster sampling variation from a superpopulation, making it over-dispersed (~99% coverage) when evaluated against the fixed sample target.',
+        theoreticalExpectedCoverage: 'over_conservative (~99%)',
+        nominalExpected: false,
+        validAuditedEstimand: 'shock_conditional',
+      };
+    }
+    if (hasSharedShock && targetEstimand === 'shock_conditional') {
+      return {
+        matched: true,
+        code: 'ESTIMAND_MATCH_SHOCK_CONDITIONAL',
+        message:
+          'Estimand Match: Cluster Student-t interval exactly covers the shock-conditional population parameter (theta + gamma) under cluster exchangeability.',
+        theoreticalExpectedCoverage: 'nominal_95 (~94-96%)',
+        nominalExpected: true,
+        validAuditedEstimand: 'shock_conditional',
+      };
+    }
+    if (!hasSharedShock && (targetEstimand === 'marginal' || targetEstimand === 'shock_conditional')) {
+      return {
+        matched: true,
+        code: 'ESTIMAND_MATCH_INDEPENDENT_CLUSTERS',
+        message:
+          'Estimand Match: In the absence of shared shocks (gamma = 0), marginal and conditional population effects are mathematically identical.',
+        theoreticalExpectedCoverage: 'nominal_95 (~94-96%)',
+        nominalExpected: true,
+        validAuditedEstimand: 'marginal',
+      };
+    }
+  }
+
+  return {
+    matched: true,
+    code: 'ESTIMAND_AUDIT_PASSED',
+    message: 'Estimand pairing audit passed.',
+    nominalExpected: true,
+    validAuditedEstimand: targetEstimand,
   };
 }

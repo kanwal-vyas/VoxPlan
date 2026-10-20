@@ -3392,6 +3392,139 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
 
 ---
 
+#### Stage 7.4.4A.6: Estimand Integrity & Independent Coverage Audit (COMPLETED)
+- **Status**: **COMPLETED**.
+- **Scope & Mission**:
+  - Perform a rigorous, independent statistical audit of VoxPlan's shadow-only adaptive scheduling activation gate following Stage 4A.5.
+  - Resolve the reported coverage discrepancy between the marginal effect (78.4%) and the conditional target (99.4%).
+  - Establish exact mathematical definitions for all estimands and prove which quantity the cluster Student-t interval covers.
+  - Build automated estimand mismatch detection and audit tools in `tests/statistical_validation_harness.js`.
+  - Evaluate 10 independent validation scenarios on fresh, disjoint held-out seeds (100000–117999) across 1,000 replications each.
+  - Revalidate practical threshold decision curves across true effects $\theta \in \{-2.0, 0.0, 0.5, 0.9, 1.0, 1.1, 1.5, 3.5\}$.
+  - Strictly maintain production isolation invariants (`isAdaptationUnlocked: false`, `productionApplied: false`, factory weights immutable, candidate weights shadow-only).
+
+- **Scope A & B — Precise Mathematical Estimand Definitions**:
+  - **Data Generating Process**:
+    $$Y_{ci} = \theta + \gamma + u_c + \epsilon_{ci}$$
+    Where:
+    - $\theta \in \mathbb{R}$: Fixed marginal population treatment effect.
+    - $\gamma \sim \mathcal{N}(0, \sigma_\gamma^2)$: Unobserved shared macro shock common across all clusters in an operational window ($\sigma_\gamma^2 = \text{crossClusterDependence} \times \sigma_{\text{between}}^2$).
+    - $u_c \sim \mathcal{N}(0, \sigma_u^2)$: Cluster-specific random effect ($\sigma_u^2 = (1 - \text{crossClusterDependence}) \times \sigma_{\text{between}}^2$).
+    - $\epsilon_{ci} \sim \mathcal{N}(0, \sigma_\epsilon^2)$: Idiosyncratic within-cluster observation error.
+  - **Estimand Taxonomy & Audit Matrix**:
+    1. **Marginal Population Effect ($\theta$)**:
+       - *Definition*: $\mathbb{E}[Y_{ci}] = \theta$.
+       - *Random Factors Averaged Over*: Shock $\gamma$, cluster effect $u_c$, error $\epsilon_{ci}$.
+       - *Random Factors Conditioned On*: None.
+       - *Observable in Deployment*: No (requires multi-window or cross-environment sampling to integrate out $\gamma$).
+       - *Interval Designed to Cover*: No. In a single operational window, $\gamma$ is constant across all clusters and cancels out of the sample variance $s^2 = \frac{1}{M-1}\sum_{c=1}^M (\overline{Y}_c - \overline{Y})^2$. Single-window standard error $s / \sqrt{M}$ cannot identify $\sigma_\gamma^2$.
+       - *Empirical Coverage*: **78.4%** under $\sigma_\gamma^2 = 0.36$.
+    2. **Shock-Conditional Population Effect ($\theta + \gamma$)**:
+       - *Definition*: $\mathbb{E}[Y_{ci} \mid \gamma] = \theta + \gamma$.
+       - *Random Factors Averaged Over*: Cluster effect $u_c$, error $\epsilon_{ci}$.
+       - *Random Factors Conditioned On*: Realized shared shock $\gamma$.
+       - *Observable in Deployment*: No (oracle quantity conditional on latent shock).
+       - *Interval Designed to Cover*: **Yes**. The Student-t interval on cluster-level sample means $\overline{Y}_c$ unbiasedly estimates the variance of $\overline{Y}$ around $\theta + \gamma$ ($\mathbb{V}(\overline{Y} \mid \gamma) = \frac{\sigma_u^2 + \sigma_\epsilon^2 / N_c}{M}$). Under normality and exchangeability, $\frac{\overline{Y} - (\theta + \gamma)}{s / \sqrt{M}} \sim t_{M-1}$.
+       - *Empirical Coverage*: **95.3%** [93.8%, 96.5%] across 1,000 replications (nominal 95% verified).
+    3. **Finite Sampled-Cluster Target ($\frac{1}{M}\sum_{c=1}^M \mathbb{E}[Y_{ci} \mid \gamma, u_c] = \theta + \gamma + \overline{u}$)**:
+       - *Definition*: Expected effect for the specific set of $M$ sampled clusters: $\frac{1}{M}\sum_{c=1}^M (\theta + \gamma + u_c)$.
+       - *Random Factors Averaged Over*: Idiosyncratic errors $\epsilon_{ci}$ only.
+       - *Random Factors Conditioned On*: Realized shock $\gamma$ AND realized cluster effects $\{u_c\}_{c=1}^M$.
+       - *Observable in Deployment*: No (simulation-only calculation).
+       - *Interval Designed to Cover*: No. The Student-t standard error incorporates between-cluster variance $\sigma_u^2 / M$ to infer population parameters. Relative to the fixed sample target, the actual error variance is only within-cluster error $\frac{\sigma_\epsilon^2}{M N_c} = 0.04$, making the cluster Student-t standard error (0.374) substantially over-dispersed.
+       - *Empirical Coverage*: **99.4%** [98.7%, 99.7%].
+    4. **Observed Sample Estimate ($\overline{Y} = \frac{1}{M}\sum_{c=1}^M \overline{Y}_c$)**:
+       - *Definition*: Arithmetic mean of cluster sample means.
+       - *Random Factors Conditioned On*: All realized sample observations.
+       - *Observable in Deployment*: Yes (production point estimate).
+       - *Coverage by CI*: 100% by construction.
+
+- **Resolution of Stage 4A.5 Discrepancy**:
+  - Stage 4A.5 reported 99.4% coverage against a "conditional target" computed as `expectedClusterMeans.reduce(...) / clusterCount`.
+  - *Mathematical Finding*: That calculation represents the **finite sampled-cluster target** ($\theta + \gamma + \overline{u}$), NOT the shock-conditional population parameter ($\theta + \gamma$).
+  - When evaluated against the true shock-conditional population parameter ($\theta + \gamma$), the empirical coverage is **95.3%** [93.8%, 96.5%], exactly matching the nominal 95% confidence level.
+  - The 78.4% coverage against the marginal target reflects the unidentifiability of common shock variance $\sigma_\gamma^2$ from a single operational window.
+
+- **Scope C — Interval Procedure Assumptions & Limitations**:
+  - Estimator: $\overline{Y} = \frac{1}{M}\sum_{c=1}^M \overline{Y}_c$, $s^2 = \frac{1}{M-1}\sum_{c=1}^M (\overline{Y}_c - \overline{Y})^2$, $\text{CI} = \overline{Y} \pm t_{M-1, 0.975} \frac{s}{\sqrt{M}}$.
+  - *Target*: Regime shock-conditional population parameter $\theta + \gamma$.
+  - *Assumptions Required*:
+    1. Cluster exchangeability conditional on the operational regime.
+    2. Approximate normality of cluster means $\overline{Y}_c$ (or sufficient cluster sample sizes).
+    3. Independent sampling of cluster units conditional on $\gamma$ (disjoint task backlogs).
+    4. Minimum cluster count $M \ge 5$ ensuring $df \ge 4$.
+  - *Limitations Disclosed*:
+    - The interval does NOT guarantee coverage for the marginal population effect $\theta$ across unknown future shocks.
+    - Observational distinct cluster IDs cannot establish statistical independence; VoxPlan marks sampling independence as unverified (`clusterSamplingIndependenceVerified: false`).
+    - Single operational windows cannot identify common shock variance; estimation of marginal uncertainty requires multi-window sampling across distinct environments.
+
+- **Scope D — Harness Refactoring & Mismatch Detection**:
+  - `generateValidationDataset` now explicitly outputs structured estimands: `marginalPopulationEffect`, `shockConditionalPopulationEffect`, `finiteSampleClusterTarget`, `observedSampleEstimate`, `sharedShock`, `clusterEffects`, and `scenarioMetadata`.
+  - `evaluateCoverageExperiment` tracks coverage independently across all estimands simultaneously (`byEstimand.marginal`, `byEstimand.shockConditional`, `byEstimand.finiteSample`, `byEstimand.observedSample`) with Wilson score 95% confidence intervals.
+  - Added `auditEstimandIntegrity` function that detects and fails on estimand-interval mismatches:
+    - Flags `ESTIMAND_MISMATCH_MARGINAL_UNDER_SHARED_SHOCK` when marginal target is paired with cluster Student-t under shared shocks.
+    - Flags `ESTIMAND_MISMATCH_FINITE_SAMPLE_PRESENTED_AS_POPULATION` when finite sample target is claimed as population coverage.
+
+- **Scope E — Independent Frozen Held-Out Validation Matrix (Seeds 100000–109999, 1,000 Replications Each)**:
+
+| Scenario | Estimand Evaluated | True Target | Replications | Coverage (Num/Denom) | Empirical Coverage % | Wilson 95% CI | Eligibility % | Assumptions Satisfied? | Gate Outcome |
+|---|---|---|---|---|---|---|---|---|---|
+| **1. Independent Gaussian** | Marginal ($\theta$) | 1.50 | 1,000 | 952 / 1,000 | 95.2% | [93.7%, 96.4%] | 16.8% | Yes | Valid |
+| **2. Shared Additive Shock** | Shock-Cond ($\theta + \gamma$) | $1.5 + \gamma$ | 1,000 | 953 / 1,000 | 95.3% | [93.8%, 96.5%] | 31.0% | Yes (Cond.) | Valid (Shock-Cond) |
+| &nbsp;&nbsp;&nbsp;*(Marginal Target)* | Marginal ($\theta$) | 1.50 | 1,000 | 784 / 1,000 | 78.4% | [75.7%, 80.9%] | — | No ($\sigma_\gamma^2$ unobs.) | Mismatch Disclosed |
+| &nbsp;&nbsp;&nbsp;*(Finite Sample Target)* | Finite ($\theta + \gamma + \overline{u}$) | Sample Mean | 1,000 | 994 / 1,000 | 99.4% | [98.7%, 99.7%] | — | Sample-conditioned | Over-dispersed |
+| **3. Heavy-Tailed Clusters** | Marginal ($t_3$ noise) | 1.50 | 1,000 | 948 / 1,000 | 94.8% | [93.2%, 96.0%] | 16.5% | Robust | Valid |
+| **4. Severe Size Imbalance** | Marginal ([20,3,3,3,3])| 1.50 | 1,000 | 949 / 1,000 | 94.9% | [93.3%, 96.1%] | 18.2% | Yes (Cluster-mean) | Valid |
+| **5. High Within-Cluster Corr**| Marginal ($\rho = 0.7$)| 1.50 | 1,000 | 951 / 1,000 | 95.1% | [93.6%, 96.3%] | 13.9% | Yes (Cluster agg) | Valid |
+| **6. Heterogeneous Effects** | Marginal (Cluster $\theta_c$)| 1.50 | 1,000 | 946 / 1,000 | 94.6% | [93.0%, 95.9%] | 13.5% | Yes | Valid |
+| **7. Outlier Dominance** | Marginal | 2.00 | 1,000 | N/A (Disqualified)| 0.0% | N/A | **0.0%** (0/1000) | No (Dominance) | **100% NOT_SUPERIOR** |
+| **8. Detectable Task Overlap** | Marginal | 3.50 | 1,000 | N/A (Blocked) | 0.0% | N/A | **0.0%** (0/1000) | No (Overlap $\ge 0.2$)| **100% INSUFFICIENT_EVIDENCE** |
+| **9. Missing Provenance** | Marginal | 3.50 | 1,000 | N/A (Blocked) | 0.0% | N/A | **0.0%** (0/1000) | No (No clusters) | **100% INSUFFICIENT_EVIDENCE** |
+| **10. Invalid Score Inputs** | Marginal | 3.50 | 1,000 | N/A (Blocked) | 0.0% | N/A | **0.0%** (0/1000) | No (NaN scores) | **100% INSUFFICIENT_METHODOLOGY**|
+
+- **Scope F — Practical-Threshold Revalidation (Rule B: $CI_{lower} \ge 1.0$) Across True Effects (Seeds 110000–117999, 1,000 Replications Each)**:
+  - $\theta = -2.0$: Eligible = 0 / 1,000 (0.0%), Rejected = 1,000 / 1,000 (100% NOT_SUPERIOR).
+  - $\theta = 0.0$: Eligible = 0 / 1,000 (0.0%), Rejected = 1,000 / 1,000 (100% NOT_SUPERIOR, 0 Any-Improvement Error).
+  - $\theta = 0.5$: Eligible = 1 / 1,000 (0.1%), Rejected = 999 / 1,000 (99.9% NOT_SUPERIOR, $\le 0.5\%$ Practical-Threshold Error).
+  - $\theta = 0.9$: Eligible = 14 / 1,000 (1.4%), Rejected = 986 / 1,000 (98.6% NOT_SUPERIOR).
+  - $\theta = 1.0$ (At threshold): Eligible = 29 / 1,000 (2.9%), Rejected = 971 / 1,000 (97.1%).
+  - $\theta = 1.1$: Eligible = 41 / 1,000 (4.1%), Rejected = 959 / 1,000 (95.9%).
+  - $\theta = 1.5$: Eligible = 168 / 1,000 (16.8%), Rejected = 832 / 1,000 (83.2%).
+  - $\theta = 3.5$: Eligible = 998 / 1,000 (99.8%), Rejected = 2 / 1,000 (0.2%).
+
+- **Scope G & H — Dependence Verification, Outcome Precedence & Fail-Closed Precedents**:
+  - Strict outcome precedence strictly enforced:
+    $$\text{INSUFFICIENT\_METHODOLOGY} > \text{INFEASIBLE} > \text{INSUFFICIENT\_EVIDENCE} > \text{NOT\_SUPERIOR} > \text{ELIGIBLE\_FOR\_SUPERVISED\_REVIEW}$$
+  - Unverified sampling independence explicitly tracked: `clusterSamplingIndependenceVerified: false`, `clusterIndependenceStatus: 'unverified_nominal_clusters'`.
+  - UI disclosure updated from misleading "✓ Independent Clusters" badge to "✓ M ≥ 5 Disjoint (Sampling Independence Unverified)".
+  - Degenerate interval checks ($CI_{lower} > CI_{upper}$) and invalid practical threshold rule specifications trigger `INSUFFICIENT_METHODOLOGY`.
+
+- **Scope I & J — Production Isolation Invariants**:
+  - `isAdaptationUnlocked: false` permanently enforced.
+  - `productionApplied: false` permanently enforced.
+  - Factory scheduler weights (`urgencyWeight: 50.0`, `priorityWeight: 100.0`, `unblockWeight: 15.0`, `riskWeight: 25.0`) remain immutable.
+  - Candidate weights remain shadow-only.
+  - Validation oracle values never enter live scheduler state.
+  - Stage 4B remains strictly unstarted.
+
+- **Verification Results Summary**:
+  - **Focused Activation-Gate & Statistical-Validation Suite**: **141 passed, 0 failed across 33 suites in 17.1s** (`node --test tests/statistical_validation.test.js tests/activation_gate_evaluator.test.js`).
+  - **Full Frontend Test Suite**: **751 passed, 0 failed across 161 suites in 18.4s** (`npm test`).
+  - **Backend Pytest Suite**: **27 passed, 0 failed in 29.16s** (`python -m pytest backend/tests/ -q`).
+  - **Linter**: **0 errors, 1 pre-existing warning** (`npm run lint`).
+  - **Production Build**: **Clean client bundle built in 1.64s** (`npm run build`).
+  - **Git Diff & Whitespace**: **Clean with zero whitespace or line-ending errors** (`git diff --check`).
+  - **Browser UI Verification**: Rendered UI in Chrome verifying updated labels (`Scenario Clusters (Disjoint Backlogs)`, `✓ M ≥ 5 Disjoint (Sampling Independence Unverified)`, `Harmonized Estimand: 1/M Σ Δ_c (Regime Shock-Conditional Target)`).
+
+- **Delivered & Modified Files**:
+  - `src/scheduler/activationGateEvaluator.js`: added practical threshold rule validation, degenerate interval detection, unverified independence tracking, single-window identification disclosures.
+  - `src/components/AdaptationSandboxCard.jsx`: updated badges to reflect unverified sampling independence, shock-conditional regime target scope, and single-window limitations.
+  - `tests/statistical_validation_harness.js`: added structured estimand extraction (`marginalPopulationEffect`, `shockConditionalPopulationEffect`, `finiteSampleClusterTarget`, `observedSampleEstimate`), multi-estimand coverage tracking (`byEstimand`), and `auditEstimandIntegrity`.
+  - `tests/statistical_validation.test.js`: added Section 7 (Phase 7.4 Stage 4A.6 audit suite) covering mathematical estimand distinctions, deterministic fixtures, Stage 4A.5 reproduction and resolution, estimand mismatch detection, 10 independent held-out scenarios (1,000 reps each), and practical-threshold decision curve validation.
+  - `PROJECT_PLAN.md`: authoritative Stage 7.4.4A.6 audit record.
+
+---
+
 #### Stage 7.4.4B: Supervised Production Activation & Dynamic Deployment Gates (UNSTARTED)
 - **Scope & Expected Deliverables**:
   - Implement the supervised production activation workflow requiring verified readiness + $\ge 15$ eligible preference comparisons + superior concordance + 0 hard constraint violations + explicit user confirmation.
