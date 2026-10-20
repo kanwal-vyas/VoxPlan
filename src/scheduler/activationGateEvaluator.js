@@ -1105,25 +1105,27 @@ export function evaluateActivationGate({
 
   // Validate sampling assurance status (Scope B)
   const isAssuranceExplicit = samplingAssurance != null && typeof samplingAssurance === 'object';
-  const rawAssuranceStatus = isAssuranceExplicit ? samplingAssurance.clusterIndependenceStatus : null;
-  const samplingAssuranceStatusValid =
-    !isAssuranceExplicit ||
-    rawAssuranceStatus == null ||
-    Object.values(SAMPLING_ASSURANCE_STATUS).includes(rawAssuranceStatus) ||
-    rawAssuranceStatus === 'unverified_nominal_clusters'; // backward compatibility
-
+  let rawAssuranceStatus = null;
+  let samplingAssuranceStatusValid = true;
   let samplingAssuranceApplicableValid = true;
-  if (rawAssuranceStatus === SAMPLING_ASSURANCE_STATUS.NOT_APPLICABLE) {
-    samplingAssuranceApplicableValid = false;
-    reasons.push(
-      'The cluster Student-t interval requires independent cluster sampling; sampling independence cannot be marked "not_applicable" for this inferential procedure.'
-    );
-  }
-
-  // Target estimand validation: single operating window cannot identify marginal population mean under shared shocks (Scope C & Scope F)
   let samplingAssuranceEstimandValid = true;
   let samplingAssuranceTypeValid = true;
+
   try {
+    rawAssuranceStatus = isAssuranceExplicit ? samplingAssurance.clusterIndependenceStatus : null;
+    samplingAssuranceStatusValid =
+      !isAssuranceExplicit ||
+      rawAssuranceStatus == null ||
+      Object.values(SAMPLING_ASSURANCE_STATUS).includes(rawAssuranceStatus) ||
+      rawAssuranceStatus === 'unverified_nominal_clusters'; // backward compatibility
+
+    if (rawAssuranceStatus === SAMPLING_ASSURANCE_STATUS.NOT_APPLICABLE) {
+      samplingAssuranceApplicableValid = false;
+      reasons.push(
+        'The cluster Student-t interval requires independent cluster sampling; sampling independence cannot be marked "not_applicable" for this inferential procedure.'
+      );
+    }
+
     if (samplingAssurance != null && typeof samplingAssurance !== 'object') {
       samplingAssuranceTypeValid = false;
       reasons.push('Sampling assurance must be a structured object; primitive value was provided.');
@@ -1135,6 +1137,7 @@ export function evaluateActivationGate({
     }
   } catch (err) {
     samplingAssuranceTypeValid = false;
+    samplingAssuranceStatusValid = false;
     reasons.push(
       `Malformed or explosive sampling assurance payload (${SAMPLING_EVIDENCE_REJECTION_REASONS.MALFORMED_SAMPLING_EVIDENCE}): ${err?.message || 'unknown error'}`
     );

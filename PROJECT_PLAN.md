@@ -3855,6 +3855,104 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
 
 ---
 
+#### Stage 7.4.4A.10: Final Activation-Gate Invariant Audit (COMPLETED)
+- **Starting Commit**: `7344434` on branch `main`.
+- **Previous Commit Message**: `fix(phase-7): isolate synthetic assurance from production`.
+- **Mission & Audit Scope**:
+  - Conduct a repository-wide, end-to-end architectural invariant audit of the Phase 7.4 adaptive scheduling safety system.
+  - Verify that production adaptation cannot be enabled through any alternate code path, persisted state, simulation result, UI state, or evaluator outcome.
+  - Verify that factory weights remain immutable, candidate weights cannot leak into live proposal generation, and configuration snapshots/rollback fail closed safely.
+  - Audit every producer and consumer of `ELIGIBLE_FOR_SUPERVISED_REVIEW` and sampling assurance.
+  - Strictly enforce non-negotiable safety invariants: `isAdaptationUnlocked: false`, `productionApplied: false`, factory weights invariant (`urgencyWeight: 50.0`, `priorityWeight: 100.0`, `unblockWeight: 15.0`, `riskWeight: 25.0`), and Stage 4B remains strictly unstarted.
+
+- **Scope A — Production Scheduling Path Tracing**:
+  | Entry Point | Weight Source | Candidate Weights Reaching Live? | Persisted State Impact | Activation Gate Outcome Mutation | Test References |
+  |---|---|---|---|---|---|
+  | **Modal Manual Generation** (`AdaptiveScheduleModal.jsx` L110) | Omitted in options; defaults to `FACTORY_SCHEDULER_WEIGHTS` | **NO**. Modal options pass `{ startDate, targetCompletionDate }`. | None on weights. Reads task list from React props. | **None**. Modal only displays gate status; does not mutate weights or activation flags. | `tests/statistical_validation.test.js` (Scope F.2, F.16) |
+  | **Conversational Rescheduling** (`scheduleNegotiator.js` L377) | Omitted in options; defaults to `FACTORY_SCHEDULER_WEIGHTS` | **NO**. `negotiateScheduleProposal` delegates directly to `generateAdaptiveSchedule(tasks, { startDate, strategy })`. | None on weights. Reads tasks and existing accepted schedule dates. | **None**. Proposal must be explicitly reviewed and accepted by human operator. | `tests/schedule_intent.test.js`, `tests/statistical_validation.test.js` (Scope F.2) |
+  | **Proposal Review & Acceptance** (`App.jsx` L310, `handleApplySchedule`) | Schedule dates applied | **NO**. Only copies dates (`task.dueDate = placement.proposedDate`) and saves `acceptedSchedule` in `localStorage`. | Updates task dates in `tasks` and `acceptedSchedule`. Zero weight persistence. | **None**. Never sets `isAdaptationUnlocked` or `productionApplied`. | `tests/schedule_intent.test.js`, `tests/statistical_validation.test.js` (Scope F.2, F.4) |
+  | **Shadow Evaluation Engine** (`shadowSchedulerEvaluator.js`) | Evaluates candidate weights in shadow comparison only | **NO**. Candidate weights are passed exclusively to `_evaluateCandidateSchedule` for comparison against baseline. | Shadow comparison history stored in memory/session. Live weights untouched. | Evaluates shadow concordance; never elevates to production. | `tests/shadow_scheduler.test.js`, `tests/statistical_validation.test.js` (Scope F.3) |
+  | **Adaptation Sandbox UI** (`AdaptationSandboxCard.jsx`) | Displays candidate exploration cards & shadow evaluation | **NO**. Candidate weights remain confined to shadow tabs. | Persisted active configuration enforces `productionApplied: false`. | Displays evaluation diagnostics; activation button remains disabled. | `tests/statistical_validation.test.js` (Scope F.15) |
+
+- **Scope B — Factory Weight Integrity & Immutability**:
+  - `FACTORY_SCHEDULER_WEIGHTS` defined in `src/scheduler/adaptiveScheduler.js`:
+    - `urgencyWeight: 50.0`
+    - `priorityWeight: 100.0`
+    - `unblockWeight: 15.0`
+    - `riskWeight: 25.0`
+  - **Immutability Enforcement**: The canonical object is permanently frozen via `Object.freeze()`. Modifying its properties throws in strict mode and fails silently in non-strict mode without altering values.
+  - **Defensive Fallback**: In `calculateTaskPriorityScore`, if any weight property is missing, non-finite, `null`, or undefined, the algorithm falls back strictly to the canonical factory default:
+    `const uW = (weights && Number.isFinite(weights.urgencyWeight)) ? weights.urgencyWeight : FACTORY_SCHEDULER_WEIGHTS.urgencyWeight;`
+  - **Candidate Weight Isolation**: Candidate weights generated in the sandbox or shadow evaluator are passed as separate, isolated object instances and never merged into or referenced by `FACTORY_SCHEDULER_WEIGHTS`.
+
+- **Scope C — Activation & Eligibility Path Audit**:
+  - Authoritative Producer: `src/scheduler/activationGateEvaluator.js` (`evaluateActivationGate`).
+  - Every path evaluating to `ELIGIBLE_FOR_SUPERVISED_REVIEW` enforces:
+    1. Sampling-assurance provenance and trust-boundary verification (`validateSamplingAssuranceEvidence`).
+    2. Zero unauthenticated or caller-asserted status bypass.
+    3. Failure closed on missing evidence, checksum mismatches, cluster fingerprint mismatches, and expired evidence.
+    4. Evaluator outcome precedence strictly fails closed: `INSUFFICIENT_METHODOLOGY > INFEASIBLE > INSUFFICIENT_EVIDENCE > NOT_SUPERIOR > ELIGIBLE_FOR_SUPERVISED_REVIEW`.
+  - **Hardening Corrected in Stage 4A.10**: Enclosed `samplingAssurance` property inspection in a complete `try / catch` block in `activationGateEvaluator.js`. Previously, a caller passing an object with an explosive property getter on `clusterIndependenceStatus` caused an unhandled crash prior to the internal validation block; it now catches the throw and fails closed safely to `INSUFFICIENT_METHODOLOGY` with `MALFORMED_SAMPLING_EVIDENCE`.
+
+- **Scope D — Environment & Simulation Boundary Verification**:
+  - Missing environment parameter defaults strictly to `'production'`.
+  - Unknown or malformed environments (`'staging'`, `'dev'`, `{}`) fail closed with `INSUFFICIENT_METHODOLOGY` and `UNSUPPORTED_EVALUATION_ENVIRONMENT`.
+  - Synthetic evidence submitted under `'production'` is strictly rejected with `SYNTHETIC_EVIDENCE_IN_PRODUCTION`.
+  - Synthetic evidence submitted under `'simulation'` when evaluating real user observations (`distinctClusterKeys.includes('real_user_comparisons')`) is strictly rejected with `UNAUTHENTICATED_SAMPLING_EVIDENCE`.
+  - Evaluator results in simulation mode are tagged with `isSimulationDiagnostic: true` and cannot be consumed by production scheduling.
+
+- **Scope E — Persistence, Restart, and Rollback Integrity**:
+  - `configurationSnapshot.js` audit:
+    - `getActiveConfigRecord` (L608): Explicitly sets `productionApplied: false` regardless of stored configuration.
+    - `rollbackToSnapshot` (L730): Enforces `productionApplied: false` on restored configurations.
+    - `restoreFactoryConfiguration` (L812): Re-applies canonical weights and sets `productionApplied: false`.
+    - Corrupted, tampered, or mismatched snapshots fail closed with verification errors.
+  - Zero storage mechanisms (`localStorage`, `indexedDB`) store activation overrides or mutate factory scheduling defaults.
+
+- **Scope F — Invariant Regression Test Suite (16 Scenarios in Section 11 of `tests/statistical_validation.test.js`)**:
+  - `11.1`: Factory weights retain exact canonical values and are immutable (`Object.isFrozen`).
+  - `11.2`: Live scheduling proposal generation uses factory weights even when candidate weights differ substantially.
+  - `11.3`: Shadow evaluation uses candidate weights without altering production weights or baseline schedules.
+  - `11.4`: Snapshot save and rollback cannot unlock adaptation (`productionApplied` remains `false`).
+  - `11.5`: Corrupted or invalid snapshots cannot change production weight selection.
+  - `11.6`: Missing sampling assurance strictly blocks production eligibility, returning `INSUFFICIENT_EVIDENCE`.
+  - `11.7`: Caller-created evidence record with valid public FNV-1a checksum is rejected with `UNAUTHENTICATED_SAMPLING_EVIDENCE` in production.
+  - `11.8`: Synthetic evidence cannot qualify real user observations (`real_user_comparisons`) even in simulation mode.
+  - `11.9`: Missing, unknown, or malformed environments fail closed with `INSUFFICIENT_METHODOLOGY` and `UNSUPPORTED_EVALUATION_ENVIRONMENT`.
+  - `11.10`: Malformed, non-object, or throwing getter evidence records safely fail closed to `MALFORMED_SAMPLING_EVIDENCE`.
+  - `11.11`: Exceptionally favourable scores ($\Delta = +25.0$) cannot override failed or missing sampling assurance.
+  - `11.12`: Achieving `ELIGIBLE_FOR_SUPERVISED_REVIEW` in simulation mode never mutates production activation flags (`isAdaptationUnlocked` remains `false`).
+  - `11.13`: Reloading corrupted or tampered persisted configuration state cannot enable production adaptation.
+  - `11.14`: Simulation evaluation results (`isSimulationDiagnostic: true`) cannot be reused to justify production adaptation.
+  - `11.15`: UI display outcome accurately maps evaluator result with no manual activation override or unlocked badge.
+  - `11.16`: All rejected activation-gate paths leave factory weights and production activation state strictly invariant.
+
+- **Scope G & H — Diagnostic Honesty & UI Transparency**:
+  - Disclosed that in VoxPlan's local-first single-client architecture, no production trust anchor exists today.
+  - Maintained separation between synthetic simulation diagnostics and production decisions.
+  - Verified no manual activation override, no unlocked badges, and no fake green verified status appear in the UI.
+
+- **Verification Results Summary**:
+  - **Activation Gate Evaluator Suite**: **58 passed, 0 failed** (`node --test tests/activation_gate_evaluator.test.js`).
+  - **Statistical Validation Suite**: **156 passed, 0 failed across 32 suites** (`node --test tests/statistical_validation.test.js`).
+  - **Combined Focused Validation**: **214 passed, 0 failed across 38 suites**.
+  - **Full Frontend Test Suite**: **824 passed, 0 failed across 165 suites** (`npm test`).
+  - **Backend Pytest Suite**: **27 passed, 0 failed** (`python -m pytest backend/tests/ -q`).
+  - **Linter**: **0 errors, 1 pre-existing warning** (`npm run lint` / `oxlint`).
+  - **Production Build**: **Clean build in 282ms** (`npm run build`).
+  - **Git Diff & Whitespace**: **Clean with zero whitespace or line-ending errors** (`git diff --check`).
+
+- **Non-Negotiable Safety Invariants Confirmed**:
+  - `isAdaptationUnlocked === false` permanently preserved.
+  - `productionApplied === false` permanently preserved.
+  - Factory weights remain exact: `urgencyWeight: 50.0`, `priorityWeight: 100.0`, `unblockWeight: 15.0`, `riskWeight: 25.0`.
+  - Production proposal generation uses factory weights.
+  - Candidate weights remain strictly shadow-only.
+  - Production eligibility remains strictly blocked without genuine production sampling assurance.
+  - Stage 4B remains strictly unstarted.
+
+---
+
 #### Stage 7.4.4B: Supervised Production Activation & Dynamic Deployment Gates (UNSTARTED)
 - **Scope & Expected Deliverables**:
   - Implement the supervised production activation workflow requiring verified readiness + $\ge 15$ eligible preference comparisons + superior concordance + 0 hard constraint violations + explicit user confirmation.

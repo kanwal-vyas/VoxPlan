@@ -23,7 +23,18 @@ import {
   getStudentTCriticalValue,
   PRACTICAL_THRESHOLD_RULES,
 } from '../src/scheduler/activationGateEvaluator.js';
-import { FACTORY_SCHEDULER_WEIGHTS } from '../src/scheduler/adaptiveScheduler.js';
+import {
+  FACTORY_SCHEDULER_WEIGHTS,
+  generateAdaptiveSchedule,
+} from '../src/scheduler/adaptiveScheduler.js';
+import { evaluateShadowSchedule } from '../src/scheduler/shadowSchedulerEvaluator.js';
+import {
+  createFactorySnapshot,
+  saveSnapshot,
+  rollbackToSnapshot,
+  restoreFactoryConfiguration,
+  getActiveConfigRecord,
+} from '../src/scheduler/configurationSnapshot.js';
 import {
   generateValidationDataset,
   evaluateCoverageExperiment,
@@ -3618,6 +3629,421 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
       assert.strictEqual(factoryBefore, factoryAfter);
       assert.strictEqual(res.isAdaptationUnlocked, false);
       assert.strictEqual(res.productionApplied, false);
+      assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.urgencyWeight, 50.0);
+      assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.priorityWeight, 100.0);
+      assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.unblockWeight, 15.0);
+      assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.riskWeight, 25.0);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Scope F: Final Activation-Gate Invariant Audit (16 Invariant Tests — Stage 4A.10)
+  // ---------------------------------------------------------------------------
+  describe('11. Phase 7.4 Stage 4A.10: Final Activation-Gate Invariant Audit (Scope F)', () => {
+    // 1. Factory weights retain exact canonical values and are immutable (Object.isFrozen)
+    it('1. factory weights retain exact canonical values and are immutable (Object.isFrozen)', () => {
+      assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.urgencyWeight, 50.0);
+      assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.priorityWeight, 100.0);
+      assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.unblockWeight, 15.0);
+      assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.riskWeight, 25.0);
+      assert.strictEqual(Object.isFrozen(FACTORY_SCHEDULER_WEIGHTS), true);
+
+      // Mutating in strict mode must throw TypeError
+      assert.throws(() => {
+        FACTORY_SCHEDULER_WEIGHTS.urgencyWeight = 999.0;
+      }, TypeError);
+      assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.urgencyWeight, 50.0);
+    });
+
+    // 2. Live scheduling proposal generation uses factory weights even when candidate weights differ substantially
+    it('2. live scheduling proposal generation uses factory weights even when candidate weights differ substantially', () => {
+      const sampleTasks = [
+        { id: 't1', title: 'Task 1', priority: 'high', dueDate: '2026-10-25', estimatedEffort: 3.0 },
+        { id: 't2', title: 'Task 2', priority: 'low', dueDate: '2026-10-22', estimatedEffort: 2.0 },
+      ];
+      // Live production scheduling calls generateAdaptiveSchedule without passing weights
+      const defaultProposal = generateAdaptiveSchedule(sampleTasks, { startDate: '2026-10-20' });
+      // Calling explicitly with FACTORY_SCHEDULER_WEIGHTS
+      const factoryProposal = generateAdaptiveSchedule(sampleTasks, { startDate: '2026-10-20', weights: FACTORY_SCHEDULER_WEIGHTS });
+
+      assert.deepStrictEqual(defaultProposal.proposedPlacements, factoryProposal.proposedPlacements);
+
+      // Contrast with candidate weights where priority is inverted
+      const invertedCandidateWeights = { urgencyWeight: 10.0, priorityWeight: 5.0, unblockWeight: 10.0, riskWeight: 10.0 };
+      const candidateProposal = generateAdaptiveSchedule(sampleTasks, { startDate: '2026-10-20', weights: invertedCandidateWeights });
+      assert.ok(candidateProposal.proposedPlacements.length > 0);
+      assert.strictEqual(defaultProposal.proposedPlacements[0].taskId, factoryProposal.proposedPlacements[0].taskId);
+    });
+
+    // 3. Shadow evaluation can use candidate weights without changing production weights or baseline schedules
+    it('3. shadow evaluation can use candidate weights without changing production weights or baseline schedules', () => {
+      const sampleTasks = [
+        { id: 't1', title: 'Urgent task', priority: 'low', dueDate: '2026-10-21', estimatedEffort: 4.0 },
+        { id: 't2', title: 'High priority task', priority: 'high', dueDate: '2026-10-28', estimatedEffort: 4.0 },
+      ];
+      const extremeCandidateWeights = { urgencyWeight: 1.0, priorityWeight: 500.0, unblockWeight: 1.0, riskWeight: 1.0 };
+      const factoryBefore = JSON.stringify(FACTORY_SCHEDULER_WEIGHTS);
+
+      const shadowResult = evaluateShadowSchedule({
+        tasks: sampleTasks,
+        options: { startDate: '2026-10-20' },
+        candidateWeights: extremeCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+      });
+
+      assert.strictEqual(shadowResult.isShadowOnly, true);
+      assert.strictEqual(shadowResult.productionApplied, false);
+      assert.ok(shadowResult.comparison);
+      // Factory weights remain unchanged in memory
+      assert.strictEqual(JSON.stringify(FACTORY_SCHEDULER_WEIGHTS), factoryBefore);
+      assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.urgencyWeight, 50.0);
+      assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.priorityWeight, 100.0);
+    });
+
+    // 4. Snapshot save and restore cannot unlock adaptation
+    it('4. snapshot save and restore cannot unlock adaptation (productionApplied remains false)', () => {
+      const mockStorage = new Map();
+      const storageAdapter = {
+        getItem: (k) => mockStorage.get(k) || null,
+        setItem: (k, v) => mockStorage.set(k, v),
+        removeItem: (k) => mockStorage.delete(k),
+      };
+
+      const factorySnap = createFactorySnapshot({ revision: 1 });
+      saveSnapshot(factorySnap, { storage: storageAdapter });
+
+      const rollbackRes = rollbackToSnapshot(factorySnap.snapshotId, { storage: storageAdapter });
+      assert.strictEqual(rollbackRes.success, true);
+      assert.strictEqual(rollbackRes.activeConfig.productionApplied, false);
+      assert.strictEqual(rollbackRes.activeConfig.isFactoryBaseline, true);
+
+      const restoreRes = restoreFactoryConfiguration({ storage: storageAdapter });
+      assert.strictEqual(restoreRes.success, true);
+      assert.strictEqual(restoreRes.activeConfig.productionApplied, false);
+      assert.strictEqual(restoreRes.activeConfig.isFactoryBaseline, true);
+    });
+
+    // 5. Invalid snapshots cannot change production weight selection
+    it('5. invalid snapshots cannot change production weight selection', () => {
+      const mockStorage = new Map();
+      const storageAdapter = {
+        getItem: (k) => mockStorage.get(k) || null,
+        setItem: (k, v) => mockStorage.set(k, v),
+        removeItem: (k) => mockStorage.delete(k),
+      };
+
+      // Corrupted snapshot with tampered weights and invalid checksum
+      mockStorage.set('snap_corrupted', JSON.stringify({
+        schemaVersion: '1.0.0',
+        snapshotId: 'snap_corrupted',
+        weights: { urgencyWeight: 999.0, priorityWeight: 999.0, unblockWeight: 999.0, riskWeight: 999.0 },
+        checksum: 'bad_checksum',
+      }));
+
+      const rollbackRes = rollbackToSnapshot('snap_corrupted', { storage: storageAdapter });
+      assert.strictEqual(rollbackRes.success, false);
+
+      const activeRecord = getActiveConfigRecord({ storage: storageAdapter });
+      assert.strictEqual(activeRecord.activeWeights.urgencyWeight, 50.0);
+      assert.strictEqual(activeRecord.activeWeights.priorityWeight, 100.0);
+      assert.strictEqual(activeRecord.productionApplied, false);
+    });
+
+    // 6. Missing sampling assurance blocks production eligibility
+    it('6. missing sampling assurance strictly blocks production eligibility, returning INSUFFICIENT_EVIDENCE', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 5.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 22006 });
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: null,
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.strictEqual(res.evidenceAssessment.clusterIndependenceStatus, SAMPLING_ASSURANCE_STATUS.UNVERIFIED);
+      assert.ok(res.reasons.some((r) => r.includes(SAMPLING_EVIDENCE_REJECTION_REASONS.MISSING_SAMPLING_ASSURANCE)));
+    });
+
+    // 7. Caller-created records with valid public checksums cannot authenticate production evidence
+    it('7. caller-created evidence record with valid public FNV-1a checksum is rejected with UNAUTHENTICATED_SAMPLING_EVIDENCE in production', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 5.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 22007 });
+      const clusterKeys = d.distinctClusterKeys || Array.from(new Set(d.pairs.map((p) => p.context?.scenario_key).filter(Boolean))).sort();
+      const datasetFingerprint = computeClusterDatasetFingerprint(clusterKeys);
+
+      const callerCreatedRecord = {
+        evidenceId: 'audit_prod_auth_2026',
+        provenanceSource: SAMPLING_PROVENANCE_SOURCES.CROSS_ENVIRONMENT_AUDIT,
+        samplingMethodology: 'cluster_stratified_without_replacement',
+        intendedEstimand: 'conditional_average_treatment_effect',
+        clustersAudited: clusterKeys,
+        datasetFingerprint,
+        assuranceStatus: SAMPLING_ASSURANCE_STATUS.VERIFIED,
+        issuedAt: new Date(Date.now() - 3600000).toISOString(),
+        expiresAt: new Date(Date.now() + 86400000 * 30).toISOString(),
+      };
+      callerCreatedRecord.evidenceChecksum = computeEvidenceRecordChecksum(callerCreatedRecord);
+
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: {
+          clusterIndependenceStatus: SAMPLING_ASSURANCE_STATUS.VERIFIED,
+          evidenceRecord: callerCreatedRecord,
+        },
+        environment: 'production',
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.ok(res.reasons.some((r) => r.includes(SAMPLING_EVIDENCE_REJECTION_REASONS.UNAUTHENTICATED_SAMPLING_EVIDENCE)));
+    });
+
+    // 8. Synthetic evidence cannot qualify real observations for production eligibility
+    it('8. synthetic evidence cannot qualify real user observations (real_user_comparisons) even under simulation environment', () => {
+      const realPairs = [
+        {
+          observationId: 'real_pair_1',
+          context: { scenario_key: 'real_user_comparisons', taskSetId: 'prod_tasks_1' },
+          candidateScore: 95.0,
+          baselineScore: 80.0,
+        },
+        {
+          observationId: 'real_pair_2',
+          context: { scenario_key: 'real_user_comparisons', taskSetId: 'prod_tasks_2' },
+          candidateScore: 92.0,
+          baselineScore: 80.0,
+        },
+      ];
+      const syntheticRecord = createSyntheticAssuranceRecord({ clusterKeys: ['real_user_comparisons'] });
+
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: realPairs,
+        samplingAssurance: syntheticRecord,
+        environment: 'simulation',
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.ok(res.reasons.some((r) => r.includes(SAMPLING_EVIDENCE_REJECTION_REASONS.UNAUTHENTICATED_SAMPLING_EVIDENCE)));
+    });
+
+    // 9. Missing or unknown environments fail closed
+    it('9. missing, unknown, or malformed environments fail closed with INSUFFICIENT_METHODOLOGY and UNSUPPORTED_EVALUATION_ENVIRONMENT', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 6.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 22009 });
+
+      const invalidEnvironments = ['staging', 'test', 'local_dev', 999, false, {}];
+      for (const env of invalidEnvironments) {
+        const res = evaluateActivationGate({
+          candidateWeights: validCandidateWeights,
+          baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+          readinessReport: defaultReadiness,
+          rollbackPreflight: defaultRollback,
+          pairedObservations: d.pairs,
+          samplingAssurance: d.syntheticAssurance,
+          environment: env,
+        });
+
+        assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_METHODOLOGY, `Expected INSUFFICIENT_METHODOLOGY for env=${env}`);
+        assert.strictEqual(res.isEligibleForSupervisedReview, false);
+        assert.ok(res.reasons.some((r) => r.includes(SAMPLING_EVIDENCE_REJECTION_REASONS.UNSUPPORTED_EVALUATION_ENVIRONMENT)));
+      }
+    });
+
+    // 10. Malformed evidence cannot bypass the evaluator
+    it('10. malformed, non-object, or throwing getter evidence records safely fail closed to MALFORMED_SAMPLING_EVIDENCE', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 5.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 22010 });
+      const explosiveAssurance = {
+        get clusterIndependenceStatus() {
+          throw new Error('Explosive getter triggered');
+        },
+      };
+
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: explosiveAssurance,
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_METHODOLOGY);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.ok(res.reasons.some((r) => r.includes(SAMPLING_EVIDENCE_REJECTION_REASONS.MALFORMED_SAMPLING_EVIDENCE)));
+    });
+
+    // 11. Favourable numerical results cannot override failed sampling assurance
+    it('11. exceptionally favourable scores (delta = +25.0) cannot override failed sampling assurance', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 25.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 22011 });
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: {
+          clusterIndependenceStatus: SAMPLING_ASSURANCE_STATUS.FAILED,
+          reasons: ['Empirical cross-cluster task leakage detected'],
+        },
+      });
+
+      assert.ok(res.uncertainty.ciLower > 1.0);
+      assert.strictEqual(res.pairedComparison.meetsPracticalImprovement, true);
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+    });
+
+    // 12. No eligibility path mutates production activation flags
+    it('12. achieving ELIGIBLE_FOR_SUPERVISED_REVIEW in simulation mode never mutates production activation flags (isAdaptationUnlocked remains false)', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 7.0, clusterCount: 5, defaultPairsPerCluster: 6, randomSeed: 22012 });
+
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: d.syntheticAssurance,
+        environment: 'simulation',
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.ELIGIBLE_FOR_SUPERVISED_REVIEW);
+      assert.strictEqual(res.isEligibleForSupervisedReview, true);
+      assert.strictEqual(res.isSimulationDiagnostic, true);
+      assert.strictEqual(res.isAdaptationUnlocked, false, 'isAdaptationUnlocked must remain false');
+      assert.strictEqual(res.productionApplied, false, 'productionApplied must remain false');
+      assert.strictEqual(res.productionInvariance.isAdaptationUnlocked, false);
+      assert.strictEqual(res.productionInvariance.productionApplied, false);
+      assert.strictEqual(res.productionInvariance.factoryWeightsUnchanged, true);
+    });
+
+    // 13. Reloading persisted state cannot enable production adaptation
+    it('13. reloading corrupted or tampered persisted configuration state cannot enable production adaptation (productionApplied remains false)', () => {
+      const mockStorage = new Map();
+      const storageAdapter = {
+        getItem: (k) => mockStorage.get(k) || null,
+        setItem: (k, v) => mockStorage.set(k, v),
+        removeItem: (k) => mockStorage.delete(k),
+      };
+
+      // Tampered active record injected directly into storage
+      mockStorage.set('voxplan_active_scheduler_config_v1', JSON.stringify({
+        schemaVersion: '1.0.0',
+        revision: 42,
+        activeWeights: { urgencyWeight: 50.0, priorityWeight: 100.0, unblockWeight: 15.0, riskWeight: 25.0 },
+        sourceSnapshotId: 'snap_malicious',
+        provenance: 'tampered',
+        updatedAt: new Date().toISOString(),
+        isFactoryBaseline: false,
+        productionApplied: true, // Tampered flag
+        isAdaptationUnlocked: true, // Tampered flag
+      }));
+
+      const activeRecord = getActiveConfigRecord({ storage: storageAdapter });
+      assert.strictEqual(activeRecord.productionApplied, false, 'productionApplied must be forced to false');
+      assert.strictEqual(activeRecord.activeWeights.urgencyWeight, 50.0);
+      assert.strictEqual(activeRecord.activeWeights.priorityWeight, 100.0);
+    });
+
+    // 14. Simulation results cannot be reused as production evidence
+    it('14. simulation evaluation results (isSimulationDiagnostic: true) cannot be reused to justify production adaptation', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 8.0, clusterCount: 5, defaultPairsPerCluster: 6, randomSeed: 22014 });
+
+      const simRes = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: d.syntheticAssurance,
+        environment: 'simulation',
+      });
+
+      assert.strictEqual(simRes.isSimulationDiagnostic, true);
+      assert.strictEqual(simRes.environment, 'simulation');
+
+      // Attempting to evaluate the same inputs under production fails closed
+      const prodRes = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: d.syntheticAssurance,
+        environment: 'production',
+      });
+
+      assert.strictEqual(prodRes.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(prodRes.isEligibleForSupervisedReview, false);
+      assert.strictEqual(prodRes.isSimulationDiagnostic, false);
+      assert.ok(prodRes.reasons.some((r) => r.includes(SAMPLING_EVIDENCE_REJECTION_REASONS.SYNTHETIC_EVIDENCE_IN_PRODUCTION)));
+    });
+
+    // 15. The UI displays the actual evaluator decision without upgrading it
+    it('15. UI display outcome accurately maps evaluator result with no manual activation override or unlocked badge', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 8.0, clusterCount: 5, defaultPairsPerCluster: 6, randomSeed: 22015 });
+      // In production mode, outcome is INSUFFICIENT_EVIDENCE
+      const evalResult = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+      });
+
+      assert.strictEqual(evalResult.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(evalResult.isEligibleForSupervisedReview, false);
+      assert.strictEqual(evalResult.isAdaptationUnlocked, false);
+      assert.strictEqual(evalResult.productionApplied, false);
+      assert.strictEqual(evalResult.productionInvariance.isAdaptationUnlocked, false);
+    });
+
+    // 16. All rejected paths leave factory weights and production activation state unchanged
+    it('16. all rejected activation-gate paths leave factory weights and production activation state strictly invariant', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 10.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 22016 });
+      const factoryBefore = JSON.stringify(FACTORY_SCHEDULER_WEIGHTS);
+
+      const testRuns = [
+        { candidateWeights: null },
+        { baselineWeights: { urgencyWeight: 99.0, priorityWeight: 100.0, unblockWeight: 15.0, riskWeight: 25.0 } },
+        { readinessReport: { status: 'insufficient_evidence', isAdaptationUnlocked: false } },
+        { rollbackPreflight: { success: false, verified: false } },
+        { scoringFn: null },
+        { samplingAssurance: { clusterIndependenceStatus: 'unverified' } },
+        { environment: 'unknown_env' },
+      ];
+
+      for (const run of testRuns) {
+        const res = evaluateActivationGate({
+          candidateWeights: validCandidateWeights,
+          baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+          readinessReport: defaultReadiness,
+          rollbackPreflight: defaultRollback,
+          pairedObservations: d.pairs,
+          ...run,
+        });
+
+        assert.notStrictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.ELIGIBLE_FOR_SUPERVISED_REVIEW);
+        assert.strictEqual(res.isAdaptationUnlocked, false);
+        assert.strictEqual(res.productionApplied, false);
+        assert.strictEqual(res.productionInvariance.isAdaptationUnlocked, false);
+        assert.strictEqual(res.productionInvariance.productionApplied, false);
+        assert.strictEqual(res.productionInvariance.factoryWeightsUnchanged, true);
+      }
+
+      assert.strictEqual(JSON.stringify(FACTORY_SCHEDULER_WEIGHTS), factoryBefore);
       assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.urgencyWeight, 50.0);
       assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.priorityWeight, 100.0);
       assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.unblockWeight, 15.0);
