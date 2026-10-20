@@ -17,6 +17,7 @@
 import {
   evaluateActivationGate,
   ACTIVATION_GATE_OUTCOMES,
+  SAMPLING_ASSURANCE_STATUS,
   createMulberry32,
 } from '../src/scheduler/activationGateEvaluator.js';
 import { FACTORY_SCHEDULER_WEIGHTS } from '../src/scheduler/adaptiveScheduler.js';
@@ -494,6 +495,16 @@ export function evaluateCoverageExperiment(options = {}) {
       randomSeed: seed,
     });
 
+    const syntheticAssurance = gateOptions.samplingAssurance !== undefined
+      ? gateOptions.samplingAssurance
+      : {
+          clusterIndependenceStatus: SAMPLING_ASSURANCE_STATUS.VERIFIED,
+          provenance: 'synthetic_generator_guarantee',
+          intendedEstimand: targetEstimand === 'shock_conditional'
+            ? 'shock_conditional_population_mean'
+            : 'shock_conditional_population_mean',
+        };
+
     const res = evaluateActivationGate({
       candidateWeights,
       baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
@@ -501,6 +512,7 @@ export function evaluateCoverageExperiment(options = {}) {
       rollbackPreflight,
       pairedObservations: dataset.pairs,
       randomSeed: seed,
+      samplingAssurance: syntheticAssurance,
       ...gateOptions,
     });
 

@@ -3525,6 +3525,128 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
 
 ---
 
+#### Stage 7.4.4A.7: Independence Assurance & Eligibility Consistency Audit (COMPLETED)
+- **Status**: **COMPLETED**.
+- **Starting Commit**: `c7c297a` (`test(phase-7): audit estimand integrity and interval coverage`).
+- **Implementation Commit**: `fix(phase-7): enforce sampling assurance before eligibility`.
+- **Scope & Mission**:
+  - Audit and correct the consistency between statistical-assumption disclosures, the activation-gate evaluator, simulation results, and the Activation Gate UI.
+  - Enforce that when real-world cluster sampling independence is unverified (`clusterIndependenceStatus: 'unverified'`), the gate strictly denies `ELIGIBLE_FOR_SUPERVISED_REVIEW` and returns `INSUFFICIENT_EVIDENCE`.
+  - Disallow simulation oracle flags or synthetic generator guarantees from leaking into production decision pathways.
+  - Formally define the sampling assurance policy states: `verified`, `unverified`, `failed`, `not_applicable`.
+  - Retain provisional practical threshold $\varepsilon = 1.0$ and Rule B ($CI_{lower} \ge \varepsilon$).
+  - Maintain absolute production isolation: `isAdaptationUnlocked: false`, `productionApplied: false`, factory weights immutable, candidate weights shadow-only. Stage 4B remains strictly unstarted.
+
+- **Scope A — Complete Eligibility-Path Audit Table**:
+
+| Required Condition | Evidence Source | Verification Status | Current Evaluator Predicate | Failure Outcome | Can Any Branch Bypass? | Focused Test |
+|---|---|---|---|---|---|---|
+| **1. Scoring Function Executable** | Evaluator options (`scoringFn`) | Verified | `typeof scoringFn === 'function'` | `INSUFFICIENT_METHODOLOGY` | No (immediate return) | F.13 |
+| **2. Finite Practical Threshold $\varepsilon > 0$** | Evaluator options (`minMeaningfulDelta`) | Verified | `typeof minMeaningfulDelta === 'number' && isFinite(...) && > 0` | `INSUFFICIENT_METHODOLOGY` | No (reverts to default 1.0) | Scope D tests |
+| **3. Valid Threshold Rule** | Evaluator options (`practicalThresholdRule`) | Verified | `rule in PRACTICAL_THRESHOLD_RULES` | `INSUFFICIENT_METHODOLOGY` | No (checked at entry) | F.12 |
+| **4. Valid Sampling Assurance Status** | Evaluator options (`samplingAssurance.clusterIndependenceStatus`) | Verified | `status in SAMPLING_ASSURANCE_STATUS` | `INSUFFICIENT_METHODOLOGY` | No (immediate rejection) | F.4 |
+| **5. Feasible Target Estimand Specification** | `samplingAssurance.intendedEstimand` | Verified | Cannot claim `marginal_population_mean` under single-window inference | `INSUFFICIENT_METHODOLOGY` | No (checked at entry) | F.8 |
+| **6. Non-Reversed Degrees of Freedom** | Evaluator options (`uncertainty`) | Verified | Degenerate interval checks $CI_{lower} \le CI_{upper}$ | `INSUFFICIENT_METHODOLOGY` | No (checked in statistical adequacy) | Gate evaluator suite |
+| **7. Candidate Weights Valid & In Bounds** | Candidate parameters | Verified | `validateCandidateWeights(candidateWeights).isValid` | `INFEASIBLE` | No (halts before evidence check) | Gate evaluator suite |
+| **8. Candidate Feasible on All Backlogs** | Schedule evaluation | Verified | `evalRes.candidateFeasible && violations.length === 0` | `INFEASIBLE` | No (infeasible pairs quarantined) | Gate evaluator suite |
+| **9. Baseline Feasible on All Backlogs** | Schedule evaluation | Verified | `evalRes.baselineFeasible && violations.length === 0` | `INFEASIBLE` | No (infeasible pairs quarantined) | Gate evaluator suite |
+| **10. Operational Exposure ($\ge 20$ decisions, $\ge 15$ completions)** | `readinessReport` | Verified | `decidedCount >= 20 && eligibleCompletedCount >= 15` | `INSUFFICIENT_EVIDENCE` | No | Gate evaluator suite |
+| **11. Sufficient Evaluation Evidence ($N \ge 15$)** | Paired observations | Verified | `eligibleCount >= 15` | `INSUFFICIENT_EVIDENCE` | No | Gate evaluator suite |
+| **12. Nominal Cluster Sufficiency ($M \ge 5$)** | Paired observations | Verified | `distinctClustersCount >= 5` | `INSUFFICIENT_EVIDENCE` | No ($M < 5$ exploratory only) | Gate evaluator suite |
+| **13. Zero Cross-Cluster Backlog Leakage** | Task set fingerprints | Verified | `!crossClusterLeakageDetected` | `INSUFFICIENT_EVIDENCE` (status -> `failed`) | No | Gate evaluator suite |
+| **14. Zero Cross-Cluster Task Overlap** | Normalized task IDs | Verified | `!crossClusterTaskOverlapDetected` (Jaccard < 0.20, overlap < 0.30) | `INSUFFICIENT_EVIDENCE` (status -> `failed`) | No | F.6 |
+| **15. Cluster Sampling Independence Verified** | `samplingAssurance.clusterIndependenceStatus` | **Unverified in production telemetry** | `status === 'verified'` | `INSUFFICIENT_EVIDENCE` | **No — Gate strictly requires verified status for eligibility** | F.1, F.2, F.3, F.7, F.17 |
+| **16. Non-Synthetic Real Evidence** | `isSyntheticData` flag | Verified | `!isSyntheticData` | `INSUFFICIENT_EVIDENCE` | No | F.9 |
+| **17. Valid Rollback Preflight** | `rollbackPreflight` | Verified | `rollbackPreflight.preflightPassed === true` | `INSUFFICIENT_EVIDENCE` | No | F.14 |
+| **18. Valid Candidate Snapshot & Checksum** | `candidateSnapshot` | Verified | `validateConfigurationSnapshot(snapshot).isValid` | `INSUFFICIENT_EVIDENCE` | No | F.15 |
+| **19. Mean Pairwise Quality Superiority** | Paired delta scores | Verified | `meanDelta >= epsilon` (Rule A) | `NOT_SUPERIOR` | No | Matrix tests |
+| **20. 95% Confidence Bound Practical Superiority** | Clustered Student-t interval | Verified | `ciLower >= epsilon` (Rule B default) | `NOT_SUPERIOR` | No | Matrix tests |
+| **21. Zero Outlier Cluster Dominance** | Cluster delta distribution | Verified | `!outlierClusterDominanceDetected` (regressing clusters $\le 50\%$) | `NOT_SUPERIOR` | No | Matrix tests |
+| **22. Primary Critical Metric Non-Regression** | On-time and delay deltas | Verified | On-time rate drop $\le 5\%$, delay increase $\le 1.0$ day | `NOT_SUPERIOR` | No | F.16 |
+
+- **Scope B & C — Sampling-Assurance Policy & Required Assumptions**:
+  - *Sampling Assurance States (`SAMPLING_ASSURANCE_STATUS`)*:
+    - `verified`: Required sampling assumptions established using an explicitly documented, defensible evidence source (e.g. randomized cluster design with known sampling frame, or synthetic generator guarantee in test code).
+    - `unverified`: Available telemetry cannot establish the required assumptions (default for real-world single-client task backlogs).
+    - `failed`: Empirical evidence contradicts sampling assumptions (e.g. cross-cluster backlog leakage or partial task overlap Jaccard $\ge 0.20$ / overlap $\ge 0.30$).
+    - `not_applicable`: Selected inferential procedure does not require independent cluster sampling (strictly rejected as `INSUFFICIENT_METHODOLOGY` for cluster-level Student-t intervals).
+  - *Distinction of Dependencies*:
+    - **Cluster-Level Independence**: Required between sampled clusters. In production telemetry, this is **unverified** because nominal cluster labels (projects/scenarios) originate from a single user environment and cannot establish statistical independence.
+    - **Within-Cluster Dependence**: Clustered Student-t interval explicitly accounts for arbitrary correlation among observations within each cluster by taking cluster-level means $\overline{Y}_c$.
+    - **Shared Macro Shocks**: Unobserved common shocks $\gamma$ cannot be identified from a single operational window. The Student-t interval targets the shock-conditional population parameter $\theta + \gamma$, NOT the marginal population effect $\theta$.
+    - **Cross-Cluster Task Overlap / Leakage**: Actively monitored. Jaccard $\ge 0.20$ or overlap $\ge 0.30$ triggers `failed` status and `INSUFFICIENT_EVIDENCE`.
+  - *Strict Eligibility Requirement*:
+    - In real production telemetry, `clusterIndependenceStatus` defaults to `unverified`.
+    - Under `unverified` status, `evaluateActivationGate` strictly blocks `ELIGIBLE_FOR_SUPERVISED_REVIEW` and returns `INSUFFICIENT_EVIDENCE`.
+
+- **Scope D & E — Synthetic Verification vs Production Evidence (Two Validation Paths)**:
+  - **Path 1 — Synthetic Methodological Validation (`tests/statistical_validation_harness.js`)**:
+    - The simulation harness generates synthetic data under known data-generating processes where clusters are sampled independently by design.
+    - The harness provides an explicit synthetic assurance declaration: `{ clusterIndependenceStatus: 'verified', provenance: 'synthetic_generator_guarantee', intendedEstimand: 'shock_conditional_population_mean' }`.
+    - Validates statistical properties (Student-t interval coverage: 95.3% for $\theta + \gamma$, 95.2% for independent Gaussian).
+  - **Path 2 — Production-Like Evidence Validation (`tests/statistical_validation.test.js`)**:
+    - Evaluates evidence as obtained from real user telemetry (`samplingAssurance: null` or `{ clusterIndependenceStatus: 'unverified' }`).
+    - Even with $\theta = 4.0$ (massive effect), $M = 5$ clusters, $N = 25$ pairs, zero overlap, and $CI_{lower} = 3.65 \gg 1.0$, the gate strictly returns `INSUFFICIENT_EVIDENCE` and 0% eligibility.
+    - Proves that simulation-only oracle information cannot grant production review eligibility.
+
+- **Scope F — Adversarial Eligibility Boundary Tests (18 Tests, 100% Passed)**:
+  - `F.1`: Grants `ELIGIBLE_FOR_SUPERVISED_REVIEW` only when independence status is explicitly verified with valid synthetic evidence.
+  - `F.2`: Returns `INSUFFICIENT_EVIDENCE` when status is unverified despite otherwise excellent metrics.
+  - `F.3`: Returns `INSUFFICIENT_EVIDENCE` when status is missing entirely (default production telemetry).
+  - `F.4`: Returns `INSUFFICIENT_METHODOLOGY` when status is set to an unknown or invalid value.
+  - `F.5`: Returns `INSUFFICIENT_EVIDENCE` when status is explicitly failed.
+  - `F.6`: Returns `INSUFFICIENT_EVIDENCE` and overrides status to failed when distinct cluster IDs share overlapping task sets.
+  - `F.7`: Returns `INSUFFICIENT_EVIDENCE` when task sets are disjoint but sampling provenance remains unverified.
+  - `F.8`: Returns `INSUFFICIENT_METHODOLOGY` when single-window inference claims to target marginal population estimand under shared shocks.
+  - `F.9`: Returns `INSUFFICIENT_EVIDENCE` when simulation results are passed with `isSyntheticData: true`.
+  - `F.10`: Documents warning when critical component metrics are missing from schedule alternatives.
+  - `F.11`: Returns `INSUFFICIENT_METHODOLOGY` when `samplingAssurance` is marked `not_applicable` for Student-t inference.
+  - `F.12`: Returns `INSUFFICIENT_METHODOLOGY` when practical-threshold rule is invalid or unrecognized.
+  - `F.13`: Returns `INSUFFICIENT_METHODOLOGY` when scoring function is non-executable or scores are non-finite.
+  - `F.14`: Returns `INSUFFICIENT_EVIDENCE` when rollback preflight fails verification.
+  - `F.15`: Returns `INSUFFICIENT_EVIDENCE` when candidate snapshot fails schema or checksum validation.
+  - `F.16`: Returns `NOT_SUPERIOR` when candidate meets composite score threshold but degrades critical on-time rate by $> 5\%$.
+  - `F.17`: Returns `INSUFFICIENT_EVIDENCE` when candidate satisfies all numerical and interval thresholds but lacks sampling independence assurance.
+  - `F.18`: Guarantees evaluation never mutates canonical factory scheduler weights or sets production activation flags.
+
+- **Scope H — UI Consistency & Transparency (`AdaptationSandboxCard.jsx`)**:
+  - Updated card label to `Scenario Clusters & Backlog Disjointness`.
+  - Replaced misleading green checkmark with amber warning for unverified evidence: `⚠️ M ≥ 5 Disjoint (Sampling Independence Unverified)`.
+  - Added dedicated rows in Clustered Uncertainty & Statistical Rigor panel:
+    - **Target Population Estimand**: `Shock-Conditional Effect (θ + γ; single window cannot identify common shock variance)`.
+    - **Sampling Independence Assurance**: `⚠️ Unverified (Nominal Single-Client Clusters; Independence Unverified)` (or `✓ Verified` / `✕ Failed`).
+    - **Inference Decision Readiness**: `⚠️ Exploratory Diagnostic (Eligibility Blocked: Sampling Independence Unverified)`.
+    - **Clusters & Backlog Disjointness**: Explicitly shows nominal cluster IDs and verified backlog disjointness.
+  - Retained provisional threshold $\varepsilon = 1.0$ pt and Rule B ($CI_{lower} \ge \varepsilon$).
+
+- **Scope I — Production Isolation Invariants Preserved**:
+  - `isAdaptationUnlocked: false` permanently preserved.
+  - `productionApplied: false` permanently preserved.
+  - Canonical factory scheduler weights remain exactly:
+    - `urgencyWeight: 50.0`
+    - `priorityWeight: 100.0`
+    - `unblockWeight: 15.0`
+    - `riskWeight: 25.0`
+  - Zero live proposal generation weight mutation.
+  - Stage 4B remains strictly unstarted.
+
+- **Verification Results Summary**:
+  - **Activation Gate Unit Suite**: **58 passed, 0 failed in 182ms** (`node --test tests/activation_gate_evaluator.test.js`).
+  - **Statistical Validation Suite**: **102 passed, 0 failed in 13.5s** (`node --test tests/statistical_validation.test.js`).
+  - **Full Frontend Test Suite**: **770 passed, 0 failed across 162 suites in 15.0s** (`npm test`).
+  - **Backend Pytest Suite**: **27 passed, 0 failed in 4.76s** (`python -m pytest backend/tests/ -q`).
+  - **Linter**: **0 errors, 1 pre-existing warning** (`npm run lint` / `oxlint`).
+  - **Production Build**: **Clean build in 307ms** (`npm run build`).
+  - **Git Diff & Whitespace**: **Clean with zero whitespace or line-ending errors** (`git diff --check`).
+  - **Browser E2E Verification**: Verified in browser (`http://localhost:5173/`); screenshot captured (`activation_gate_sampling_independence_1792481173422.png`) confirming clean display of Sampling Independence Assurance row, exploratory diagnostic state, and 0 console errors.
+
+- **Remaining Blockers Before Any Future Supervised Activation (Stage 4B)**:
+  1. Real-world telemetry currently has `clusterIndependenceStatus: 'unverified'`. A defensible sampling provenance methodology (e.g. cross-environment operational windows, verified independent projects, or randomized trial designs) must be established before production eligibility can be unlocked.
+  2. Single-window common shocks cannot identify marginal population variance; multi-window telemetry collection is required for marginal effect inference.
+  3. Supervised human review workflow with explicit confirmation and automatic rollback preflighting.
+
+---
+
 #### Stage 7.4.4B: Supervised Production Activation & Dynamic Deployment Gates (UNSTARTED)
 - **Scope & Expected Deliverables**:
   - Implement the supervised production activation workflow requiring verified readiness + $\ge 15$ eligible preference comparisons + superior concordance + 0 hard constraint violations + explicit user confirmation.

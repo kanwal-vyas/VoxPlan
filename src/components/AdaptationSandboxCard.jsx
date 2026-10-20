@@ -2072,7 +2072,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
               </span>
             </div>
             <div style={styles.rankingStatCard}>
-              <span style={styles.rankingStatLabel}>Scenario Clusters (Disjoint Backlogs)</span>
+              <span style={styles.rankingStatLabel}>Scenario Clusters & Backlog Disjointness</span>
               <span style={styles.rankingStatValue}>
                 {activeActivationGate.evidenceAssessment.distinctClustersCount} / {activeActivationGate.evidenceAssessment.minDecisionClustersRequired ?? 5}
               </span>
@@ -2082,7 +2082,9 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                   : activeActivationGate.evidenceAssessment.crossClusterLeakageDetected
                   ? '⚠️ Backlog Leakage Detected'
                   : activeActivationGate.evidenceAssessment.distinctClustersCount >= 5
-                  ? '✓ M ≥ 5 Disjoint (Sampling Independence Unverified)'
+                  ? (activeActivationGate.evidenceAssessment.clusterSamplingIndependenceVerified
+                      ? '✓ M ≥ 5 Disjoint (Sampling Independence Verified)'
+                      : '⚠️ M ≥ 5 Disjoint (Sampling Independence Unverified)')
                   : '✕ Inadequate (< 5 Clusters)'}
               </span>
             </div>
@@ -2109,11 +2111,43 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', fontSize: '12px' }}>
-                <span style={{ fontWeight: 600, color: '#374151' }}>Decision Rule & Target Scope:</span>
+                <span style={{ fontWeight: 600, color: '#374151' }}>Target Population Estimand:</span>
+                <span style={{ color: '#1F2937' }}>
+                  Shock-Conditional Effect (θ + γ; single window cannot identify common shock variance)
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', fontSize: '12px' }}>
+                <span style={{ fontWeight: 600, color: '#374151' }}>Decision Rule & Practical Threshold:</span>
                 <span style={{ color: '#1F2937' }}>
                   {activeActivationGate.practicalThresholdMetadata?.comparisonRule === 'confidence_bound'
-                    ? 'Rule B: CI_lower ≥ ε (Regime shock-conditional θ + γ; Single-window cannot identify common shock variance)'
-                    : 'Rule A: Mean ≥ ε (Regime shock-conditional θ + γ; Single-window cannot identify common shock variance)'}
+                    ? `Rule B: CI_lower ≥ ε (provisional ε = ${activeActivationGate.practicalThresholdMetadata?.thresholdEpsilon ?? 1.0} pt)`
+                    : `Rule A: Mean ≥ ε (provisional ε = ${activeActivationGate.practicalThresholdMetadata?.thresholdEpsilon ?? 1.0} pt)`}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', fontSize: '12px' }}>
+                <span style={{ fontWeight: 600, color: '#374151' }}>Sampling Independence Assurance:</span>
+                <span style={{ color: activeActivationGate.evidenceAssessment.clusterSamplingIndependenceVerified ? '#065F46' : '#92400E', fontWeight: 600 }}>
+                  {activeActivationGate.evidenceAssessment.clusterIndependenceStatus === 'verified'
+                    ? `✓ Verified (${activeActivationGate.evidenceAssessment.samplingAssurance?.provenance || 'Guaranteed'})`
+                    : activeActivationGate.evidenceAssessment.clusterIndependenceStatus === 'failed'
+                    ? '✕ Failed (Cross-Cluster Overlap/Leakage Detected)'
+                    : activeActivationGate.evidenceAssessment.clusterIndependenceStatus === 'not_applicable'
+                    ? '✕ Not Applicable (Methodology Conflict)'
+                    : '⚠️ Unverified (Nominal Single-Client Clusters; Independence Unverified)'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', fontSize: '12px' }}>
+                <span style={{ fontWeight: 600, color: '#374151' }}>Inference Decision Readiness:</span>
+                <span style={{ color: activeActivationGate.uncertainty.isDecisionReady ? '#065F46' : '#92400E', fontWeight: 600 }}>
+                  {activeActivationGate.uncertainty.isDecisionReady
+                    ? '✓ Decision-Ready Inference'
+                    : '⚠️ Exploratory Diagnostic (Eligibility Blocked: Sampling Independence Unverified)'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', fontSize: '12px' }}>
+                <span style={{ fontWeight: 600, color: '#374151' }}>Clusters & Backlog Disjointness:</span>
+                <span style={{ color: '#1F2937' }}>
+                  {activeActivationGate.evidenceAssessment.distinctClustersCount} Nominal Cluster IDs · {activeActivationGate.evidenceAssessment.disjointTaskSetsVerified ? 'Disjoint Task Sets (Zero Leakage/Overlap)' : '⚠️ Task Overlap or Leakage Detected'}
                 </span>
               </div>
               {activeActivationGate.uncertainty.bootstrapPercentile?.ciLower != null && (
@@ -2136,7 +2170,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
               )}
               {activeActivationGate.uncertainty.isExploratoryOnly && (
                 <div style={{ marginTop: '8px', padding: '6px 10px', backgroundColor: '#FFFBEB', borderRadius: '4px', border: '1px solid #FDE68A', fontSize: '11px', color: '#92400E' }}>
-                  ⚠️ <strong>Exploratory Simulation Diagnostic Only:</strong> Small cluster sample (M &lt; 5), task overlap, or leakage. Degrees of freedom are too sparse to support decision eligibility or confirm superiority.
+                  ⚠️ <strong>Exploratory Simulation Diagnostic Only:</strong> {activeActivationGate.evidenceAssessment.clusterSamplingIndependenceVerified ? 'Small cluster sample (M < 5), task overlap, or leakage.' : 'Cluster sampling independence remains unverified in real telemetry.'} Formal decision-ready eligibility is strictly withheld.
                 </div>
               )}
               <p style={{ margin: '8px 0 0 0', fontSize: '11px', color: '#6B7280', lineHeight: '1.4' }}>

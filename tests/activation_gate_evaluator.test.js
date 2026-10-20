@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   evaluateActivationGate,
   ACTIVATION_GATE_OUTCOMES,
+  SAMPLING_ASSURANCE_STATUS,
   THRESHOLD_STATUS,
   evaluateSinglePairedObservation,
 } from '../src/scheduler/activationGateEvaluator.js';
@@ -32,6 +33,15 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
       verified: true,
       factorySnapshotAvailable: true,
       error: null,
+    };
+  }
+
+  // Helper to build a standard passing sampling assurance declaration (Stage 4A.7 Path 1)
+  function createPassingSamplingAssurance() {
+    return {
+      clusterIndependenceStatus: SAMPLING_ASSURANCE_STATUS.VERIFIED,
+      provenance: 'synthetic_fixture',
+      intendedEstimand: 'shock_conditional_population_mean',
     };
   }
 
@@ -378,6 +388,7 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
         candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
         readinessReport: createPassingReadinessReport(),
         rollbackPreflight: createPassingRollbackPreflight(),
+        samplingAssurance: createPassingSamplingAssurance(),
         pairedObservations: pairs,
         minMeaningfulDelta: 1.0,
       });
@@ -408,6 +419,7 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
         candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
         readinessReport: createPassingReadinessReport(),
         rollbackPreflight: createPassingRollbackPreflight(),
+        samplingAssurance: createPassingSamplingAssurance(),
         pairedObservations: highVariancePairs,
         minMeaningfulDelta: 0.5,
         randomSeed: 42,
@@ -592,6 +604,7 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
         },
         readinessReport: createPassingReadinessReport(),
         rollbackPreflight: createPassingRollbackPreflight(),
+        samplingAssurance: createPassingSamplingAssurance(),
         pairedObservations: pairs,
         minMeaningfulDelta: 1.0,
         randomSeed: 42,
@@ -605,6 +618,37 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
       assert.equal(res.pairedComparison.meetsPracticalImprovement, true);
       assert.equal(res.uncertainty.isCiPositive, true);
       assert.ok(res.uncertainty.ciLower > 0);
+    });
+
+    it('5.1b blocks ELIGIBLE_FOR_SUPERVISED_REVIEW when samplingAssurance is omitted or unverified (Path 2 Production Invariant)', () => {
+      const pairs = createPairedObservations({
+        count: 25,
+        clusters: ['cluster_a', 'cluster_b', 'cluster_c', 'cluster_d', 'cluster_e'],
+        candScoreBase: 88.0,
+        baseScoreBase: 84.0,
+        variance: 0.2,
+      });
+
+      const res = evaluateActivationGate({
+        candidateWeights: {
+          urgencyWeight: 52.0,
+          priorityWeight: 105.0,
+          unblockWeight: 15.0,
+          riskWeight: 26.0,
+        },
+        readinessReport: createPassingReadinessReport(),
+        rollbackPreflight: createPassingRollbackPreflight(),
+        // samplingAssurance omitted: defaults to unverified
+        pairedObservations: pairs,
+        minMeaningfulDelta: 1.0,
+        randomSeed: 42,
+      });
+
+      assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.equal(res.isEligibleForSupervisedReview, false);
+      assert.equal(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.equal(res.evidenceAssessment.clusterIndependenceStatus, SAMPLING_ASSURANCE_STATUS.UNVERIFIED);
+      assert.ok(res.reasons.some((r) => r.includes('Cluster sampling independence is unverified')));
     });
 
     it('5.2 strictly enforces production invariance guarantees throughout evaluation', () => {
@@ -786,6 +830,7 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
         candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
         readinessReport: createPassingReadinessReport(),
         rollbackPreflight: createPassingRollbackPreflight(),
+        samplingAssurance: createPassingSamplingAssurance(),
         pairedObservations: pairs,
         minMeaningfulDelta: 1.0,
       });
@@ -805,6 +850,7 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
         candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
         readinessReport: createPassingReadinessReport(),
         rollbackPreflight: createPassingRollbackPreflight(),
+        samplingAssurance: createPassingSamplingAssurance(),
         pairedObservations: pairs,
       });
       assert.equal(res.outcome, ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR);
@@ -822,6 +868,7 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
         candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
         readinessReport: createPassingReadinessReport(),
         rollbackPreflight: createPassingRollbackPreflight(),
+        samplingAssurance: createPassingSamplingAssurance(),
         pairedObservations: pairs,
         minMeaningfulDelta: 1.0,
       });
@@ -1174,6 +1221,7 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
         },
         readinessReport: createPassingReadinessReport(),
         rollbackPreflight: createPassingRollbackPreflight(),
+        samplingAssurance: createPassingSamplingAssurance(),
         pairedObservations: pairs,
         minMeaningfulDelta: 1.0,
         randomSeed: 42,
@@ -1241,6 +1289,7 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
         candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
         readinessReport: createPassingReadinessReport(),
         rollbackPreflight: createPassingRollbackPreflight(),
+        samplingAssurance: createPassingSamplingAssurance(),
         pairedObservations: pairs,
         minMeaningfulDelta: 1.0,
       });
@@ -1267,6 +1316,7 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
         candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
         readinessReport: createPassingReadinessReport(),
         rollbackPreflight: createPassingRollbackPreflight(),
+        samplingAssurance: createPassingSamplingAssurance(),
         pairedObservations: pairs,
         minMeaningfulDelta: 1.0,
         randomSeed: 42,
@@ -1287,6 +1337,7 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
         candidateWeights: { ...FACTORY_SCHEDULER_WEIGHTS },
         readinessReport: createPassingReadinessReport(),
         rollbackPreflight: createPassingRollbackPreflight(),
+        samplingAssurance: createPassingSamplingAssurance(),
         pairedObservations: pairs,
       });
       assert.ok(res.evidencePolicy);
@@ -1332,6 +1383,7 @@ describe('Phase 7.4 Stage 4A: Shadow-Only Activation-Gate Evaluator', () => {
           candidateWeights,
           readinessReport: createPassingReadinessReport(),
           rollbackPreflight: createPassingRollbackPreflight(),
+          samplingAssurance: createPassingSamplingAssurance(),
           pairedObservations: pairs,
           randomSeed: seed,
         });

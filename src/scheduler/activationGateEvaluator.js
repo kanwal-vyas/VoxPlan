@@ -45,6 +45,22 @@ export const ACTIVATION_GATE_OUTCOMES = Object.freeze({
 });
 
 /**
+ * Sampling assurance status vocabulary (Phase 7.4 Stage 4A.7).
+ *
+ * Defines explicit states for required inferential sampling assumptions:
+ * - VERIFIED: Established via documented, defensible evidence source (e.g. randomized cluster design or synthetic guarantee).
+ * - UNVERIFIED: Available telemetry cannot establish independent cluster sampling (real-world single-client backlogs).
+ * - FAILED: Empirical evidence contradicts sampling assumptions (e.g. cross-cluster task leakage or overlap).
+ * - NOT_APPLICABLE: Selected procedure mathematically does not require assumption (invalid for cluster Student-t).
+ */
+export const SAMPLING_ASSURANCE_STATUS = Object.freeze({
+  VERIFIED: 'verified',
+  UNVERIFIED: 'unverified',
+  FAILED: 'failed',
+  NOT_APPLICABLE: 'not_applicable',
+});
+
+/**
  * Status definition for practical improvement threshold.
  */
 export const THRESHOLD_STATUS = Object.freeze({
@@ -108,7 +124,7 @@ export const METHODOLOGY_DISCLOSURES = Object.freeze([
   'Cross-cluster task overlap (Jaccard similarity >= 0.20 or overlap coefficient >= 0.30) violates cluster exchangeability and invalidates decision readiness, resulting in conservative insufficient evidence.',
   'Estimand Distinction: The cluster Student-t interval targets the shock-conditional population effect (theta + gamma) for the observed operational regime. It does not target the marginal population effect (theta) across unobserved environment shocks, nor does it target the finite sampled-cluster mean (theta + gamma + mean(u)).',
   'Single-Window Identification Limitation: A single operational window provides zero degrees of freedom to identify the variance of an unobserved common shock (sigma_gamma^2). Estimating marginal population uncertainty requires telemetry across multiple independent longitudinal operational windows or multi-environment randomized sampling.',
-  'Unverified Independence Policy: Distinct scenario cluster IDs and non-overlapping task backlogs confirm the absence of detectable task leakage, but DO NOT constitute mathematical proof of statistical independence. Independence across clusters remains unverified.',
+  'Sampling Assurance Policy: Distinct scenario cluster IDs and non-overlapping task backlogs confirm the absence of detectable task leakage, but DO NOT constitute mathematical proof of statistical independence. If cluster sampling independence is unverified in telemetry, decision readiness is invalidated and supervised review eligibility is blocked.',
 ]);
 
 /**
@@ -628,6 +644,7 @@ export function runClusteredBootstrap(
  * @param {number} [params.randomSeed=42] - Seed for deterministic clustered bootstrap resampling.
  * @param {number} [params.bootstrapIterations=DEFAULT_BOOTSTRAP_ITERATIONS] - Bootstrap iteration count.
  * @param {string} [params.practicalThresholdRule=DEFAULT_PRACTICAL_THRESHOLD_RULE] - Comparison rule (confidence_bound or mean_threshold).
+ * @param {Object} [params.samplingAssurance=null] - Formal sampling assurance declaration and provenance (Scope B).
  * @returns {Object} Comprehensive, structured activation gate assessment report.
  */
 export function evaluateActivationGate({
@@ -643,6 +660,7 @@ export function evaluateActivationGate({
   randomSeed = 42,
   bootstrapIterations = DEFAULT_BOOTSTRAP_ITERATIONS,
   practicalThresholdRule = DEFAULT_PRACTICAL_THRESHOLD_RULE,
+  samplingAssurance = null,
 } = {}) {
   const reasons = [];
 
@@ -653,6 +671,32 @@ export function evaluateActivationGate({
   const epsilonValid = typeof minMeaningfulDelta === 'number' && isFinite(minMeaningfulDelta) && minMeaningfulDelta > 0;
   const epsilon = epsilonValid ? minMeaningfulDelta : DEFAULT_MIN_MEANINGFUL_DELTA;
   const ruleValid = practicalThresholdRule == null || Object.values(PRACTICAL_THRESHOLD_RULES).includes(practicalThresholdRule);
+
+  // Validate sampling assurance status (Scope B)
+  const isAssuranceExplicit = samplingAssurance != null && typeof samplingAssurance === 'object';
+  const rawAssuranceStatus = isAssuranceExplicit ? samplingAssurance.clusterIndependenceStatus : null;
+  const samplingAssuranceStatusValid =
+    !isAssuranceExplicit ||
+    rawAssuranceStatus == null ||
+    Object.values(SAMPLING_ASSURANCE_STATUS).includes(rawAssuranceStatus) ||
+    rawAssuranceStatus === 'unverified_nominal_clusters'; // backward compatibility
+
+  let samplingAssuranceApplicableValid = true;
+  if (rawAssuranceStatus === SAMPLING_ASSURANCE_STATUS.NOT_APPLICABLE) {
+    samplingAssuranceApplicableValid = false;
+    reasons.push(
+      'The cluster Student-t interval requires independent cluster sampling; sampling independence cannot be marked "not_applicable" for this inferential procedure.'
+    );
+  }
+
+  // Target estimand validation: single operating window cannot identify marginal population mean under shared shocks (Scope C & Scope F)
+  let samplingAssuranceEstimandValid = true;
+  if (isAssuranceExplicit && samplingAssurance.intendedEstimand === 'marginal_population_mean') {
+    samplingAssuranceEstimandValid = false;
+    reasons.push(
+      'Single-window cluster Student-t inference cannot identify the marginal population estimand in the presence of unobserved common shocks; intended estimand must be shock-conditional (shock_conditional_population_mean).'
+    );
+  }
 
   if (!scoringValid) {
     reasons.push('Invalid schedule objective scoring function provided (must be an executable function).');
@@ -667,8 +711,24 @@ export function evaluateActivationGate({
       `Invalid practical threshold rule "${practicalThresholdRule}"; must be one of: ${Object.values(PRACTICAL_THRESHOLD_RULES).join(', ')}.`
     );
   }
+  if (!samplingAssuranceStatusValid) {
+    reasons.push(
+      `Invalid sampling assurance status "${rawAssuranceStatus}"; must be one of: ${Object.values(SAMPLING_ASSURANCE_STATUS).join(', ')}.`
+    );
+  }
 
-  const methodologyValid = scoringValid && epsilonValid && ruleValid;
+  const methodologyValid =
+    scoringValid &&
+    epsilonValid &&
+    ruleValid &&
+    samplingAssuranceStatusValid &&
+    samplingAssuranceApplicableValid &&
+    samplingAssuranceEstimandValid;
+
+  let clusterIndependenceStatus =
+    rawAssuranceStatus === 'unverified_nominal_clusters'
+      ? SAMPLING_ASSURANCE_STATUS.UNVERIFIED
+      : (rawAssuranceStatus ?? SAMPLING_ASSURANCE_STATUS.UNVERIFIED);
 
   // -------------------------------------------------------------------------
   // 2. Candidate Configuration Validation (Audit Boundary)
@@ -908,16 +968,25 @@ export function evaluateActivationGate({
       const candTotal = Number(candMetrics.totalTasks ?? 0);
       const candOnTime = Number(candMetrics.onTimeTasksCount ?? 0);
       const candDelayed = Number(candMetrics.delayedTasksCount ?? 0);
-      const candDelayDays = candDelayed > 0 ? Number(candMetrics.totalDelayDays ?? 0) / candDelayed : 0;
+      const candDelayDays = candMetrics.averageDelayDays != null
+        ? Number(candMetrics.averageDelayDays)
+        : (candDelayed > 0 ? Number(candMetrics.totalDelayDays ?? 0) / candDelayed : 0);
 
       const baseTotal = Number(baseMetrics.totalTasks ?? 0);
       const baseOnTime = Number(baseMetrics.onTimeTasksCount ?? 0);
       const baseDelayed = Number(baseMetrics.delayedTasksCount ?? 0);
-      const baseDelayDays = baseDelayed > 0 ? Number(baseMetrics.totalDelayDays ?? 0) / baseDelayed : 0;
+      const baseDelayDays = baseMetrics.averageDelayDays != null
+        ? Number(baseMetrics.averageDelayDays)
+        : (baseDelayed > 0 ? Number(baseMetrics.totalDelayDays ?? 0) / baseDelayed : 0);
 
-      if (candTotal > 0 && baseTotal > 0) {
-        const candRate = Math.max(0, Math.min(1, candOnTime / candTotal));
-        const baseRate = Math.max(0, Math.min(1, baseOnTime / baseTotal));
+      const candRate = candMetrics.onTimeCompletionRate != null
+        ? Number(candMetrics.onTimeCompletionRate)
+        : (candTotal > 0 ? Math.max(0, Math.min(1, candOnTime / candTotal)) : null);
+      const baseRate = baseMetrics.onTimeCompletionRate != null
+        ? Number(baseMetrics.onTimeCompletionRate)
+        : (baseTotal > 0 ? Math.max(0, Math.min(1, baseOnTime / baseTotal)) : null);
+
+      if (candRate != null && baseRate != null) {
         sumOnTimeDelta += (candRate - baseRate);
         sumDelayDelta += (candDelayDays - baseDelayDays);
         pairsWithComponentsCount++;
@@ -1067,13 +1136,31 @@ export function evaluateActivationGate({
     }
   }
 
+  // Detect cross-cluster leakage or task overlap and override status (Scope B & Scope F)
+  if (crossClusterLeakageDetected || crossClusterTaskOverlapDetected) {
+    clusterIndependenceStatus = SAMPLING_ASSURANCE_STATUS.FAILED;
+  }
+
+  const samplingIndependenceSatisfied = clusterIndependenceStatus === SAMPLING_ASSURANCE_STATUS.VERIFIED;
+
+  if (clusterIndependenceStatus === SAMPLING_ASSURANCE_STATUS.UNVERIFIED) {
+    reasons.push(
+      'Cluster sampling independence is unverified (status: "unverified"); independent cluster sampling is required for decision-ready Student-t inference and supervised review eligibility.'
+    );
+  } else if (clusterIndependenceStatus === SAMPLING_ASSURANCE_STATUS.FAILED) {
+    reasons.push(
+      'Cluster sampling independence failed (status: "failed"): available evidence contradicts independent cluster sampling.'
+    );
+  }
+
   // Evaluation evidence check under minimum-evidence policy
   const evaluationEvidencePassed =
     eligibleCount >= MIN_PAIRED_OBSERVATIONS &&
     distinctClustersCount >= MIN_DECISION_CLUSTERS &&
     !crossClusterLeakageDetected &&
     !crossClusterTaskOverlapDetected &&
-    !isSyntheticData;
+    !isSyntheticData &&
+    samplingIndependenceSatisfied;
 
   // -------------------------------------------------------------------------
   // 5. Hard Feasibility Gate
@@ -1199,12 +1286,15 @@ export function evaluateActivationGate({
 
       const isDecisionClusterCount = distinctClustersCount >= MIN_DECISION_CLUSTERS;
       const isDecisionReadyForInference =
-        isDecisionClusterCount && !crossClusterLeakageDetected && !crossClusterTaskOverlapDetected;
+        isDecisionClusterCount &&
+        !crossClusterLeakageDetected &&
+        !crossClusterTaskOverlapDetected &&
+        samplingIndependenceSatisfied;
 
       if (!isDecisionReadyForInference) {
-        uncertaintyDisclaimer = `Cluster-level Student-t interval (${degreesOfFreedom} df, t_crit = ${tCritical}) across ${distinctClustersCount} clusters: 95% CI is [${ciLower}, ${ciUpper}] (EXPLORATORY ONLY — Not Decision-Ready). Warning: Small cluster count (M=${distinctClustersCount} < ${MIN_DECISION_CLUSTERS}), cross-cluster leakage, or task overlap invalidates independent cluster inference.`;
+        uncertaintyDisclaimer = `Cluster-level Student-t interval (${degreesOfFreedom} df, t_crit = ${tCritical}) across ${distinctClustersCount} clusters: 95% CI is [${ciLower}, ${ciUpper}] (EXPLORATORY ONLY — Not Decision-Ready). Warning: Small cluster count (M=${distinctClustersCount} < ${MIN_DECISION_CLUSTERS}), unverified or failed cluster sampling independence (status: "${clusterIndependenceStatus}"), cross-cluster leakage, or task overlap invalidates independent cluster inference.`;
       } else {
-        uncertaintyDisclaimer = `Cluster-level Student-t interval (${degreesOfFreedom} df, t_crit = ${tCritical}) across ${distinctClustersCount} clusters: 95% CI is [${ciLower}, ${ciUpper}]. Assumes cluster-level exchangeability and conditional independence across distinct scenario units. Decision-ready under minimum-evidence policy.`;
+        uncertaintyDisclaimer = `Cluster-level Student-t interval (${degreesOfFreedom} df, t_crit = ${tCritical}) across ${distinctClustersCount} clusters: 95% CI is [${ciLower}, ${ciUpper}]. Assumes cluster-level exchangeability and conditional independence across distinct scenario units. Decision-ready under verified sampling assurance.`;
       }
     } catch (err) {
       uncertaintyDisclaimer = `Failed to estimate clustered uncertainty: ${err.message}`;
@@ -1227,6 +1317,7 @@ export function evaluateActivationGate({
     distinctClustersCount >= MIN_DECISION_CLUSTERS &&
     !crossClusterLeakageDetected &&
     !crossClusterTaskOverlapDetected &&
+    samplingIndependenceSatisfied &&
     eligibleCount >= MIN_PAIRED_OBSERVATIONS &&
     operationalReadinessPassed &&
     rollbackPreflightPassed &&
@@ -1348,8 +1439,9 @@ export function evaluateActivationGate({
         zeroLeakageEnforced: !crossClusterLeakageDetected,
         zeroOverlapEnforced: !crossClusterTaskOverlapDetected,
         disjointTaskSetsVerified: !crossClusterTaskOverlapDetected && !crossClusterLeakageDetected,
-        clusterSamplingIndependenceVerified: false,
-        clusterIndependenceStatus: 'unverified_nominal_clusters',
+        clusterSamplingIndependenceVerified: samplingIndependenceSatisfied,
+        clusterIndependenceStatus,
+        samplingAssurance: isAssuranceExplicit ? samplingAssurance : null,
         unobservedSharedShockLimitation:
           'Common environment shocks affecting all clusters equally cannot be identified from a single operational window; interval covers shock-conditional effect (theta + gamma), not marginal population effect.',
         uncertaintyMethod: canEstimateUncertainty ? 'cluster_level_t_interval_95' : null,
@@ -1382,8 +1474,9 @@ export function evaluateActivationGate({
       crossClusterLeakageDetected,
       crossClusterTaskOverlapDetected,
       maxCrossClusterTaskJaccard,
-      clusterSamplingIndependenceVerified: false,
-      clusterIndependenceStatus: 'unverified_nominal_clusters',
+      clusterSamplingIndependenceVerified: samplingIndependenceSatisfied,
+      clusterIndependenceStatus,
+      samplingAssurance: isAssuranceExplicit ? samplingAssurance : null,
       isDecisionReady,
     },
     thresholdPolicy: {
@@ -1481,6 +1574,15 @@ export function evaluateActivationGate({
       snapshotValid,
       rollbackPreflightVerified: rollbackPreflightPassed,
       details: rollbackDetails,
+    },
+    samplingAssurancePolicy: {
+      status: clusterIndependenceStatus,
+      isVerified: samplingIndependenceSatisfied,
+      isAssuranceExplicit,
+      provenance: isAssuranceExplicit ? (samplingAssurance?.provenance ?? 'unspecified') : 'omitted_in_telemetry',
+      targetEstimand: isAssuranceExplicit ? (samplingAssurance?.intendedEstimand ?? 'shock_conditional_population_mean') : 'shock_conditional_population_mean',
+      policyDescription:
+        'Cluster Student-t interval requires independent cluster sampling for shock-conditional population inference. Real-world telemetry lacking defensible sampling provenance remains unverified, blocking supervised review eligibility.',
     },
     methodologyDisclosures: METHODOLOGY_DISCLOSURES,
     productionInvariance: {
