@@ -7,15 +7,19 @@ VoxPlan is being evolved from a student/sprint task tracker into an independent,
 
 ---
 
-## Quick Start & Demo Launch Orchestration
+## Application Structure & Routing
 
-VoxPlan provides an automated launcher that validates runtime dependencies (Node 18+, Python 3.10+), detects port conflicts, connects to already running services without spawning duplicates, polls service health until fully ready, and opens the application in your browser.
+VoxPlan is organized into two distinct experiences with seamless client-side routing:
+- **`/` — Product Landing Page**: Product introduction, interactive feature previews (Adaptive Schedule, ML Risk, Voice Commands), architecture comparison, and direct calls to action.
+- **`/app` — Functional Productivity Application**: The full operational intelligence workspace featuring task management, live stopwatch timers, ML delay-risk prediction, Kahn DAG dependency scheduling, visual proposal editing, behavioral habit insights, and RFC 5545 `.ics` calendar export.
 
 ```bash
 # Automated Launch (Node.js script or Windows batch wrapper)
-npm run demo
+npm run demo                 # Starts services and opens Product Landing Page (/)
+npm run demo -- --app        # Starts services and opens directly to Productivity App (/app)
 # or on Windows:
 .\run-demo.bat
+.\run-demo.bat --app
 
 # Launch flags:
 npm run demo -- --no-open    # Start services without automatically opening browser

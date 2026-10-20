@@ -21,7 +21,9 @@ const rootDir = process.cwd();
 
 const FRONTEND_PORT = 5173;
 const BACKEND_PORT = 8000;
-const FRONTEND_URL = `http://localhost:${FRONTEND_PORT}/`;
+const openDirectApp = process.argv.includes('--app');
+const targetPath = openDirectApp ? 'app' : '';
+const FRONTEND_URL = `http://localhost:${FRONTEND_PORT}/${targetPath}`;
 const BACKEND_HEALTH_URL = `http://127.0.0.1:${BACKEND_PORT}/health`;
 const BACKEND_STATUS_URL = `http://127.0.0.1:${BACKEND_PORT}/api/model/status`;
 

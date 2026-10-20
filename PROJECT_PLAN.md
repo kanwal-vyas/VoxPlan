@@ -4080,3 +4080,51 @@ Ensure VoxPlan is 100% reliable to launch and demonstrate for the 48–72 hour m
 - **Backend Test Suite**: **27 / 27 passing** (`python -m pytest backend/tests/`).
 - **Linter**: Zero errors (`npm run lint`).
 - **Production Build**: 70 modules transformed in ~270ms (`npm run build`).
+
+---
+
+## UI Restructure: Product Landing Page (/) & Productivity App (/app)
+
+### Objective
+Restructure VoxPlan into two distinct, well-defined user experiences without rewriting application logic:
+1. `/` — Product Landing Page: A polished, responsive product showcase explaining what VoxPlan does, who benefits from it, interactive previews (DAG scheduling, ML risk, stopwatch timers, voice commands), architecture comparisons, core features, how-it-works workflow, and calls to action.
+2. `/app` — Functional Productivity Application: The existing interactive workspace preserved completely with all task management, timers, ML explainability, adaptive scheduling, visual proposal editing, behavioral insights, personal models, and RFC 5545 export.
+
+### Implementation Summary
+1. **Lightweight Native Routing (`src/App.jsx`)**:
+   - Zero additional external dependencies or bloated routers.
+   - Client-side route matching checking `window.location.pathname`:
+     - `/app` or `/app/*` $\to$ `<ProductivityApp onNavigate={navigate} />`
+     - `/` or other $\to$ `<LandingPage onNavigate={navigate} />`
+   - Smooth `popstate` browser forward/back button support.
+   - Deep-linking and browser refresh fully functional on both `/` and `/app`.
+   - Anchor smooth scrolling support (`#features`, `#how-it-works`, `#architecture`, `#safety`).
+2. **Product Landing Page (`src/pages/LandingPage.jsx`)**:
+   - Navigation bar with brand mark, section links, and "Open App →" CTA.
+   - Hero section with editorial typography, category pill, and primary/secondary CTAs.
+   - Interactive preview card with 3 switchable tabs:
+     - Adaptive Schedule preview with Kahn ready-queue and capacity utilization.
+     - ML Risk & Stopwatch with interactive live focus timer and Gini factor breakdowns.
+     - Voice & Commands dialogue transcript demonstration.
+   - Core Features Grid covering only implemented capabilities (DAG scheduling, ML delay-risk, Bayesian habit pace, voice planning, time-blocking, .ics export).
+   - "How It Works" 4-step progressive timeline.
+   - Local-First Architecture & Safety comparison table highlighting local IndexedDB, zero remote LLM APIs, and fail-closed activation gates.
+   - Final CTA and clean footer.
+3. **Productivity App Relocation (`src/pages/ProductivityApp.jsx`)**:
+   - Preserved 100% of existing functional logic, state, and components.
+   - Injected `onNavigate` into `Header.jsx` with an intuitive "← Overview" button and brand navigation.
+4. **Demo Launcher Flag (`scripts/demoLauncher.mjs`)**:
+   - Added `--app` flag support (`npm run demo -- --app`) to open directly to `/app`.
+
+### Verification Results
+- **Frontend Test Suite**: **832 / 832 passing** (166 nested describe suites across 25 test files).
+- **Backend Test Suite**: **27 / 27 passing** (pytest).
+- **Linter**: Zero errors (`oxlint`).
+- **Production Build**: Built cleanly with Vite (`72 modules transformed in 536ms`).
+- **Browser Subagent Walkthrough**:
+  - Verified `/` renders Landing Page with all sections and tabs.
+  - Verified interactive stopwatch timer.
+  - Verified navigation from `/` to `/app` via "Open App" and "Launch VoxPlan App".
+  - Verified "← Overview" returns from `/app` to `/`.
+  - Verified direct URL entry and refresh at `/app`.
+  - Verified demo seeding, task list updates, and zero uncaught console errors.

@@ -6,6 +6,7 @@ export default function Header({
   onScrollToSection,
   onSeedDemo,
   onClearDemo,
+  onNavigate,
 }) {
   const [scrolled, setScrolled] = useState(false);
 
@@ -28,7 +29,17 @@ export default function Header({
     >
       <div style={styles.headerInner}>
         {/* Brand Wordmark & Sticker */}
-        <div style={styles.brand} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+        <div
+          style={styles.brand}
+          onClick={() => {
+            if (onNavigate) {
+              onNavigate('/');
+            } else {
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          }}
+          title={onNavigate ? 'Back to Product Landing Page' : 'Scroll to top'}
+        >
           <div style={styles.brandBadge}>
             <span>✦</span>
           </div>
@@ -38,6 +49,17 @@ export default function Header({
 
         {/* Floating Nav Capsule */}
         <nav style={styles.nav} aria-label="Sections">
+          {onNavigate && (
+            <button
+              type="button"
+              id="header-nav-landing-btn"
+              onClick={() => onNavigate('/')}
+              style={styles.navLandingLink}
+              title="Return to Product Landing Page"
+            >
+              ← Overview
+            </button>
+          )}
           <button
             type="button"
             onClick={() => onScrollToSection('pulse')}
@@ -208,6 +230,20 @@ const styles = {
     padding: '6px 14px',
     borderRadius: '9999px',
     transition: 'all 0.15s ease',
+  },
+  navLandingLink: {
+    background: 'rgba(201, 182, 255, 0.22)',
+    border: '1px solid rgba(201, 182, 255, 0.5)',
+    color: '#5B35C2',
+    fontSize: '12px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    padding: '5px 12px',
+    borderRadius: '9999px',
+    transition: 'all 0.15s ease',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '3px',
   },
   statusPill: {
     display: 'flex',
