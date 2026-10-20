@@ -14,6 +14,7 @@ import {
   evaluateActivationGate,
   ACTIVATION_GATE_OUTCOMES,
   SAMPLING_ASSURANCE_STATUS,
+  SAMPLING_PROVENANCE_SOURCES,
   computeTaskSetFingerprint,
   getStudentTCriticalValue,
   PRACTICAL_THRESHOLD_RULES,
@@ -23,6 +24,7 @@ import {
   generateValidationDataset,
   evaluateCoverageExperiment,
   auditEstimandIntegrity,
+  createSyntheticAssuranceRecord,
 } from './statistical_validation_harness.js';
 
 describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Provenance Audit', () => {
@@ -51,11 +53,9 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
     riskWeight: 26.0,
   };
 
-  const defaultSyntheticAssurance = {
-    clusterIndependenceStatus: SAMPLING_ASSURANCE_STATUS.VERIFIED,
-    provenance: 'synthetic_generator_guarantee',
-    intendedEstimand: 'shock_conditional_population_mean',
-  };
+  const defaultSyntheticAssurance = createSyntheticAssuranceRecord({
+    clusterKeys: ['cluster_1', 'cluster_2', 'cluster_3', 'cluster_4', 'cluster_5'],
+  });
 
   // ---------------------------------------------------------------------------
   // Scope A, B, C: Controlled Simulation Matrix Across 16 Scenarios
@@ -2297,11 +2297,7 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
         readinessReport: defaultReadiness,
         rollbackPreflight: defaultRollback,
         pairedObservations: d.pairs,
-        samplingAssurance: {
-          clusterIndependenceStatus: SAMPLING_ASSURANCE_STATUS.VERIFIED,
-          provenance: 'synthetic_generator_guarantee',
-          intendedEstimand: 'shock_conditional_population_mean',
-        },
+        samplingAssurance: d.syntheticAssurance,
       });
 
       assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.ELIGIBLE_FOR_SUPERVISED_REVIEW);
@@ -2489,7 +2485,7 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
         readinessReport: defaultReadiness,
         rollbackPreflight: defaultRollback,
         pairedObservations: pairs,
-        samplingAssurance: defaultSyntheticAssurance,
+        samplingAssurance: createSyntheticAssuranceRecord({ clusterKeys: ['cl_0', 'cl_1', 'cl_2', 'cl_3', 'cl_4'] }),
       });
 
       assert.strictEqual(res.pairedComparison.componentMetricsAudited, false);
@@ -2607,7 +2603,7 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
         readinessReport: defaultReadiness,
         rollbackPreflight: defaultRollback,
         pairedObservations: pairs,
-        samplingAssurance: defaultSyntheticAssurance,
+        samplingAssurance: createSyntheticAssuranceRecord({ clusterKeys: ['cl_0', 'cl_1', 'cl_2', 'cl_3', 'cl_4'] }),
       });
 
       assert.strictEqual(res.pairedComparison.criticalMetricRegressionDetected, true);
@@ -2649,6 +2645,437 @@ describe('Phase 7.4 Stage 4A.3: Independent Statistical Validation & Evidence Pr
         rollbackPreflight: defaultRollback,
         pairedObservations: d.pairs,
         samplingAssurance: defaultSyntheticAssurance,
+      });
+
+      assert.strictEqual(res.isAdaptationUnlocked, false);
+      assert.strictEqual(res.productionApplied, false);
+      assert.strictEqual(res.productionInvariance.isAdaptationUnlocked, false);
+      assert.strictEqual(res.productionInvariance.productionApplied, false);
+      assert.strictEqual(res.productionInvariance.factoryWeightsUnchanged, true);
+      assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.urgencyWeight, 50.0);
+      assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.priorityWeight, 100.0);
+      assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.unblockWeight, 15.0);
+      assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.riskWeight, 25.0);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Scope F: Sampling-Assurance Provenance & Trust-Boundary Audit (18 Adversarial Tests — Stage 4A.8)
+  // ---------------------------------------------------------------------------
+  describe('9. Phase 7.4 Stage 4A.8: Sampling-Assurance Provenance & Trust-Boundary Audit (Scope F)', () => {
+    // 1. Production caller supplies clusterIndependenceStatus: 'verified' without a trusted evidence record
+    it('F.1 production caller supplies clusterIndependenceStatus: "verified" without trusted evidence record', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 19001 });
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: {
+          clusterIndependenceStatus: SAMPLING_ASSURANCE_STATUS.VERIFIED,
+        },
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterIndependenceStatus, SAMPLING_ASSURANCE_STATUS.UNVERIFIED);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.strictEqual(res.uncertainty.isDecisionReady, false);
+      assert.ok(res.reasons.some((r) => r.includes('Unauthenticated claim')));
+      assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.urgencyWeight, 50.0);
+      assert.strictEqual(res.isAdaptationUnlocked, false);
+    });
+
+    // 2. Production caller supplies clusterSamplingIndependenceVerified: true
+    it('F.2 production caller supplies clusterSamplingIndependenceVerified: true', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 19002 });
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: {
+          clusterSamplingIndependenceVerified: true,
+        },
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.strictEqual(res.uncertainty.isDecisionReady, false);
+      assert.ok(res.reasons.some((r) => r.includes('Caller boolean assertion')));
+      assert.strictEqual(res.isAdaptationUnlocked, false);
+    });
+
+    // 3. Production caller supplies provenance: 'synthetic_generator_guarantee'
+    it('F.3 production caller supplies provenance: "synthetic_generator_guarantee" without evidence record', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 19003 });
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: {
+          clusterIndependenceStatus: SAMPLING_ASSURANCE_STATUS.VERIFIED,
+          provenance: SAMPLING_PROVENANCE_SOURCES.SYNTHETIC_GENERATOR,
+        },
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.strictEqual(res.uncertainty.isDecisionReady, false);
+      assert.ok(res.reasons.some((r) => r.includes('Unauthenticated claim')));
+      assert.strictEqual(res.isAdaptationUnlocked, false);
+    });
+
+    // 4. Production caller supplies isSyntheticData: false alongside forged verification fields
+    it('F.4 production caller supplies isSyntheticData: false alongside forged verification fields', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 19004 });
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        isSyntheticData: false,
+        samplingAssurance: {
+          clusterIndependenceStatus: 'verified',
+          clusterSamplingIndependenceVerified: true,
+          provenance: 'synthetic_generator_guarantee',
+          isSyntheticData: false,
+        },
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.strictEqual(res.uncertainty.isDecisionReady, false);
+      assert.ok(res.reasons.some((r) => r.includes('Caller boolean assertion') || r.includes('Unauthenticated claim')));
+      assert.strictEqual(res.isAdaptationUnlocked, false);
+    });
+
+    // 5. Production caller supplies a fabricated evidence ID
+    it('F.5 production caller supplies a fabricated evidence ID', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 19005 });
+      const forgedAssurance = createSyntheticAssuranceRecord({
+        clusterKeys: d.distinctClusterKeys,
+        evidenceId: 'fabricated_assurance_id_007',
+      });
+
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: forgedAssurance,
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.strictEqual(res.uncertainty.isDecisionReady, false);
+      assert.ok(res.reasons.some((r) => r.includes('Fabricated or invalid evidence identifier detected')));
+      assert.strictEqual(res.isAdaptationUnlocked, false);
+    });
+
+    // 6. Production caller supplies an altered evidence record with otherwise valid fields
+    it('F.6 production caller supplies an altered evidence record (checksum mismatch)', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 19006 });
+      const tamperedAssurance = createSyntheticAssuranceRecord({
+        clusterKeys: d.distinctClusterKeys,
+        tamperChecksum: true,
+      });
+
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: tamperedAssurance,
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.strictEqual(res.uncertainty.isDecisionReady, false);
+      assert.ok(res.reasons.some((r) => r.includes('Evidence record checksum mismatch')));
+      assert.strictEqual(res.isAdaptationUnlocked, false);
+    });
+
+    // 7. Production caller supplies missing evidence
+    it('F.7 production caller supplies missing evidence (null or omitted)', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 19007 });
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: null,
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterIndependenceStatus, SAMPLING_ASSURANCE_STATUS.UNVERIFIED);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.strictEqual(res.uncertainty.isDecisionReady, false);
+      assert.ok(res.reasons.some((r) => r.includes('Cluster sampling assurance was omitted')));
+      assert.strictEqual(res.isAdaptationUnlocked, false);
+    });
+
+    // 8. Production caller supplies an unknown status
+    it('F.8 production caller supplies an unknown status string', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 19008 });
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: {
+          clusterIndependenceStatus: 'unprecedented_verified_tier',
+        },
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_METHODOLOGY);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.uncertainty.isDecisionReady, false);
+      assert.ok(res.reasons.some((r) => r.includes('Invalid sampling assurance status')));
+      assert.strictEqual(res.isAdaptationUnlocked, false);
+    });
+
+    // 9. Production caller supplies conflicting status and evidence fields
+    it('F.9 production caller supplies conflicting status and evidence methodology', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 19009 });
+      const conflictingAssurance = createSyntheticAssuranceRecord({
+        clusterKeys: d.distinctClusterKeys,
+        tamperMethodology: 'single_client_nominal_backlogs',
+      });
+
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: conflictingAssurance,
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterIndependenceStatus, SAMPLING_ASSURANCE_STATUS.FAILED);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.strictEqual(res.uncertainty.isDecisionReady, false);
+      assert.ok(res.reasons.some((r) => r.includes('Conflicting evidence record')));
+      assert.strictEqual(res.isAdaptationUnlocked, false);
+    });
+
+    // 10. Production caller supplies expired or stale evidence
+    it('F.10 production caller supplies expired or stale evidence', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 19010 });
+      const expiredAssurance = createSyntheticAssuranceRecord({
+        clusterKeys: d.distinctClusterKeys,
+        issuedAt: '2020-01-01T00:00:00.000Z',
+        expiresAt: '2020-01-02T00:00:00.000Z',
+      });
+
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: expiredAssurance,
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.strictEqual(res.uncertainty.isDecisionReady, false);
+      assert.ok(res.reasons.some((r) => r.includes('Evidence record has expired')));
+      assert.strictEqual(res.isAdaptationUnlocked, false);
+    });
+
+    // 11. Production caller supplies evidence for a different cluster set or configuration
+    it('F.11 production caller supplies evidence for a different cluster set', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 19011 });
+      const mismatchedAssurance = createSyntheticAssuranceRecord({
+        clusterKeys: ['different_tenant_c1', 'different_tenant_c2', 'different_tenant_c3', 'different_tenant_c4', 'different_tenant_c5'],
+      });
+
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: mismatchedAssurance,
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.strictEqual(res.uncertainty.isDecisionReady, false);
+      assert.ok(res.reasons.some((r) => r.includes('Evidence dataset fingerprint mismatch')));
+      assert.strictEqual(res.isAdaptationUnlocked, false);
+    });
+
+    // 12. Production caller supplies valid-looking evidence from an unsupported source
+    it('F.12 production caller supplies evidence from an unsupported source', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 19012 });
+      const unsupportedAssurance = createSyntheticAssuranceRecord({
+        clusterKeys: d.distinctClusterKeys,
+        provenanceSource: 'third_party_unverified_vendor',
+      });
+
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: unsupportedAssurance,
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.strictEqual(res.uncertainty.isDecisionReady, false);
+      assert.ok(res.reasons.some((r) => r.includes('unsupported or untrusted')));
+      assert.strictEqual(res.isAdaptationUnlocked, false);
+    });
+
+    // 13. UI state claims verification while evaluator evidence is absent
+    it('F.13 UI state claims verification while evaluator evidence is absent', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 19013 });
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: {
+          uiDeclaredStatus: 'verified',
+          clusterIndependenceStatus: 'verified',
+        },
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.strictEqual(res.uncertainty.isDecisionReady, false);
+      assert.ok(res.reasons.some((r) => r.includes('Unauthenticated claim')));
+      assert.strictEqual(res.isAdaptationUnlocked, false);
+    });
+
+    // 14. Synthetic harness generates data under known independent sampling and correctly validates interval behaviour
+    it('F.14 synthetic harness generates data under known independent sampling and validates interval coverage', () => {
+      const exp = evaluateCoverageExperiment({
+        scenarioConfig: {
+          groundTruthEffect: 3.0,
+          clusterCount: 5,
+          defaultPairsPerCluster: 5,
+          withinClusterVariance: 0.8,
+          betweenClusterVariance: 0.4,
+        },
+        numReplications: 30,
+        seedStart: 19014,
+        targetEstimand: 'shock_conditional',
+      });
+
+      assert.strictEqual(exp.validCiCount, 30, 'All 30 replications produce valid confidence intervals');
+      assert.ok(exp.empiricalCoverage >= 0.90, `Empirical coverage must be nominal (~95%): got ${exp.empiricalCoverage}`);
+      assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.urgencyWeight, 50.0);
+    });
+
+    // 15. Synthetic oracle fields are not accepted as production verification
+    it('F.15 synthetic oracle fields are rejected in production environment (environment: "production")', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 4.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 19015 });
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: d.syntheticAssurance,
+        environment: 'production',
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.strictEqual(res.uncertainty.isDecisionReady, false);
+      assert.ok(res.reasons.some((r) => r.includes('Synthetic generator guarantee cannot be accepted as production verification evidence')));
+      assert.strictEqual(res.isAdaptationUnlocked, false);
+    });
+
+    // 16. A candidate with extremely favourable scores cannot bypass the provenance gate
+    it('F.16 candidate with extremely favourable scores cannot bypass missing evidence provenance gate', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 12.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 19016 });
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: null, // missing assurance
+      });
+
+      assert.ok((res.pairedComparison.meanDelta ?? 0) > 10.0, 'Candidate has huge empirical score advantage');
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.strictEqual(res.uncertainty.isDecisionReady, false);
+      assert.ok(res.reasons.some((r) => r.includes('Cluster sampling assurance was omitted')));
+      assert.strictEqual(res.isAdaptationUnlocked, false);
+    });
+
+    // 17. Invalid sampling evidence returns a structured conservative outcome
+    it('F.17 invalid sampling evidence returns a structured conservative outcome with diagnostics', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 3.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 19017 });
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: {
+          clusterIndependenceStatus: 'unverified',
+          provenance: 'production_single_client_telemetry',
+        },
+      });
+
+      assert.strictEqual(res.outcome, ACTIVATION_GATE_OUTCOMES.INSUFFICIENT_EVIDENCE);
+      assert.strictEqual(res.isEligibleForSupervisedReview, false);
+      assert.ok(res.samplingAssurancePolicy);
+      assert.strictEqual(res.samplingAssurancePolicy.status, SAMPLING_ASSURANCE_STATUS.UNVERIFIED);
+      assert.strictEqual(res.samplingAssurancePolicy.isVerified, false);
+      assert.strictEqual(res.samplingAssurancePolicy.isEvidenceValidated, false);
+      assert.ok(Array.isArray(res.samplingAssurancePolicy.failureReasons));
+      assert.ok(res.samplingAssurancePolicy.failureReasons.length > 0);
+      assert.strictEqual(res.evidenceAssessment.clusterSamplingIndependenceVerified, false);
+      assert.strictEqual(res.uncertainty.isDecisionReady, false);
+      assert.strictEqual(res.isAdaptationUnlocked, false);
+    });
+
+    // 18. Factory weights and production activation flags remain unchanged after every rejection
+    it('F.18 factory weights and production activation flags remain invariant across all rejections', () => {
+      const d = generateValidationDataset({ groundTruthEffect: 5.0, clusterCount: 5, defaultPairsPerCluster: 5, randomSeed: 19018 });
+      const res = evaluateActivationGate({
+        candidateWeights: validCandidateWeights,
+        baselineWeights: FACTORY_SCHEDULER_WEIGHTS,
+        readinessReport: defaultReadiness,
+        rollbackPreflight: defaultRollback,
+        pairedObservations: d.pairs,
+        samplingAssurance: {
+          clusterIndependenceStatus: 'forged_verified',
+        },
       });
 
       assert.strictEqual(res.isAdaptationUnlocked, false);

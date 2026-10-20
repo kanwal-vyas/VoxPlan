@@ -407,6 +407,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
       pairedObservations,
       isSyntheticData: isSynthetic,
       minMeaningfulDelta: DEFAULT_MIN_MEANINGFUL_DELTA,
+      environment: isSynthetic ? 'simulation' : 'production',
     });
   }, [showSyntheticDemo, syntheticDemo, realAnalysis, simCandidateWeights, snapshotsList]);
 
@@ -2125,15 +2126,31 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', fontSize: '12px' }}>
-                <span style={{ fontWeight: 600, color: '#374151' }}>Sampling Independence Assurance:</span>
+                <span style={{ fontWeight: 600, color: '#374151' }}>Claimed Sampling Status:</span>
+                <span style={{ color: '#4B5563', fontFamily: 'monospace', fontSize: '11px' }}>
+                  {activeActivationGate.evidenceAssessment.samplingAssurance?.clusterIndependenceStatus || 'unspecified'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', fontSize: '12px' }}>
+                <span style={{ fontWeight: 600, color: '#374151' }}>Evidence Provenance & Validation:</span>
+                <span style={{ color: activeActivationGate.evidenceAssessment.evidenceValidation?.isValidated ? '#065F46' : '#92400E', fontWeight: 600 }}>
+                  {activeActivationGate.evidenceAssessment.evidenceValidation?.isValidated
+                    ? `✓ Authenticated (${activeActivationGate.evidenceAssessment.evidenceValidation?.provenanceSource || 'Validated'})`
+                    : activeActivationGate.evidenceAssessment.evidenceValidation?.provenanceSource === 'production_telemetry'
+                    ? '⚠️ Unauthenticated (No Production Trust Anchor in Local Telemetry)'
+                    : `⚠️ Unauthenticated (${activeActivationGate.evidenceAssessment.evidenceValidation?.reason || 'No Evidence Record'})`}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', fontSize: '12px' }}>
+                <span style={{ fontWeight: 600, color: '#374151' }}>Sampling Independence Status:</span>
                 <span style={{ color: activeActivationGate.evidenceAssessment.clusterSamplingIndependenceVerified ? '#065F46' : '#92400E', fontWeight: 600 }}>
-                  {activeActivationGate.evidenceAssessment.clusterIndependenceStatus === 'verified'
-                    ? `✓ Verified (${activeActivationGate.evidenceAssessment.samplingAssurance?.provenance || 'Guaranteed'})`
+                  {activeActivationGate.evidenceAssessment.clusterSamplingIndependenceVerified
+                    ? '✓ Verified (Authenticated Evidence Record)'
                     : activeActivationGate.evidenceAssessment.clusterIndependenceStatus === 'failed'
                     ? '✕ Failed (Cross-Cluster Overlap/Leakage Detected)'
                     : activeActivationGate.evidenceAssessment.clusterIndependenceStatus === 'not_applicable'
                     ? '✕ Not Applicable (Methodology Conflict)'
-                    : '⚠️ Unverified (Nominal Single-Client Clusters; Independence Unverified)'}
+                    : '⚠️ Unverified (Production Eligibility Blocked)'}
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', fontSize: '12px' }}>
@@ -2141,7 +2158,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                 <span style={{ color: activeActivationGate.uncertainty.isDecisionReady ? '#065F46' : '#92400E', fontWeight: 600 }}>
                   {activeActivationGate.uncertainty.isDecisionReady
                     ? '✓ Decision-Ready Inference'
-                    : '⚠️ Exploratory Diagnostic (Eligibility Blocked: Sampling Independence Unverified)'}
+                    : '⚠️ Exploratory Diagnostic (Eligibility Blocked)'}
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', fontSize: '12px' }}>
@@ -2168,7 +2185,12 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                   </span>
                 </div>
               )}
-              {activeActivationGate.uncertainty.isExploratoryOnly && (
+              {!activeActivationGate.evidenceAssessment.evidenceValidation?.isValidated && (
+                <div style={{ marginTop: '8px', padding: '6px 10px', backgroundColor: '#FFFBEB', borderRadius: '4px', border: '1px solid #FDE68A', fontSize: '11px', color: '#92400E' }}>
+                  ⚠️ <strong>No Production Trust Anchor Configured:</strong> VoxPlan uses local-first client telemetry. Production cluster sampling assurance cannot currently be established, strictly blocking automated or supervised production adaptation.
+                </div>
+              )}
+              {activeActivationGate.uncertainty.isExploratoryOnly && activeActivationGate.evidenceAssessment.evidenceValidation?.isValidated && (
                 <div style={{ marginTop: '8px', padding: '6px 10px', backgroundColor: '#FFFBEB', borderRadius: '4px', border: '1px solid #FDE68A', fontSize: '11px', color: '#92400E' }}>
                   ⚠️ <strong>Exploratory Simulation Diagnostic Only:</strong> {activeActivationGate.evidenceAssessment.clusterSamplingIndependenceVerified ? 'Small cluster sample (M < 5), task overlap, or leakage.' : 'Cluster sampling independence remains unverified in real telemetry.'} Formal decision-ready eligibility is strictly withheld.
                 </div>

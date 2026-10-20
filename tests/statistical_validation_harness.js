@@ -18,10 +18,80 @@ import {
   evaluateActivationGate,
   ACTIVATION_GATE_OUTCOMES,
   SAMPLING_ASSURANCE_STATUS,
+  SAMPLING_PROVENANCE_SOURCES,
+  computeClusterDatasetFingerprint,
+  computeEvidenceRecordChecksum,
   createMulberry32,
 } from '../src/scheduler/activationGateEvaluator.js';
 import { FACTORY_SCHEDULER_WEIGHTS } from '../src/scheduler/adaptiveScheduler.js';
 import { computeWilsonScoreInterval } from '../src/scheduler/rankingEvaluator.js';
+
+/**
+ * Creates an authentic synthetic sampling-assurance record bound to a specific dataset (Phase 7.4 Stage 4A.8).
+ *
+ * Test-Harness Only Security Notice:
+ * This generator is restricted to test and simulation harnesses. Production code does NOT export
+ * or permit arbitrary generation of assurance records.
+ *
+ * @param {Object} options
+ * @param {Array<string>} [options.clusterKeys=[]] - Distinct cluster keys to bind and audit.
+ * @param {string} [options.intendedEstimand='shock_conditional_population_mean']
+ * @param {string|null} [options.evidenceId=null] - Evidence ID (defaults to deterministic hashed ID).
+ * @param {string|null} [options.issuedAt=null] - ISO timestamp string.
+ * @param {string|null} [options.expiresAt=null] - ISO timestamp string.
+ * @param {boolean} [options.tamperChecksum=false] - If true, corrupts integrity checksum.
+ * @param {boolean} [options.tamperClusters=false] - If true, audits mismatched cluster set.
+ * @param {boolean} [options.tamperFingerprint=false] - If true, provides invalid dataset fingerprint.
+ * @param {string|null} [options.tamperMethodology=null] - If provided, sets conflicting methodology.
+ * @param {string} [options.provenanceSource=SAMPLING_PROVENANCE_SOURCES.SYNTHETIC_GENERATOR]
+ * @param {string} [options.assuranceStatus=SAMPLING_ASSURANCE_STATUS.VERIFIED]
+ * @returns {Object} Structured sampling assurance declaration with embedded evidenceRecord.
+ */
+export function createSyntheticAssuranceRecord({
+  clusterKeys = [],
+  intendedEstimand = 'shock_conditional_population_mean',
+  evidenceId = null,
+  issuedAt = null,
+  expiresAt = null,
+  tamperChecksum = false,
+  tamperClusters = false,
+  tamperFingerprint = false,
+  tamperMethodology = null,
+  provenanceSource = SAMPLING_PROVENANCE_SOURCES.SYNTHETIC_GENERATOR,
+  assuranceStatus = SAMPLING_ASSURANCE_STATUS.VERIFIED,
+} = {}) {
+  const distinctKeys = Array.from(new Set(clusterKeys.map(String))).sort();
+  const audited = tamperClusters ? ['unrelated_cluster_alpha'] : distinctKeys;
+  const datasetFingerprint = tamperFingerprint
+    ? 'deadbeef'
+    : computeClusterDatasetFingerprint(distinctKeys);
+  const now = new Date();
+  const issued = issuedAt || now.toISOString();
+  // Valid for 24 hours by default
+  const expires = expiresAt || new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+  const eid = evidenceId || `synth_assurance_${computeClusterDatasetFingerprint(distinctKeys)}`;
+
+  const record = {
+    evidenceId: eid,
+    provenanceSource,
+    samplingMethodology: tamperMethodology || 'independent_prng_cluster_draws',
+    intendedEstimand,
+    clustersAudited: audited,
+    datasetFingerprint,
+    assuranceStatus,
+    issuedAt: issued,
+    expiresAt: expires,
+  };
+
+  record.recordChecksum = tamperChecksum ? 'badc0de1' : computeEvidenceRecordChecksum(record);
+
+  return {
+    clusterIndependenceStatus: assuranceStatus,
+    provenance: provenanceSource,
+    intendedEstimand,
+    evidenceRecord: record,
+  };
+}
 
 /**
  * Standard Box-Muller transform for generating standard normal deviates.
@@ -408,6 +478,8 @@ export function generateValidationDataset(config = {}) {
         observedSampleEstimate: 'Empirical cluster-averaged sample mean 1/M sum_c (1/N_c sum_i Y_ci)',
       },
     },
+    distinctClusterKeys: clusterKeys,
+    syntheticAssurance: createSyntheticAssuranceRecord({ clusterKeys }),
     generationConfig: config,
   };
 }
@@ -495,15 +567,15 @@ export function evaluateCoverageExperiment(options = {}) {
       randomSeed: seed,
     });
 
+    const clusterKeys = dataset.distinctClusterKeys || Array.from(new Set(dataset.pairs.map((p) => p.context?.scenario_key).filter(Boolean))).sort();
     const syntheticAssurance = gateOptions.samplingAssurance !== undefined
       ? gateOptions.samplingAssurance
-      : {
-          clusterIndependenceStatus: SAMPLING_ASSURANCE_STATUS.VERIFIED,
-          provenance: 'synthetic_generator_guarantee',
+      : createSyntheticAssuranceRecord({
+          clusterKeys,
           intendedEstimand: targetEstimand === 'shock_conditional'
             ? 'shock_conditional_population_mean'
             : 'shock_conditional_population_mean',
-        };
+        });
 
     const res = evaluateActivationGate({
       candidateWeights,
@@ -513,6 +585,7 @@ export function evaluateCoverageExperiment(options = {}) {
       pairedObservations: dataset.pairs,
       randomSeed: seed,
       samplingAssurance: syntheticAssurance,
+      environment: 'simulation',
       ...gateOptions,
     });
 
@@ -617,6 +690,7 @@ export function evaluateCoverageExperiment(options = {}) {
   return {
     replicationsCount: numReplications,
     validCiEvaluationsCount,
+    validCiCount: validCiEvaluationsCount,
     groundTruthEffect,
     targetEstimand,
     coveredCount,

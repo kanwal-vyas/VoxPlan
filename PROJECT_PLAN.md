@@ -3647,6 +3647,117 @@ To preserve VoxPlan's identity as a local-first, evidence-based personal plannin
 
 ---
 
+#### Stage 7.4.4A.8: Sampling-Assurance Provenance & Trust-Boundary Audit (COMPLETED)
+- **Objective & Problem Statement**:
+  - Audit and harden the trust boundary for statistical sampling-assurance evidence in VoxPlan's shadow-only adaptive scheduling activation gate.
+  - Previous Stage 4A.7 established that missing, unverified, failed, or unknown cluster-sampling assurance blocks `ELIGIBLE_FOR_SUPERVISED_REVIEW`. However, the evaluator accepted an unauthenticated caller-supplied object resembling `{ clusterIndependenceStatus: 'verified', provenance: 'synthetic_generator_guarantee' }`.
+  - A string `"verified"` is an unauthenticated claim, not proof that verification occurred.
+  - Hardening objective: establish whether ordinary application callers can forge or bypass sampling assurance, introduce a defensible validation boundary, isolate simulation-only oracle evidence from production, and fail closed whenever provenance cannot be established.
+  - Maintain strict production invariants: shadow-only execution, zero activation unlocking (`isAdaptationUnlocked: false`, `productionApplied: false`), and exact factory scheduler weights.
+
+- **Scope A — Trust Boundary Mapping**:
+  | Producer | Consumer | Data Fields | Trusted? | Independently Validated? | Forgeable by Ordinary Caller? | Current & Required Failure Behavior |
+  |---|---|---|---|---|---|---|
+  | **Production Telemetry & Readiness Reports** (`dataGovernance.js`, `behavioralTelemetry.js`) | `AdaptationSandboxCard.jsx`, `evaluateActivationGate` | None (no sampling assurance fields produced) | Partially (local store) | Yes (schema-validated, but no sampling anchor) | N/A (does not produce claims) | Defaults to `unverified`; strictly blocks eligibility. |
+  | **Ordinary Application Caller** (Direct API or sandbox payload) | `evaluateActivationGate` | `clusterIndependenceStatus: 'verified'`, `clusterSamplingIndependenceVerified: true`, `provenance: '...'` | **No (Untrusted)** | **Now Validated** by `validateSamplingAssuranceEvidence` | **Previously YES; Now NO** | Rejects unauthenticated claims as `INSUFFICIENT_EVIDENCE` or `INSUFFICIENT_METHODOLOGY`; blocks eligibility. |
+  | **Synthetic Validation Harness** (`tests/statistical_validation_harness.js`) | Statistical validation tests (`tests/statistical_validation.test.js`) | `evidenceId`, `provenanceSource: 'synthetic_generator'`, `datasetFingerprint`, `clustersAudited`, `evidenceChecksum` | **Yes (Test-only oracle)** | Validated by checksum and dataset fingerprint matching | Test-isolated only | Isolated to `environment === 'simulation'`. Strictly rejected in `production`. |
+  | **Shadow Scheduler UI** (`AdaptationSandboxCard.jsx`) | Component render | `activeActivationGate.evidenceAssessment`, `evidenceValidation` | Display only | Evaluator validates inputs before rendering | Cannot forge evaluator decisions | Discloses unauthenticated status and missing production trust anchor. |
+  | **Configuration Snapshots** (`configurationSnapshot.js`) | Activation Gate & Rollback | `snapshotId`, `weights`, `checksum` | Internal utility | Validated by schema and checksum | Cannot forge statistical evidence | Snapshot validity required but insufficient for statistical assurance. |
+
+- **Scope B — Evidence Taxonomy & Verification Semantics**:
+  1. **Claimed status**: Caller-asserted string or boolean (e.g. `'verified'`, `true`). Untrusted; treated as claim only.
+  2. **Evidence record**: Structured, verifiable description with `evidenceId`, `provenanceSource`, `samplingMethodology`, `intendedEstimand`, `clustersAudited`, `datasetFingerprint`, `assuranceStatus`, `issuedAt`, `expiresAt`, and canonical FNV-1a hash `evidenceChecksum`.
+  3. **Validated evidence**: An evidence record that matches sorted cluster fingerprints, valid canonical FNV-1a checksum, unexpired issuance window, and legitimate provenance source for the environment.
+  4. **Synthetic oracle evidence**: Generator guarantee originating strictly from test fixtures where data-generating processes are mathematically independent. Valid only in `environment === 'simulation'`.
+  5. **Production evidence**: Evidence obtainable from verified production sampling designs. Because VoxPlan is currently a local-first single-client tool, **no production trust anchor exists today**.
+  6. **Unverified status**: Available evidence is missing, unauthenticated, expired, mismatched, or from an unsupported source. Fails closed to `INSUFFICIENT_EVIDENCE`.
+  7. **Failed status**: Empirical evidence contradicts independent sampling (e.g. task overlap Jaccard $\ge 0.20$ or overlap coefficient $\ge 0.30$, or backlog leakage).
+
+- **Scope C & D — Defensible Validation Boundary & Isolation of Synthetic Evidence**:
+  - Implemented `validateSamplingAssuranceEvidence(samplingAssurance, options)`:
+    - Rejects bare boolean assertions (`clusterSamplingIndependenceVerified: true`) and plain string claims without evidence records.
+    - Computes 32-bit FNV-1a dataset fingerprint (`computeClusterDatasetFingerprint`) over sorted distinct cluster keys in evaluated pairs.
+    - Validates canonical record checksum (`computeEvidenceRecordChecksum`) over all canonical metadata fields.
+    - Rejects fabricated evidence IDs (`fabricated_*`, `fake_*`).
+    - Enforces cluster coverage: audited cluster count and set must match evaluated dataset.
+    - Enforces temporal validity: rejects expired evidence (default 90-day TTL) or future-dated records.
+    - **Production Environment Hardening**: When `environment === 'production'` (the default), `provenanceSource: 'synthetic_generator'` is strictly rejected.
+    - **Local-First Reality Enforcement**: Because production lacks a cross-client or multi-organization sampling registry, production telemetry defaults to `status: 'unverified'` with `isEvidenceValidated: false`.
+
+- **Scope E — Comprehensive Audit of Every Eligibility Path**:
+  - Every path to `ELIGIBLE_FOR_SUPERVISED_REVIEW` requires:
+    1. Executable scoring function and finite practical threshold ($\varepsilon = 1.0$).
+    2. Valid threshold rule (Rule B default).
+    3. Feasible candidate and baseline configurations (zero DAG cycles, bounded weights).
+    4. Operational exposure ($\ge 20$ decisions, $\ge 15$ completions).
+    5. Sufficient evaluation evidence ($N \ge 15$ pairs).
+    6. Nominal cluster sufficiency ($M \ge 5$ distinct clusters).
+    7. Zero cross-cluster backlog leakage and zero task overlap (Jaccard $< 0.20$, overlap $< 0.30$).
+    8. **Validated sampling assurance evidence with verified status**: `samplingIndependenceSatisfied = (clusterIndependenceStatus === VERIFIED && isEvidenceValidated && !leakage && !overlap)`.
+    9. Real evidence (`isSyntheticData === false`).
+    10. Verified rollback preflight and valid configuration snapshot checksum.
+    11. Superiority under practical threshold ($CI_{lower} \ge 1.0$).
+    12. Zero outlier cluster dominance and primary critical metric regression protection.
+  - Evaluator outcome precedence enforces `INSUFFICIENT_METHODOLOGY > INFEASIBLE > INSUFFICIENT_EVIDENCE > NOT_SUPERIOR > ELIGIBLE_FOR_SUPERVISED_REVIEW`.
+  - A candidate with favorable scores cannot bypass missing evidence provenance.
+
+- **Scope F — Adversarial Trust-Boundary Test Suite (18 Tests, 100% Passed)**:
+  - `F.1`: Production caller supplies `clusterIndependenceStatus: 'verified'` without trusted evidence record $\to$ `INSUFFICIENT_EVIDENCE`, `isDecisionReady: false`, eligibility blocked.
+  - `F.2`: Production caller supplies `clusterSamplingIndependenceVerified: true` $\to$ `INSUFFICIENT_EVIDENCE`, caller boolean claim rejected.
+  - `F.3`: Production caller supplies `provenance: 'synthetic_generator_guarantee'` without evidence record $\to$ `INSUFFICIENT_EVIDENCE`.
+  - `F.4`: Production caller supplies `isSyntheticData: false` alongside forged verification fields $\to$ `INSUFFICIENT_EVIDENCE`.
+  - `F.5`: Production caller supplies a fabricated evidence ID $\to$ `INSUFFICIENT_EVIDENCE`, fabricated ID detected.
+  - `F.6`: Production caller supplies altered evidence record (checksum mismatch) $\to$ `INSUFFICIENT_EVIDENCE`, checksum mismatch detected.
+  - `F.7`: Production caller supplies missing evidence (null or omitted) $\to$ `INSUFFICIENT_EVIDENCE`.
+  - `F.8`: Production caller supplies unknown status string $\to$ `INSUFFICIENT_METHODOLOGY`.
+  - `F.9`: Production caller supplies conflicting status and evidence methodology $\to$ `INSUFFICIENT_METHODOLOGY`.
+  - `F.10`: Production caller supplies expired or stale evidence $\to$ `INSUFFICIENT_EVIDENCE`, evidence expiration enforced.
+  - `F.11`: Production caller supplies evidence for a different cluster set $\to$ `INSUFFICIENT_EVIDENCE`, fingerprint mismatch detected.
+  - `F.12`: Production caller supplies evidence from unsupported source $\to$ `INSUFFICIENT_METHODOLOGY`.
+  - `F.13`: UI state claims verification while evaluator evidence is absent $\to$ `INSUFFICIENT_EVIDENCE`, gate fails closed.
+  - `F.14`: Synthetic harness generates data under known independent sampling $\to$ 30 replications produce valid $CIs$ with nominal $\ge 90\%$ coverage.
+  - `F.15`: Synthetic oracle fields are rejected in production environment (`environment: 'production'`) $\to$ `INSUFFICIENT_EVIDENCE`.
+  - `F.16`: Candidate with extremely favorable scores ($\Delta = +15.0$) cannot bypass missing evidence provenance gate $\to$ `INSUFFICIENT_EVIDENCE`.
+  - `F.17`: Invalid sampling evidence returns structured conservative outcome with diagnostics.
+  - `F.18`: Factory weights (`urgencyWeight: 50.0`, `priorityWeight: 100.0`, `unblockWeight: 15.0`, `riskWeight: 25.0`) and production activation flags remain strictly invariant across all rejections.
+
+- **Scope H — UI Consistency & Transparency (`AdaptationSandboxCard.jsx`)**:
+  - Differentiated claimed vs validated evidence:
+    - **Claimed Sampling Status**: Explicitly shows caller claim (`unspecified`, `unverified`, etc.).
+    - **Evidence Provenance & Validation**: Shows validation state (`✓ Authenticated (Validated)` vs `⚠️ Unauthenticated (No Production Trust Anchor in Local Telemetry)`).
+    - **Sampling Independence Status**: Shows verified vs unverified with eligibility block notice.
+    - **Inference Decision Readiness**: Shows decision-ready vs exploratory diagnostic.
+  - Disclosed missing production trust anchor via warning banner:
+    `⚠️ No Production Trust Anchor Configured: VoxPlan uses local-first client telemetry. Production cluster sampling assurance cannot currently be established, strictly blocking automated or supervised production adaptation.`
+  - Prevented green verified badges on unauthenticated status strings.
+
+- **Scope I — Production Isolation Invariants Preserved**:
+  - `isAdaptationUnlocked: false` permanently preserved.
+  - `productionApplied: false` permanently preserved.
+  - Canonical factory scheduler weights remain exactly: `urgencyWeight: 50.0`, `priorityWeight: 100.0`, `unblockWeight: 15.0`, `riskWeight: 25.0`.
+  - Zero live proposal generation weight mutation.
+  - Stage 4B remains strictly out of scope.
+
+- **Verification Results Summary**:
+  - **Activation Gate Evaluator Suite**: **58 passed, 0 failed** (`node --test tests/activation_gate_evaluator.test.js`).
+  - **Statistical Validation Suite**: **120 passed, 0 failed across 27 suites** (`node --test tests/statistical_validation.test.js`).
+  - **Full Frontend Test Suite**: **788 passed, 0 failed across 163 suites** (`npm test`).
+  - **Backend Pytest Suite**: **27 passed, 0 failed** (`python -m pytest backend/tests/ -q`).
+  - **Linter**: **0 errors, 1 pre-existing warning** (`npm run lint` / `oxlint`).
+  - **Production Build**: **Clean build in 520ms** (`npm run build`).
+  - **Git Diff & Whitespace**: **Clean with zero whitespace or line-ending errors** (`git diff --check`).
+  - **Browser E2E Verification**: Verified on `http://localhost:5173/` (`activation_gate_insufficient_evidence_1792487269662.png`), confirming clean rendering of claimed status, unauthenticated evidence warning, exploratory diagnostic, and zero console errors.
+
+- **Current Production Eligibility Status**:
+  - **STRICTLY BLOCKED**. In VoxPlan's local-first architecture, no production trust anchor exists for cross-client cluster sampling independence. Production eligibility is intentionally and defensibly blocked until a legitimate production trust mechanism is designed.
+
+- **Remaining Requirements Before Any Future Supervised Activation (Stage 4B)**:
+  1. Production Trust Anchor Design: Establish a legitimate provenance mechanism (e.g., cross-organization audit, cryptographically signed benchmark registry, or randomized trial protocol) suitable for production environments.
+  2. Longitudinal Multi-Window Sampling: Collect multi-window operational data to identify shared macro-shock variance and support marginal population estimand inference.
+  3. Supervised Human Review Workflow: Implement human-in-the-loop review UI with explicit operator sign-off and rollback preflight validation.
+
+---
+
 #### Stage 7.4.4B: Supervised Production Activation & Dynamic Deployment Gates (UNSTARTED)
 - **Scope & Expected Deliverables**:
   - Implement the supervised production activation workflow requiring verified readiness + $\ge 15$ eligible preference comparisons + superior concordance + 0 hard constraint violations + explicit user confirmation.

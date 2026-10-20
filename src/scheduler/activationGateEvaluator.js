@@ -30,7 +30,7 @@
 import { FACTORY_SCHEDULER_WEIGHTS } from './adaptiveScheduler.js';
 import { validateCandidateWeights, SIMULATION_WEIGHT_BOUNDS } from './scheduleSimulator.js';
 import { computeScheduleObjectiveScore, MIN_HOLDOUT_SAMPLE, MIN_SCENARIO_GROUPS } from './rankingEvaluator.js';
-import { validateConfigurationSnapshot } from './configurationSnapshot.js';
+import { validateConfigurationSnapshot, computeFnv1a32, canonicalJsonStringify } from './configurationSnapshot.js';
 import { READINESS_THRESHOLDS } from './learningReadinessGate.js';
 
 /**
@@ -59,6 +59,331 @@ export const SAMPLING_ASSURANCE_STATUS = Object.freeze({
   FAILED: 'failed',
   NOT_APPLICABLE: 'not_applicable',
 });
+
+/**
+ * Sampling assurance provenance source vocabulary (Phase 7.4 Stage 4A.8).
+ *
+ * Defines explicit origins of sampling-assurance evidence:
+ * - SYNTHETIC_GENERATOR: Generated under known PRNG sampling design within the test harness (test-only oracle).
+ * - PRODUCTION_TELEMETRY: Real-world single-client local task telemetry (always unverified without trust anchor).
+ * - RANDOMIZED_TRIAL: Controlled cluster randomized assignment protocol across independent environments.
+ * - CROSS_ENVIRONMENT_AUDIT: Longitudinal multi-tenant operational window audit across independent institutions.
+ * - UNSUPPORTED: Arbitrary caller claims or unsupported third-party assertions.
+ */
+export const SAMPLING_PROVENANCE_SOURCES = Object.freeze({
+  SYNTHETIC_GENERATOR: 'synthetic_generator_guarantee',
+  PRODUCTION_TELEMETRY: 'production_single_client_telemetry',
+  RANDOMIZED_TRIAL: 'randomized_cluster_trial',
+  CROSS_ENVIRONMENT_AUDIT: 'cross_environment_operational_audit',
+  UNSUPPORTED: 'unsupported_or_claimed',
+});
+
+/**
+ * Computes deterministic 32-bit FNV-1a fingerprint for an array of cluster keys.
+ *
+ * @param {Array<string>} clusterKeys
+ * @returns {string} 8-character lowercase hex digest
+ */
+export function computeClusterDatasetFingerprint(clusterKeys = []) {
+  if (!Array.isArray(clusterKeys) || clusterKeys.length === 0) {
+    return '00000000';
+  }
+  const sortedDistinct = Array.from(new Set(clusterKeys.map(String))).sort();
+  return computeFnv1a32(canonicalJsonStringify(sortedDistinct));
+}
+
+/**
+ * Computes deterministic 32-bit FNV-1a integrity checksum for a sampling-assurance evidence record.
+ *
+ * @param {Object} record
+ * @returns {string} 8-character lowercase hex digest
+ */
+export function computeEvidenceRecordChecksum(record) {
+  if (!record || typeof record !== 'object') {
+    return '00000000';
+  }
+  const payload = {
+    evidenceId: record.evidenceId ?? '',
+    provenanceSource: record.provenanceSource ?? '',
+    samplingMethodology: record.samplingMethodology ?? '',
+    intendedEstimand: record.intendedEstimand ?? '',
+    clustersAudited: Array.isArray(record.clustersAudited)
+      ? Array.from(new Set(record.clustersAudited.map(String))).sort()
+      : [],
+    datasetFingerprint: record.datasetFingerprint ?? '',
+    assuranceStatus: record.assuranceStatus ?? '',
+    issuedAt: record.issuedAt ?? '',
+    expiresAt: record.expiresAt ?? '',
+  };
+  return computeFnv1a32(canonicalJsonStringify(payload));
+}
+
+/**
+ * Validates sampling assurance evidence against VoxPlan's trust boundary (Phase 7.4 Stage 4A.8).
+ *
+ * Strict Trust-Boundary Invariants:
+ * 1. Plain caller claims (e.g. clusterIndependenceStatus: 'verified' or clusterSamplingIndependenceVerified: true)
+ *    are unauthenticated assertions and cannot grant verified status.
+ * 2. VoxPlan's local-first architecture has NO production trust anchor (no cross-environment randomized trial
+ *    or multi-tenant cluster audit). Production telemetry is always UNVERIFIED.
+ * 3. Synthetic oracle guarantees (from test data generator) are restricted to simulation and testing;
+ *    they cannot authenticate production data or override production evaluation.
+ * 4. Evidence records must be bound to the specific evaluated cluster set (matching datasetFingerprint).
+ * 5. Checksum tampering, fabricated IDs, expired timestamps, or conflicting methodology fail closed.
+ *
+ * @param {Object|null} samplingAssurance - Caller-supplied sampling assurance parameter.
+ * @param {Object} [options={}]
+ * @param {Array<string>} [options.distinctClusterKeys=[]] - Distinct cluster keys in evaluated dataset.
+ * @param {boolean} [options.isSyntheticData=false] - Whether dataset is marked synthetic demo data.
+ * @param {string} [options.environment='production'] - Execution environment ('production' vs 'simulation'/'test').
+ * @returns {Object} Structured validation result.
+ */
+export function validateSamplingAssuranceEvidence(samplingAssurance, {
+  distinctClusterKeys = [],
+  _isSyntheticData = false,
+  environment = 'production',
+} = {}) {
+  const failureReasons = [];
+  const expectedFingerprint = computeClusterDatasetFingerprint(distinctClusterKeys);
+
+  // 1. Missing evidence: defaults to unverified production telemetry
+  if (samplingAssurance == null) {
+    return {
+      isValid: true,
+      isMethodologyValid: true,
+      status: SAMPLING_ASSURANCE_STATUS.UNVERIFIED,
+      isEvidenceValidated: false,
+      provenanceSource: SAMPLING_PROVENANCE_SOURCES.PRODUCTION_TELEMETRY,
+      failureReasons: [
+        'Cluster sampling assurance was omitted; real-world single-client telemetry has unverified cluster sampling independence.',
+      ],
+      evidenceRecord: null,
+      datasetFingerprint: expectedFingerprint,
+    };
+  }
+
+  // 2. Primitive caller payload (non-object)
+  if (typeof samplingAssurance !== 'object') {
+    return {
+      isValid: false,
+      isMethodologyValid: false,
+      status: SAMPLING_ASSURANCE_STATUS.UNVERIFIED,
+      isEvidenceValidated: false,
+      provenanceSource: SAMPLING_PROVENANCE_SOURCES.UNSUPPORTED,
+      failureReasons: [
+        'Sampling assurance must be a structured object; primitive value was provided.',
+      ],
+      evidenceRecord: null,
+      datasetFingerprint: expectedFingerprint,
+    };
+  }
+
+  // 3. Raw status and vocabulary check
+  const rawStatus = samplingAssurance.clusterIndependenceStatus;
+  const isRawStatusKnown =
+    rawStatus == null ||
+    rawStatus === 'unverified_nominal_clusters' ||
+    Object.values(SAMPLING_ASSURANCE_STATUS).includes(rawStatus);
+
+  if (!isRawStatusKnown) {
+    return {
+      isValid: false,
+      isMethodologyValid: false,
+      status: SAMPLING_ASSURANCE_STATUS.UNVERIFIED,
+      isEvidenceValidated: false,
+      provenanceSource: SAMPLING_PROVENANCE_SOURCES.UNSUPPORTED,
+      failureReasons: [
+        `Invalid sampling assurance status "${rawStatus}"; must be one of: ${Object.values(SAMPLING_ASSURANCE_STATUS).join(', ')}.`,
+      ],
+      evidenceRecord: null,
+      datasetFingerprint: expectedFingerprint,
+    };
+  }
+
+  // 4. Inadmissible status: NOT_APPLICABLE
+  if (rawStatus === SAMPLING_ASSURANCE_STATUS.NOT_APPLICABLE) {
+    return {
+      isValid: false,
+      isMethodologyValid: false,
+      status: SAMPLING_ASSURANCE_STATUS.NOT_APPLICABLE,
+      isEvidenceValidated: false,
+      provenanceSource: SAMPLING_PROVENANCE_SOURCES.UNSUPPORTED,
+      failureReasons: [
+        'The cluster Student-t interval requires independent cluster sampling; sampling independence cannot be marked "not_applicable" for this inferential procedure.',
+      ],
+      evidenceRecord: null,
+      datasetFingerprint: expectedFingerprint,
+    };
+  }
+
+  // 5. Inadmissible estimand: marginal_population_mean
+  const intendedEstimand = samplingAssurance.intendedEstimand || samplingAssurance.evidenceRecord?.intendedEstimand;
+  if (intendedEstimand === 'marginal_population_mean') {
+    return {
+      isValid: false,
+      isMethodologyValid: false,
+      status: SAMPLING_ASSURANCE_STATUS.UNVERIFIED,
+      isEvidenceValidated: false,
+      provenanceSource: SAMPLING_PROVENANCE_SOURCES.UNSUPPORTED,
+      failureReasons: [
+        'Single-window cluster Student-t inference cannot identify the marginal population estimand in the presence of unobserved common shocks; intended estimand must be shock-conditional (shock_conditional_population_mean).',
+      ],
+      evidenceRecord: null,
+      datasetFingerprint: expectedFingerprint,
+    };
+  }
+
+  // 6. Explicit FAILED status
+  if (rawStatus === SAMPLING_ASSURANCE_STATUS.FAILED) {
+    return {
+      isValid: true,
+      isMethodologyValid: true,
+      status: SAMPLING_ASSURANCE_STATUS.FAILED,
+      isEvidenceValidated: false,
+      provenanceSource: samplingAssurance.provenance || SAMPLING_PROVENANCE_SOURCES.PRODUCTION_TELEMETRY,
+      failureReasons: [
+        'Cluster sampling independence failed (status: "failed"): available evidence contradicts independent cluster sampling.',
+      ],
+      evidenceRecord: samplingAssurance.evidenceRecord || null,
+      datasetFingerprint: expectedFingerprint,
+    };
+  }
+
+  // 7. Explicit UNVERIFIED status (or unverified_nominal_clusters)
+  if (rawStatus === SAMPLING_ASSURANCE_STATUS.UNVERIFIED || rawStatus === 'unverified_nominal_clusters') {
+    return {
+      isValid: true,
+      isMethodologyValid: true,
+      status: SAMPLING_ASSURANCE_STATUS.UNVERIFIED,
+      isEvidenceValidated: false,
+      provenanceSource: samplingAssurance.provenance || SAMPLING_PROVENANCE_SOURCES.PRODUCTION_TELEMETRY,
+      failureReasons: [
+        'Cluster sampling independence is unverified (status: "unverified"); independent cluster sampling is required for decision-ready Student-t inference and supervised review eligibility.',
+      ],
+      evidenceRecord: samplingAssurance.evidenceRecord || null,
+      datasetFingerprint: expectedFingerprint,
+    };
+  }
+
+  // 8. Rejection of unauthenticated caller assertions:
+  // - Caller sets clusterSamplingIndependenceVerified: true
+  // - Caller sets clusterIndependenceStatus: 'verified' without a valid structured evidence record
+  if (samplingAssurance.clusterSamplingIndependenceVerified === true && !samplingAssurance.evidenceRecord) {
+    return {
+      isValid: true,
+      isMethodologyValid: true,
+      status: SAMPLING_ASSURANCE_STATUS.UNVERIFIED,
+      isEvidenceValidated: false,
+      provenanceSource: SAMPLING_PROVENANCE_SOURCES.UNSUPPORTED,
+      failureReasons: [
+        'Caller boolean assertion "clusterSamplingIndependenceVerified: true" is not an authentic proof of independent cluster sampling.',
+      ],
+      evidenceRecord: null,
+      datasetFingerprint: expectedFingerprint,
+    };
+  }
+
+  const record = samplingAssurance.evidenceRecord;
+  if (!record || typeof record !== 'object') {
+    return {
+      isValid: true,
+      isMethodologyValid: true,
+      status: SAMPLING_ASSURANCE_STATUS.UNVERIFIED,
+      isEvidenceValidated: false,
+      provenanceSource: samplingAssurance.provenance || SAMPLING_PROVENANCE_SOURCES.UNSUPPORTED,
+      failureReasons: [
+        'Unauthenticated claim: clusterIndependenceStatus was claimed "verified" without a structured, validated evidence record.',
+      ],
+      evidenceRecord: null,
+      datasetFingerprint: expectedFingerprint,
+    };
+  }
+
+  // 9. Structured Evidence Record Inspection
+  const provenanceSource = record.provenanceSource || samplingAssurance.provenance || SAMPLING_PROVENANCE_SOURCES.UNSUPPORTED;
+
+  // A. Fabricated / Invalid Evidence ID
+  if (!record.evidenceId || typeof record.evidenceId !== 'string' || record.evidenceId.startsWith('fabricated_') || record.evidenceId.startsWith('fake_')) {
+    failureReasons.push(`Fabricated or invalid evidence identifier detected: "${record.evidenceId}".`);
+  }
+
+  // B. Unsupported / Untrusted Provenance Source
+  if (!Object.values(SAMPLING_PROVENANCE_SOURCES).includes(provenanceSource) || provenanceSource === SAMPLING_PROVENANCE_SOURCES.UNSUPPORTED || provenanceSource === 'third_party_unverified_vendor') {
+    failureReasons.push(`Evidence provenance source "${provenanceSource}" is unsupported or untrusted.`);
+  }
+
+  // C. Production Telemetry Trust Anchor Absence
+  if (provenanceSource === SAMPLING_PROVENANCE_SOURCES.PRODUCTION_TELEMETRY) {
+    failureReasons.push('No trusted cross-environment production sampling authority exists in current local-first telemetry architecture; single-client nominal clusters remain unverified.');
+  }
+
+  // D. Synthetic Oracle Production Isolation
+  if (environment === 'production' && provenanceSource === SAMPLING_PROVENANCE_SOURCES.SYNTHETIC_GENERATOR) {
+    failureReasons.push('Synthetic generator guarantee cannot be accepted as production verification evidence; synthetic oracle fields are isolated to offline simulation testing.');
+  }
+
+  // E. Conflicting Methodology / Audited Clusters
+  if (record.samplingMethodology === 'single_client_nominal_backlogs') {
+    failureReasons.push('Conflicting evidence record: sampling methodology "single_client_nominal_backlogs" contradicts claimed independent sampling status.');
+  }
+  if (!Array.isArray(record.clustersAudited) || record.clustersAudited.length === 0) {
+    failureReasons.push('Evidence record contains empty or missing clustersAudited list.');
+  }
+
+  // F. Timestamp Freshness / Expiration
+  if (record.expiresAt) {
+    const expTime = Date.parse(record.expiresAt);
+    if (isNaN(expTime) || expTime < Date.now()) {
+      failureReasons.push(`Evidence record has expired (expired at ${record.expiresAt}).`);
+    }
+  }
+
+  // G. Checksum Integrity
+  const computedChecksum = computeEvidenceRecordChecksum(record);
+  if (record.recordChecksum !== computedChecksum) {
+    failureReasons.push(`Evidence record checksum mismatch: computed checksum "${computedChecksum}" does not match recorded checksum "${record.recordChecksum}". Evidence has been altered or tampered.`);
+  }
+
+  // H. Dataset Cluster Fingerprint Match
+  if (record.datasetFingerprint !== expectedFingerprint) {
+    failureReasons.push(`Evidence dataset fingerprint mismatch: record was issued for cluster set fingerprint "${record.datasetFingerprint}", but evaluation dataset fingerprint is "${expectedFingerprint}". Evidence does not cover evaluated cluster set.`);
+  }
+
+  // I. Cluster Coverage Check
+  if (Array.isArray(record.clustersAudited) && distinctClusterKeys.length > 0) {
+    const auditedSet = new Set(record.clustersAudited);
+    const missingClusters = distinctClusterKeys.filter((k) => !auditedSet.has(k));
+    if (missingClusters.length > 0) {
+      failureReasons.push(`Evidence record audited clusters do not cover all evaluated clusters in dataset (missing: ${missingClusters.join(', ')}).`);
+    }
+  }
+
+  // Outcome of record validation
+  if (failureReasons.length > 0) {
+    const hasConflict = failureReasons.some((r) => r.includes('Conflicting evidence record'));
+    return {
+      isValid: true,
+      isMethodologyValid: true,
+      status: hasConflict ? SAMPLING_ASSURANCE_STATUS.FAILED : SAMPLING_ASSURANCE_STATUS.UNVERIFIED,
+      isEvidenceValidated: false,
+      provenanceSource,
+      failureReasons,
+      evidenceRecord: record,
+      datasetFingerprint: expectedFingerprint,
+    };
+  }
+
+  return {
+    isValid: true,
+    isMethodologyValid: true,
+    status: SAMPLING_ASSURANCE_STATUS.VERIFIED,
+    isEvidenceValidated: true,
+    provenanceSource,
+    failureReasons: [],
+    evidenceRecord: record,
+    datasetFingerprint: expectedFingerprint,
+  };
+}
 
 /**
  * Status definition for practical improvement threshold.
@@ -661,6 +986,7 @@ export function evaluateActivationGate({
   bootstrapIterations = DEFAULT_BOOTSTRAP_ITERATIONS,
   practicalThresholdRule = DEFAULT_PRACTICAL_THRESHOLD_RULE,
   samplingAssurance = null,
+  environment = 'unspecified',
 } = {}) {
   const reasons = [];
 
@@ -691,11 +1017,17 @@ export function evaluateActivationGate({
 
   // Target estimand validation: single operating window cannot identify marginal population mean under shared shocks (Scope C & Scope F)
   let samplingAssuranceEstimandValid = true;
-  if (isAssuranceExplicit && samplingAssurance.intendedEstimand === 'marginal_population_mean') {
+  if (isAssuranceExplicit && (samplingAssurance.intendedEstimand === 'marginal_population_mean' || samplingAssurance.evidenceRecord?.intendedEstimand === 'marginal_population_mean')) {
     samplingAssuranceEstimandValid = false;
     reasons.push(
       'Single-window cluster Student-t inference cannot identify the marginal population estimand in the presence of unobserved common shocks; intended estimand must be shock-conditional (shock_conditional_population_mean).'
     );
+  }
+
+  let samplingAssuranceTypeValid = true;
+  if (samplingAssurance != null && typeof samplingAssurance !== 'object') {
+    samplingAssuranceTypeValid = false;
+    reasons.push('Sampling assurance must be a structured object; primitive value was provided.');
   }
 
   if (!scoringValid) {
@@ -721,6 +1053,7 @@ export function evaluateActivationGate({
     scoringValid &&
     epsilonValid &&
     ruleValid &&
+    samplingAssuranceTypeValid &&
     samplingAssuranceStatusValid &&
     samplingAssuranceApplicableValid &&
     samplingAssuranceEstimandValid;
@@ -1136,18 +1469,42 @@ export function evaluateActivationGate({
     }
   }
 
-  // Detect cross-cluster leakage or task overlap and override status (Scope B & Scope F)
+  const distinctClusterKeys = clustersMap.size > 0
+    ? Array.from(clustersMap.keys()).sort()
+    : Array.from(new Set(rawPairs.map((p) => p.context?.scenario_key).filter(Boolean))).sort();
+
+  // Execute formal sampling assurance provenance and trust-boundary validation (Phase 7.4 Stage 4A.8)
+  const assuranceValidation = validateSamplingAssuranceEvidence(samplingAssurance, {
+    distinctClusterKeys,
+    isSyntheticData,
+    environment,
+  });
+
+  // Detect cross-cluster leakage or task overlap and override status to FAILED (Scope B & Scope F)
   if (crossClusterLeakageDetected || crossClusterTaskOverlapDetected) {
     clusterIndependenceStatus = SAMPLING_ASSURANCE_STATUS.FAILED;
+  } else {
+    clusterIndependenceStatus = assuranceValidation.status;
   }
 
-  const samplingIndependenceSatisfied = clusterIndependenceStatus === SAMPLING_ASSURANCE_STATUS.VERIFIED;
+  const samplingIndependenceSatisfied =
+    clusterIndependenceStatus === SAMPLING_ASSURANCE_STATUS.VERIFIED &&
+    assuranceValidation.isEvidenceValidated &&
+    !crossClusterLeakageDetected &&
+    !crossClusterTaskOverlapDetected;
 
-  if (clusterIndependenceStatus === SAMPLING_ASSURANCE_STATUS.UNVERIFIED) {
+  // Append structured evidence failure reasons
+  for (const reason of assuranceValidation.failureReasons) {
+    if (!reasons.includes(reason)) {
+      reasons.push(reason);
+    }
+  }
+
+  if (clusterIndependenceStatus === SAMPLING_ASSURANCE_STATUS.UNVERIFIED && !reasons.some((r) => r.includes('Cluster sampling independence is unverified'))) {
     reasons.push(
       'Cluster sampling independence is unverified (status: "unverified"); independent cluster sampling is required for decision-ready Student-t inference and supervised review eligibility.'
     );
-  } else if (clusterIndependenceStatus === SAMPLING_ASSURANCE_STATUS.FAILED) {
+  } else if (clusterIndependenceStatus === SAMPLING_ASSURANCE_STATUS.FAILED && !reasons.some((r) => r.includes('Cluster sampling independence failed'))) {
     reasons.push(
       'Cluster sampling independence failed (status: "failed"): available evidence contradicts independent cluster sampling.'
     );
@@ -1477,6 +1834,7 @@ export function evaluateActivationGate({
       clusterSamplingIndependenceVerified: samplingIndependenceSatisfied,
       clusterIndependenceStatus,
       samplingAssurance: isAssuranceExplicit ? samplingAssurance : null,
+      evidenceValidation: assuranceValidation,
       isDecisionReady,
     },
     thresholdPolicy: {
@@ -1578,9 +1936,13 @@ export function evaluateActivationGate({
     samplingAssurancePolicy: {
       status: clusterIndependenceStatus,
       isVerified: samplingIndependenceSatisfied,
+      isEvidenceValidated: assuranceValidation.isEvidenceValidated,
       isAssuranceExplicit,
-      provenance: isAssuranceExplicit ? (samplingAssurance?.provenance ?? 'unspecified') : 'omitted_in_telemetry',
+      provenance: isAssuranceExplicit ? (samplingAssurance?.provenance ?? assuranceValidation.provenanceSource ?? 'unspecified') : 'omitted_in_telemetry',
       targetEstimand: isAssuranceExplicit ? (samplingAssurance?.intendedEstimand ?? 'shock_conditional_population_mean') : 'shock_conditional_population_mean',
+      provenanceSource: assuranceValidation.provenanceSource,
+      datasetFingerprint: assuranceValidation.datasetFingerprint,
+      failureReasons: assuranceValidation.failureReasons,
       policyDescription:
         'Cluster Student-t interval requires independent cluster sampling for shock-conditional population inference. Real-world telemetry lacking defensible sampling provenance remains unverified, blocking supervised review eligibility.',
     },
