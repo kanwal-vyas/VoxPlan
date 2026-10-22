@@ -60,7 +60,7 @@ Every capability in VoxPlan is assigned to exactly one of the six authoritative 
 | **RFC 5545 iCalendar (.ics) Export** | `src/scheduler/icalExporter.js` | Standards-compliant `.ics` export strictly bound to accepted schedules; disabled before acceptance. |
 | **Shadow-Only Adaptation Sandbox** | `src/scheduler/shadowSchedulerEvaluator.js`, `AdaptationSandboxCard.jsx` | Candidate weights isolated to shadow simulation; factory weights strictly immutable. |
 | **Sampling Assurance Trust Boundary** | `src/scheduler/activationGateEvaluator.js` | Rejects unauthenticated caller claims; synthetic evidence isolated to simulation mode; production gate fails closed. |
-| **Demo Seeding & Reset Utility** | `src/utils/demoDataSeeder.js`, `scripts/demoLauncher.mjs` | Deterministic 12-task showcase profile seeding with overwrite confirmation and clean teardown. 8 dedicated tests passing. |
+| **Demo Seeding & Reset Utility** | `src/utils/demoDataSeeder.js`, `scripts/demoLauncher.mjs` | Deterministic 12-task showcase profile seeding with overwrite confirmation, user data backup/restoration, and clean teardown. 10 dedicated tests passing. |
 
 ### Category B: In Scope but Unfinished
 - **None for the 72-hour demonstration milestone**. All core demonstration flows and safety boundaries are implemented and passing.
@@ -133,7 +133,7 @@ VoxPlan achieves the definition of **Demonstration Complete** when all of the fo
 7. **Schedule Export**: Exports RFC 5545 compliant `.ics` calendar files upon user acceptance.
 8. **Behavioral Intelligence**: Renders habit trends and walk-forward duration estimation curves when seeded with showcase observations.
 9. **Safety Boundaries**: The Adaptation Sandbox visibly enforces "Shadow-Only" evaluation, rejects synthetic claims in production, and guarantees factory weights remain invariant.
-10. **Test Integrity**: 100% passing test suites across both frontend (`npm test`, 832 tests) and backend (`pytest`, 27 tests).
+10. **Test Integrity**: 100% passing test suites across both frontend (`npm test`, 834 tests) and backend (`pytest`, 27 tests).
 
 ---
 
@@ -144,7 +144,7 @@ VoxPlan achieves the definition of **Demonstration Complete** when all of the fo
 | Item | Priority | Status | Verification Method | Blocker / Dependency |
 |---|:---:|:---:|---|---|
 | **Demo Launch Orchestration** | P1 | **DONE** | Tested `node scripts/demoLauncher.mjs --no-open` | None |
-| **Showcase Profile Seeding & Teardown** | P1 | **DONE** | Tested `node --test tests/demo_data_seeder.test.js` (8/8 passed) | None |
+| **Showcase Profile Seeding & Teardown** | P1 | **DONE** | Tested `node --test tests/demo_data_seeder.test.js` (10/10 passed) | None |
 | **Header Demo Control UI** | P1 | **DONE** | Verified in browser subagent walk-through | None |
 | **End-to-End Demo Journey Verification** | P1 | **DONE** | Browser subagent walk-through and recording generated | Chromium browser for voice |
 | **Presenter Runbook Documentation** | P2 | **DONE** | Documented in `README.md` and `PROJECT_SCOPE.md` | None |

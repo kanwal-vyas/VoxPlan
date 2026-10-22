@@ -286,6 +286,54 @@ export async function clearEventsByProfile(profileId) {
 }
 
 /**
+ * Deletes ONLY synthetic demo events for a profile, preserving genuine user telemetry events.
+ * @param {string} profileId
+ * @returns {Promise<boolean>}
+ */
+export async function clearDemoEventsByProfile(profileId) {
+  // Clear demo events from memory fallback
+  for (const [key, ev] of memoryFallback.events.entries()) {
+    if (
+      ev.profile_id === profileId &&
+      (ev.isDemoSeed || ev.isSyntheticData || ev.provenanceSource === 'demo_seeding_utility')
+    ) {
+      memoryFallback.events.delete(key);
+    }
+  }
+
+  const db = await getDb();
+  if (!db) return true;
+
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction([EVENTS_STORE], 'readwrite');
+      const store = tx.objectStore(EVENTS_STORE);
+      const index = store.index('profile_id');
+      const request = index.openCursor(IDBKeyRange.only(profileId));
+
+      request.onsuccess = (event) => {
+        const cursor = event.target.result;
+        if (cursor) {
+          const val = cursor.value;
+          if (
+            val &&
+            (val.isDemoSeed || val.isSyntheticData || val.provenanceSource === 'demo_seeding_utility')
+          ) {
+            cursor.delete();
+          }
+          cursor.continue();
+        } else {
+          resolve(true);
+        }
+      };
+      request.onerror = () => resolve(false);
+    } catch {
+      resolve(false);
+    }
+  });
+}
+
+/**
  * Saves or updates a timer session in IndexedDB.
  * @param {object} session
  */

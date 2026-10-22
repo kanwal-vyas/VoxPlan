@@ -28,6 +28,7 @@ const BACKEND_HEALTH_URL = `http://127.0.0.1:${BACKEND_PORT}/health`;
 const BACKEND_STATUS_URL = `http://127.0.0.1:${BACKEND_PORT}/api/model/status`;
 
 const noOpen = process.argv.includes('--no-open');
+const isDryRun = process.argv.includes('--dry-run');
 const isWindows = process.platform === 'win32';
 
 let backendProcess = null;
@@ -37,6 +38,22 @@ function logBanner() {
   console.log('\n============================================================');
   console.log('       ✦ VoxPlan 72-Hour Live Demo Launcher ✦');
   console.log('============================================================');
+}
+
+if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  logBanner();
+  console.log(`Usage:
+  npm run demo [-- [options]]
+  node scripts/demoLauncher.mjs [options]
+  .\\run-demo.bat [options]
+
+Options:
+  --app       Open directly to Productivity Application (/app) instead of Landing Page (/)
+  --no-open   Start services without automatically opening the browser
+  --dry-run   Perform runtime checks and port inspection without launching background processes
+  --help, -h  Display this help message
+`);
+  process.exit(0);
 }
 
 /**
@@ -167,42 +184,66 @@ function checkEnvironment() {
  */
 async function checkPorts() {
   console.log('\n[2/5] Checking service port status...');
+  const portConflicts = { backend: false, frontend: false };
 
   // Check backend port 8000
   const backendProbe = await probeHttp(BACKEND_HEALTH_URL);
   let backendAlreadyRunning = false;
-  if (backendProbe && backendProbe.ok) {
-    try {
-      const json = JSON.parse(backendProbe.body);
-      if (json.service === 'voxplan-ml' || json.status === 'ok') {
-        backendAlreadyRunning = true;
-        console.log(`  ✓ Backend is already running on port ${BACKEND_PORT} (VoxPlan service identified).`);
+  if (backendProbe) {
+    if (backendProbe.ok) {
+      try {
+        const json = JSON.parse(backendProbe.body);
+        if (json.service === 'voxplan-ml') {
+          backendAlreadyRunning = true;
+          console.log(`  ✓ Backend is already running on port ${BACKEND_PORT} (VoxPlan service identified).`);
+        } else {
+          portConflicts.backend = true;
+          console.warn(`  ⚠️ Port ${BACKEND_PORT} is in use by an unrecognized service (not VoxPlan).`);
+        }
+      } catch {
+        portConflicts.backend = true;
+        console.warn(`  ⚠️ Port ${BACKEND_PORT} responded with non-JSON content; occupied by an unrelated service.`);
       }
-    } catch {
-      // not voxplan
+    } else {
+      portConflicts.backend = true;
+      console.warn(`  ⚠️ Port ${BACKEND_PORT} is in use (HTTP ${backendProbe.statusCode}).`);
     }
   }
 
   // Check frontend port 5173
   const frontendProbe = await probeHttp(FRONTEND_URL);
   let frontendAlreadyRunning = false;
-  if (frontendProbe && frontendProbe.ok) {
-    frontendAlreadyRunning = true;
-    console.log(`  ✓ Frontend is already running on port ${FRONTEND_PORT}.`);
+  if (frontendProbe) {
+    if (frontendProbe.ok) {
+      if (frontendProbe.body && (frontendProbe.body.includes('VoxPlan') || frontendProbe.body.includes('voxplan'))) {
+        frontendAlreadyRunning = true;
+        console.log(`  ✓ Frontend is already running on port ${FRONTEND_PORT} (VoxPlan dev server identified).`);
+      } else {
+        portConflicts.frontend = true;
+        console.warn(`  ⚠️ Port ${FRONTEND_PORT} is in use by an unrelated web service.`);
+      }
+    } else {
+      portConflicts.frontend = true;
+      console.warn(`  ⚠️ Port ${FRONTEND_PORT} is in use (HTTP ${frontendProbe.statusCode}).`);
+    }
   }
 
-  return { backendAlreadyRunning, frontendAlreadyRunning };
+  return { backendAlreadyRunning, frontendAlreadyRunning, portConflicts };
 }
 
 /**
  * Launches the backend process if not already running.
  */
-async function startBackend(pyExe, alreadyRunning) {
+async function startBackend(pyExe, alreadyRunning, hasConflict = false) {
   if (alreadyRunning) {
     return true;
   }
+  if (hasConflict) {
+    console.warn(`  ⚠️ Skipping backend launch: port ${BACKEND_PORT} is in use by another process. Please close it if you wish to run FastAPI ML.`);
+    return false;
+  }
   if (!pyExe) {
-    console.log('  ⚠️ Skipping backend launch: Python executable not found.');
+    console.log('  ⚠️ Skipping backend launch: Python executable not found. ML backend features will operate in client offline mode.');
     return false;
   }
 
@@ -230,6 +271,9 @@ async function startBackend(pyExe, alreadyRunning) {
     });
 
     const ready = await waitForReadiness('FastAPI backend', BACKEND_HEALTH_URL, 15000);
+    if (!ready) {
+      console.warn('  ⚠️ FastAPI backend startup timed out. VoxPlan frontend will operate in offline resilience mode.');
+    }
     return Boolean(ready);
   } catch (err) {
     console.error(`  ❌ Failed to start backend: ${err.message}`);
@@ -240,9 +284,13 @@ async function startBackend(pyExe, alreadyRunning) {
 /**
  * Launches the frontend Vite server if not already running.
  */
-async function startFrontend(alreadyRunning) {
+async function startFrontend(alreadyRunning, hasConflict = false) {
   if (alreadyRunning) {
     return true;
+  }
+  if (hasConflict) {
+    console.error(`  ❌ Port ${FRONTEND_PORT} is in use by an unrelated service. Cannot start Vite without conflicting. Please free port ${FRONTEND_PORT}.`);
+    return false;
   }
 
   console.log('\n[4/5] Starting Vite frontend server on port 5173...');
@@ -264,6 +312,9 @@ async function startFrontend(alreadyRunning) {
     });
 
     const ready = await waitForReadiness('Vite dev server', FRONTEND_URL, 15000);
+    if (!ready) {
+      console.error('  ❌ Vite frontend server timed out after 15s. Check that Node dependencies are installed.');
+    }
     return Boolean(ready);
   } catch (err) {
     console.error(`  ❌ Failed to start frontend: ${err.message}`);
@@ -351,10 +402,26 @@ process.on('SIGTERM', cleanup);
 async function main() {
   logBanner();
   const { pyExe } = checkEnvironment();
-  const { backendAlreadyRunning, frontendAlreadyRunning } = await checkPorts();
+  const { backendAlreadyRunning, frontendAlreadyRunning, portConflicts } = await checkPorts();
 
-  await startBackend(pyExe, backendAlreadyRunning);
-  await startFrontend(frontendAlreadyRunning);
+  if (isDryRun) {
+    console.log('\n[Dry Run] Preflight and port inspection completed.');
+    console.log(`  Backend Service (port ${BACKEND_PORT}):  ${backendAlreadyRunning ? 'Running (VoxPlan verified)' : portConflicts.backend ? 'Port occupied by another process' : 'Available for launch'}`);
+    console.log(`  Frontend Service (port ${FRONTEND_PORT}): ${frontendAlreadyRunning ? 'Running (VoxPlan verified)' : portConflicts.frontend ? 'Port occupied by another process' : 'Available for launch'}`);
+    console.log(`  Target Launch URL:       ${FRONTEND_URL}`);
+    console.log(`  Browser Auto-Open:       ${noOpen ? 'Disabled (--no-open)' : 'Enabled'}`);
+    console.log('\n✓ Dry run preflight successful.\n');
+    process.exit(0);
+  }
+
+  await startBackend(pyExe, backendAlreadyRunning, portConflicts.backend);
+  const frontendOk = await startFrontend(frontendAlreadyRunning, portConflicts.frontend);
+
+  if (!frontendOk && !frontendAlreadyRunning) {
+    console.error('\n❌ Frontend is not running or failed readiness checks. Demo cannot launch.\n');
+    cleanup();
+    return;
+  }
 
   await reportAndLaunch();
 

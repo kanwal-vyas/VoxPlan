@@ -13,7 +13,9 @@ import {
   clearDemoSeed,
   DEMO_SEED_KEY,
   DEMO_STORAGE_TASKS_KEY,
+  DEMO_BACKUP_TASKS_KEY,
 } from '../src/utils/demoDataSeeder.js';
+import { clearDemoEventsByProfile, saveEvent, getEventsByProfile } from '../src/telemetry/indexedDbStore.js';
 import { validateEvent } from '../src/telemetry/eventSchema.js';
 import { computeBehavioralStats } from '../src/telemetry/behavioralStats.js';
 import {
@@ -211,5 +213,85 @@ describe('Demo Data Seeder & Profile Calibration Audit', () => {
     assert.strictEqual(gateResult.productionApplied, false);
     assert.strictEqual(gateResult.isAdaptationUnlocked, false);
     assert.notStrictEqual(gateResult.outcome, 'ELIGIBLE_FOR_SUPERVISED_REVIEW');
+  });
+
+  it('9. backs up existing user tasks and restores them on reset without wiping unrelated work', async () => {
+    const mockStorage = new Map();
+    const userOriginalTasks = [
+      { id: 'user-task-101', title: 'Real user task A', completed: false },
+      { id: 'user-task-102', title: 'Real user task B', completed: true },
+    ];
+    mockStorage.set(DEMO_STORAGE_TASKS_KEY, JSON.stringify(userOriginalTasks));
+
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+      localStorage: {
+        getItem: (k) => mockStorage.get(k) || null,
+        setItem: (k, v) => mockStorage.set(k, String(v)),
+        removeItem: (k) => mockStorage.delete(k),
+      },
+    };
+
+    try {
+      // 1. Seed demo with confirmed overwrite
+      const seedRes = await applyDemoSeed({ confirmOverwrite: true });
+      assert.strictEqual(seedRes.success, true);
+      assert.strictEqual(mockStorage.has(DEMO_BACKUP_TASKS_KEY), true);
+      assert.strictEqual(mockStorage.get(DEMO_SEED_KEY), 'true');
+
+      // 2. Reset demo
+      const clearRes = await clearDemoSeed();
+      assert.strictEqual(clearRes.success, true);
+      assert.strictEqual(mockStorage.has(DEMO_SEED_KEY), false);
+      assert.strictEqual(mockStorage.has(DEMO_BACKUP_TASKS_KEY), false);
+
+      // 3. User original tasks must be restored!
+      const restored = JSON.parse(mockStorage.get(DEMO_STORAGE_TASKS_KEY));
+      assert.deepStrictEqual(restored, userOriginalTasks);
+    } finally {
+      globalThis.window = originalWindow;
+    }
+  });
+
+  it('10. clearDemoEventsByProfile deletes ONLY synthetic demo events, preserving genuine user events', async () => {
+    const profileId = 'prof_isolation_test';
+    const genuineUserEvent = {
+      event_id: 'real-ev-1',
+      profile_id: profileId,
+      event_type: 'task_created',
+      timestamp: new Date().toISOString(),
+      schema_version: 2,
+      isSyntheticData: false,
+      provenanceSource: 'user_action',
+      payload: { title: 'Genuine task' },
+    };
+
+    const demoSeededEvent = {
+      event_id: 'demo-ev-1',
+      profile_id: profileId,
+      event_type: 'task_created',
+      timestamp: new Date().toISOString(),
+      schema_version: 2,
+      isSyntheticData: true,
+      isDemoSeed: true,
+      provenanceSource: 'demo_seeding_utility',
+      payload: { title: 'Demo task' },
+    };
+
+    // Save both events
+    await saveEvent(genuineUserEvent);
+    await saveEvent(demoSeededEvent);
+
+    const eventsBefore = await getEventsByProfile(profileId);
+    assert.strictEqual(eventsBefore.length, 2);
+
+    // Run selective demo cleanup
+    const clearResult = await clearDemoEventsByProfile(profileId);
+    assert.strictEqual(clearResult, true);
+
+    const eventsAfter = await getEventsByProfile(profileId);
+    assert.strictEqual(eventsAfter.length, 1);
+    assert.strictEqual(eventsAfter[0].event_id, 'real-ev-1');
+    assert.strictEqual(eventsAfter[0].isSyntheticData, false);
   });
 });

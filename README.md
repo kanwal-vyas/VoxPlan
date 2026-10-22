@@ -22,7 +22,9 @@ npm run demo -- --app        # Starts services and opens directly to Productivit
 .\run-demo.bat --app
 
 # Launch flags:
+npm run demo -- --app        # Open directly to Productivity Application (/app)
 npm run demo -- --no-open    # Start services without automatically opening browser
+npm run demo -- --dry-run    # Preflight check and port inspection without spawning processes
 npm run demo -- --help       # Show all orchestration options
 ```
 
@@ -38,10 +40,10 @@ npm run dev
 ```
 
 ### Verified Test Suites & Quality Metrics
-- **Frontend Test Suite**: **832 / 832 passing** across 166 test suites (`npm test`).
+- **Frontend Test Suite**: **834 / 834 passing** across 166 test suites in 25 test files (`npm test`).
 - **Backend Test Suite**: **27 / 27 passing** across REST and ML endpoints (`python -m pytest backend/tests/`).
 - **Linter**: Zero errors (`npm run lint`).
-- **Production Build**: Clean compilation in ~270ms (`npm run build`).
+- **Production Build**: Clean compilation (`npm run build`).
 - **Authoritative Scope Document**: See [PROJECT_SCOPE.md](file:///c:/Users/kaval%20vyas/OneDrive/Desktop/Projects/VoxPlan/PROJECT_SCOPE.md) for full classification (Categories A through F).
 
 ---

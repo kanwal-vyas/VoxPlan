@@ -42,7 +42,7 @@ import {
   generateIcsCalendar,
   downloadIcsFile,
 } from '../scheduler/icalExporter';
-import { saveEvent, clearEventsByProfile } from '../telemetry/indexedDbStore';
+import { saveEvent, clearDemoEventsByProfile } from '../telemetry/indexedDbStore';
 import { applyDemoSeed, clearDemoSeed, hasExistingUserData } from '../utils/demoDataSeeder';
 
 const STORAGE_KEY = 'voxplan_tasks';
@@ -239,49 +239,66 @@ export default function ProductivityApp({ onNavigate }) {
     return buildPersonalDurationModel(telemetryEvents, tasks);
   }, [telemetryEvents, tasks]);
 
-  // Live Demonstration Seeding & Teardown Handlers
+  // Live Demonstration Seeding & Teardown Handlers with concurrent operation guard
+  const isDemoActionBusyRef = useRef(false);
+
   const handleSeedDemo = useCallback(async () => {
-    if (hasExistingUserData()) {
-      const ok = typeof window !== 'undefined' && window.confirm
-        ? window.confirm(
-            'Load Showcase Demo Profile?\n\nThis will replace active tasks with a calibrated demonstration dataset (8 completed tasks + 4 active tasks) for presenting behavioral habit insights and duration estimation.\n\nClick OK to confirm.'
-          )
-        : true;
-      if (!ok) return;
-    }
-    const res = await applyDemoSeed({
-      confirmOverwrite: true,
-      saveEventFn: (ev) => saveEvent(ev),
-    });
-    if (res.success) {
-      setTasks(loadSavedTasks());
-      setAcceptedSchedule(null);
-      await telemetry.init();
-      setFeedback({ type: 'success', message: res.message });
-    } else {
-      setFeedback({ type: 'error', message: res.message });
+    if (isDemoActionBusyRef.current) return;
+    isDemoActionBusyRef.current = true;
+    try {
+      if (hasExistingUserData()) {
+        const ok = typeof window !== 'undefined' && window.confirm
+          ? window.confirm(
+              'Load Showcase Demo Profile?\n\nThis will replace active tasks with a calibrated demonstration dataset (8 completed tasks + 4 active tasks) for presenting behavioral habit insights and duration estimation.\n\nYour existing user tasks will be backed up and restored on Reset.\n\nClick OK to confirm.'
+            )
+          : true;
+        if (!ok) return;
+      }
+      const res = await applyDemoSeed({
+        confirmOverwrite: true,
+        saveEventFn: (ev) => saveEvent(ev),
+      });
+      if (res.success) {
+        setTasks(loadSavedTasks());
+        setAcceptedSchedule(null);
+        await telemetry.init();
+        setFeedback({ type: 'success', message: res.message });
+      } else {
+        setFeedback({ type: 'error', message: res.message });
+      }
+    } finally {
+      isDemoActionBusyRef.current = false;
     }
   }, []);
 
   const handleClearDemo = useCallback(async () => {
-    const ok = typeof window !== 'undefined' && window.confirm
-      ? window.confirm(
-          'Reset to Clean Default State?\n\nThis will clear the demonstration tasks and restore clean welcome tasks with fresh telemetry.\n\nClick OK to confirm.'
-        )
-      : true;
-    if (!ok) return;
-    const res = await clearDemoSeed({
-      clearEventsFn: (pId) => clearEventsByProfile(pId),
-    });
-    if (res.success) {
-      setTasks(loadSavedTasks());
-      setAcceptedSchedule(null);
-      await telemetry.init();
-      setFeedback({ type: 'info', message: res.message });
+    if (isDemoActionBusyRef.current) return;
+    isDemoActionBusyRef.current = true;
+    try {
+      const ok = typeof window !== 'undefined' && window.confirm
+        ? window.confirm(
+            'Reset to Clean Default State?\n\nThis will clear demonstration tasks, restore any backed-up user tasks (or clean welcome tasks), and remove synthetic demo telemetry while preserving genuine user data.\n\nClick OK to confirm.'
+          )
+        : true;
+      if (!ok) return;
+      const res = await clearDemoSeed({
+        clearEventsFn: (pId) => clearDemoEventsByProfile(pId),
+      });
+      if (res.success) {
+        setTasks(loadSavedTasks());
+        setAcceptedSchedule(null);
+        await telemetry.init();
+        setFeedback({ type: 'info', message: res.message });
+      }
+    } finally {
+      isDemoActionBusyRef.current = false;
     }
   }, []);
 
-  // Expose global developer helper for live demo walk-throughs & automated tests
+  // Developer Convenience Interface:
+  // Exposes helper functions on window for live presenter walk-throughs and automated test runners.
+  // Note: This is an internal developer convenience, not an external API or security boundary.
+  // In accordance with VoxPlan's local-first architecture, all operations remain entirely within the client.
   useEffect(() => {
     if (typeof window !== 'undefined') {
       window.voxplanDemo = {

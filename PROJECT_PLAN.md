@@ -4075,7 +4075,7 @@ Ensure VoxPlan is 100% reliable to launch and demonstrate for the 48–72 hour m
    - Defined testable completion criteria and a 48–72h vs post-demo risk completion matrix.
 
 ### Automated Test Verification
-- **Frontend Test Suite**: **832 / 832 passing** (166 test files).
+- **Frontend Test Suite**: **832 / 832 passing** (166 test suites across 25 test files).
   - Added `tests/demo_data_seeder.test.js`: 8/8 tests passing.
 - **Backend Test Suite**: **27 / 27 passing** (`python -m pytest backend/tests/`).
 - **Linter**: Zero errors (`npm run lint`).
@@ -4128,3 +4128,40 @@ Restructure VoxPlan into two distinct, well-defined user experiences without rew
   - Verified "← Overview" returns from `/app` to `/`.
   - Verified direct URL entry and refresh at `/app`.
   - Verified demo seeding, task list updates, and zero uncaught console errors.
+
+---
+
+## Demo Readiness Stage: Cross-Route Regression & Scope Consistency Audit Execution Record
+
+### Objective
+Perform an exhaustive final reliability audit of the two-route architecture (`/` and `/app`), demo-seeding and reset safety boundaries, launcher behavior, Phase 7 invariant preservation, and project documentation alignment.
+
+### Verified Findings & Hardening Implemented
+1. **Demo Seeding & Reset Safety Boundaries (`src/utils/demoDataSeeder.js`, `src/telemetry/indexedDbStore.js`, `src/pages/ProductivityApp.jsx`)**:
+   - **User Data Backup & Restoration**: Hardened `applyDemoSeed()` to back up existing user tasks (`voxplan_user_tasks_backup`) before seeding. Hardened `clearDemoSeed()` to restore backed-up user tasks automatically on reset.
+   - **Selective Task Reset**: If no backup exists, `clearDemoSeed()` filters out only demo-owned tasks (`isDemoTask()`), preserving any non-demo tasks created by the user.
+   - **Selective Telemetry Purge**: Added and integrated `clearDemoEventsByProfile()` in `indexedDbStore.js`, ensuring demo resets delete ONLY synthetic demo events (`isDemoSeed: true`, `provenanceSource: 'demo_seeding_utility'`) while keeping genuine user telemetry intact.
+   - **Accidental Repeated Click Guard**: Added `isDemoActionBusyRef` concurrency guard to `ProductivityApp.jsx`, preventing rapid double-clicks from bypassing confirmation or executing racing seed/reset operations.
+   - **Developer Convenience Interface**: Documented `window.voxplanDemo` as an internal developer convenience for live presentations rather than an external security boundary.
+   - **Regression Test Coverage**: Added tests 9 and 10 to `tests/demo_data_seeder.test.js` (10/10 tests passing).
+2. **Demo Launcher Orchestration (`scripts/demoLauncher.mjs`, `run-demo.bat`)**:
+   - Added `--dry-run` flag for preflight inspection and non-destructive port status reporting.
+   - Added `--help` / `-h` usage flag.
+   - Enhanced port conflict handling: detects whether ports 8000/5173 are genuine VoxPlan services vs unrelated processes without killing external tasks.
+   - Confirmed Windows paths with spaces work safely.
+3. **Cross-Route Browser Journey Verification**:
+   - Verified landing page direct entry, hero CTA navigation, preview tabs, preview stopwatch start/pause, direct `/app` navigation, and Overview link back to `/`.
+   - Resolved React shorthand/non-shorthand CSS style conflict warning in `LandingPage.jsx`.
+4. **Phase 7 Invariant Audit**:
+   - Reconfirmed factory scheduler weights remain exactly `50.0`, `100.0`, `15.0`, and `25.0` (`Object.isFrozen`).
+   - Reconfirmed `isAdaptationUnlocked === false` and `productionApplied === false` across all production execution paths.
+   - Reconfirmed unauthenticated sampling assurance strictly blocks production eligibility.
+   - Stage 7.4.4B intentionally remains unstarted.
+
+### Test & Quality Verification Summary
+- **Frontend Test Suite**: **834 / 834 passing** across 166 suites in 25 test files (`npm test`).
+- **Backend Test Suite**: **27 / 27 passing** across REST and ML endpoints (`python -m pytest backend/tests/`).
+- **Linter**: Zero errors (`npm run lint`).
+- **Production Build**: 72 modules transformed cleanly in 711ms (`npm run build`).
+- **Demo Launcher**: Dry run verified (`node scripts/demoLauncher.mjs --dry-run`).
+- **Browser Subagent Walkthrough**: Complete video recording generated and verified (`two_route_audit_1792664103191.webp`).

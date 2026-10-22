@@ -1042,7 +1042,7 @@ const styles = {
     gap: '6px',
   },
   previewTabBtn: {
-    background: 'none',
+    backgroundColor: 'transparent',
     border: 'none',
     padding: '6px 14px',
     fontSize: '12px',

@@ -23,6 +23,7 @@ import { formatISODate } from '../conversation/compoundCommandParser.js';
 export const DEMO_SEED_KEY = 'voxplan_demo_seed_active';
 export const DEMO_STORAGE_TASKS_KEY = 'voxplan_tasks';
 export const DEMO_STORAGE_ACCEPTED_SCHEDULE_KEY = 'voxplan_accepted_schedule';
+export const DEMO_BACKUP_TASKS_KEY = 'voxplan_user_tasks_backup';
 
 /**
  * Generates deterministic demo tasks and corresponding Schema v2 telemetry events.
@@ -387,6 +388,7 @@ export function hasExistingUserData() {
 
 /**
  * Applies the demo dataset to localStorage and IndexedDB with overwrite protection.
+ * Backs up existing genuine user data before seeding to allow flawless restoration on reset.
  *
  * @param {object} [options={}]
  * @param {boolean} [options.confirmOverwrite=false]
@@ -408,6 +410,14 @@ export async function applyDemoSeed(options = {}) {
       taskCount: 0,
       eventCount: 0,
     };
+  }
+
+  // Backup existing genuine user data before seeding so it can be restored on reset
+  if (hasExistingUserData()) {
+    const existingRaw = window.localStorage.getItem(DEMO_STORAGE_TASKS_KEY);
+    if (existingRaw) {
+      window.localStorage.setItem(DEMO_BACKUP_TASKS_KEY, existingRaw);
+    }
   }
 
   // 2. Generate deterministic dataset
@@ -440,10 +450,27 @@ export async function applyDemoSeed(options = {}) {
 }
 
 /**
- * Clears demo data and restores clean default welcome state.
+ * Checks whether a task is owned by the demo seeder.
+ * @param {object} t Task object
+ * @returns {boolean}
+ */
+export function isDemoTask(t) {
+  if (!t || typeof t !== 'object') return false;
+  return Boolean(
+    t.isDemoSeed ||
+    t.isSyntheticData ||
+    t.provenanceSource === 'demo_seeding_utility' ||
+    (typeof t.id === 'string' && t.id.startsWith('demo-'))
+  );
+}
+
+/**
+ * Clears demo data and restores clean state.
+ * If user tasks were backed up before demo seeding, restores the backed-up user tasks.
+ * If any non-demo tasks exist, preserves them while removing only demo-owned records.
  *
  * @param {object} [options={}]
- * @param {Function} [options.clearEventsFn] Optional injected clearEventsByProfile function
+ * @param {Function} [options.clearEventsFn] Optional injected function to delete demo events
  * @returns {Promise<{ success: boolean, message: string }>}
  */
 export async function clearDemoSeed(options = {}) {
@@ -458,18 +485,55 @@ export async function clearDemoSeed(options = {}) {
     window.localStorage.getItem('voxplan_profile_id') ||
     'prof_demo_showcase';
 
-  // Remove tasks and demo active marker
-  window.localStorage.removeItem(DEMO_STORAGE_TASKS_KEY);
+  // 1. Task teardown: Restore backed-up user tasks if available, or remove only demo-owned tasks
+  const backedUpTasks = window.localStorage.getItem(DEMO_BACKUP_TASKS_KEY);
+  if (backedUpTasks) {
+    try {
+      const parsed = JSON.parse(backedUpTasks);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        window.localStorage.setItem(DEMO_STORAGE_TASKS_KEY, backedUpTasks);
+      } else {
+        window.localStorage.removeItem(DEMO_STORAGE_TASKS_KEY);
+      }
+    } catch {
+      window.localStorage.removeItem(DEMO_STORAGE_TASKS_KEY);
+    }
+    window.localStorage.removeItem(DEMO_BACKUP_TASKS_KEY);
+  } else {
+    // If no backup was created, check if non-demo tasks exist in storage
+    const currentTasksRaw = window.localStorage.getItem(DEMO_STORAGE_TASKS_KEY);
+    if (currentTasksRaw) {
+      try {
+        const parsed = JSON.parse(currentTasksRaw);
+        if (Array.isArray(parsed)) {
+          const nonDemoTasks = parsed.filter((t) => !isDemoTask(t));
+          if (nonDemoTasks.length > 0) {
+            window.localStorage.setItem(DEMO_STORAGE_TASKS_KEY, JSON.stringify(nonDemoTasks));
+          } else {
+            window.localStorage.removeItem(DEMO_STORAGE_TASKS_KEY);
+          }
+        } else {
+          window.localStorage.removeItem(DEMO_STORAGE_TASKS_KEY);
+        }
+      } catch {
+        window.localStorage.removeItem(DEMO_STORAGE_TASKS_KEY);
+      }
+    } else {
+      window.localStorage.removeItem(DEMO_STORAGE_TASKS_KEY);
+    }
+  }
+
+  // Remove demo active marker and demo schedule
   window.localStorage.removeItem(DEMO_STORAGE_ACCEPTED_SCHEDULE_KEY);
   window.localStorage.removeItem(DEMO_SEED_KEY);
 
-  // Clear IndexedDB events if clearer function provided
+  // 2. Clear IndexedDB events: clearEventsFn deletes only demo-seeded events
   if (typeof clearEventsFn === 'function') {
     await clearEventsFn(profileId);
   }
 
   return {
     success: true,
-    message: 'Demo dataset cleared. Application restored to clean default state.',
+    message: 'Demo dataset cleared. Application restored to clean state.',
   };
 }
