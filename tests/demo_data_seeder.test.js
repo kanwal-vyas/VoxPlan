@@ -11,6 +11,9 @@ import {
   hasExistingUserData,
   applyDemoSeed,
   clearDemoSeed,
+  isDemoTask,
+  parseAndValidateBackup,
+  CANONICAL_DEMO_TASK_IDS,
   DEMO_SEED_KEY,
   DEMO_STORAGE_TASKS_KEY,
   DEMO_BACKUP_TASKS_KEY,
@@ -293,5 +296,281 @@ describe('Demo Data Seeder & Profile Calibration Audit', () => {
     assert.strictEqual(eventsAfter.length, 1);
     assert.strictEqual(eventsAfter[0].event_id, 'real-ev-1');
     assert.strictEqual(eventsAfter[0].isSyntheticData, false);
+  });
+
+  it('11. genuine tasks created during active demo are preserved and merged upon reset', async () => {
+    const mockStorage = new Map();
+    const originalTasks = [
+      { id: 'user-t-1', title: 'Pre-existing Task 1', completed: false },
+    ];
+    mockStorage.set(DEMO_STORAGE_TASKS_KEY, JSON.stringify(originalTasks));
+
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+      localStorage: {
+        getItem: (k) => mockStorage.get(k) || null,
+        setItem: (k, v) => mockStorage.set(k, String(v)),
+        removeItem: (k) => mockStorage.delete(k),
+      },
+    };
+
+    try {
+      // 1. Seed demo
+      await applyDemoSeed({ confirmOverwrite: true });
+      assert.strictEqual(mockStorage.has(DEMO_BACKUP_TASKS_KEY), true);
+
+      // 2. User creates a new genuine task while demo is active
+      const currentTasks = JSON.parse(mockStorage.get(DEMO_STORAGE_TASKS_KEY));
+      const newGenuineTask = {
+        id: 'task-user-created-during-demo',
+        title: 'Urgent user work added mid-demo',
+        completed: false,
+        createdAt: new Date().toISOString(),
+      };
+      mockStorage.set(DEMO_STORAGE_TASKS_KEY, JSON.stringify([newGenuineTask, ...currentTasks]));
+
+      // 3. Reset demo
+      const clearRes = await clearDemoSeed();
+      assert.strictEqual(clearRes.success, true);
+
+      // 4. Verification: both the pre-existing task AND the task created during demo must survive!
+      const restored = JSON.parse(mockStorage.get(DEMO_STORAGE_TASKS_KEY));
+      assert.strictEqual(restored.length, 2);
+      assert.ok(restored.some((t) => t.id === 'user-t-1'));
+      assert.ok(restored.some((t) => t.id === 'task-user-created-during-demo'));
+      // No demo tasks remain
+      assert.ok(restored.every((t) => !isDemoTask(t)));
+    } finally {
+      globalThis.window = originalWindow;
+    }
+  });
+
+  it('12. malformed backup JSON does not cause destructive wipe of current genuine tasks and is quarantined safely', async () => {
+    const mockStorage = new Map();
+    const currentTasks = [
+      { id: 'safe-user-task-1', title: 'Work In Progress', completed: false },
+    ];
+    mockStorage.set(DEMO_STORAGE_TASKS_KEY, JSON.stringify(currentTasks));
+    mockStorage.set(DEMO_BACKUP_TASKS_KEY, '{ invalid json truncated...');
+
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+      localStorage: {
+        getItem: (k) => mockStorage.get(k) || null,
+        setItem: (k, v) => mockStorage.set(k, String(v)),
+        removeItem: (k) => mockStorage.delete(k),
+      },
+    };
+
+    try {
+      const clearRes = await clearDemoSeed();
+      assert.strictEqual(clearRes.success, false);
+      assert.ok(clearRes.message.includes('malformed'));
+
+      // Crucial: current tasks were NOT wiped!
+      const finalTasks = JSON.parse(mockStorage.get(DEMO_STORAGE_TASKS_KEY));
+      assert.strictEqual(finalTasks.length, 1);
+      assert.strictEqual(finalTasks[0].id, 'safe-user-task-1');
+
+      // Crucial: malformed backup string was quarantined, not silently lost
+      const quarantineKey = Array.from(mockStorage.keys()).find((k) => k.startsWith('voxplan_quarantine_backup_'));
+      assert.ok(quarantineKey, 'Corrupted backup must be quarantined in a recovery key');
+      assert.strictEqual(mockStorage.get(quarantineKey), '{ invalid json truncated...');
+    } finally {
+      globalThis.window = originalWindow;
+    }
+  });
+
+  it('13. backward compatibility: restores both legacy raw task arrays and versioned backup envelopes', () => {
+    // 1. Test legacy array
+    const legacyArrayRaw = JSON.stringify([
+      { id: 'legacy-t-1', title: 'Legacy Array Task', completed: false },
+    ]);
+    const legacyParsed = parseAndValidateBackup(legacyArrayRaw);
+    assert.strictEqual(legacyParsed.valid, true);
+    assert.strictEqual(legacyParsed.tasks.length, 1);
+    assert.strictEqual(legacyParsed.metadata.format, 'legacy_array');
+
+    // 2. Test versioned envelope
+    const envelopeRaw = JSON.stringify({
+      schema_version: 1,
+      backed_up_at: '2026-10-22T10:00:00.000Z',
+      profile_id: 'prof_test',
+      task_count: 1,
+      tasks: [{ id: 'env-t-1', title: 'Envelope Task', completed: true }],
+    });
+    const envelopeParsed = parseAndValidateBackup(envelopeRaw);
+    assert.strictEqual(envelopeParsed.valid, true);
+    assert.strictEqual(envelopeParsed.tasks.length, 1);
+    assert.strictEqual(envelopeParsed.metadata.format, 'versioned_envelope');
+  });
+
+  it('14. confirmation cancellation causes zero mutation to storage or active state', async () => {
+    const mockStorage = new Map();
+    const originalTasks = [
+      { id: 'user-t-1', title: 'Original Task', completed: false },
+    ];
+    mockStorage.set(DEMO_STORAGE_TASKS_KEY, JSON.stringify(originalTasks));
+
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+      localStorage: {
+        getItem: (k) => mockStorage.get(k) || null,
+        setItem: (k, v) => mockStorage.set(k, String(v)),
+        removeItem: (k) => mockStorage.delete(k),
+      },
+    };
+
+    try {
+      // Simulating user declining confirmation: confirmOverwrite = false
+      const res = await applyDemoSeed({ confirmOverwrite: false });
+      assert.strictEqual(res.success, false);
+      assert.ok(res.message.includes('Existing user tasks detected'));
+
+      // Storage must remain completely untouched
+      assert.strictEqual(mockStorage.get(DEMO_STORAGE_TASKS_KEY), JSON.stringify(originalTasks));
+      assert.strictEqual(mockStorage.has(DEMO_BACKUP_TASKS_KEY), false);
+      assert.strictEqual(mockStorage.has(DEMO_SEED_KEY), false);
+    } finally {
+      globalThis.window = originalWindow;
+    }
+  });
+
+  it('15. partial write failure during IndexedDB event saving triggers automatic rollback of localStorage', async () => {
+    const mockStorage = new Map();
+    const originalTasks = [
+      { id: 'user-t-preserve', title: 'Preserve Me', completed: false },
+    ];
+    mockStorage.set(DEMO_STORAGE_TASKS_KEY, JSON.stringify(originalTasks));
+
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+      localStorage: {
+        getItem: (k) => mockStorage.get(k) || null,
+        setItem: (k, v) => mockStorage.set(k, String(v)),
+        removeItem: (k) => mockStorage.delete(k),
+      },
+    };
+
+    try {
+      let callCount = 0;
+      const failingSaveEventFn = async () => {
+        callCount++;
+        if (callCount > 2) {
+          throw new Error('Disk IO or Quota Failure in IndexedDB');
+        }
+        return true;
+      };
+
+      const res = await applyDemoSeed({
+        confirmOverwrite: true,
+        saveEventFn: failingSaveEventFn,
+      });
+
+      assert.strictEqual(res.success, false);
+      assert.ok(res.message.includes('telemetry persistence failed'));
+
+      // Crucial: localStorage was rolled back to pre-seed original tasks!
+      const currentTasks = JSON.parse(mockStorage.get(DEMO_STORAGE_TASKS_KEY));
+      assert.deepStrictEqual(currentTasks, originalTasks);
+      assert.strictEqual(mockStorage.has(DEMO_SEED_KEY), false);
+    } finally {
+      globalThis.window = originalWindow;
+    }
+  });
+
+  it('16. storage quota error during backup creation aborts seeding safely and preserves existing tasks intact', async () => {
+    const mockStorage = new Map();
+    const originalTasks = [
+      { id: 'vital-task', title: 'Vital user task', completed: false },
+    ];
+    mockStorage.set(DEMO_STORAGE_TASKS_KEY, JSON.stringify(originalTasks));
+
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+      localStorage: {
+        getItem: (k) => mockStorage.get(k) || null,
+        setItem: (k, v) => {
+          if (k === DEMO_BACKUP_TASKS_KEY) {
+            throw new Error('QuotaExceededError: LocalStorage limit reached');
+          }
+          mockStorage.set(k, String(v));
+        },
+        removeItem: (k) => mockStorage.delete(k),
+      },
+    };
+
+    try {
+      const res = await applyDemoSeed({ confirmOverwrite: true });
+      assert.strictEqual(res.success, false);
+      assert.ok(res.message.includes('Storage write failure during backup'));
+
+      // Vital tasks must remain untouched in primary storage
+      const currentTasks = JSON.parse(mockStorage.get(DEMO_STORAGE_TASKS_KEY));
+      assert.deepStrictEqual(currentTasks, originalTasks);
+    } finally {
+      globalThis.window = originalWindow;
+    }
+  });
+
+  it('17. non-demo task with "demo-" in title or custom ID without provenance marker is NOT falsely classified as demo task', () => {
+    assert.ok(CANONICAL_DEMO_TASK_IDS.has('demo-c-1'));
+    assert.strictEqual(CANONICAL_DEMO_TASK_IDS.has('demo-presentation-notes'), false);
+
+    const userCustomTask = {
+      id: 'demo-presentation-notes',
+      title: 'Prepare demo for executive staff',
+      completed: false,
+    };
+    // Crucial: not a canonical demo ID and has no demo provenance markers
+    assert.strictEqual(isDemoTask(userCustomTask), false);
+
+    // Canonical demo ID without provenance (legacy) is recognized
+    const canonicalLegacy = { id: 'demo-c-1', title: 'Task 1' };
+    assert.strictEqual(isDemoTask(canonicalLegacy), true);
+
+    // Any ID with explicit provenance marker is recognized
+    const markedTask = { id: 'custom-id-999', isDemoSeed: true };
+    assert.strictEqual(isDemoTask(markedTask), true);
+  });
+
+  it('18. repeated seed attempts do not overwrite an existing genuine backup with mixed demo data', async () => {
+    const mockStorage = new Map();
+    const originalTasks = [
+      { id: 'real-user-1', title: 'Original Genuine Task', completed: false },
+    ];
+    mockStorage.set(DEMO_STORAGE_TASKS_KEY, JSON.stringify(originalTasks));
+
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+      localStorage: {
+        getItem: (k) => mockStorage.get(k) || null,
+        setItem: (k, v) => mockStorage.set(k, String(v)),
+        removeItem: (k) => mockStorage.delete(k),
+      },
+    };
+
+    try {
+      // 1. Initial seed with genuine user data
+      await applyDemoSeed({ confirmOverwrite: true });
+      const backup1 = mockStorage.get(DEMO_BACKUP_TASKS_KEY);
+      assert.ok(backup1);
+
+      // 2. User adds another task while demo is active
+      const tasksInDemo = JSON.parse(mockStorage.get(DEMO_STORAGE_TASKS_KEY));
+      tasksInDemo.push({ id: 'task-user-added', title: 'User Task Mid-Demo' });
+      mockStorage.set(DEMO_STORAGE_TASKS_KEY, JSON.stringify(tasksInDemo));
+
+      // 3. User clicks seed again (repeated seed)
+      await applyDemoSeed({ confirmOverwrite: true });
+
+      // Crucial: The backup must NOT contain the 12 demo tasks!
+      const backup2Raw = mockStorage.get(DEMO_BACKUP_TASKS_KEY);
+      const backup2 = parseAndValidateBackup(backup2Raw);
+      assert.strictEqual(backup2.valid, true);
+      assert.ok(backup2.tasks.every((t) => !isDemoTask(t)), 'Backup must NEVER contain demo-seeded tasks');
+    } finally {
+      globalThis.window = originalWindow;
+    }
   });
 });

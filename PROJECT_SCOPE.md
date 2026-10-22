@@ -60,7 +60,7 @@ Every capability in VoxPlan is assigned to exactly one of the six authoritative 
 | **RFC 5545 iCalendar (.ics) Export** | `src/scheduler/icalExporter.js` | Standards-compliant `.ics` export strictly bound to accepted schedules; disabled before acceptance. |
 | **Shadow-Only Adaptation Sandbox** | `src/scheduler/shadowSchedulerEvaluator.js`, `AdaptationSandboxCard.jsx` | Candidate weights isolated to shadow simulation; factory weights strictly immutable. |
 | **Sampling Assurance Trust Boundary** | `src/scheduler/activationGateEvaluator.js` | Rejects unauthenticated caller claims; synthetic evidence isolated to simulation mode; production gate fails closed. |
-| **Demo Seeding & Reset Utility** | `src/utils/demoDataSeeder.js`, `scripts/demoLauncher.mjs` | Deterministic 12-task showcase profile seeding with overwrite confirmation, user data backup/restoration, and clean teardown. 10 dedicated tests passing. |
+| **Demo Seeding & Reset Utility** | `src/utils/demoDataSeeder.js`, `scripts/demoLauncher.mjs` | Deterministic 12-task showcase profile seeding with overwrite confirmation, versioned backup envelopes, non-demo task merge preservation, corrupted backup quarantine, atomic rollback, and selective teardown. 18 dedicated tests passing. |
 
 ### Category B: In Scope but Unfinished
 - **None for the 72-hour demonstration milestone**. All core demonstration flows and safety boundaries are implemented and passing.

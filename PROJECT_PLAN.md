@@ -4165,3 +4165,50 @@ Perform an exhaustive final reliability audit of the two-route architecture (`/`
 - **Production Build**: 72 modules transformed cleanly in 711ms (`npm run build`).
 - **Demo Launcher**: Dry run verified (`node scripts/demoLauncher.mjs --dry-run`).
 - **Browser Subagent Walkthrough**: Complete video recording generated and verified (`two_route_audit_1792664103191.webp`).
+
+---
+
+## Demo Data Recovery & Release Readiness Audit Execution Record (October 22, 2026)
+
+### Objective
+Execute an evidence-driven Demo Data Recovery & Release Readiness Audit across demo seeding, local storage backup and recovery, process lifecycle management, cross-route behavior, and Phase 7 safety invariants. Identify concrete failure modes in real storage interactions, implement minimal safe mitigations, add regression tests, and reconcile authoritative project documentation.
+
+### Confirmed Failure Modes & Implemented Hardening
+1. **Accidental Erasure of Genuine Tasks Created During Demo Sessions**:
+   - *Failure Mode*: Previously, restoring a backup on reset wholesale replaced active tasks, silently wiping any genuine user tasks created or edited during an active demo session.
+   - *Mitigation*: Hardened `clearDemoSeed()` in `src/utils/demoDataSeeder.js` to inspect current storage, extract non-demo tasks, and merge them with restored backup records (preserving user edits and appending new genuine tasks).
+2. **Namespace Collision & False-Positive Task Deletion**:
+   - *Failure Mode*: Previously, `isDemoTask()` treated any task whose ID began with `demo-` as demo-owned, creating a collision risk if genuine user tasks had demo-prefixed IDs or titles.
+   - *Mitigation*: Established `CANONICAL_DEMO_TASK_IDS` matching exactly `demo-c-1..8` and `demo-a-1..4` alongside explicit provenance markers (`isDemoSeed`, `isSyntheticData`, `provenanceSource`). Arbitrary user tasks are never treated as demo tasks.
+   - *Persistence Integrity*: Updated `normalizeTask()` in `src/pages/ProductivityApp.jsx` to preserve demo provenance properties and `chunkable` without dropping them during React state hydration.
+3. **Backup Data Corruption & Malformed JSON Handling**:
+   - *Failure Mode*: Previously, malformed JSON in `voxplan_user_tasks_backup` could wipe `voxplan_tasks` or cause unhandled exceptions.
+   - *Mitigation*: Implemented `parseAndValidateBackup()` supporting both legacy raw-array formats and versioned backup envelopes (`schema_version: 1`, `backed_up_at`, `profile_id`, `task_count`). If corrupted data is detected, it is quarantined in `voxplan_quarantine_backup_<timestamp>` for manual recovery, and uncorrupted active tasks are preserved.
+4. **Partial Write Failure & Cross-Store Rollback**:
+   - *Failure Mode*: If IndexedDB event saving threw an exception after `localStorage` tasks were written, state diverged with no rollback.
+   - *Mitigation*: Wrapped `applyDemoSeed()` in a transactional pattern that snapshots pre-seed state in memory. If IndexedDB event persistence fails, `localStorage` tasks and demo seed markers are automatically rolled back.
+5. **Repeated Seed Protection**:
+   - *Failure Mode*: Repeated seed clicks when genuine tasks existed could overwrite an existing backup with mixed demo data.
+   - *Mitigation*: Added guard checking if a valid backup already exists; if so, it is preserved rather than overwritten with demo-seeded records. Added module-level concurrency flag `isDemoActionInProgress` to prevent racing calls.
+6. **Launcher Loopback Probing & Process Tree Termination (`scripts/demoLauncher.mjs`)**:
+   - *Failure Mode*: Probing `localhost` caused a ~20s OS IPv6 fallback timeout on Windows when ports were unoccupied. On shutdown, child process trees spawned via shell could orphan background processes.
+   - *Mitigation*: Updated `probeHttp()` to probe IPv4 loopback (`127.0.0.1`), reducing preflight dry-run inspection from 41s to ~2s. Updated `cleanup()` to execute process-tree termination on Windows (`taskkill /pid <PID> /T /F`) strictly targeting launcher-spawned PIDs.
+
+### Automated Regression Test Coverage (`tests/demo_data_seeder.test.js`)
+Extended test suite from 10 to 18 comprehensive tests:
+- Test 11: Genuine tasks created during active demo are preserved and merged upon reset.
+- Test 12: Malformed backup JSON does not cause destructive wipe of current genuine tasks and is quarantined safely.
+- Test 13: Backward compatibility with both legacy raw task arrays and versioned backup envelopes.
+- Test 14: Confirmation cancellation causes zero mutation to storage or active state.
+- Test 15: Partial write failure during IndexedDB event saving triggers automatic rollback of localStorage.
+- Test 16: Storage quota error during backup creation aborts seeding safely and preserves existing tasks intact.
+- Test 17: Non-demo task with "demo-" in title or custom ID without provenance marker is NOT falsely classified as demo task.
+- Test 18: Repeated seed attempts do not overwrite an existing genuine backup with mixed demo data.
+
+### Verification Results
+- **Frontend Test Suite**: **842 / 842 passing** across 166 suites in 25 test files (`npm test`).
+- **Backend Test Suite**: **27 / 27 passing** across REST and ML endpoints (`python -m pytest backend/tests/`).
+- **Linter**: Zero errors (`npm run lint`).
+- **Production Build**: Built cleanly with Vite in 558ms (`npm run build`).
+- **Scheduler Invariants**: Factory weights remain strictly canonical (`urgencyWeight: 50.0`, `priorityWeight: 100.0`, `unblockWeight: 15.0`, `riskWeight: 25.0`), `isAdaptationUnlocked === false`, `productionApplied === false`. Stage 7.4.4B remains intentionally locked.
+- **Phase 8 Boundaries**: Full WCAG 2.1 AA audit, encrypted export, route code-splitting, PWA service worker, and remote CI remain explicitly deferred post-demo.

@@ -40,7 +40,7 @@ npm run dev
 ```
 
 ### Verified Test Suites & Quality Metrics
-- **Frontend Test Suite**: **834 / 834 passing** across 166 test suites in 25 test files (`npm test`).
+- **Frontend Test Suite**: **842 / 842 passing** across 166 test suites in 25 test files (`npm test`).
 - **Backend Test Suite**: **27 / 27 passing** across REST and ML endpoints (`python -m pytest backend/tests/`).
 - **Linter**: Zero errors (`npm run lint`).
 - **Production Build**: Clean compilation (`npm run build`).
@@ -461,3 +461,22 @@ The behavioral telemetry event schema (`SCHEMA_VERSION = 2`) introduces versione
 - **Measurement Only**: VoxPlan strictly does **not** automatically retrain the scheduler, tune heuristic weights, or alter priority rules from sparse user feedback.
 - **Concept Independence**: Acceptance rate, manual overrides, and execution timeliness are separated into distinct concepts. A high acceptance rate is not proof that the schedule was good; a low override rate is not proof that all tasks were completed on time.
 - **Automated Test Coverage**: 115 automated tests passing across 30 suites in `tests/schedule_feedback.test.js`, `tests/schedule_evaluation.test.js`, `tests/personal_model.test.js`, and `tests/telemetry.test.js`.
+
+---
+
+## Demo Data Recovery & Process Lifecycle Architecture
+
+VoxPlan includes a hardened demonstration data seeding, recovery, and launch system designed for zero accidental data loss:
+
+### 1. Hardened Backup & Recovery Protocol (`src/utils/demoDataSeeder.js`)
+- **Versioned Backup Envelope**: Genuine user tasks are backed up to `voxplan_user_tasks_backup` with schema metadata (`schema_version: 1`, `backed_up_at`, `profile_id`, `task_count`). Both legacy raw-array and versioned envelope formats are supported backward-compatibly.
+- **Non-Demo Merge Preservation**: Any genuine user tasks created or edited during an active demo session are merged with the restored backup on reset rather than wiped.
+- **Strict Identity Namespace**: Demo tasks are identified via explicit provenance markers (`isDemoSeed`, `isSyntheticData`, `provenanceSource`) or canonical demo task identifiers (`CANONICAL_DEMO_TASK_IDS`: `demo-c-1..8`, `demo-a-1..4`). User tasks with "demo-" in the title or custom IDs are never falsely treated as demo records.
+- **Selective Telemetry Cleanup**: Resetting a demo profile invokes `clearDemoEventsByProfile()`, which selectively deletes only synthetic demo events, preserving all genuine user telemetry.
+- **Quarantine on Corrupted Data**: If a backup contains malformed JSON or corrupted structures, the raw payload is quarantined in `voxplan_quarantine_backup_<timestamp>` rather than destructively wiped, and uncorrupted active tasks are preserved.
+- **Atomic Rollback on Partial Write**: If IndexedDB event saving fails during demo seeding, `localStorage` tasks and seed markers are automatically rolled back to their pre-seed state.
+
+### 2. Demo Launch Orchestration (`scripts/demoLauncher.mjs`)
+- **Loopback Probe Optimization**: Probing uses IPv4 loopback (`127.0.0.1`), eliminating Windows OS IPv6 DNS fallback delays (reducing dry-run preflight from ~41s to ~2s).
+- **Honest Health Reporting**: Service status is verified through real HTTP response probes before displaying `[ONLINE]` status in banners.
+- **Process Ownership Isolation**: Child process cleanup on exit (`SIGINT`/`SIGTERM`) terminates only processes spawned by the current launcher invocation using process-tree termination on Windows (`taskkill /pid <PID> /T /F`), never killing pre-existing healthy services or unrelated applications.

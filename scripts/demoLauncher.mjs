@@ -58,14 +58,16 @@ Options:
 
 /**
  * Checks HTTP endpoint and returns body as JSON/text, or null if unreachable.
+ * Uses IPv4 loopback (127.0.0.1) when probing localhost to prevent 20s OS IPv6 fallback delays on Windows.
  */
 function probeHttp(url, timeoutMs = 1500) {
   return new Promise((resolve) => {
     try {
       const parsed = new URL(url);
+      const hostname = parsed.hostname === 'localhost' ? '127.0.0.1' : parsed.hostname;
       const req = http.request(
         {
-          hostname: parsed.hostname,
+          hostname,
           port: parsed.port,
           path: parsed.pathname + parsed.search,
           method: 'GET',
@@ -343,9 +345,14 @@ async function reportAndLaunch() {
     }
   }
 
+  const backendProbe = await probeHttp(BACKEND_HEALTH_URL, 800);
+  const isBackendLive = Boolean(backendProbe && backendProbe.ok);
+  const frontendProbe = await probeHttp(FRONTEND_URL, 800);
+  const isFrontendLive = Boolean(frontendProbe && frontendProbe.ok);
+
   logBanner();
-  console.log(`  Frontend Server:     ${FRONTEND_URL}  [ONLINE]`);
-  console.log(`  Backend ML API:      http://127.0.0.1:${BACKEND_PORT}/   [ONLINE]`);
+  console.log(`  Frontend Server:     ${FRONTEND_URL}  [${isFrontendLive ? 'ONLINE' : 'OFFLINE'}]`);
+  console.log(`  Backend ML API:      http://127.0.0.1:${BACKEND_PORT}/   [${isBackendLive ? 'ONLINE' : 'OFFLINE (Client-side offline mode active)'}]`);
   console.log(`  Model Intelligence:  ${modelInfo}`);
   console.log('------------------------------------------------------------');
   console.log('  Live Demo Entry:     ' + FRONTEND_URL);
@@ -374,19 +381,36 @@ async function reportAndLaunch() {
 
 /**
  * Graceful cleanup of child processes on exit.
+ * Terminates ONLY processes spawned by this specific launcher invocation.
  */
 function cleanup() {
   console.log('\n[Shutdown] Stopping launched background services...');
   if (backendProcess && !backendProcess.killed) {
     try {
-      backendProcess.kill('SIGTERM');
+      if (isWindows && backendProcess.pid) {
+        try {
+          execSync(`taskkill /pid ${backendProcess.pid} /T /F`, { stdio: 'ignore' });
+        } catch {
+          backendProcess.kill('SIGTERM');
+        }
+      } else {
+        backendProcess.kill('SIGTERM');
+      }
     } catch {
       // ignore
     }
   }
   if (frontendProcess && !frontendProcess.killed) {
     try {
-      frontendProcess.kill('SIGTERM');
+      if (isWindows && frontendProcess.pid) {
+        try {
+          execSync(`taskkill /pid ${frontendProcess.pid} /T /F`, { stdio: 'ignore' });
+        } catch {
+          frontendProcess.kill('SIGTERM');
+        }
+      } else {
+        frontendProcess.kill('SIGTERM');
+      }
     } catch {
       // ignore
     }

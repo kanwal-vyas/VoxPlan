@@ -148,7 +148,7 @@ const normalizeTask = (t) => {
     createdAt = new Date().toISOString();
   }
 
-  return {
+  const normalized = {
     id,
     title,
     description,
@@ -160,6 +160,13 @@ const normalizeTask = (t) => {
     dependencies,
     createdAt,
   };
+
+  if (t.isDemoSeed) normalized.isDemoSeed = true;
+  if (t.isSyntheticData) normalized.isSyntheticData = true;
+  if (t.provenanceSource) normalized.provenanceSource = t.provenanceSource;
+  if (t.chunkable !== undefined) normalized.chunkable = Boolean(t.chunkable);
+
+  return normalized;
 };
 
 const loadSavedTasks = () => {
