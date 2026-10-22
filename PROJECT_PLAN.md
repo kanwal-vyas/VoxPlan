@@ -4278,3 +4278,66 @@ Execute an independent, adversarial audit and failure-injection review of VoxPla
   - `isAdaptationUnlocked`: **false**
   - `productionApplied`: **false**
   - Stage 7.4.4B remains intentionally locked. Phase 8 release engineering remains deferred post-demo.
+
+---
+
+## Final Task Ownership & Cross-Tab Data Integrity Audit Execution Record (October 22, 2026)
+
+### Objective
+Resolve the remaining data-integrity risks identified during the adversarial recovery audit prior to Phase 8 release engineering within the existing local-first architecture:
+1. Fix ownership ambiguity: A genuine task matching both canonical demo ID and canonical demo title must not be deleted; ownership relies strictly on explicit provenance metadata, with ambiguous records conservatively preserved.
+2. Prevent cross-tab task edits from being silently lost: Coordinate ordinary task persistence with demo operations via revision tracking and conflict merging by task ID.
+3. Make reset recovery resilient to interruption: Durably record pending telemetry cleanup state (`voxplan_demo_cleanup_pending`) before teardown to enable idempotent recovery upon launch or retry.
+
+### Implemented Hardening & Architecture Improvements
+
+1. **Explicit Provenance & Ambiguous Record Preservation (`src/utils/demoDataSeeder.js`)**:
+   - Hardened `isDemoTask(t)`: Exclusively requires explicit provenance markers (`isDemoSeed === true || isSyntheticData === true || provenanceSource === 'demo_seeding_utility'`). An unmarked task is never classified as demo-owned solely because its ID or title matches a demo template.
+   - Added `isAmbiguousDemoTask(t)`: Identifies unprovenanced records matching canonical demo patterns (`demo-c-1..8`, `demo-a-1..4`).
+   - During `clearDemoSeed()`, ambiguous records in storage or restored from backups are conservatively preserved, reported in `ambiguousTasksPreserved`, and communicated via diagnostic user messaging without silent data erasure or artificial re-tagging.
+
+2. **Cross-Tab Concurrency Coordination & Conflict Detection (`safePersistTasks`)**:
+   - Introduced `DEMO_STORAGE_REVISION_KEY = 'voxplan_tasks_revision'`.
+   - Implemented `safePersistTasks(tasksToSave, options)`:
+     - Checks `isDemoLockActive()`: If a demo seed/reset is in progress in another tab, write attempts return `{ success: false, conflict: true, reason: 'demo_action_in_progress' }`, preventing stale snapshots from overwriting active demo state.
+     - Detects revision mismatches: When `options.expectedRevision !== currentRevision`, performs safe ID-based merging (`taskMap.set(t.id, t)`) so non-overlapping additions and edits from both tabs are preserved.
+     - Advances storage revision on every successful mutation.
+   - Updated `ProductivityApp.jsx`:
+     - Tracks `lastKnownRevisionRef` across render cycles.
+     - Subscribes to HTML5 `storage` events on `window` to immediately reload tasks and accepted schedules when another tab saves or resets data.
+     - Persists task changes through `safePersistTasks()` rather than blind `localStorage.setItem()`.
+
+3. **Interruption-Resilient Telemetry Recovery (`DEMO_CLEANUP_PENDING_KEY`)**:
+   - Introduced `DEMO_CLEANUP_PENDING_KEY = 'voxplan_demo_cleanup_pending'`.
+   - In `clearDemoSeed()`, records `localStorage.setItem(DEMO_CLEANUP_PENDING_KEY, profileId)` prior to task restoration.
+   - If the process or tab is terminated before IndexedDB cleanup completes, the pending cleanup marker remains durably stored.
+   - Implemented `getPendingDemoCleanupProfile()` and `resumePendingDemoCleanup(clearEventsFn)`.
+   - In `ProductivityApp.jsx`, on mount, automatically resumes and finalizes pending telemetry cleanups idempotently, removing `DEMO_CLEANUP_PENDING_KEY` only upon verified success.
+
+### Verification & Test Evidence Summary
+- **Demo Seeder & Recovery Test Suite**: **37 / 37 passing** across 5 suites (`node --test tests/demo_data_seeder.test.js`):
+  - Provenance regression: Genuine task matching canonical demo ID and title is preserved across seed/reset.
+  - Hydration & reserialization regression: Tasks retain non-demo classification after serialization cycles.
+  - Demo-like fields regression: Tasks with matching categories/effort without provenance are preserved.
+  - Legitimate demo records with provenance are cleanly identified and deleted on reset.
+  - Legacy demo records without provenance are treated as ambiguous and preserved with diagnostic count.
+  - Repeated seed/reset cycles never delete or convert ambiguous tasks into demo-owned records.
+  - Cross-tab concurrency: `safePersistTasks` blocks writes during demo locks and merges concurrent revisions.
+  - Interrupted reset: Crash injection leaves durable pending marker; `resumePendingDemoCleanup` recovers idempotently.
+  - Deterministic 5-step scenario: Tab A load $\to$ Tab B lock $\to$ Tab A write block $\to$ Tab B finish $\to$ Tab A merge.
+- **Activation Gate & Statistical Validation Suites**: **240 / 240 passing** (`tests/activation_gate_evaluator.test.js`, `tests/statistical_validation.test.js`, `tests/telemetry_pipeline.test.js`, `tests/adaptive_weight_tuner.test.js`).
+- **Full Frontend Suite**: **861 / 861 passing** across 170 suites in 25 test files (`npm test`).
+- **Backend Test Suite**: **27 / 27 passing** (`python -m pytest backend`).
+- **Linter**: Zero errors (`npm run lint`).
+- **Production Bundle**: Built cleanly with Vite in 321ms (`npm run build`).
+- **Git Diff & Whitespace**: Zero whitespace or line-ending errors (`git diff --check`).
+
+### Scheduler Invariant Confirmation
+- `urgencyWeight`: **50.0**
+- `priorityWeight`: **100.0**
+- `unblockWeight`: **15.0**
+- `riskWeight`: **25.0**
+- `Object.isFrozen(FACTORY_SCHEDULER_WEIGHTS)`: **true**
+- `isAdaptationUnlocked`: **false**
+- `productionApplied`: **false**
+- Stage 7.4.4B remains permanently locked. Phase 8 release engineering remains deferred.

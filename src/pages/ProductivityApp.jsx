@@ -43,7 +43,15 @@ import {
   downloadIcsFile,
 } from '../scheduler/icalExporter';
 import { saveEvent, clearDemoEventsByProfile } from '../telemetry/indexedDbStore';
-import { applyDemoSeed, clearDemoSeed, hasExistingUserData } from '../utils/demoDataSeeder';
+import {
+  applyDemoSeed,
+  clearDemoSeed,
+  hasExistingUserData,
+  safePersistTasks,
+  resumePendingDemoCleanup,
+  DEMO_SEED_KEY,
+  DEMO_STORAGE_REVISION_KEY,
+} from '../utils/demoDataSeeder';
 
 const STORAGE_KEY = 'voxplan_tasks';
 
@@ -216,6 +224,38 @@ export default function ProductivityApp({ onNavigate }) {
 
   const voiceRecognitionRef = useRef(null);
   const speechSynthesisRef = useRef(null);
+  const lastKnownRevisionRef = useRef(
+    typeof window !== 'undefined' && window.localStorage
+      ? window.localStorage.getItem(DEMO_STORAGE_REVISION_KEY) || ''
+      : ''
+  );
+
+  // Resume any pending demo telemetry cleanup from interrupted resets on mount
+  useEffect(() => {
+    resumePendingDemoCleanup((profileId) => clearDemoEventsByProfile(profileId)).then((res) => {
+      if (res && res.cleaned) {
+        telemetry.init();
+      }
+    }).catch((err) => {
+      console.warn('Pending cleanup resume error:', err);
+    });
+  }, []);
+
+  // Cross-tab synchronization via standard storage event
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (!e) return;
+      if (e.key === STORAGE_KEY || e.key === DEMO_SEED_KEY || e.key === DEMO_STORAGE_REVISION_KEY) {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          lastKnownRevisionRef.current = window.localStorage.getItem(DEMO_STORAGE_REVISION_KEY) || '';
+        }
+        setTasks(loadSavedTasks());
+        setAcceptedSchedule(loadAcceptedSchedule());
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
   // Initialize persistent telemetry storage on mount
   useEffect(() => {
@@ -398,12 +438,22 @@ export default function ProductivityApp({ onNavigate }) {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Persist tasks to localStorage whenever tasks change
+  // Persist tasks to localStorage whenever tasks change with cross-tab conflict detection
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+      const res = safePersistTasks(tasks, {
+        expectedRevision: lastKnownRevisionRef.current,
+      });
+      if (res.success) {
+        lastKnownRevisionRef.current = res.revision;
+        if (res.conflict && Array.isArray(res.tasks) && res.tasks.length !== tasks.length) {
+          setTasks(res.tasks);
+        }
+      } else if (res.conflict && res.reason === 'demo_action_in_progress') {
+        console.warn('Task save deferred: demo action in progress in another tab.');
+      }
     } catch (err) {
-      console.error('Failed to persist tasks to localStorage:', err);
+      console.error('Failed to persist tasks to storage:', err);
     }
   }, [tasks]);
 

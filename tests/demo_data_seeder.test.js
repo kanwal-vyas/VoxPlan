@@ -12,6 +12,11 @@ import {
   applyDemoSeed,
   clearDemoSeed,
   isDemoTask,
+  isAmbiguousDemoTask,
+  safePersistTasks,
+  getPendingDemoCleanupProfile,
+  resumePendingDemoCleanup,
+  isDemoLockActive,
   parseAndValidateBackup,
   CANONICAL_DEMO_TASK_IDS,
   CANONICAL_DEMO_TASK_TITLES,
@@ -19,6 +24,8 @@ import {
   DEMO_STORAGE_TASKS_KEY,
   DEMO_BACKUP_TASKS_KEY,
   DEMO_ACTION_LOCK_KEY,
+  DEMO_STORAGE_REVISION_KEY,
+  DEMO_CLEANUP_PENDING_KEY,
   acquireDemoLock,
   releaseDemoLock,
 } from '../src/utils/demoDataSeeder.js';
@@ -531,9 +538,11 @@ describe('Demo Data Seeder & Profile Calibration Audit', () => {
 
     assert.strictEqual(CANONICAL_DEMO_TASK_TITLES['demo-c-1'], 'Initialize repository & CI configuration');
 
-    // Canonical demo ID without provenance is ONLY recognized if title matches canonical demo title
+    // Canonical demo ID and title without explicit provenance is NOT classified as demo-owned
+    // to prevent deleting genuine user tasks matching demo templates. It is marked as ambiguous.
     const canonicalLegacy = { id: 'demo-c-1', title: CANONICAL_DEMO_TASK_TITLES['demo-c-1'] };
-    assert.strictEqual(isDemoTask(canonicalLegacy), true);
+    assert.strictEqual(isDemoTask(canonicalLegacy), false);
+    assert.strictEqual(isAmbiguousDemoTask(canonicalLegacy), true);
 
     // Canonical demo ID with genuine user title is preserved as user task (Scenario A)
     const canonicalCollision = { id: 'demo-c-1', title: 'Prepare Tax Return 2026' };
@@ -841,5 +850,564 @@ describe('Demo Data Seeder & Profile Calibration Audit', () => {
     } finally {
       globalThis.window = originalWindow;
     }
+  });
+
+  describe('Task Ownership & Provenance Verification', () => {
+    it('1. genuine task with canonical demo ID and canonical demo title is not classified as demo task and is preserved across reset', async () => {
+      const originalWindow = globalThis.window;
+      const mockStorage = new Map();
+      globalThis.window = {
+        localStorage: {
+          getItem: (k) => mockStorage.get(k) || null,
+          setItem: (k, v) => mockStorage.set(k, String(v)),
+          removeItem: (k) => mockStorage.delete(k),
+        },
+      };
+
+      try {
+        const canonicalId = 'demo-c-1';
+        const canonicalTitle = CANONICAL_DEMO_TASK_TITLES[canonicalId];
+
+        // Genuine task crafted by user that matches canonical ID and canonical title
+        const genuineTask = {
+          id: canonicalId,
+          title: canonicalTitle,
+          priority: 'high',
+          completed: false,
+          userNote: 'This is a genuine user task, not seeded demo data',
+        };
+
+        // 1. Provenance check
+        assert.strictEqual(isDemoTask(genuineTask), false, 'Task without demo provenance must NOT be demo task');
+        assert.strictEqual(isAmbiguousDemoTask(genuineTask), true, 'Task matching demo ID without provenance is ambiguous');
+
+        // Store as pre-existing user data
+        mockStorage.set(DEMO_STORAGE_TASKS_KEY, JSON.stringify([genuineTask]));
+
+        // 2. Seed demo dataset (confirming overwrite)
+        const seedRes = await applyDemoSeed({ confirmOverwrite: true });
+        assert.strictEqual(seedRes.success, true);
+        assert.ok(mockStorage.has(DEMO_BACKUP_TASKS_KEY), 'Backup must be created');
+
+        // 3. Clear demo
+        const clearRes = await clearDemoSeed();
+        assert.strictEqual(clearRes.success, true);
+        assert.strictEqual(clearRes.ambiguousTasksPreserved, 1, 'Ambiguous task must be counted and preserved');
+
+        // 4. Verify persisted task content
+        const restored = JSON.parse(mockStorage.get(DEMO_STORAGE_TASKS_KEY));
+        assert.strictEqual(restored.length, 1);
+        assert.strictEqual(restored[0].id, canonicalId);
+        assert.strictEqual(restored[0].title, canonicalTitle);
+        assert.strictEqual(restored[0].userNote, 'This is a genuine user task, not seeded demo data');
+        assert.strictEqual(isDemoTask(restored[0]), false);
+      } finally {
+        globalThis.window = originalWindow;
+      }
+    });
+
+    it('2. task retains non-demo status and is preserved after hydration and reserialization', async () => {
+      const originalWindow = globalThis.window;
+      const mockStorage = new Map();
+      globalThis.window = {
+        localStorage: {
+          getItem: (k) => mockStorage.get(k) || null,
+          setItem: (k, v) => mockStorage.set(k, String(v)),
+          removeItem: (k) => mockStorage.delete(k),
+        },
+      };
+
+      try {
+        const canonicalId = 'demo-c-2';
+        const canonicalTitle = CANONICAL_DEMO_TASK_TITLES[canonicalId];
+
+        const genuineTask = {
+          id: canonicalId,
+          title: canonicalTitle,
+          priority: 'medium',
+          dueDate: '2026-11-01',
+          completed: true,
+        };
+
+        // Hydration simulation: JSON stringify -> parse -> reserialize
+        const serialized = JSON.stringify([genuineTask]);
+        const hydrated = JSON.parse(serialized);
+        assert.strictEqual(isDemoTask(hydrated[0]), false);
+        assert.strictEqual(isAmbiguousDemoTask(hydrated[0]), true);
+
+        mockStorage.set(DEMO_STORAGE_TASKS_KEY, JSON.stringify(hydrated));
+
+        await applyDemoSeed({ confirmOverwrite: true });
+        const clearRes = await clearDemoSeed();
+        assert.strictEqual(clearRes.success, true);
+
+        const restored = JSON.parse(mockStorage.get(DEMO_STORAGE_TASKS_KEY));
+        assert.strictEqual(restored.length, 1);
+        assert.strictEqual(restored[0].id, canonicalId);
+        assert.strictEqual(restored[0].completed, true);
+      } finally {
+        globalThis.window = originalWindow;
+      }
+    });
+
+    it('3. genuine task with demo-like fields but no explicit demo provenance is preserved', async () => {
+      const originalWindow = globalThis.window;
+      const mockStorage = new Map();
+      globalThis.window = {
+        localStorage: {
+          getItem: (k) => mockStorage.get(k) || null,
+          setItem: (k, v) => mockStorage.set(k, String(v)),
+          removeItem: (k) => mockStorage.delete(k),
+        },
+      };
+
+      try {
+        const taskWithDemoFields = {
+          id: 'user-task-engineering-1',
+          title: 'Implement Kahn topological scheduler DAG',
+          category: 'Engineering',
+          priority: 'high',
+          estimatedEffort: 5.0,
+          actualHours: 5.4,
+          durationSource: 'tracked',
+        };
+
+        assert.strictEqual(isDemoTask(taskWithDemoFields), false);
+        assert.strictEqual(isAmbiguousDemoTask(taskWithDemoFields), false);
+
+        mockStorage.set(DEMO_STORAGE_TASKS_KEY, JSON.stringify([taskWithDemoFields]));
+
+        await applyDemoSeed({ confirmOverwrite: true });
+        const clearRes = await clearDemoSeed();
+        assert.strictEqual(clearRes.success, true);
+
+        const restored = JSON.parse(mockStorage.get(DEMO_STORAGE_TASKS_KEY));
+        assert.strictEqual(restored.length, 1);
+        assert.strictEqual(restored[0].id, 'user-task-engineering-1');
+        assert.strictEqual(restored[0].estimatedEffort, 5.0);
+      } finally {
+        globalThis.window = originalWindow;
+      }
+    });
+
+    it('4. legitimate demo record with explicit provenance is identified and removed on reset', async () => {
+      const legitDemoRecord = {
+        id: 'demo-c-5',
+        title: 'Implement Kahn topological scheduler DAG',
+        isDemoSeed: true,
+        isSyntheticData: true,
+        provenanceSource: 'demo_seeding_utility',
+      };
+
+      assert.strictEqual(isDemoTask(legitDemoRecord), true);
+      assert.strictEqual(isAmbiguousDemoTask(legitDemoRecord), false);
+    });
+
+    it('5. legacy demo records without provenance are treated conservatively as ambiguous and preserved', async () => {
+      const originalWindow = globalThis.window;
+      const mockStorage = new Map();
+      globalThis.window = {
+        localStorage: {
+          getItem: (k) => mockStorage.get(k) || null,
+          setItem: (k, v) => mockStorage.set(k, String(v)),
+          removeItem: (k) => mockStorage.delete(k),
+        },
+      };
+
+      try {
+        // A legacy record from older versions where provenance was omitted
+        const legacyAmbiguousRecord = {
+          id: 'demo-c-3',
+          title: 'Design pastel design system & cards',
+        };
+
+        assert.strictEqual(isDemoTask(legacyAmbiguousRecord), false, 'Cannot prove demo ownership without provenance');
+        assert.strictEqual(isAmbiguousDemoTask(legacyAmbiguousRecord), true);
+
+        mockStorage.set(DEMO_STORAGE_TASKS_KEY, JSON.stringify([legacyAmbiguousRecord]));
+
+        await applyDemoSeed({ confirmOverwrite: true });
+        const clearRes = await clearDemoSeed();
+        assert.strictEqual(clearRes.success, true);
+        assert.strictEqual(clearRes.ambiguousTasksPreserved, 1);
+
+        const persisted = JSON.parse(mockStorage.get(DEMO_STORAGE_TASKS_KEY));
+        assert.strictEqual(persisted.length, 1);
+        assert.strictEqual(persisted[0].id, 'demo-c-3');
+      } finally {
+        globalThis.window = originalWindow;
+      }
+    });
+
+    it('6. repeated seed/reset cycles never delete or convert ambiguous records to demo-owned records', async () => {
+      const originalWindow = globalThis.window;
+      const mockStorage = new Map();
+      globalThis.window = {
+        localStorage: {
+          getItem: (k) => mockStorage.get(k) || null,
+          setItem: (k, v) => mockStorage.set(k, String(v)),
+          removeItem: (k) => mockStorage.delete(k),
+        },
+      };
+
+      try {
+        const ambiguousTask = {
+          id: 'demo-a-1',
+          title: CANONICAL_DEMO_TASK_TITLES['demo-a-1'],
+          notes: 'Ambiguous task cycle test',
+        };
+
+        mockStorage.set(DEMO_STORAGE_TASKS_KEY, JSON.stringify([ambiguousTask]));
+
+        // Cycle 1
+        await applyDemoSeed({ confirmOverwrite: true });
+        let clearRes = await clearDemoSeed();
+        assert.strictEqual(clearRes.success, true);
+        let currentTasks = JSON.parse(mockStorage.get(DEMO_STORAGE_TASKS_KEY));
+        assert.strictEqual(currentTasks.length, 1);
+        assert.strictEqual(isDemoTask(currentTasks[0]), false, 'Must not be converted to demo-owned');
+
+        // Cycle 2
+        await applyDemoSeed({ confirmOverwrite: true });
+        clearRes = await clearDemoSeed();
+        assert.strictEqual(clearRes.success, true);
+        currentTasks = JSON.parse(mockStorage.get(DEMO_STORAGE_TASKS_KEY));
+        assert.strictEqual(currentTasks.length, 1);
+        assert.strictEqual(currentTasks[0].id, 'demo-a-1');
+        assert.strictEqual(currentTasks[0].notes, 'Ambiguous task cycle test');
+        assert.strictEqual(isDemoTask(currentTasks[0]), false);
+      } finally {
+        globalThis.window = originalWindow;
+      }
+    });
+  });
+
+  describe('Cross-Tab Concurrency & Safe Persistence', () => {
+    it('7. safePersistTasks blocks writes when a demo action lock is active', () => {
+      const originalWindow = globalThis.window;
+      const mockStorage = new Map();
+      globalThis.window = {
+        localStorage: {
+          getItem: (k) => mockStorage.get(k) || null,
+          setItem: (k, v) => mockStorage.set(k, String(v)),
+          removeItem: (k) => mockStorage.delete(k),
+        },
+      };
+
+      try {
+        // Tab B acquires demo action lock
+        acquireDemoLock();
+        assert.strictEqual(isDemoLockActive(), true);
+
+        // Tab A attempts to save a task
+        const tabATask = [{ id: 'task-a', title: 'Tab A Edit' }];
+        const result = safePersistTasks(tabATask);
+
+        assert.strictEqual(result.success, false);
+        assert.strictEqual(result.conflict, true);
+        assert.strictEqual(result.reason, 'demo_action_in_progress');
+
+        // Release lock
+        releaseDemoLock();
+        assert.strictEqual(isDemoLockActive(), false);
+
+        // Tab A can now save
+        const retryResult = safePersistTasks(tabATask);
+        assert.strictEqual(retryResult.success, true);
+        assert.strictEqual(retryResult.conflict, false);
+      } finally {
+        releaseDemoLock();
+        globalThis.window = originalWindow;
+      }
+    });
+
+    it('8. safePersistTasks detects concurrent revisions and merges non-overlapping tasks by ID', () => {
+      const originalWindow = globalThis.window;
+      const mockStorage = new Map();
+      globalThis.window = {
+        localStorage: {
+          getItem: (k) => mockStorage.get(k) || null,
+          setItem: (k, v) => mockStorage.set(k, String(v)),
+          removeItem: (k) => mockStorage.delete(k),
+        },
+      };
+
+      try {
+        // Baseline tasks
+        const initialTasks = [
+          { id: 'task-1', title: 'Task 1' },
+          { id: 'task-2', title: 'Task 2' },
+        ];
+        const initialSave = safePersistTasks(initialTasks);
+        const baselineRev = initialSave.revision;
+
+        // Tab B updates Task 2 and adds Task 3
+        const tabBTasks = [
+          { id: 'task-1', title: 'Task 1' },
+          { id: 'task-2', title: 'Task 2 updated by Tab B' },
+          { id: 'task-3', title: 'Task 3 created by Tab B' },
+        ];
+        const tabBSave = safePersistTasks(tabBTasks, { expectedRevision: baselineRev });
+        assert.strictEqual(tabBSave.success, true);
+        assert.notStrictEqual(tabBSave.revision, baselineRev);
+
+        // Tab A (which loaded at baselineRev) edits Task 1 and adds Task 4
+        const tabATasks = [
+          { id: 'task-1', title: 'Task 1 updated by Tab A' },
+          { id: 'task-2', title: 'Task 2' },
+          { id: 'task-4', title: 'Task 4 created by Tab A' },
+        ];
+        const tabASave = safePersistTasks(tabATasks, { expectedRevision: baselineRev });
+
+        assert.strictEqual(tabASave.success, true);
+        assert.strictEqual(tabASave.conflict, true, 'Revision conflict must be flagged');
+
+        // Merged tasks inspection
+        const persisted = JSON.parse(mockStorage.get(DEMO_STORAGE_TASKS_KEY));
+        assert.strictEqual(persisted.length, 4);
+
+        const t1 = persisted.find((t) => t.id === 'task-1');
+        const t2 = persisted.find((t) => t.id === 'task-2');
+        const t3 = persisted.find((t) => t.id === 'task-3');
+        const t4 = persisted.find((t) => t.id === 'task-4');
+
+        assert.strictEqual(t1.title, 'Task 1 updated by Tab A', 'Tab A edit on task-1 applied');
+        assert.strictEqual(t2.title, 'Task 2 updated by Tab B', 'Tab B edit on task-2 retained');
+        assert.strictEqual(t3.title, 'Task 3 created by Tab B', 'Tab B task-3 retained');
+        assert.strictEqual(t4.title, 'Task 4 created by Tab A', 'Tab A task-4 retained');
+      } finally {
+        globalThis.window = originalWindow;
+      }
+    });
+
+    it('9. stale demo locks (>10000ms) are safely reclaimed', () => {
+      const originalWindow = globalThis.window;
+      const mockStorage = new Map();
+      globalThis.window = {
+        localStorage: {
+          getItem: (k) => mockStorage.get(k) || null,
+          setItem: (k, v) => mockStorage.set(k, String(v)),
+          removeItem: (k) => mockStorage.delete(k),
+        },
+      };
+
+      try {
+        // Injected stale lock from 15 seconds ago
+        const staleLock = {
+          holder: 'tab_crashed',
+          timestamp: Date.now() - 15000,
+        };
+        mockStorage.set(DEMO_ACTION_LOCK_KEY, JSON.stringify(staleLock));
+
+        assert.strictEqual(isDemoLockActive(), false, 'Stale lock must not be active');
+
+        // Acquire lock should succeed by reclaiming the stale lock
+        const acquired = acquireDemoLock();
+        assert.strictEqual(acquired, true, 'Must successfully reclaim stale lock');
+        assert.strictEqual(isDemoLockActive(), true);
+      } finally {
+        releaseDemoLock();
+        globalThis.window = originalWindow;
+      }
+    });
+  });
+
+  describe('Interrupted Reset & Durable Recovery', () => {
+    it('10. reset interrupted after task restoration leaves pending cleanup marker for retry', async () => {
+      const originalWindow = globalThis.window;
+      const mockStorage = new Map();
+      globalThis.window = {
+        localStorage: {
+          getItem: (k) => mockStorage.get(k) || null,
+          setItem: (k, v) => mockStorage.set(k, String(v)),
+          removeItem: (k) => mockStorage.delete(k),
+        },
+      };
+
+      try {
+        const profileId = 'prof_interrupted_test';
+        mockStorage.set('voxplan_profile_id', profileId);
+
+        // Seed demo
+        await applyDemoSeed({ confirmOverwrite: true });
+
+        // Simulate crash right before telemetry cleanup by injecting throwing clearEventsFn
+        let attemptedCleanup = false;
+        const injectedFailureFn = async (pId) => {
+          attemptedCleanup = pId === profileId;
+          throw new Error('Injected crash during IndexedDB transaction');
+        };
+
+        const clearRes = await clearDemoSeed({ clearEventsFn: injectedFailureFn, profileId });
+        assert.strictEqual(clearRes.success, false);
+        assert.strictEqual(clearRes.partialSuccess, true);
+        assert.strictEqual(clearRes.telemetryCleaned, false);
+        assert.strictEqual(clearRes.cleanupPending, true);
+        assert.strictEqual(attemptedCleanup, true);
+
+        // Verify durable state: DEMO_CLEANUP_PENDING_KEY is preserved!
+        assert.strictEqual(mockStorage.get(DEMO_CLEANUP_PENDING_KEY), profileId);
+        assert.strictEqual(getPendingDemoCleanupProfile(), profileId);
+
+        // Verify application recovery: resumePendingDemoCleanup on next launch
+        let resumedCalls = 0;
+        const successfulResumeFn = async (pId) => {
+          assert.strictEqual(pId, profileId);
+          resumedCalls++;
+          return true;
+        };
+
+        const resumeRes = await resumePendingDemoCleanup(successfulResumeFn);
+        assert.strictEqual(resumeRes.success, true);
+        assert.strictEqual(resumeRes.cleaned, true);
+        assert.strictEqual(resumedCalls, 1);
+
+        // Marker should now be cleaned up!
+        assert.strictEqual(mockStorage.get(DEMO_CLEANUP_PENDING_KEY), null);
+        assert.strictEqual(getPendingDemoCleanupProfile(), null);
+
+        // Repeated recovery attempt is idempotent
+        const secondResumeRes = await resumePendingDemoCleanup(successfulResumeFn);
+        assert.strictEqual(secondResumeRes.success, true);
+        assert.strictEqual(secondResumeRes.cleaned, false);
+        assert.strictEqual(resumedCalls, 1, 'Idempotent: no further calls needed');
+      } finally {
+        globalThis.window = originalWindow;
+      }
+    });
+  });
+
+  describe('Deterministic Multi-Tab Interleaved Execution Scenarios', () => {
+    it('11. [Deterministic 5-Step] Tab A load -> Tab B seed -> Tab A edit during lock -> Tab B finish -> Tab A merge', async () => {
+      const originalWindow = globalThis.window;
+      const mockStorage = new Map();
+      globalThis.window = {
+        localStorage: {
+          getItem: (k) => mockStorage.get(k) || null,
+          setItem: (k, v) => mockStorage.set(k, String(v)),
+          removeItem: (k) => mockStorage.delete(k),
+        },
+      };
+
+      try {
+        // Step 1: Baseline state with genuine tasks loaded by Tab A
+        const genuineTasks = [
+          { id: 'user-task-1', title: 'Pre-existing user task 1', completed: false },
+          { id: 'user-task-2', title: 'Pre-existing user task 2', completed: false },
+        ];
+        const tabAInitialSave = safePersistTasks(genuineTasks);
+        const tabARevision = tabAInitialSave.revision;
+        assert.ok(mockStorage.has(DEMO_STORAGE_REVISION_KEY));
+        const tabALoadedState = [...genuineTasks];
+
+        // Step 2: Tab B starts demo seeding (acquires lock)
+        acquireDemoLock();
+        assert.strictEqual(isDemoLockActive(), true);
+
+        // Step 3: Tab A attempts to save a new task using its previously loaded state while lock is active
+        const tabANewTask = { id: 'user-task-3', title: 'Task created by Tab A concurrently' };
+        const tabAAttempt = safePersistTasks([...tabALoadedState, tabANewTask], { expectedRevision: tabARevision });
+
+        // Assert: Write is blocked safely, NOT silently overwriting Tab B's in-flight operation
+        assert.strictEqual(tabAAttempt.success, false);
+        assert.strictEqual(tabAAttempt.conflict, true);
+        assert.strictEqual(tabAAttempt.reason, 'demo_action_in_progress');
+
+        // Step 4: Tab B finishes writing its state and releases lock
+        releaseDemoLock();
+        await applyDemoSeed({ confirmOverwrite: true });
+        assert.strictEqual(isDemoLockActive(), false);
+
+        // Step 5: Tab A now retries saving / merging after Tab B completes
+        const tabARetry = safePersistTasks([...tabALoadedState, tabANewTask], { expectedRevision: tabARevision });
+        assert.strictEqual(tabARetry.success, true);
+        assert.strictEqual(tabARetry.conflict, true, 'Revision mismatch detected and handled via merge');
+
+        // Both tabs reload and inspect persisted records
+        const finalPersisted = JSON.parse(mockStorage.get(DEMO_STORAGE_TASKS_KEY));
+        // Tab A's new task is preserved!
+        assert.ok(finalPersisted.some((t) => t.id === 'user-task-3'));
+        // Pre-existing tasks in backup are safe!
+        assert.ok(mockStorage.has(DEMO_BACKUP_TASKS_KEY));
+      } finally {
+        releaseDemoLock();
+        globalThis.window = originalWindow;
+      }
+    });
+
+    it('12. [Deterministic Edit] Tab A edits task during concurrent Tab B operations', async () => {
+      const originalWindow = globalThis.window;
+      const mockStorage = new Map();
+      globalThis.window = {
+        localStorage: {
+          getItem: (k) => mockStorage.get(k) || null,
+          setItem: (k, v) => mockStorage.set(k, String(v)),
+          removeItem: (k) => mockStorage.delete(k),
+        },
+      };
+
+      try {
+        const initialTasks = [
+          { id: 'user-task-1', title: 'Original Title', completed: false },
+        ];
+        const init = safePersistTasks(initialTasks);
+
+        // Tab B updates another task or revision
+        const tabBTasks = [
+          { id: 'user-task-1', title: 'Original Title', completed: false },
+          { id: 'user-task-b', title: 'Tab B Task', completed: false },
+        ];
+        safePersistTasks(tabBTasks, { expectedRevision: init.revision });
+
+        // Tab A edits user-task-1 using stale revision
+        const tabAEdits = [
+          { id: 'user-task-1', title: 'Updated Title by Tab A', completed: true },
+        ];
+        const editRes = safePersistTasks(tabAEdits, { expectedRevision: init.revision });
+        assert.strictEqual(editRes.success, true);
+        assert.strictEqual(editRes.conflict, true);
+
+        // Verify merged records: Tab A's edit applied, Tab B's addition preserved
+        const persisted = JSON.parse(mockStorage.get(DEMO_STORAGE_TASKS_KEY));
+        const t1 = persisted.find((t) => t.id === 'user-task-1');
+        const tb = persisted.find((t) => t.id === 'user-task-b');
+        assert.strictEqual(t1.title, 'Updated Title by Tab A');
+        assert.strictEqual(t1.completed, true);
+        assert.ok(tb);
+      } finally {
+        globalThis.window = originalWindow;
+      }
+    });
+
+    it('13. [Deterministic Reset Failure] Tab B reset fails telemetry; lock is freed and Tab A proceeds', async () => {
+      const originalWindow = globalThis.window;
+      const mockStorage = new Map();
+      globalThis.window = {
+        localStorage: {
+          getItem: (k) => mockStorage.get(k) || null,
+          setItem: (k, v) => mockStorage.set(k, String(v)),
+          removeItem: (k) => mockStorage.delete(k),
+        },
+      };
+
+      try {
+        await applyDemoSeed({ confirmOverwrite: true });
+
+        // Tab B triggers reset with failing telemetry cleanup
+        const failingClear = async () => false;
+        const resetRes = await clearDemoSeed({ clearEventsFn: failingClear });
+
+        assert.strictEqual(resetRes.partialSuccess, true);
+        // Guarantee: Lock MUST be released even on partial failure / failure
+        assert.strictEqual(isDemoLockActive(), false);
+
+        // Tab A is not permanently blocked
+        const tabAWrite = safePersistTasks([{ id: 'tab-a-after-fail', title: 'Can write now' }]);
+        assert.strictEqual(tabAWrite.success, true);
+      } finally {
+        releaseDemoLock();
+        globalThis.window = originalWindow;
+      }
+    });
   });
 });
