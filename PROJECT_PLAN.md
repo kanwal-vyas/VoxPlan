@@ -4441,3 +4441,114 @@ Resolve the remaining data-integrity risks identified during the adversarial rec
 - Automated scans and synthetic regression tests verify technical accessibility hooks, but do not constitute formal third-party certification.
 - Manual assistive-technology verification using screen readers (JAWS, NVDA, Apple VoiceOver, ORCA) across diverse platforms remains documented as an ongoing verification task.
 - Encrypted backups, PWA service workers, code-splitting, and cloud telemetry remain strictly out of scope.
+
+---
+
+### Phase 8, Stage 8.2: Encrypted Local Backups & Verified Recovery (Executed: 2026-10-22)
+
+**Baseline Commit**: `a646947e6ee37f14e1b2f2ecdac7e1a3aaef2442`
+**Execution Status**: **IMPLEMENTED & VERIFIED** (Complete AES-GCM encrypted export, domain validation, staged transactional restore, rollback safeguards, and cross-tab concurrency prevention).
+
+#### 1. Threat Model & Security Policy
+- **Threats Mitigated**:
+  - Offline confidentiality: Encrypted using authenticated AES-GCM (256-bit key) with PBKDF2-HMAC-SHA256 key derivation (600,000 iterations default, bounded between 100,000 and 1,000,000).
+  - Ciphertext/Tag tampering: AES-GCM 128-bit authentication tag verification ensures any bit manipulation in ciphertext or tag immediately triggers an unforgeable decryption failure.
+  - Metadata tampering: Unencrypted envelope header parameters (`format`, `version`, `app_version`, `kdf_iterations`, `created_at`) are cryptographically bound via Authenticated Additional Data (AAD). Modifying envelope parameters invalidates the tag.
+  - Resource exhaustion / DoS: Strict 10 MB maximum payload/file size enforcement before memory allocation or key derivation; bounded KDF iterations.
+  - Incompatible / Malformed versions: Strict version checking (`format === 'voxplan_encrypted_backup'`, envelope version `1`, schema version `1`).
+  - Concurrent data corruption: Preflight check matches storage revision (`voxplan_tasks_revision`) against preview state; active demo lock aborts restore.
+  - Partial write failure: Atomic-style staged restore protocol takes pre-restore snapshot (`voxplan_restore_pre_snapshot`), sets in-progress recovery marker, and rolls back upon any write error.
+- **What Encryption Does Not Protect Against**:
+  - Browser-origin compromises (malware, keyloggers, or malicious browser extensions running with DOM/storage access).
+  - Forgotten passwords: No backdoor, master key, or recovery service exists.
+
+#### 2. Backup Data Inventory & Scope
+- **Included in Backup**:
+  - Genuine active and completed tasks (titles, priorities, categories, due dates, estimates, completion states, dependency links, tracked durations).
+  - Accepted schedule snapshot (`voxplan_accepted_schedule`).
+  - Time-block settings (`voxplan_time_block_settings`: working hours, focus windows, meeting blackouts).
+  - User preferences (`voxplan_speech_output_enabled`, `voxplan_preference_collection_enabled`).
+  - Genuine behavioral telemetry events (`telemetry_events` in IndexedDB for the active profile).
+  - Focused timer sessions (`timer_sessions` in IndexedDB).
+- **Intentionally Excluded**:
+  - In-flight stopwatch/timer state (`voxplan_active_timer`): Transient, non-resumable across export/restore intervals.
+  - Operational demo markers (`voxplan_demo_seed_active`, `voxplan_demo_action_lock`, `voxplan_demo_cleanup_pending`): Internal state.
+  - Pre-seed demo rollback backup (`voxplan_user_tasks_backup`): Internal seeder rollback envelope.
+  - Adaptive scheduler candidate snapshots (`voxplan_adaptive_config_snapshots_v1`): Shadow diagnostics only; factory baseline is immutable.
+  - Synthetic demo events (`isDemoSeed` / `isSyntheticData`): Filtered out from telemetry exports.
+- **Regenerated on Restore**:
+  - Storage revision marker (`voxplan_tasks_revision`): Fresh timestamped revision emitted to synchronize all other open tabs via standard HTML5 `storage` event.
+
+#### 3. Cryptographic Envelope & Architecture
+- **Format**: `voxplan_encrypted_backup`, Version 1.
+- **Cipher**: AES-GCM (256-bit key) with 128-bit authentication tag.
+- **KDF**: PBKDF2 with SHA-256 (`PBKDF2-HMAC-SHA256`).
+- **Salt**: 16 bytes (128 bits) cryptographically secure random (`crypto.getRandomValues`) per backup.
+- **IV / Nonce**: 12 bytes (96 bits) cryptographically secure random per backup, never reused.
+- **Iterations**: 600,000 iterations default (bounded [100000, 1000000]).
+- **AAD**: Canonical JSON binding format, version, app version, KDF algorithm, and creation timestamp.
+
+#### 4. Staged Restore & Rollback Protocol
+1. **Defensive Pre-Decryption**: Validates file size $\le 10$ MB, envelope format, version, and KDF bounds before expensive crypto operations.
+2. **Authenticated Decryption**: Verifies password and authenticates tag + AAD. Failed auth immediately stops without touching storage.
+3. **Domain & Schema Validation**:
+   - Validates JSON structure against Schema Version 1.
+   - Validates individual task fields, normalizes legacy formats, enforces unique task IDs.
+   - Scans dependencies: Broken references (dependencies on non-existent tasks) are identified and displayed as actionable notices.
+4. **Restore Preview & Consent**: Summarizes task counts (active vs completed), schedule presence, telemetry counts, and impact on current workspace.
+5. **Preflight Checks**:
+   - Re-checks storage revision against preview snapshot (`currentRevision === expectedRevision`).
+   - Verifies demo action lock is inactive (`!isDemoLockActive()`).
+6. **Staged Execution & Rollback**:
+   - Writes `voxplan_restore_in_progress` and `voxplan_restore_pre_snapshot` to `localStorage`.
+   - Writes restored tasks, schedule, time-block availability, and preferences to `localStorage`.
+   - Verifies read-back from storage. If read-back fails or throws, automatically rolls back from `voxplan_restore_pre_snapshot`.
+   - Clears genuine telemetry events for profile and writes restored events/sessions to IndexedDB.
+   - Cleans up recovery markers upon verified completion and advances revision marker to trigger cross-tab re-render.
+7. **Startup Interruption Recovery**: On mount, `checkAndRecoverInterruptedRestore()` detects aborted writes and restores the pre-restore snapshot.
+
+#### 5. Verification & Test Evidence Summary
+- **Backup & Recovery Test Suite**: **21 / 21 passing** across 6 suites in 225ms (`node --test tests/backup_and_recovery.test.js`):
+  - 1.1 Round-trip authenticated encryption/decryption with plaintext verification.
+  - 1.2 Wrong password rejection without leaking internal errors.
+  - 1.3 Modified ciphertext rejection (tag mismatch).
+  - 1.4 Modified envelope metadata rejection (AAD mismatch).
+  - 1.5 Salt (16 bytes) and IV (12 bytes) length enforcement.
+  - 1.6 KDF iteration bounds [100000, 1000000] enforcement.
+  - 1.7 Payload size limit (10 MB) enforcement.
+  - 2.1 Valid envelope acceptance.
+  - 2.2 Unsupported format and version rejection.
+  - 2.3 Duplicate task ID detection and rejection.
+  - 2.4 Task field normalization and broken dependency warnings.
+  - 2.5 Maximum task count safety limit enforcement.
+  - 3.1 Concurrent modification rejection via revision mismatch.
+  - 3.2 Demo action lock preflight blocking.
+  - 3.3 Full verified restore with read-back verification and recovery cleanup.
+  - 3.4 Automatic storage rollback upon write failure.
+  - 3.5 Interrupted restore startup detection and snapshot recovery.
+  - 4.1 End-to-end export $\to$ decrypt $\to$ preview pipeline.
+  - 4.2 Ambiguous task preservation during backup export without misclassifying as demo data.
+  - 5.1 Factory scheduler weights immutability confirmation.
+  - 5.2 Production activation gate fails closed and adaptation locked.
+- **Accessibility Regression Suite**: **18 / 18 passing** (`node --test tests/accessibility.test.js`).
+- **Demo Data Seeder Suite**: **37 / 37 passing** (`node --test tests/demo_data_seeder.test.js`).
+- **Full Frontend Suite**: **900 / 900 passing** across 183 suites in 27 test files (`npm test`).
+- **Backend Test Suite**: **27 / 27 passing** (`python -m pytest backend`).
+- **Linter**: Zero errors (`npm run lint` / `oxlint`).
+- **Production Build**: Built cleanly with Vite in 286ms (`npm run build`).
+- **Formatting & Whitespace**: Zero errors (`git diff --check`).
+
+#### 6. Scheduler Invariant Confirmation
+- `urgencyWeight`: **50.0**
+- `priorityWeight`: **100.0**
+- `unblockWeight`: **15.0**
+- `riskWeight`: **25.0**
+- `Object.isFrozen(FACTORY_SCHEDULER_WEIGHTS)`: **true**
+- `isAdaptationUnlocked`: **false**
+- `productionApplied`: **false**
+- Candidate weights remain confined to shadow evaluation; Phase 7.4.4B remains locked.
+
+#### 7. Remaining Limitations & Deferred Scope
+- Browser storage (localStorage + IndexedDB) lacks a unified multi-store ACID transaction primitive. While the staged restore protocol with pre-restore snapshots and read-back verification provides robust recovery against crashes and write errors, true single-transaction guarantees across disparate storage engines are fundamentally unavailable in web browsers.
+- Encrypted cloud syncing is explicitly out of scope.
+- Phase 8 Stages 8.3 (PWA / code-splitting) and 8.4 (CI automation) remain deferred.

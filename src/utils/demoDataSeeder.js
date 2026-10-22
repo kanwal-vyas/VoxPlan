@@ -396,11 +396,12 @@ const DEMO_LOCK_TIMEOUT_MS = 6000;
  *
  * @returns {boolean} True if lock is currently held
  */
-export function isDemoLockActive() {
+export function isDemoLockActive(injectedStorage = null) {
   if (isDemoActionInProgress) return true;
-  if (typeof window !== 'undefined' && window.localStorage) {
+  const storage = injectedStorage || (typeof window !== 'undefined' && window.localStorage ? window.localStorage : null);
+  if (storage) {
     try {
-      const existing = window.localStorage.getItem(DEMO_ACTION_LOCK_KEY);
+      const existing = storage.getItem(DEMO_ACTION_LOCK_KEY);
       if (existing) {
         const lockTime = parseInt(existing, 10);
         if (!isNaN(lockTime) && Date.now() - lockTime < DEMO_LOCK_TIMEOUT_MS) {

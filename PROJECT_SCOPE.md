@@ -80,7 +80,7 @@ Every capability in VoxPlan is assigned to exactly one of the six authoritative 
 | Stage & Feature | Scope & Rationale for Deferral | Resuming Prerequisite |
 |---|---|---|
 | **Stage 8.1: Accessibility Audit & Keyboard Navigation** | Evaluated against WCAG 2.2 AA criteria; remediated skip links, focus rings, token contrast, dialog semantics, keyboard task buttons, and ARIA tablists. Verified by 18 regression tests. Screen-reader verification ongoing. | **Completed & Verified** (October 22, 2026) |
-| **Stage 8.2: Data Governance & Backup** | Web Crypto AES-GCM encrypted JSON backup and automated schema migrations. Standard JSON export is currently available in Section 04. | Post-demo release sprint |
+| **Stage 8.2: Encrypted Local Backups & Verified Recovery** | Web Crypto AES-GCM (256-bit) + PBKDF2 (SHA-256) encrypted export, schema validation, preview inspection, and staged transactional restore with rollback recovery. 21 dedicated tests passing. | **Completed & Verified** (October 22, 2026) |
 | **Stage 8.3: PWA & Bundle Code-Splitting** | Service Worker offline caching and `React.lazy()` bundle splitting. Current bundle loads in ~20ms on `localhost`. | Post-demo release sprint |
 | **Stage 8.4: CI Pipeline & Production Hosting** | Automated GitHub Actions CI workflow, CSP headers, and containerized deployment. Local Vite + Uvicorn run reliably. | Final v1.0 release |
 

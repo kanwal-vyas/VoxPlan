@@ -11,6 +11,7 @@ import PersonalModelDashboard from '../components/PersonalModelDashboard';
 import TaskList from '../components/TaskList';
 import TaskExplanationModal from '../components/TaskExplanationModal';
 import AdaptiveScheduleModal from '../components/AdaptiveScheduleModal';
+import BackupModal from '../components/BackupModal';
 import LoadingScreen from '../components/LoadingScreen';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { initCinematicScrollStory } from '../animations/scrollStory';
@@ -52,6 +53,7 @@ import {
   DEMO_SEED_KEY,
   DEMO_STORAGE_REVISION_KEY,
 } from '../utils/demoDataSeeder';
+import { checkAndRecoverInterruptedRestore } from '../utils/backupManager';
 
 const STORAGE_KEY = 'voxplan_tasks';
 
@@ -221,6 +223,7 @@ export default function ProductivityApp({ onNavigate }) {
   const [activeProposal, setActiveProposal] = useState(null);
   const [acceptedSchedule, setAcceptedSchedule] = useState(() => loadAcceptedSchedule());
   const [pendingClarification, setPendingClarification] = useState(null);
+  const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
 
   const voiceRecognitionRef = useRef(null);
   const speechSynthesisRef = useRef(null);
@@ -230,8 +233,17 @@ export default function ProductivityApp({ onNavigate }) {
       : ''
   );
 
-  // Resume any pending demo telemetry cleanup from interrupted resets on mount
+  // Resume any pending demo telemetry cleanup or interrupted restore on mount
   useEffect(() => {
+    const recovery = checkAndRecoverInterruptedRestore();
+    if (recovery && recovery.recovered) {
+      setTimeout(() => {
+        setTasks(loadSavedTasks());
+        setAcceptedSchedule(loadAcceptedSchedule());
+        setFeedback({ type: 'info', message: recovery.message });
+      }, 0);
+    }
+
     resumePendingDemoCleanup((profileId) => clearDemoEventsByProfile(profileId)).then((res) => {
       if (res && res.cleaned) {
         telemetry.init();
@@ -889,6 +901,21 @@ export default function ProductivityApp({ onNavigate }) {
     }
   };
 
+  const handleRestoreSuccess = (restoredData) => {
+    if (restoredData && Array.isArray(restoredData.tasks)) {
+      setTasks(restoredData.tasks);
+    } else {
+      setTasks(loadSavedTasks());
+    }
+    setAcceptedSchedule(loadAcceptedSchedule());
+    telemetry.isInitialized = false;
+    telemetry.init();
+    setFeedback({
+      type: 'success',
+      message: 'Workspace restored successfully from encrypted backup.',
+    });
+  };
+
   const handleProposalGenerated = useCallback(async (proposal) => {
     await telemetry.recordScheduleProposalGenerated(proposal);
   }, []);
@@ -966,6 +993,10 @@ export default function ProductivityApp({ onNavigate }) {
     const cleanCmd = String(rawText || '').trim().toLowerCase();
     if (/^(?:export|download)\s+(?:the\s+)?(?:calendar|schedule)(?:\s+file|\s+\.ics)?$/i.test(cleanCmd)) {
       handleExportCalendar();
+      return;
+    }
+    if (/^(?:backup|export\s+backup|restore\s+backup|open\s+backup)$/i.test(cleanCmd)) {
+      setIsBackupModalOpen(true);
       return;
     }
 
@@ -1337,6 +1368,7 @@ export default function ProductivityApp({ onNavigate }) {
           onSeedDemo={handleSeedDemo}
           onClearDemo={handleClearDemo}
           onNavigate={onNavigate}
+          onOpenBackup={() => setIsBackupModalOpen(true)}
         />
 
         {/* Main Landmark for Accessibility (WCAG 2.2 1.3.1 Info and Relationships & 2.4.1 Bypass Blocks) */}
@@ -1491,6 +1523,14 @@ export default function ProductivityApp({ onNavigate }) {
         onApplySchedule={handleApplySchedule}
         onProposalGenerated={handleProposalGenerated}
         onDiscardSchedule={handleDiscardSchedule}
+      />
+
+      {/* Encrypted Workspace Backup & Recovery Modal */}
+      <BackupModal
+        isOpen={isBackupModalOpen}
+        onClose={() => setIsBackupModalOpen(false)}
+        currentTasks={tasks}
+        onRestoreSuccess={handleRestoreSuccess}
       />
     </div>
   );

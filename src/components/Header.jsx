@@ -7,6 +7,7 @@ export default function Header({
   onSeedDemo,
   onClearDemo,
   onNavigate,
+  onOpenBackup,
 }) {
   const [scrolled, setScrolled] = useState(false);
 
@@ -121,34 +122,50 @@ export default function Header({
           </span>
         </div>
 
-        {/* Development & Demo Seeding Quick Action */}
-        {(onSeedDemo || onClearDemo) && (
-          <div style={styles.demoControls}>
-            {onSeedDemo && (
-              <button
-                type="button"
-                id="demo-seed-profile-btn"
-                onClick={onSeedDemo}
-                title="Load calibrated demo profile (8 completed tasks + 4 active tasks)"
-                style={styles.demoSeedBtn}
-              >
-                <span>⚡</span>
-                <span>Demo Seed</span>
-              </button>
-            )}
-            {onClearDemo && (
-              <button
-                type="button"
-                id="demo-clear-profile-btn"
-                onClick={onClearDemo}
-                title="Reset to clean default welcome state"
-                style={styles.demoClearBtn}
-              >
-                Reset
-              </button>
-            )}
-          </div>
-        )}
+        {/* Header Actions: Encrypted Backup & Demo Seeding */}
+        <div style={styles.actionControls}>
+          {onOpenBackup && (
+            <button
+              type="button"
+              id="header-backup-btn"
+              onClick={onOpenBackup}
+              title="Open Encrypted Workspace Backup & Restore"
+              style={styles.backupBtn}
+              aria-label="Open Encrypted Workspace Backup and Restore dialog"
+            >
+              <span>🔐</span>
+              <span>Backup</span>
+            </button>
+          )}
+
+          {(onSeedDemo || onClearDemo) && (
+            <div style={styles.demoControls}>
+              {onSeedDemo && (
+                <button
+                  type="button"
+                  id="demo-seed-profile-btn"
+                  onClick={onSeedDemo}
+                  title="Load calibrated demo profile (8 completed tasks + 4 active tasks)"
+                  style={styles.demoSeedBtn}
+                >
+                  <span>⚡</span>
+                  <span>Demo Seed</span>
+                </button>
+              )}
+              {onClearDemo && (
+                <button
+                  type="button"
+                  id="demo-clear-profile-btn"
+                  onClick={onClearDemo}
+                  title="Reset to clean default welcome state"
+                  style={styles.demoClearBtn}
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );
@@ -272,11 +289,32 @@ const styles = {
     fontWeight: '600',
     color: '#4A4852',
   },
-  demoControls: {
+  actionControls: {
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
     marginLeft: '4px',
+  },
+  backupBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '6px 12px',
+    fontSize: '11px',
+    fontWeight: '600',
+    fontFamily: 'inherit',
+    color: '#1F1E24',
+    backgroundColor: '#FFFFFF',
+    border: '1px solid rgba(37, 36, 42, 0.18)',
+    borderRadius: '9999px',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+  },
+  demoControls: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    marginLeft: '2px',
   },
   demoSeedBtn: {
     display: 'inline-flex',
