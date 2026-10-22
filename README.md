@@ -40,7 +40,7 @@ npm run dev
 ```
 
 ### Verified Test Suites & Quality Metrics
-- **Frontend Test Suite**: **842 / 842 passing** across 166 test suites in 25 test files (`npm test`).
+- **Frontend Test Suite**: **848 / 848 passing** across 166 test suites in 25 test files (`npm test`).
 - **Backend Test Suite**: **27 / 27 passing** across REST and ML endpoints (`python -m pytest backend/tests/`).
 - **Linter**: Zero errors (`npm run lint`).
 - **Production Build**: Clean compilation (`npm run build`).

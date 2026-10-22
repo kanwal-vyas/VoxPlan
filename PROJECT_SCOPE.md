@@ -133,7 +133,7 @@ VoxPlan achieves the definition of **Demonstration Complete** when all of the fo
 7. **Schedule Export**: Exports RFC 5545 compliant `.ics` calendar files upon user acceptance.
 8. **Behavioral Intelligence**: Renders habit trends and walk-forward duration estimation curves when seeded with showcase observations.
 9. **Safety Boundaries**: The Adaptation Sandbox visibly enforces "Shadow-Only" evaluation, rejects synthetic claims in production, and guarantees factory weights remain invariant.
-10. **Test Integrity**: 100% passing test suites across both frontend (`npm test`, 834 tests) and backend (`pytest`, 27 tests).
+10. **Test Integrity**: 100% passing test suites across both frontend (`npm test`, 848 tests) and backend (`pytest`, 27 tests).
 
 ---
 
@@ -144,7 +144,7 @@ VoxPlan achieves the definition of **Demonstration Complete** when all of the fo
 | Item | Priority | Status | Verification Method | Blocker / Dependency |
 |---|:---:|:---:|---|---|
 | **Demo Launch Orchestration** | P1 | **DONE** | Tested `node scripts/demoLauncher.mjs --no-open` | None |
-| **Showcase Profile Seeding & Teardown** | P1 | **DONE** | Tested `node --test tests/demo_data_seeder.test.js` (10/10 passed) | None |
+| **Showcase Profile Seeding & Teardown** | P1 | **DONE** | Tested `node --test tests/demo_data_seeder.test.js` (24/24 passed) | None |
 | **Header Demo Control UI** | P1 | **DONE** | Verified in browser subagent walk-through | None |
 | **End-to-End Demo Journey Verification** | P1 | **DONE** | Browser subagent walk-through and recording generated | Chromium browser for voice |
 | **Presenter Runbook Documentation** | P2 | **DONE** | Documented in `README.md` and `PROJECT_SCOPE.md` | None |

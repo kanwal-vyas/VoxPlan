@@ -291,11 +291,17 @@ export default function ProductivityApp({ onNavigate }) {
       const res = await clearDemoSeed({
         clearEventsFn: (pId) => clearDemoEventsByProfile(pId),
       });
-      if (res.success) {
+      if (res.tasksRestored || res.success) {
         setTasks(loadSavedTasks());
         setAcceptedSchedule(null);
         await telemetry.init();
-        setFeedback({ type: 'info', message: res.message });
+        if (res.telemetryCleaned === false || res.partialSuccess) {
+          setFeedback({ type: 'warning', message: res.message });
+        } else {
+          setFeedback({ type: 'info', message: res.message });
+        }
+      } else {
+        setFeedback({ type: 'error', message: res.message });
       }
     } finally {
       isDemoActionBusyRef.current = false;

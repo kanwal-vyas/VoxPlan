@@ -14,9 +14,13 @@ import {
   isDemoTask,
   parseAndValidateBackup,
   CANONICAL_DEMO_TASK_IDS,
+  CANONICAL_DEMO_TASK_TITLES,
   DEMO_SEED_KEY,
   DEMO_STORAGE_TASKS_KEY,
   DEMO_BACKUP_TASKS_KEY,
+  DEMO_ACTION_LOCK_KEY,
+  acquireDemoLock,
+  releaseDemoLock,
 } from '../src/utils/demoDataSeeder.js';
 import { clearDemoEventsByProfile, saveEvent, getEventsByProfile } from '../src/telemetry/indexedDbStore.js';
 import { validateEvent } from '../src/telemetry/eventSchema.js';
@@ -525,9 +529,15 @@ describe('Demo Data Seeder & Profile Calibration Audit', () => {
     // Crucial: not a canonical demo ID and has no demo provenance markers
     assert.strictEqual(isDemoTask(userCustomTask), false);
 
-    // Canonical demo ID without provenance (legacy) is recognized
-    const canonicalLegacy = { id: 'demo-c-1', title: 'Task 1' };
+    assert.strictEqual(CANONICAL_DEMO_TASK_TITLES['demo-c-1'], 'Initialize repository & CI configuration');
+
+    // Canonical demo ID without provenance is ONLY recognized if title matches canonical demo title
+    const canonicalLegacy = { id: 'demo-c-1', title: CANONICAL_DEMO_TASK_TITLES['demo-c-1'] };
     assert.strictEqual(isDemoTask(canonicalLegacy), true);
+
+    // Canonical demo ID with genuine user title is preserved as user task (Scenario A)
+    const canonicalCollision = { id: 'demo-c-1', title: 'Prepare Tax Return 2026' };
+    assert.strictEqual(isDemoTask(canonicalCollision), false);
 
     // Any ID with explicit provenance marker is recognized
     const markedTask = { id: 'custom-id-999', isDemoSeed: true };
@@ -569,6 +579,265 @@ describe('Demo Data Seeder & Profile Calibration Audit', () => {
       const backup2 = parseAndValidateBackup(backup2Raw);
       assert.strictEqual(backup2.valid, true);
       assert.ok(backup2.tasks.every((t) => !isDemoTask(t)), 'Backup must NEVER contain demo-seeded tasks');
+    } finally {
+      globalThis.window = originalWindow;
+    }
+  });
+
+  it('19. [Scenario A] canonical demo ID collision: genuine task with id demo-c-1 survives seed and reset intact', async () => {
+    const mockStorage = new Map();
+    const genuineCollidingTask = {
+      id: 'demo-c-1',
+      title: 'Prepare Tax Return 2026',
+      description: 'Crucial genuine personal tax document task',
+      priority: 'high',
+      dueDate: '2026-11-15',
+      completed: false,
+    };
+    mockStorage.set(DEMO_STORAGE_TASKS_KEY, JSON.stringify([genuineCollidingTask]));
+
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+      localStorage: {
+        getItem: (k) => mockStorage.get(k) || null,
+        setItem: (k, v) => mockStorage.set(k, String(v)),
+        removeItem: (k) => mockStorage.delete(k),
+      },
+    };
+
+    try {
+      // 1. Genuine task must be recognized as user data despite id matching canonical demo id
+      assert.strictEqual(hasExistingUserData(), true);
+
+      // 2. Seed demo dataset
+      const seedRes = await applyDemoSeed({ confirmOverwrite: true });
+      assert.strictEqual(seedRes.success, true);
+
+      // Verify backup contains the genuine task, NOT filtered out
+      const backupRaw = mockStorage.get(DEMO_BACKUP_TASKS_KEY);
+      assert.ok(backupRaw, 'Backup must exist');
+      const backupParsed = parseAndValidateBackup(backupRaw);
+      assert.strictEqual(backupParsed.valid, true);
+      assert.strictEqual(backupParsed.tasks.length, 1);
+      assert.strictEqual(backupParsed.tasks[0].id, 'demo-c-1');
+      assert.strictEqual(backupParsed.tasks[0].title, 'Prepare Tax Return 2026');
+
+      // 3. Reset demo
+      const clearRes = await clearDemoSeed();
+      assert.strictEqual(clearRes.success, true);
+
+      // 4. Genuine task must be completely restored!
+      const finalTasks = JSON.parse(mockStorage.get(DEMO_STORAGE_TASKS_KEY));
+      assert.strictEqual(finalTasks.length, 1);
+      assert.strictEqual(finalTasks[0].id, 'demo-c-1');
+      assert.strictEqual(finalTasks[0].title, 'Prepare Tax Return 2026');
+    } finally {
+      globalThis.window = originalWindow;
+    }
+  });
+
+  it('20. [Scenario E] partial telemetry persistence failure fails closed and triggers rollback', async () => {
+    const mockStorage = new Map();
+    const originalTasks = [
+      { id: 'user-t-safe', title: 'Existing User Work', completed: false },
+    ];
+    mockStorage.set(DEMO_STORAGE_TASKS_KEY, JSON.stringify(originalTasks));
+
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+      localStorage: {
+        getItem: (k) => mockStorage.get(k) || null,
+        setItem: (k, v) => mockStorage.set(k, String(v)),
+        removeItem: (k) => mockStorage.delete(k),
+      },
+    };
+
+    try {
+      // saveEventFn returns false on the 4th event (partial write without throw)
+      let count = 0;
+      const partialSaveFn = async () => {
+        count++;
+        return count <= 3; // saves only 3 events, then returns false
+      };
+
+      const seedRes = await applyDemoSeed({
+        confirmOverwrite: true,
+        saveEventFn: partialSaveFn,
+      });
+
+      // Must fail closed and report incomplete persistence
+      assert.strictEqual(seedRes.success, false);
+      assert.ok(seedRes.message.includes('telemetry persistence incomplete'));
+
+      // Storage must be rolled back to pre-seed original tasks
+      const currentTasks = JSON.parse(mockStorage.get(DEMO_STORAGE_TASKS_KEY));
+      assert.deepStrictEqual(currentTasks, originalTasks);
+      assert.strictEqual(mockStorage.has(DEMO_SEED_KEY), false);
+    } finally {
+      globalThis.window = originalWindow;
+    }
+  });
+
+  it('21. [Scenario F] partial telemetry cleanup failure reports explicit partialSuccess and warning contract', async () => {
+    const mockStorage = new Map();
+    const originalTasks = [
+      { id: 'user-t-before', title: 'Task Before Demo', completed: false },
+    ];
+    mockStorage.set(DEMO_STORAGE_TASKS_KEY, JSON.stringify(originalTasks));
+
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+      localStorage: {
+        getItem: (k) => mockStorage.get(k) || null,
+        setItem: (k, v) => mockStorage.set(k, String(v)),
+        removeItem: (k) => mockStorage.delete(k),
+      },
+    };
+
+    try {
+      await applyDemoSeed({ confirmOverwrite: true });
+
+      // clearEventsFn reports false (failure/incomplete)
+      const failingClearFn = async () => false;
+
+      const clearRes = await clearDemoSeed({ clearEventsFn: failingClearFn });
+
+      // Must NOT report full success
+      assert.strictEqual(clearRes.success, false);
+      assert.strictEqual(clearRes.partialSuccess, true);
+      assert.strictEqual(clearRes.tasksRestored, true);
+      assert.strictEqual(clearRes.telemetryCleaned, false);
+      assert.ok(clearRes.message.includes('telemetry cleanup reported incomplete'));
+
+      // Crucial: genuine tasks WERE restored safely despite telemetry failure
+      const finalTasks = JSON.parse(mockStorage.get(DEMO_STORAGE_TASKS_KEY));
+      assert.strictEqual(finalTasks.length, 1);
+      assert.strictEqual(finalTasks[0].id, 'user-t-before');
+    } finally {
+      globalThis.window = originalWindow;
+    }
+  });
+
+  it('22. [Scenario D] backup validation rejects unsupported schema version, count mismatch, and deduplicates IDs', () => {
+    // 1. Unsupported future schema version
+    const futureEnvelope = JSON.stringify({
+      schema_version: 99,
+      tasks: [{ id: 't-1', title: 'Task 1' }],
+    });
+    const futureRes = parseAndValidateBackup(futureEnvelope);
+    assert.strictEqual(futureRes.valid, false);
+    assert.ok(futureRes.error.includes('unsupported_schema_version_99'));
+
+    // 2. Declared task_count mismatch
+    const mismatchEnvelope = JSON.stringify({
+      schema_version: 1,
+      task_count: 5,
+      tasks: [{ id: 't-1', title: 'Task 1' }],
+    });
+    const mismatchRes = parseAndValidateBackup(mismatchEnvelope);
+    assert.strictEqual(mismatchRes.valid, false);
+    assert.ok(mismatchRes.error.includes('task_count_mismatch'));
+
+    // 3. Duplicate task IDs deduplicated safely
+    const dupEnvelope = JSON.stringify({
+      schema_version: 1,
+      tasks: [
+        { id: 't-dup', title: 'Version A' },
+        { id: 't-dup', title: 'Version B' },
+      ],
+    });
+    const dupRes = parseAndValidateBackup(dupEnvelope);
+    assert.strictEqual(dupRes.valid, true);
+    assert.strictEqual(dupRes.tasks.length, 1);
+    assert.strictEqual(dupRes.tasks[0].title, 'Version A');
+  });
+
+  it('23. [Scenario G] cross-tab concurrency lock prevents racing seed/reset operations and auto-expires', async () => {
+    const mockStorage = new Map();
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+      localStorage: {
+        getItem: (k) => mockStorage.get(k) || null,
+        setItem: (k, v) => mockStorage.set(k, String(v)),
+        removeItem: (k) => mockStorage.delete(k),
+      },
+    };
+
+    try {
+      // 1. Simulate an active lock from another tab held just now
+      mockStorage.set(DEMO_ACTION_LOCK_KEY, String(Date.now()));
+
+      // Concurrent seed attempt must be rejected
+      const seedRes = await applyDemoSeed({ confirmOverwrite: true });
+      assert.strictEqual(seedRes.success, false);
+      assert.ok(seedRes.message.includes('already in progress'));
+
+      // Concurrent clear attempt must be rejected
+      const clearRes = await clearDemoSeed();
+      assert.strictEqual(clearRes.success, false);
+      assert.ok(clearRes.message.includes('already in progress'));
+
+      // 2. Simulate expired lock (e.g. from crashed tab 10 seconds ago)
+      mockStorage.set(DEMO_ACTION_LOCK_KEY, String(Date.now() - 10000));
+      assert.strictEqual(acquireDemoLock(), true);
+      releaseDemoLock();
+      assert.strictEqual(mockStorage.has(DEMO_ACTION_LOCK_KEY), false);
+    } finally {
+      globalThis.window = originalWindow;
+    }
+  });
+
+  it('24. [Scenario B] task conflict resolution: active non-demo additions override or coexist with restored backup', async () => {
+    const mockStorage = new Map();
+    const userOriginalTasks = [
+      { id: 't-shared', title: 'Original Version of Shared Task', completed: false },
+      { id: 't-unique-pre', title: 'Unique Pre-existing Task', completed: true },
+    ];
+    mockStorage.set(DEMO_STORAGE_TASKS_KEY, JSON.stringify(userOriginalTasks));
+
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+      localStorage: {
+        getItem: (k) => mockStorage.get(k) || null,
+        setItem: (k, v) => mockStorage.set(k, String(v)),
+        removeItem: (k) => mockStorage.delete(k),
+      },
+    };
+
+    try {
+      await applyDemoSeed({ confirmOverwrite: true });
+
+      // During the demo, user creates a new task AND edits the shared task
+      const activeTasksDuringDemo = [
+        { id: 't-shared', title: 'Updated Version of Shared Task Mid-Demo', completed: true },
+        { id: 't-new-mid', title: 'Newly Added Mid-Demo Task', completed: false },
+        // ... demo tasks also present in active store ...
+        ...generateDemoDataset().tasks,
+      ];
+      mockStorage.set(DEMO_STORAGE_TASKS_KEY, JSON.stringify(activeTasksDuringDemo));
+
+      // Reset demo
+      const clearRes = await clearDemoSeed();
+      assert.strictEqual(clearRes.success, true);
+
+      // Verify merged outcome
+      const finalTasks = JSON.parse(mockStorage.get(DEMO_STORAGE_TASKS_KEY));
+      assert.strictEqual(finalTasks.length, 3);
+
+      const shared = finalTasks.find((t) => t.id === 't-shared');
+      assert.ok(shared);
+      // Active mid-demo edit overrides the stale pre-seed backup version
+      assert.strictEqual(shared.title, 'Updated Version of Shared Task Mid-Demo');
+      assert.strictEqual(shared.completed, true);
+
+      // Pre-existing unique task is restored
+      assert.ok(finalTasks.some((t) => t.id === 't-unique-pre'));
+
+      // New task created mid-demo is preserved
+      assert.ok(finalTasks.some((t) => t.id === 't-new-mid'));
+
+      // All 12 demo tasks are gone
+      assert.ok(finalTasks.every((t) => !isDemoTask(t)));
     } finally {
       globalThis.window = originalWindow;
     }

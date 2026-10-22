@@ -4212,3 +4212,69 @@ Extended test suite from 10 to 18 comprehensive tests:
 - **Production Build**: Built cleanly with Vite in 558ms (`npm run build`).
 - **Scheduler Invariants**: Factory weights remain strictly canonical (`urgencyWeight: 50.0`, `priorityWeight: 100.0`, `unblockWeight: 15.0`, `riskWeight: 25.0`), `isAdaptationUnlocked === false`, `productionApplied === false`. Stage 7.4.4B remains intentionally locked.
 - **Phase 8 Boundaries**: Full WCAG 2.1 AA audit, encrypted export, route code-splitting, PWA service worker, and remote CI remain explicitly deferred post-demo.
+
+---
+
+## Adversarial Demo Recovery Audit & Failure-Injection Review Execution Record (October 22, 2026)
+
+### Objective
+Execute an independent, adversarial audit and failure-injection review of VoxPlan's demo seeding, backup restoration, task provenance, telemetry cleanup, process lifecycle, and recovery behavior. Demonstrate concrete failure modes with deterministic unit tests, implement minimal scoped mitigations without altering scheduler factory weights or production activation gates, and verify the resulting persisted storage state.
+
+### Threat Model & Invariants Evaluated
+1. **Record Classification**:
+   - Genuine tasks prior to seeding (in backup envelope `voxplan_user_tasks_backup`).
+   - Demo-generated tasks (explicit provenance markers: `isDemoSeed: true`, `isSyntheticData: true`, `provenanceSource: 'demo_seeding_utility'`).
+   - Genuine tasks created or edited during active demo sessions (`currentNonDemoTasks`).
+   - Unprovenanced or legacy records with coincidentally matching canonical IDs (`demo-c-1..8`, `demo-a-1..4`).
+   - Genuine telemetry events vs synthetic demo events in IndexedDB.
+   - Malformed, stale, or partially written backups.
+2. **Core Guarantees**:
+   - Genuine task data must never be silently discarded.
+   - Ambiguous ownership must not be resolved via unsafe deletion.
+   - Malformed backups must be quarantined rather than triggering destructive fallback wipes.
+   - Partial telemetry failures must be honestly communicated and fail closed where appropriate.
+   - Cross-tab operations must be synchronized to prevent storage corruption.
+   - Factory scheduler weights and production activation gates must remain strictly frozen and unalterable.
+
+### Confirmed Defects Demonstrated & Scoped Hardening Implemented
+1. **Defect 1: Canonical Demo ID Collision False-Positive Task Deletion (Scenario A)**:
+   - *Demonstrated Defect*: `isDemoTask()` previously classified any task whose ID matched `CANONICAL_DEMO_TASK_IDS` as a demo task even if it lacked demo provenance markers and possessed completely different genuine user content (e.g. `{ id: 'demo-c-1', title: 'Prepare Tax Return 2026' }`). During demo seeding, this genuine task was excluded from the backup, and during reset it was filtered out and permanently erased.
+   - *Scoped Hardening*: Introduced `CANONICAL_DEMO_TASK_TITLES` map in `src/utils/demoDataSeeder.js`. Hardened `isDemoTask()` to require BOTH canonical ID AND matching canonical title for unprovenanced records, alongside explicit provenance markers (`isDemoSeed === true || isSyntheticData === true || provenanceSource === 'demo_seeding_utility'`). If the title differs, the task is classified as genuine user data, safely backed up during seeding, and restored on reset.
+   - *Regression Test*: Added test 19 asserting that a genuine user task with `id: 'demo-c-1'` and title `'Prepare Tax Return 2026'` survives seeding and reset intact.
+2. **Defect 2: Incomplete Telemetry Persistence False Success (Scenario E)**:
+   - *Demonstrated Defect*: In `applyDemoSeed()`, when `saveEventFn` returned `false` without throwing (e.g. partial IndexedDB transaction rejection), `persistedEvents < dataset.events.length`, but the operation returned `{ success: true }`, leaving active tasks replaced with demo data and `voxplan_demo_seed_active` set to `true` despite incomplete telemetry.
+   - *Scoped Hardening*: Hardened `applyDemoSeed()` to verify `persistedEvents === dataset.events.length`. If any event fails, the operation fails closed, executes `safeRollbackStorage()` to restore pre-seed tasks and clear active markers, and returns `{ success: false, message: '...incomplete...' }`.
+   - *Regression Test*: Added test 20 verifying that a partial save returns `success: false` and rolls back `localStorage`.
+3. **Defect 3: Incomplete Telemetry Cleanup Truthful Feedback Contract (Scenario F)**:
+   - *Demonstrated Defect*: In `clearDemoSeed()`, if `clearEventsFn()` returned `false` or threw an error, the function returned `success: true` and `ProductivityApp.jsx` rendered an `info` banner declaring "Demo dataset cleared. Application restored to clean state.", falsely claiming complete cleanup.
+   - *Scoped Hardening*: Hardened `clearDemoSeed()` to return `{ success: false, partialSuccess: true, tasksRestored: true, telemetryCleaned: false, message: '...' }` when telemetry cleanup fails. Updated `ProductivityApp.jsx` to render a `warning` banner informing the user of the partial state while safely hydrating restored tasks into UI state.
+   - *Regression Test*: Added test 21 verifying `partialSuccess: true` and `telemetryCleaned: false` on telemetry cleanup failure.
+4. **Defect 4: Backup Envelope Validation & Deduplication (Scenario D)**:
+   - *Demonstrated Defect*: `parseAndValidateBackup()` accepted unsupported future schema versions, ignored declared `task_count` mismatches, and allowed duplicate IDs.
+   - *Scoped Hardening*: Hardened `parseAndValidateBackup(raw, activeProfileId)` to reject `schema_version > 1` (`unsupported_schema_version_<N>`), validate `task_count === taskList.length`, detect profile mismatches, and deduplicate duplicate task IDs.
+   - *Regression Test*: Added test 22 asserting rejection of future schema versions and count mismatches, and safe deduplication of duplicate IDs.
+5. **Defect 5: Cross-Tab Storage Concurrency Guard (Scenario G)**:
+   - *Demonstrated Defect*: `isDemoActionInProgress` was only an in-memory boolean in a single JavaScript heap, allowing two concurrent tabs on `http://localhost:5173/app` to race on `localStorage`.
+   - *Scoped Hardening*: Introduced `DEMO_ACTION_LOCK_KEY = 'voxplan_demo_action_lock'` with `acquireDemoLock()` and `releaseDemoLock()`. The lock uses an explicit timestamp with a 6000ms auto-expiry window to prevent deadlocks in case of tab crashes or page reloads.
+   - *Regression Test*: Added test 23 asserting that active locks reject concurrent seed/reset calls and expired locks are safely reclaimed.
+6. **Task Conflict Resolution Policy Verification (Scenario B)**:
+   - Added test 24 verifying that tasks created or edited during active demo sessions (`currentNonDemoTasks`) override or append to restored pre-seed tasks by `task.id`, while all 12 demo tasks are cleanly removed.
+7. **Launcher Process Lifecycle Audit (Scenario H)**:
+   - Verified `scripts/demoLauncher.mjs` against preflight inspections (`--dry-run`), route resolution (`--app`), port conflict isolation, and process-tree termination on Windows (`taskkill /pid <PID> /T /F`).
+
+### Verification & Test Evidence Summary
+- **Demo Seeder & Recovery Test Suite**: **24 / 24 passing** (`node --test tests/demo_data_seeder.test.js`).
+- **Activation Gate & Statistical Validation Suite**: **214 / 214 passing** across 37 suites (`tests/activation_gate_evaluator.test.js`, `tests/statistical_validation.test.js`).
+- **Full Frontend Suite**: **848 / 848 passing** across 166 suites in 25 test files (`npm test`).
+- **Backend Suite**: **27 / 27 passing** across REST and ML endpoints (`python -m pytest backend`).
+- **Linter**: Zero errors (`npm run lint`).
+- **Production Build**: 72 modules transformed cleanly in 1.33s (`npm run build`).
+- **Scheduler Safeguards**:
+  - `urgencyWeight`: **50.0**
+  - `priorityWeight`: **100.0**
+  - `unblockWeight`: **15.0**
+  - `riskWeight`: **25.0**
+  - `Object.isFrozen(FACTORY_SCHEDULER_WEIGHTS)`: **true**
+  - `isAdaptationUnlocked`: **false**
+  - `productionApplied`: **false**
+  - Stage 7.4.4B remains intentionally locked. Phase 8 release engineering remains deferred post-demo.
