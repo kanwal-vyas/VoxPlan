@@ -235,14 +235,15 @@ export default function ProductivityApp({ onNavigate }) {
 
   // Resume any pending demo telemetry cleanup or interrupted restore on mount
   useEffect(() => {
-    const recovery = checkAndRecoverInterruptedRestore();
-    if (recovery && recovery.recovered) {
-      setTimeout(() => {
-        setTasks(loadSavedTasks());
-        setAcceptedSchedule(loadAcceptedSchedule());
-        setFeedback({ type: 'info', message: recovery.message });
-      }, 0);
-    }
+    Promise.resolve(checkAndRecoverInterruptedRestore()).then((recovery) => {
+      if (recovery && recovery.recovered) {
+        setTimeout(() => {
+          setTasks(loadSavedTasks());
+          setAcceptedSchedule(loadAcceptedSchedule());
+          setFeedback({ type: 'info', message: recovery.message });
+        }, 0);
+      }
+    });
 
     resumePendingDemoCleanup((profileId) => clearDemoEventsByProfile(profileId)).then((res) => {
       if (res && res.cleaned) {

@@ -187,6 +187,7 @@ export default function BackupModal({
     try {
       const res = await restoreBackupData(restorePreview.validation, {
         expectedRevision: restorePreview.expectedRevision,
+        workspaceFingerprint: restorePreview.workspaceFingerprint,
       });
 
       if (!res.success) {

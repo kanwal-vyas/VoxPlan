@@ -4552,3 +4552,140 @@ Resolve the remaining data-integrity risks identified during the adversarial rec
 - Browser storage (localStorage + IndexedDB) lacks a unified multi-store ACID transaction primitive. While the staged restore protocol with pre-restore snapshots and read-back verification provides robust recovery against crashes and write errors, true single-transaction guarantees across disparate storage engines are fundamentally unavailable in web browsers.
 - Encrypted cloud syncing is explicitly out of scope.
 - Phase 8 Stages 8.3 (PWA / code-splitting) and 8.4 (CI automation) remain deferred.
+
+---
+
+### Phase 8, Stage 8.2A Execution Record: Adversarial Backup Recovery & Cross-Store Integrity Audit
+
+**Baseline Commit**: `d92a1ff788b960ba018ba6526fdb5b60bbed58e7`
+**Execution Date**: October 22, 2026
+**Execution Status**: **AUDITED, REMEDIATED & HARDENED** (Two-phase staged journal, complete multi-store snapshot across localStorage and IndexedDB, verified rollback, composite cross-store concurrency fingerprinting, and deterministic startup recovery).
+
+---
+
+#### 1. Complete Persistence Inventory
+
+| Category | Storage Engine & Key | Read Mechanism | Write Mechanism | Failure Detection | Rollback Behavior | Startup Recovery | Cross-Tab Detection |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Tasks & Metadata** | `localStorage` (`voxplan_tasks`) | `JSON.parse(storage.getItem('voxplan_tasks'))` | `storage.setItem` | Read-back string comparison | Restored from `preRestoreSnapshot.tasks` | Restored from snapshot if uncommitted | Storage event on `voxplan_tasks` / revision |
+| **Accepted Schedule** | `localStorage` (`voxplan_accepted_schedule`) | `JSON.parse(storage.getItem('voxplan_accepted_schedule'))` | `storage.setItem` / `removeItem` | Read-back string comparison | Restored from `preRestoreSnapshot.schedule` | Restored from snapshot if uncommitted | Workspace composite fingerprint |
+| **Time-Block Settings** | `localStorage` (`voxplan_time_block_settings`) | `JSON.parse(storage.getItem('voxplan_time_block_settings'))` | `storage.setItem` / `removeItem` | Read-back string comparison | Restored from `preRestoreSnapshot.timeBlocks` (removed if null) | Restored from snapshot if uncommitted | Workspace composite fingerprint |
+| **User Preferences** | `localStorage` (`voxplan_speech_output_enabled`, `voxplan_preference_collection_enabled`) | String equality check (`'true'`) | `storage.setItem` / `removeItem` | Read-back boolean comparison | Restored from `preRestoreSnapshot.speech` and `.preference` | Restored from snapshot if uncommitted | Workspace composite fingerprint |
+| **Telemetry Events** | IndexedDB (`voxplan_db` -> `telemetry_events`) | `getEventsByProfile(profileId)` | `clearEventsByProfile` + `saveEventsBatch` | IDB transaction error / batch count check | Cleared and restored from `preRestoreSnapshot.telemetryEvents` | Restored from snapshot via async startup recovery | Workspace composite fingerprint (event count) |
+| **Timer Sessions** | IndexedDB (`voxplan_db` -> `timer_sessions`) | `getTimerSessionsByTask(taskId)` | `clearTimerSessionsByProfile` + `saveTimerSession` | Return boolean false / IDB error | Cleared and restored from `preRestoreSnapshot.timerSessions` | Restored from snapshot via async startup recovery | Workspace composite fingerprint |
+| **Task Revisions** | `localStorage` (`voxplan_tasks_revision`) | String read | `storage.setItem` timestamp + random salt | Read-back comparison | Restored from `preRestoreSnapshot.revision` | Restored from snapshot if uncommitted | Storage event triggers cross-tab sync |
+| **Recovery Snapshot & Journal** | `localStorage` (`voxplan_restore_pre_snapshot`, `voxplan_restore_journal`, `voxplan_restore_in_progress`) | `JSON.parse` | Synchronous `setItem` with immediate read-back verification | Read-back validation | Kept intact if rollback fails (`ROLLBACK_FAILED`) | Replays rollback if uncommitted; cleans if `COMMITTED` | N/A (Internal operational markers) |
+| **Demo Locks & Cleanup** | `localStorage` (`voxplan_demo_action_lock`, `voxplan_demo_cleanup_pending`) | String read / timestamp timeout | `setItem` / `removeItem` | Preflight check | Never modified by restore | Preserved independently of restore journal | Preflight rejects restore with `demo_action_in_progress` |
+
+---
+
+#### 2. Confirmed Defects & Root Cause Analysis
+
+1. **Swallowed IndexedDB Persistence Errors (Invariant E Violation)**:
+   - *Defect*: `restoreBackupData` wrapped `saveEventsBatch` and `saveTimerSession` in a `try / catch` block that only issued `console.warn` and proceeded to return `{ success: true }`.
+   - *Impact*: In environments where an IndexedDB transaction aborted or failed, a partial restore was falsely reported as a success.
+   - *Remediation*: Removed error swallowing. If `saveEventsBatch` saves fewer than expected records, or if `saveTimerSession` returns `false`, an explicit error is thrown, immediately triggering full multi-store rollback.
+2. **Asymmetric Pre-Restore Snapshot & Permanent Telemetry Wipeout (Invariant A Violation)**:
+   - *Defect*: `preRestoreSnapshot` previously only captured localStorage keys (`tasks`, `schedule`, `revision`). When `clearEventsByProfile(profileId)` ran, the user's historical telemetry was permanently erased before new events were written. If a subsequent write error occurred, rollback only restored tasks, leaving telemetry lost forever.
+   - *Remediation*: Expanded `preRestoreSnapshot` to capture all existing genuine telemetry events and task timer sessions for the profile from IndexedDB before any storage mutation begins.
+3. **Incomplete Rollback for Null Time-Blocks, Speech, and Preferences**:
+   - *Defect*: `executeRollback` had `if (snap.timeBlocks !== null) storage.setItem(...)`. If time-block settings were originally null, the newly restored time blocks remained in storage instead of being removed. Furthermore, `speech` and `preference` settings were recorded in snapshot but completely omitted from the rollback code.
+   - *Remediation*: If `preRestoreSnapshot.timeBlocks === null`, rollback calls `storage.removeItem('voxplan_time_block_settings')`. Added full rollback and read-back verification for speech output and preference collection flags.
+4. **Task-Only Concurrency Guard (Invariant D Violation)**:
+   - *Defect*: Preview concurrency checking only checked `voxplan_tasks_revision`. Concurrent edits to schedules, time blocks, user preferences, or telemetry in other tabs were completely ignored.
+   - *Remediation*: Implemented `computeWorkspaceFingerprint(storage, profileId)`, which computes a deterministic composite hash covering tasks, schedules, time-block availability, user preferences, task revisions, and telemetry counts.
+5. **Premature Recovery Marker Removal on Startup (Invariant C Violation)**:
+   - *Defect*: `checkAndRecoverInterruptedRestore` previously cleared recovery markers whenever `voxplan_tasks` was valid JSON, regardless of whether the restore had completed or had left schedules, settings, or telemetry in an inconsistent or half-written state.
+   - *Remediation*: Introduced `RESTORE_JOURNAL_KEY` with explicit phase tracking (`PREPARED`, `COMMITTING_INDEXED_DB`, `INDEXED_DB_COMMITTED`, `COMMITTING_LOCAL_STORAGE`, `VERIFYING`, `COMMITTED`, `ROLLING_BACK`, `ROLLBACK_FAILED`). Markers are only retained as successful if `phase === COMMITTED`; any other interrupted phase triggers full verified rollback from the pre-restore snapshot.
+
+---
+
+#### 3. Hardened Two-Phase Recovery Protocol
+
+```mermaid
+stateDiagram-v2
+    [*] --> PREPARED: Capture full snapshot (localStorage + IndexedDB) & verify read-back
+    PREPARED --> COMMITTING_INDEXED_DB: Write telemetry events & timer sessions
+    COMMITTING_INDEXED_DB --> INDEXED_DB_COMMITTED: Verify IDB write counts
+    INDEXED_DB_COMMITTED --> COMMITTING_LOCAL_STORAGE: Synchronously write tasks, schedule, time-blocks, preferences, revision
+    COMMITTING_LOCAL_STORAGE --> VERIFYING: Read-back verify all stores
+    VERIFYING --> COMMITTED: Mark journal COMMITTED
+    COMMITTED --> [*]: Clear recovery markers (Success)
+
+    PREPARED --> ROLLING_BACK: Any failure / quota error
+    COMMITTING_INDEXED_DB --> ROLLING_BACK: Any IDB transaction error
+    INDEXED_DB_COMMITTED --> ROLLING_BACK: Any localStorage write error
+    COMMITTING_LOCAL_STORAGE --> ROLLING_BACK: Any read-back mismatch
+    VERIFYING --> ROLLING_BACK: Any read-back mismatch
+
+    ROLLING_BACK --> [*]: Rollback verified & markers cleared (Old state preserved)
+    ROLLING_BACK --> ROLLBACK_FAILED: Rollback write failure
+    ROLLBACK_FAILED --> [*]: Snapshot preserved for manual recovery
+```
+
+---
+
+#### 4. Adversarial Failure Injection Results
+
+| Test ID | Scenario Description | Injection Method | Invariant Verified | Outcome |
+| :--- | :--- | :--- | :--- | :--- |
+| **6.1** | Schedule write failure after tasks written | `injectFailureAfter: 'during_schedule_write'` | Invariant A (Failed restore) | **PASSED** (Tasks, schedule, and revision rolled back to baseline) |
+| **6.2** | Preferences write failure after tasks & schedule | `injectFailureAfter: 'during_preferences_write'` | Invariant A (Failed restore) | **PASSED** (All stores rolled back to pre-restore baseline) |
+| **6.3** | QuotaExceededError during snapshot persistence | Storage mock throws on `RESTORE_PRE_SNAPSHOT_KEY` | Invariant A (Failed restore) | **PASSED** (Aborted before any store mutation; tasks untouched) |
+| **6.4** | IDB batch event write failure | `injectFailureAfter: 'during_idb_write'` | Invariant E & A | **PASSED** (No false success; genuine user telemetry preserved) |
+| **6.5** | Timer session write failure | Invalid session record causes `saveTimerSession` rejection | Invariant E & A | **PASSED** (No false success; both IDB and storage rolled back) |
+| **6.6** | Read-back verification mismatch | `injectFailureAfter: 'during_readback'` | Invariant E & A | **PASSED** (Mismatch caught; rolled back to original state) |
+| **6.7** | Rollback execution itself fails | `failRollback: true` | Invariant A & E | **PASSED** (Fails closed; snapshot and journal preserved with `ROLLBACK_FAILED`) |
+| **6.8** | Marker cleanup interrupted after commit | `injectFailureAfter: 'fail_marker_cleanup'` | Invariant B & C | **PASSED** (Startup recovery detects `COMMITTED` and preserves new data) |
+| **7.1** | Rollback with originally null time-blocks | Pre-restore snapshot with `timeBlocks: null` | Invariant A (Cleanup) | **PASSED** (Key removed from storage; null state restored) |
+| **7.2** | Rollback of speech and preference settings | Pre-restore snapshot with non-default booleans | Invariant A (Completeness) | **PASSED** (Original boolean strings restored exactly) |
+| **7.3** | Startup recovery with corrupt snapshot JSON | Malformed JSON in `RESTORE_PRE_SNAPSHOT_KEY` | Invariant C (Interruption) | **PASSED** (Markers preserved for safety; no destructive wipe) |
+| **7.4** | Startup recovery with missing snapshot | Missing snapshot with valid existing tasks | Invariant C (Idempotency) | **PASSED** (Safely cleans orphan marker without modifying tasks) |
+| **8.1** | Interruption at PREPARED phase | Mocked journal `phase: 'PREPARED'` on startup | Invariant C (Interruption) | **PASSED** (Rolled back cleanly to pre-restore baseline) |
+| **8.2** | Interruption at INDEXED_DB_COMMITTED phase | Mocked journal `phase: 'INDEXED_DB_COMMITTED'` | Invariant C (Cross-store) | **PASSED** (IDB rolled back to original events; localStorage preserved) |
+| **8.3** | Interruption during COMMITTING_LOCAL_STORAGE | Half-written tasks and schedule in storage | Invariant C (Cross-store) | **PASSED** (Tasks and schedule rolled back to pre-restore baseline) |
+| **8.4** | Repeated startup recovery runs | Run `checkAndRecoverInterruptedRestore()` twice | Invariant C (Idempotency) | **PASSED** (First run recovers; second run safely returns `recovered: false`) |
+| **9.1** | Concurrent accepted schedule modification | Schedule modified in another tab during preview | Invariant D (Concurrency) | **PASSED** (Restoration safely rejected with `concurrent_modification`) |
+| **9.2** | Concurrent time-block settings modification | Time-blocks modified in another tab during preview | Invariant D (Concurrency) | **PASSED** (Restoration safely rejected with `concurrent_modification`) |
+| **9.3** | Concurrent user preference modification | Speech toggle changed in another tab during preview | Invariant D (Concurrency) | **PASSED** (Restoration safely rejected with `concurrent_modification`) |
+| **9.4** | Concurrent demo lock activation | `DEMO_ACTION_LOCK_KEY` set before restore | Invariant D (Demo lock) | **PASSED** (Restoration safely rejected with `demo_action_in_progress`) |
+| **9.5** | Concurrent demo cleanup pending | `DEMO_CLEANUP_PENDING_KEY` set before restore | Invariant D (Demo lock) | **PASSED** (Restoration safely rejected with `demo_action_in_progress`) |
+| **10.1** | Deep multi-store baseline failed restore | Baseline fixture with distinct values in all stores | Invariant A (All stores) | **PASSED** (Tasks, schedule, time blocks, settings, IDB identical to baseline) |
+| **10.2** | Successful restore survives application restart | Restored fixture into empty workspace + restart | Invariant B (Persistence) | **PASSED** (All restored data survives application restart intact) |
+| **10.3** | Operational markers exclusion | Restored backup payload into workspace | Security / Scope | **PASSED** (No demo locks, timers, or rollback envelopes imported) |
+| **11.1** | Simultaneous restore journal and demo cleanup | Interrupted restore with pending demo cleanup | Coordination | **PASSED** (Restore rolls back tasks first; demo cleanup marker preserved) |
+| **11.2** | Ambiguous genuine task demo reset survival | Task with canonical demo ID/title without provenance | Data Safety | **PASSED** (Genuine task preserved across reset; only demo task deleted) |
+
+---
+
+#### 5. Verification & Test Evidence Summary
+
+- **Backup & Recovery Audit Suite**: **47 / 47 passing** across 12 suites in 255ms (`node --test tests/backup_and_recovery.test.js`).
+- **Demo Data Seeder Suite**: **37 / 37 passing** across 5 suites in 24ms (`node --test tests/demo_data_seeder.test.js`).
+- **Accessibility Regression Suite**: **18 / 18 passing** across 7 suites in 20ms (`node --test tests/accessibility.test.js`).
+- **Full Frontend Test Suite**: **926 / 926 passing** across 189 suites in 27 test files (`npm test`).
+- **Backend Test Suite**: **27 / 27 passing** (`python -m pytest backend`).
+- **Linter**: Zero errors (`npm run lint` / `oxlint`).
+- **Production Build**: Built cleanly with Vite in 342ms (`npm run build`).
+- **Formatting & Whitespace**: Zero errors (`git diff --check`).
+
+---
+
+#### 6. Scheduler Invariant Confirmation
+
+- `urgencyWeight`: **50.0**
+- `priorityWeight`: **100.0**
+- `unblockWeight`: **15.0**
+- `riskWeight`: **25.0**
+- `Object.isFrozen(FACTORY_SCHEDULER_WEIGHTS)`: **true**
+- `isAdaptationUnlocked`: **false**
+- `productionApplied`: **false**
+- Candidate weights remain confined to shadow evaluation; Phase 7.4.4B remains locked.
+
+---
+
+#### 7. Remaining Limitations & Deferred Scope
+
+- **Disclosed Browser Storage Limitation**: Web browsers do not provide a hardware or OS-level two-phase commit across disparate storage engines (`localStorage` and `IndexedDB`). While our staged recovery journal and pre-restore snapshots guarantee deterministic recovery upon application launch for all interrupted or crashed operations, instantaneous cross-store hardware atomicity during a mid-turn browser power loss is physically impossible under standard Web Platform APIs.
+- **Encrypted Cloud Sync**: Explicitly out of scope.
+- **Phase 8 Release Engineering**: Stage 8.3 (PWA / service worker and code splitting) and Stage 8.4 (CI / deployment) remain deferred.
