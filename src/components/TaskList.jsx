@@ -69,7 +69,7 @@ export default function TaskList({
           </div>
 
           {/* Filter Pills */}
-          <div style={styles.filterNav}>
+          <div style={styles.filterNav} role="group" aria-label="Task status filters">
             {[
               { id: 'all', label: 'All Tasks', emoji: '📝' },
               { id: 'pending', label: 'Pending', emoji: '⏳' },
@@ -80,12 +80,13 @@ export default function TaskList({
                 key={f.id}
                 type="button"
                 onClick={() => onChangeFilter(f.id)}
+                aria-pressed={activeFilter === f.id}
                 style={{
                   ...styles.filterBtn,
                   ...(activeFilter === f.id ? styles.activeFilterBtn : {}),
                 }}
               >
-                <span>{f.emoji}</span>
+                <span aria-hidden="true">{f.emoji}</span>
                 <span>{f.label}</span>
               </button>
             ))}

@@ -4341,3 +4341,103 @@ Resolve the remaining data-integrity risks identified during the adversarial rec
 - `isAdaptationUnlocked`: **false**
 - `productionApplied`: **false**
 - Stage 7.4.4B remains permanently locked. Phase 8 release engineering remains deferred.
+
+---
+
+## Phase 8: Release Engineering, Hardening, and Operational Readiness
+
+### Phase 8, Stage 8.1: Accessibility Audit & Keyboard Navigation (Executed: 2026-10-22)
+
+**Baseline Commit**: `b60fa25d2f19f62e65e76814b79f81e351104695`
+**Execution Status**: **REMEDIATED & VERIFIED** (Targeted AA evaluated criteria; manual screen-reader testing documented as ongoing operational check).
+
+#### 1. Audit Scope & Target Standard
+- Evaluated both primary routes: `/` (Landing Page) and `/app` (Productivity Application).
+- Evaluated against **WCAG 2.2 Level AA** criteria:
+  - 1.3.1 Info and Relationships (Landmarks, headings, semantic forms, lists).
+  - 1.4.3 Contrast (Minimum) (Normal text $\ge$ 4.5:1, large text/UI components $\ge$ 3:1).
+  - 2.1.1 Keyboard (All interactive functionality operable via keyboard).
+  - 2.1.2 No Keyboard Trap (Escape key modal dismissal and focus exit).
+  - 2.2.2 Pause, Stop, Hide (Stopwatch, timers, and animations).
+  - 2.3.3 Animation from Interactions & 2.2.2 Motion (`prefers-reduced-motion: reduce`).
+  - 2.4.1 Bypass Blocks (Skip to main content links).
+  - 2.4.2 Page Titled (Descriptive, dynamic document titles per route).
+  - 2.4.7 Focus Visible (High-contrast 3px outline on `:focus-visible`).
+  - 4.1.2 Name, Role, Value (Accessible names, ARIA tablists, progressbars, dialogs).
+
+#### 2. Confirmed Deficiencies & Severity Classification
+1. **High**: Missing accessible names and interactive button semantics on task card metadata fields:
+   - Due date and effort duration pills were non-button `<span>` and `<div>` elements with mouse-only click handlers.
+   - Task explanation hint was a plain `<span>` element.
+   - *Remediation*: Refactored into semantic `<button>` elements with clear task-specific `aria-label`s (`Change due date for task...`, `Change estimated effort for task...`, `View AI scheduling explanation for task...`) and full keyboard activation.
+2. **High**: Missing accessible names on icon-only and interactive controls:
+   - Brand logo in header was a `<span>` with click listener.
+   - Mobile menu toggle had no `aria-expanded` or `aria-controls`.
+   - CommandBar input lacked an associated `<label>` element.
+   - Task reorder buttons and delete buttons used generic or missing labels.
+   - Landing page preview stopwatch buttons lacked context distinguishing them from active user task tracking.
+   - *Remediation*: Converted brand headers to accessible buttons with `aria-label`, added `.sr-only` label for CommandBar, added descriptive `aria-label`s on all task card actions, and explicitly marked preview controls as demonstration items.
+3. **Medium**: Showcase tabs and modal tabs lacked WAI-ARIA tab pattern:
+   - Interactive preview tabs on `/` and navigation tabs in `AdaptiveScheduleModal.jsx` lacked `role="tablist"`, `role="tab"`, `aria-selected`, `aria-controls`, and `role="tabpanel"`.
+   - Arrow-key navigation between tabs was unavailable.
+   - *Remediation*: Implemented full WAI-ARIA tablist pattern with `ArrowRight` and `ArrowLeft` keyboard navigation on both preview showcase and modal tab bars.
+4. **Medium**: Missing bypass blocks and landmark navigation:
+   - Neither route provided a skip-to-main-content link.
+   - Main content was not marked with `<main id="main-content">`.
+   - *Remediation*: Added `.skip-link` in `App.jsx` and marked primary content containers with `<main id="main-content" tabIndex={-1}>` on both `/` and `/app`.
+5. **Medium**: Static page title across routes:
+   - Single document title remained fixed regardless of navigation state.
+   - *Remediation*: Added route-aware dynamic `document.title` updating in `App.jsx`.
+6. **Medium**: Color contrast deficiency on muted text tokens:
+   - `--text-muted` (`#7A7782`) against warm cream background (`#FFF8EF`) provided only 4.21:1 contrast, falling short of the 4.5:1 WCAG AA threshold for body text.
+   - *Remediation*: Adjusted `--text-muted` to `#686571` (yielding 5.35:1 contrast, passing comfortably) and `--text-light` to `#6E6B78`, preserving the editorial aesthetic.
+7. **Medium**: Modals lacked Escape key handlers and dialog semantics:
+   - Neither `TaskExplanationModal` nor `AdaptiveScheduleModal` dismissed on `Escape`.
+   - Modals lacked `role="dialog"`, `aria-modal="true"`, and `aria-labelledby`.
+   - *Remediation*: Added `Escape` key event listeners and proper dialog semantics to both modal components.
+8. **Low/Medium**: Missing reduced motion accommodations:
+   - CSS animations and smooth transitions persisted regardless of user OS preferences.
+   - *Remediation*: Added `@media (prefers-reduced-motion: reduce)` in `index.css` forcing `scroll-behavior: auto` and disabling non-essential transitions and animations.
+
+#### 3. Targeted Fixes & Code Artifacts
+- `src/index.css`: Global focus ring, token contrast hardening, skip-link styles, screen-reader utility (`.sr-only`), and `prefers-reduced-motion`.
+- `src/App.jsx`: Skip-link rendering, dynamic `document.title` route synchronization.
+- `src/pages/LandingPage.jsx`: `<main id="main-content">`, brand button, ARIA tablist with arrow keys, demonstration stopwatch labels.
+- `src/pages/ProductivityApp.jsx`: `<main id="main-content">` landmark.
+- `src/components/Header.jsx`: Keyboard brand trigger with home label.
+- `src/components/CommandBar.jsx`: Accessible input label with `.sr-only`.
+- `src/components/TaskCard.jsx`: Semantic keyboard buttons for due date, effort duration, explain hint, and task-specific labels for reordering, completion, and deletion.
+- `src/components/TaskList.jsx`: `aria-pressed` on filter controls with decorative icon hiding.
+- `src/components/ProjectOverview.jsx`: `role="progressbar"` with ARIA range values.
+- `src/components/TaskExplanationModal.jsx`: `role="dialog"`, `aria-modal="true"`, Escape key dismissal.
+- `src/components/AdaptiveScheduleModal.jsx`: `role="dialog"`, `aria-modal="true"`, Escape key dismissal, ARIA tablist with arrow keys.
+- `tests/accessibility.test.js`: Comprehensive 18-test regression suite covering contrast formulas, tokens, landmarks, tabs, cards, modals, and scheduler invariants.
+- `tests/demo_data_seeder.test.js`: Harmonized concurrency test storage mocks.
+
+#### 4. Verification & Audit Results
+- **Accessibility Regression Suite**: **18 / 18 passing** (`node --test tests/accessibility.test.js`).
+- **Full Frontend Suite**: **879 / 879 passing** across 177 suites in 26 test files (`npm test`).
+- **Backend Test Suite**: **27 / 27 passing** (`python -m pytest backend`).
+- **Linter**: Zero errors (`npm run lint` / `oxlint`).
+- **Production Build**: Built cleanly with Vite in 333ms (`npm run build`).
+- **Formatting & Whitespace**: Zero errors (`git diff --check`).
+- **Browser Keyboard Walkthrough**: Verified live on Chromium subagent with recorded session (`a11y_walkthrough_run`):
+  - Skip link appears on Tab and jumps to `#main-content` on Enter.
+  - Arrow keys switch preview tabs and focus rings display distinctly.
+  - Stopwatch activates via keyboard space/enter.
+  - New task created and task list inspected for accessible controls.
+
+#### 5. Protected Scheduler Invariants Confirmation
+- `urgencyWeight`: **50.0**
+- `priorityWeight`: **100.0**
+- `unblockWeight`: **15.0**
+- `riskWeight`: **25.0**
+- `Object.isFrozen(FACTORY_SCHEDULER_WEIGHTS)`: **true**
+- `isAdaptationUnlocked`: **false**
+- `productionApplied`: **false**
+- Candidate weights remain confined to shadow evaluation; Phase 7.4.4B remains locked.
+
+#### 6. Honest Limitations & Deferred Scope
+- Automated scans and synthetic regression tests verify technical accessibility hooks, but do not constitute formal third-party certification.
+- Manual assistive-technology verification using screen readers (JAWS, NVDA, Apple VoiceOver, ORCA) across diverse platforms remains documented as an ongoing verification task.
+- Encrypted backups, PWA service workers, code-splitting, and cloud telemetry remain strictly out of scope.

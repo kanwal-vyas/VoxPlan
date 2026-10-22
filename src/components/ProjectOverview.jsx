@@ -121,7 +121,15 @@ export default function ProjectOverview({
               </span>
             </div>
 
-            <div style={styles.progressBarTrack}>
+            <div
+              style={styles.progressBarTrack}
+              role="progressbar"
+              aria-label="Sprint completion progress"
+              aria-valuenow={progressPercent}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuetext={`${completedCount} of ${totalCount} tasks completed (${progressPercent}%)`}
+            >
               <div
                 style={{
                   ...styles.progressBarFill,

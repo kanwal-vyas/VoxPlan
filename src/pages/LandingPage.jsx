@@ -69,13 +69,18 @@ export default function LandingPage({ onNavigate }) {
       >
         <div style={styles.headerContainer}>
           {/* Brand */}
-          <div style={styles.brand} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+          <button
+            type="button"
+            style={styles.brand}
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            aria-label="VoxPlan home, scroll to top"
+          >
             <div style={styles.brandBadge}>
               <span>✦</span>
             </div>
             <span style={styles.brandName}>VOXPLAN</span>
             <span style={styles.taglineNote}>smart notebook</span>
-          </div>
+          </button>
 
           {/* Desktop Nav Links */}
           <nav style={styles.desktopNav} aria-label="Landing Navigation">
@@ -111,6 +116,8 @@ export default function LandingPage({ onNavigate }) {
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               style={styles.mobileMenuToggle}
               aria-label="Toggle Navigation Menu"
+              aria-expanded={mobileMenuOpen}
+              aria-controls="landing-mobile-menu"
             >
               {mobileMenuOpen ? '✕' : '☰'}
             </button>
@@ -119,7 +126,7 @@ export default function LandingPage({ onNavigate }) {
 
         {/* Mobile Dropdown Menu */}
         {mobileMenuOpen && (
-          <div style={styles.mobileMenu}>
+          <div id="landing-mobile-menu" style={styles.mobileMenu}>
             <button type="button" onClick={() => scrollToSection('features')} style={styles.mobileNavLink}>
               Features
             </button>
@@ -143,8 +150,10 @@ export default function LandingPage({ onNavigate }) {
         )}
       </header>
 
-      {/* 2. Hero Section */}
-      <section style={styles.heroSection}>
+      {/* Main Landmark for Accessibility (WCAG 2.2 1.3.1 Info and Relationships & 2.4.1 Bypass Blocks) */}
+      <main id="main-content" tabIndex={-1} style={{ outline: 'none' }}>
+        {/* 2. Hero Section */}
+        <section style={styles.heroSection}>
         <div style={styles.heroContainer}>
           {/* Eyebrow Pill */}
           <div style={styles.eyebrowPill}>
@@ -219,9 +228,33 @@ export default function LandingPage({ onNavigate }) {
               <span style={styles.previewDotGreen} />
               <span style={styles.previewTitleText}>VoxPlan Interactive System Architecture</span>
             </div>
-            <div style={styles.previewTabs}>
+            <div
+              style={styles.previewTabs}
+              role="tablist"
+              aria-label="Interactive demonstration showcase tabs"
+              onKeyDown={(e) => {
+                const tabs = ['schedule', 'risk', 'voice'];
+                const idx = tabs.indexOf(activePreviewTab);
+                if (e.key === 'ArrowRight') {
+                  e.preventDefault();
+                  const nextTab = tabs[(idx + 1) % tabs.length];
+                  setActivePreviewTab(nextTab);
+                  document.getElementById(`preview-tab-${nextTab}`)?.focus();
+                } else if (e.key === 'ArrowLeft') {
+                  e.preventDefault();
+                  const prevTab = tabs[(idx - 1 + tabs.length) % tabs.length];
+                  setActivePreviewTab(prevTab);
+                  document.getElementById(`preview-tab-${prevTab}`)?.focus();
+                }
+              }}
+            >
               <button
                 type="button"
+                role="tab"
+                id="preview-tab-schedule"
+                aria-selected={activePreviewTab === 'schedule'}
+                aria-controls="preview-panel-schedule"
+                tabIndex={activePreviewTab === 'schedule' ? 0 : -1}
                 onClick={() => setActivePreviewTab('schedule')}
                 style={{
                   ...styles.previewTabBtn,
@@ -232,6 +265,11 @@ export default function LandingPage({ onNavigate }) {
               </button>
               <button
                 type="button"
+                role="tab"
+                id="preview-tab-risk"
+                aria-selected={activePreviewTab === 'risk'}
+                aria-controls="preview-panel-risk"
+                tabIndex={activePreviewTab === 'risk' ? 0 : -1}
                 onClick={() => setActivePreviewTab('risk')}
                 style={{
                   ...styles.previewTabBtn,
@@ -242,6 +280,11 @@ export default function LandingPage({ onNavigate }) {
               </button>
               <button
                 type="button"
+                role="tab"
+                id="preview-tab-voice"
+                aria-selected={activePreviewTab === 'voice'}
+                aria-controls="preview-panel-voice"
+                tabIndex={activePreviewTab === 'voice' ? 0 : -1}
                 onClick={() => setActivePreviewTab('voice')}
                 style={{
                   ...styles.previewTabBtn,
@@ -255,7 +298,13 @@ export default function LandingPage({ onNavigate }) {
 
           {/* Tab 1: Adaptive Schedule Preview */}
           {activePreviewTab === 'schedule' && (
-            <div style={styles.previewBody}>
+            <div
+              role="tabpanel"
+              id="preview-panel-schedule"
+              aria-labelledby="preview-tab-schedule"
+              tabIndex={0}
+              style={styles.previewBody}
+            >
               <div style={styles.previewLeftCol}>
                 <div style={styles.previewCardTitleWrap}>
                   <span style={styles.stickerYellow}>Topological Ready-Queue</span>
@@ -332,7 +381,13 @@ export default function LandingPage({ onNavigate }) {
 
           {/* Tab 2: ML Risk & Stopwatch Preview */}
           {activePreviewTab === 'risk' && (
-            <div style={styles.previewBody}>
+            <div
+              role="tabpanel"
+              id="preview-panel-risk"
+              aria-labelledby="preview-tab-risk"
+              tabIndex={0}
+              style={styles.previewBody}
+            >
               <div style={styles.previewLeftCol}>
                 <div style={styles.previewCardTitleWrap}>
                   <span style={styles.stickerMint}>Supervised ML + Bayesian Pace</span>
@@ -357,6 +412,7 @@ export default function LandingPage({ onNavigate }) {
                       type="button"
                       onClick={() => setPreviewTimerRunning(!previewTimerRunning)}
                       style={previewTimerRunning ? styles.pauseBtn : styles.startBtn}
+                      aria-label={previewTimerRunning ? 'Pause demonstration stopwatch' : 'Start demonstration stopwatch'}
                     >
                       {previewTimerRunning ? '⏸ Pause Timer' : '▶ Start Tracking'}
                     </button>
@@ -367,6 +423,7 @@ export default function LandingPage({ onNavigate }) {
                         setPreviewTimerSeconds(0);
                       }}
                       style={styles.resetBtn}
+                      aria-label="Reset demonstration stopwatch"
                     >
                       Reset
                     </button>
@@ -417,7 +474,13 @@ export default function LandingPage({ onNavigate }) {
 
           {/* Tab 3: Voice & Natural Language Commands */}
           {activePreviewTab === 'voice' && (
-            <div style={styles.previewBody}>
+            <div
+              role="tabpanel"
+              id="preview-panel-voice"
+              aria-labelledby="preview-tab-voice"
+              tabIndex={0}
+              style={styles.previewBody}
+            >
               <div style={styles.previewLeftCol}>
                 <div style={styles.previewCardTitleWrap}>
                   <span style={styles.stickerPeach}>Voice + Typed Symmetry</span>
@@ -676,6 +739,7 @@ export default function LandingPage({ onNavigate }) {
           </div>
         </div>
       </section>
+      </main>
 
       {/* 8. Footer */}
       <footer style={styles.footer}>
@@ -766,6 +830,11 @@ const styles = {
     gap: '8px',
     cursor: 'pointer',
     userSelect: 'none',
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    font: 'inherit',
+    textAlign: 'left',
   },
   brandBadge: {
     width: '32px',

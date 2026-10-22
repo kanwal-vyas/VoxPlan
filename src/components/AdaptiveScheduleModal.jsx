@@ -429,6 +429,23 @@ export default function AdaptiveScheduleModal({
     onClose();
   };
 
+  const handleDiscardRef = useRef(handleDiscard);
+  useEffect(() => {
+    handleDiscardRef.current = handleDiscard;
+  });
+
+  // Accessible Escape key modal dismissal (WCAG 2.2 Level AA: 2.1.2 No Keyboard Trap)
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        handleDiscardRef.current?.('user_closed');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
+
   const handleApply = () => {
     if (isStale) return;
     if (hasAppliedRef.current) return;
@@ -548,9 +565,33 @@ export default function AdaptiveScheduleModal({
         </div>
 
         {/* Tab Navigation */}
-        <div style={styles.navTabBar}>
+        <div
+          style={styles.navTabBar}
+          role="tablist"
+          aria-label="Adaptive Schedule Navigation"
+          onKeyDown={(e) => {
+            const tabs = ['proposal', 'benchmark', 'feedback', 'export'];
+            const idx = tabs.indexOf(activeTab);
+            if (e.key === 'ArrowRight') {
+              e.preventDefault();
+              const nextTab = tabs[(idx + 1) % tabs.length];
+              setActiveTab(nextTab);
+              document.getElementById(`adaptive-tab-${nextTab}`)?.focus();
+            } else if (e.key === 'ArrowLeft') {
+              e.preventDefault();
+              const prevTab = tabs[(idx - 1 + tabs.length) % tabs.length];
+              setActiveTab(prevTab);
+              document.getElementById(`adaptive-tab-${prevTab}`)?.focus();
+            }
+          }}
+        >
           <button
             type="button"
+            role="tab"
+            id="adaptive-tab-proposal"
+            aria-selected={activeTab === 'proposal'}
+            aria-controls="adaptive-tabpanel-proposal"
+            tabIndex={activeTab === 'proposal' ? 0 : -1}
             onClick={() => setActiveTab('proposal')}
             style={{
               ...styles.navTabBtn,
@@ -561,6 +602,11 @@ export default function AdaptiveScheduleModal({
           </button>
           <button
             type="button"
+            role="tab"
+            id="adaptive-tab-benchmark"
+            aria-selected={activeTab === 'benchmark'}
+            aria-controls="adaptive-tabpanel-benchmark"
+            tabIndex={activeTab === 'benchmark' ? 0 : -1}
             onClick={() => setActiveTab('benchmark')}
             style={{
               ...styles.navTabBtn,
@@ -571,6 +617,11 @@ export default function AdaptiveScheduleModal({
           </button>
           <button
             type="button"
+            role="tab"
+            id="adaptive-tab-feedback"
+            aria-selected={activeTab === 'feedback'}
+            aria-controls="adaptive-tabpanel-feedback"
+            tabIndex={activeTab === 'feedback' ? 0 : -1}
             onClick={() => setActiveTab('feedback')}
             style={{
               ...styles.navTabBtn,
@@ -581,6 +632,11 @@ export default function AdaptiveScheduleModal({
           </button>
           <button
             type="button"
+            role="tab"
+            id="adaptive-tab-export"
+            aria-selected={activeTab === 'export'}
+            aria-controls="adaptive-tabpanel-export"
+            tabIndex={activeTab === 'export' ? 0 : -1}
             onClick={() => {
               setActiveTab('export');
               setExportFeedback(null);
@@ -596,7 +652,12 @@ export default function AdaptiveScheduleModal({
 
         {/* TAB 1: SCHEDULE PROPOSAL */}
         {activeTab === 'proposal' && (
-          <>
+          <div
+            role="tabpanel"
+            id="adaptive-tabpanel-proposal"
+            aria-labelledby="adaptive-tab-proposal"
+            tabIndex={0}
+          >
             {/* Stale Proposal Alert Banner */}
             {isStale && (
               <div style={styles.staleBanner}>
@@ -1106,12 +1167,18 @@ export default function AdaptiveScheduleModal({
                 </button>
               </div>
             </div>
-          </>
+          </div>
         )}
 
         {/* TAB 2: STRATEGY BENCHMARK & QUALITY EVALUATION */}
         {activeTab === 'benchmark' && benchmarkComparison && (
-          <div style={styles.benchmarkContainer}>
+          <div
+            style={styles.benchmarkContainer}
+            role="tabpanel"
+            id="adaptive-tabpanel-benchmark"
+            aria-labelledby="adaptive-tab-benchmark"
+            tabIndex={0}
+          >
             {/* Scenario Selector Ribbon */}
             <div style={styles.scenarioBar}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -1357,7 +1424,13 @@ export default function AdaptiveScheduleModal({
 
         {/* TAB 3: SCHEDULE FEEDBACK & OUTCOME TRACKING */}
         {activeTab === 'feedback' && feedbackReport && (
-          <div style={styles.feedbackContainer}>
+          <div
+            style={styles.feedbackContainer}
+            role="tabpanel"
+            id="adaptive-tabpanel-feedback"
+            aria-labelledby="adaptive-tab-feedback"
+            tabIndex={0}
+          >
             {/* Sufficiency Alert */}
             {!feedbackReport.summary.isSufficientData ? (
               <div style={styles.feedbackSufficiencyBanner}>
@@ -1593,7 +1666,13 @@ export default function AdaptiveScheduleModal({
 
         {/* TAB 4: CALENDAR EXPORT (RFC 5545 .ICS) */}
         {activeTab === 'export' && (
-          <div style={styles.exportContainer}>
+          <div
+            style={styles.exportContainer}
+            role="tabpanel"
+            id="adaptive-tabpanel-export"
+            aria-labelledby="adaptive-tab-export"
+            tabIndex={0}
+          >
             <div style={styles.exportHeaderCard}>
               <div style={styles.exportTitleRow}>
                 <div>

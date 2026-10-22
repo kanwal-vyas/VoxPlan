@@ -262,8 +262,8 @@ export default function TaskCard({
                 onMoveUp(index);
               }}
               style={styles.reorderBtn}
-              title="Move task up"
-              aria-label="Move task up"
+              title={`Move "${task.title}" up`}
+              aria-label={`Move task "${task.title}" up`}
             >
               ▲
             </button>
@@ -276,8 +276,8 @@ export default function TaskCard({
                 onMoveDown(index);
               }}
               style={styles.reorderBtn}
-              title="Move task down"
-              aria-label="Move task down"
+              title={`Move "${task.title}" down`}
+              aria-label={`Move task "${task.title}" down`}
             >
               ▼
             </button>
@@ -292,8 +292,8 @@ export default function TaskCard({
               backgroundColor: task.completed ? '#25242A' : '#FFFFFF',
               borderColor: task.completed ? '#25242A' : 'rgba(37, 36, 42, 0.3)',
             }}
-            title={task.completed ? 'Mark uncompleted' : 'Mark completed'}
-            aria-label="Toggle task completion"
+            title={task.completed ? `Mark "${task.title}" uncompleted` : `Mark "${task.title}" completed`}
+            aria-label={task.completed ? `Mark "${task.title}" as incomplete` : `Mark "${task.title}" as complete`}
           >
             {task.completed && (
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
@@ -310,8 +310,8 @@ export default function TaskCard({
               onDelete(task.id);
             }}
             style={styles.deleteBtn}
-            title="Delete task"
-            aria-label="Delete task"
+            title={`Delete "${task.title}"`}
+            aria-label={`Delete task "${task.title}"`}
           >
             ✕
           </button>
@@ -336,8 +336,14 @@ export default function TaskCard({
               onBlur={handleSaveTitle}
               autoFocus
               style={styles.editInput}
+              aria-label={`Edit title for "${task.title}"`}
             />
-            <button type="button" onClick={handleSaveTitle} style={styles.saveBtn}>
+            <button
+              type="button"
+              onClick={handleSaveTitle}
+              style={styles.saveBtn}
+              aria-label={`Save title for "${task.title}"`}
+            >
               ✓
             </button>
             <button
@@ -348,6 +354,7 @@ export default function TaskCard({
                 setIsEditing(false);
               }}
               style={styles.cancelBtn}
+              aria-label={`Cancel editing title for "${task.title}"`}
             >
               ✕
             </button>
@@ -373,7 +380,8 @@ export default function TaskCard({
                 setIsEditing(true);
               }}
               style={styles.editTrigger}
-              title="Edit title"
+              title={`Edit title for "${task.title}"`}
+              aria-label={`Edit title for "${task.title}"`}
             >
               ✎
             </button>
@@ -396,6 +404,7 @@ export default function TaskCard({
               onChange={(e) => setSelfReportedMins(e.target.value)}
               placeholder="Mins (e.g. 45)"
               style={styles.durationInput}
+              aria-label={`Self-reported working minutes for "${task.title}"`}
               autoFocus
             />
             <button
@@ -403,6 +412,7 @@ export default function TaskCard({
               onClick={() => confirmCompletionWithDuration('self_reported')}
               style={styles.saveDurationBtn}
               title="Save approximate working minutes"
+              aria-label={`Save self-reported minutes for "${task.title}"`}
             >
               Save mins
             </button>
@@ -411,6 +421,7 @@ export default function TaskCard({
               onClick={() => confirmCompletionWithDuration('unknown')}
               style={styles.skipDurationBtn}
               title="Leave duration as unmeasured"
+              aria-label={`Skip duration logging for "${task.title}"`}
             >
               Skip (Unknown)
             </button>
@@ -419,6 +430,7 @@ export default function TaskCard({
               onClick={() => setShowDurationPrompt(false)}
               style={styles.cancelDurationBtn}
               title="Cancel"
+              aria-label={`Cancel completion prompt for "${task.title}"`}
             >
               ✕
             </button>
@@ -437,21 +449,38 @@ export default function TaskCard({
                 value={rescheduleDate}
                 onChange={(e) => setRescheduleDate(e.target.value)}
                 style={styles.datePickerInput}
+                aria-label={`New due date for "${task.title}"`}
               />
-              <button type="button" onClick={handleSaveReschedule} style={styles.smallSaveBtn}>✓</button>
-              <button type="button" onClick={() => setIsRescheduling(false)} style={styles.smallCancelBtn}>✕</button>
+              <button
+                type="button"
+                onClick={handleSaveReschedule}
+                style={styles.smallSaveBtn}
+                aria-label={`Save new due date for "${task.title}"`}
+              >
+                ✓
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsRescheduling(false)}
+                style={styles.smallCancelBtn}
+                aria-label={`Cancel rescheduling for "${task.title}"`}
+              >
+                ✕
+              </button>
             </div>
           ) : (
-            <span
-              style={styles.dueDate}
+            <button
+              type="button"
+              style={styles.dueDateBtn}
               onClick={(e) => {
                 e.stopPropagation();
                 if (!task.completed) setIsRescheduling(true);
               }}
               title="Click to reschedule due date"
+              aria-label={`Reschedule due date for "${task.title}". Current due date is ${formatDueDate(task.dueDate)}`}
             >
               📅 {formatDueDate(task.dueDate)}
-            </span>
+            </button>
           )}
 
           {/* Effort estimate display or editor */}
@@ -465,17 +494,34 @@ export default function TaskCard({
                 onChange={(e) => setEffortInput(e.target.value)}
                 placeholder="Hours"
                 style={styles.effortNumberInput}
+                aria-label={`Estimated effort in hours for "${task.title}"`}
               />
-              <button type="button" onClick={handleSaveEffort} style={styles.smallSaveBtn}>✓</button>
-              <button type="button" onClick={() => setIsEditingEffort(false)} style={styles.smallCancelBtn}>✕</button>
+              <button
+                type="button"
+                onClick={handleSaveEffort}
+                style={styles.smallSaveBtn}
+                aria-label={`Save effort estimate for "${task.title}"`}
+              >
+                ✓
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsEditingEffort(false)}
+                style={styles.smallCancelBtn}
+                aria-label={`Cancel editing effort for "${task.title}"`}
+              >
+                ✕
+              </button>
             </div>
           ) : task.estimatedEffort != null ? (
-            <div
-              style={styles.durationPillGroup}
+            <button
+              type="button"
+              style={styles.durationPillBtn}
               onClick={(e) => {
                 e.stopPropagation();
                 if (!task.completed) setIsEditingEffort(true);
               }}
+              aria-label={`Edit effort estimate for "${task.title}". Current effort is ${task.estimatedEffort} hours`}
               title={
                 durationEstimate &&
                 (durationEstimate.personalization_status === 'sparse' ||
@@ -500,7 +546,7 @@ export default function TaskCard({
                     </span>
                   </span>
               )}
-            </div>
+            </button>
           ) : !task.completed ? (
             <button
               type="button"
@@ -510,6 +556,7 @@ export default function TaskCard({
               }}
               style={styles.addEffortBtn}
               title="Set estimated effort to view personalized duration predictions"
+              aria-label={`Add estimated effort for "${task.title}"`}
             >
               + effort
             </button>
@@ -525,6 +572,7 @@ export default function TaskCard({
                 onClick={() => onPauseTimer && onPauseTimer(task.id)}
                 style={styles.timerActiveBtn}
                 title="Pause active stopwatch"
+                aria-label={`Pause active stopwatch for "${task.title}". Elapsed: ${formatDuration(liveSeconds)}`}
               >
                 <span style={styles.pulsingDot} />
                 <span>⏸ {formatDuration(liveSeconds)}</span>
@@ -535,6 +583,7 @@ export default function TaskCard({
                 onClick={() => onStartTimer && onStartTimer(task.id)}
                 style={styles.timerPausedBtn}
                 title="Resume working timer"
+                aria-label={`Resume working stopwatch for "${task.title}". Elapsed: ${formatDuration(liveSeconds)}`}
               >
                 <span>▶ {formatDuration(liveSeconds)}</span>
               </button>
@@ -544,6 +593,7 @@ export default function TaskCard({
                 onClick={() => onStartTimer && onStartTimer(task.id)}
                 style={styles.timerIdleBtn}
                 title="Start working stopwatch for this task"
+                aria-label={`Start working stopwatch for "${task.title}"`}
               >
                 <span>▶ Timer</span>
               </button>
@@ -595,9 +645,21 @@ export default function TaskCard({
           )}
         </div>
 
-        <span style={styles.explainHint}>
-          {prediction ? 'view details →' : 'model offline'}
-        </span>
+        {prediction ? (
+          <button
+            type="button"
+            style={styles.explainHintBtn}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onOpenExplanation) onOpenExplanation(task, prediction);
+            }}
+            aria-label={`View delay risk prediction explanation for "${task.title}"`}
+          >
+            view details →
+          </button>
+        ) : (
+          <span style={styles.explainHint}>model offline</span>
+        )}
       </div>
     </article>
   );
@@ -1008,5 +1070,36 @@ const styles = {
     border: '1px solid #C9B6FF',
     marginLeft: '4px',
     cursor: 'help',
+  },
+  dueDateBtn: {
+    fontSize: '12px',
+    cursor: 'pointer',
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    font: 'inherit',
+    color: '#706D73',
+    fontWeight: '500',
+  },
+  durationPillBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    cursor: 'pointer',
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    font: 'inherit',
+  },
+  explainHintBtn: {
+    fontSize: '12px',
+    color: '#706D73',
+    fontWeight: '500',
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    font: 'inherit',
+    cursor: 'pointer',
+    textDecoration: 'underline',
   },
 };

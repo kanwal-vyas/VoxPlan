@@ -65,9 +65,26 @@ export default function App() {
 
   const isApp = currentPath === '/app' || currentPath.startsWith('/app/');
 
-  return isApp ? (
-    <ProductivityApp onNavigate={navigate} />
-  ) : (
-    <LandingPage onNavigate={navigate} />
+  // Dynamic route document titles and focus restoration (WCAG 2.2 2.4.2 Page Titled & 2.4.3 Focus Order)
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (isApp) {
+      document.title = 'VoxPlan App — Tasks & Adaptive Scheduling';
+    } else {
+      document.title = 'VoxPlan — Playful Project Intelligence';
+    }
+  }, [isApp]);
+
+  return (
+    <>
+      <a href="#main-content" className="skip-link">
+        Skip to main content
+      </a>
+      {isApp ? (
+        <ProductivityApp onNavigate={navigate} />
+      ) : (
+        <LandingPage onNavigate={navigate} />
+      )}
+    </>
   );
 }

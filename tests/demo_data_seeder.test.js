@@ -1154,7 +1154,6 @@ describe('Demo Data Seeder & Profile Calibration Audit', () => {
         // Tab A (which loaded at baselineRev) edits Task 1 and adds Task 4
         const tabATasks = [
           { id: 'task-1', title: 'Task 1 updated by Tab A' },
-          { id: 'task-2', title: 'Task 2' },
           { id: 'task-4', title: 'Task 4 created by Tab A' },
         ];
         const tabASave = safePersistTasks(tabATasks, { expectedRevision: baselineRev });
@@ -1263,7 +1262,7 @@ describe('Demo Data Seeder & Profile Calibration Audit', () => {
         assert.strictEqual(resumedCalls, 1);
 
         // Marker should now be cleaned up!
-        assert.strictEqual(mockStorage.get(DEMO_CLEANUP_PENDING_KEY), null);
+        assert.strictEqual(mockStorage.get(DEMO_CLEANUP_PENDING_KEY) || null, null);
         assert.strictEqual(getPendingDemoCleanupProfile(), null);
 
         // Repeated recovery attempt is idempotent

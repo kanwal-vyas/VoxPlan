@@ -29,7 +29,8 @@ export default function Header({
     >
       <div style={styles.headerInner}>
         {/* Brand Wordmark & Sticker */}
-        <div
+        <button
+          type="button"
           style={styles.brand}
           onClick={() => {
             if (onNavigate) {
@@ -38,6 +39,7 @@ export default function Header({
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }
           }}
+          aria-label={onNavigate ? 'Back to VoxPlan product landing page' : 'VoxPlan home, scroll to top'}
           title={onNavigate ? 'Back to Product Landing Page' : 'Scroll to top'}
         >
           <div style={styles.brandBadge}>
@@ -45,7 +47,7 @@ export default function Header({
           </div>
           <span style={styles.brandName}>VOXPLAN</span>
           <span style={styles.taglineNote}>smart notebook</span>
-        </div>
+        </button>
 
         {/* Floating Nav Capsule */}
         <nav style={styles.nav} aria-label="Sections">
@@ -185,6 +187,11 @@ const styles = {
     gap: '10px',
     cursor: 'pointer',
     userSelect: 'none',
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    font: 'inherit',
+    textAlign: 'left',
   },
   brandBadge: {
     width: '28px',

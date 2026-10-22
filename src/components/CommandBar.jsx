@@ -199,6 +199,9 @@ export default function CommandBar({
               <span style={styles.promptIcon}>
                 {conversationState === 'AWAITING_CONFIRMATION' ? '⚠️' : conversationState === 'AWAITING_PROPOSAL_DECISION' ? '📋' : '💬'}
               </span>
+              <label htmlFor="command-input" className="sr-only">
+                Planning command or task input
+              </label>
               <input
                 type="text"
                 value={inputVal}
@@ -208,6 +211,7 @@ export default function CommandBar({
                   if (e.key === 'Enter') handleSubmit(e);
                 }}
                 id="command-input"
+                aria-label="Planning command or task input"
                 placeholder={placeholderText}
                 style={styles.input}
               />

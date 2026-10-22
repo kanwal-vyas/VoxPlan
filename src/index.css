@@ -22,8 +22,8 @@
   /* Typography Colors */
   --text-dark: #25242A;
   --text-body: #4A4852;
-  --text-muted: #7A7782;
-  --text-light: #9B98A3;
+  --text-muted: #686571; /* WCAG AA 5.35:1 contrast against #FFF8EF */
+  --text-light: #6E6B78;
 
   /* Card Borders & Shadows */
   --border-subtle: rgba(37, 36, 42, 0.08);
@@ -67,6 +67,49 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Distinct, Accessible Focus Rings (WCAG 2.2 Level AA: 2.4.7 Focus Visible & 2.4.11 Focus Not Obscured) */
+:focus-visible {
+  outline: 3px solid var(--text-dark);
+  outline-offset: 2px;
+}
+
+/* Accessible Skip-to-Content Link */
+.skip-link {
+  position: absolute;
+  top: -120px;
+  left: 1rem;
+  background: var(--text-dark);
+  color: #FFFFFF;
+  padding: 0.75rem 1.25rem;
+  font-weight: 700;
+  font-size: 0.95rem;
+  border-radius: var(--radius-sm);
+  z-index: 99999;
+  text-decoration: none;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  transition: top 0.15s ease-out;
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+  top: 1rem;
+  outline: 3px solid var(--pastel-butter);
+  outline-offset: 2px;
+}
+
+/* Screen Reader Only Utility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -107,4 +150,20 @@ button, input {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #D4C5B5;
+}
+
+/* Reduced Motion Preference (WCAG 2.2 2.3.3 Animation from Interactions) */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

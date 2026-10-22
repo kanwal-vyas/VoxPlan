@@ -1339,11 +1339,13 @@ export default function ProductivityApp({ onNavigate }) {
           onNavigate={onNavigate}
         />
 
-        {/* Playful Hero */}
-        <Hero
-          modelMetadata={modelStatus}
-          onScrollToSection={handleScrollToSection}
-        />
+        {/* Main Landmark for Accessibility (WCAG 2.2 1.3.1 Info and Relationships & 2.4.1 Bypass Blocks) */}
+        <main id="main-content" tabIndex={-1} style={{ outline: 'none', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {/* Playful Hero */}
+          <Hero
+            modelMetadata={modelStatus}
+            onScrollToSection={handleScrollToSection}
+          />
 
         {/* Giant Editorial Typography Ribbon 1 */}
         <div className="editorial-ribbon-wrap" aria-hidden="true">
@@ -1464,6 +1466,7 @@ export default function ProductivityApp({ onNavigate }) {
           }}
           onCancelClarification={() => executeCommand('cancel')}
         />
+        </main>
       </div>
 
       {/* Task ML Explainability Modal (Smart Note) */}

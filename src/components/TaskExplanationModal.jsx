@@ -1,6 +1,16 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 export default function TaskExplanationModal({ task, prediction, onClose }) {
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   if (!task || !prediction) return null;
 
   const prob = prediction.delay_probability ?? prediction.probability ?? 0;
@@ -52,7 +62,13 @@ export default function TaskExplanationModal({ task, prediction, onClose }) {
   const theme = getTheme();
 
   return (
-    <div style={styles.backdrop} onClick={onClose}>
+    <div
+      style={styles.backdrop}
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="task-explanation-title"
+    >
       <div style={styles.sheet} onClick={(e) => e.stopPropagation()}>
         {/* Modal Top Row */}
         <div style={styles.topRow}>
@@ -66,7 +82,7 @@ export default function TaskExplanationModal({ task, prediction, onClose }) {
             type="button"
             onClick={onClose}
             style={styles.closeBtn}
-            aria-label="Close modal"
+            aria-label={`Close explanation for "${task.title}"`}
           >
             ✕
           </button>
@@ -75,7 +91,7 @@ export default function TaskExplanationModal({ task, prediction, onClose }) {
         {/* Title & Risk Highlight */}
         <div style={styles.titleGroup}>
           <span style={styles.eyebrow}>PREDICTIVE EXPLANATION</span>
-          <h2 style={styles.taskTitle}>{task.title}</h2>
+          <h2 id="task-explanation-title" style={styles.taskTitle}>{task.title}</h2>
 
           <div style={{ ...styles.riskHighlightBox, backgroundColor: theme.headerBg, border: `1.5px solid ${theme.borderColor}` }}>
             <span
