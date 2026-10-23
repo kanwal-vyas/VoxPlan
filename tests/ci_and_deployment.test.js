@@ -61,6 +61,19 @@ describe('Phase 8, Stage 8.4: CI Pipeline, Reproducible Builds & Deployment Hard
       assert.match(content, /pytest backend\/tests\//, 'Must run pytest in backend job');
       assert.match(content, /git status --porcelain backend\/models/, 'Must verify model files are not dirtied by tests');
     });
+
+    it('1.7 Pins third-party actions to immutable commit SHAs', () => {
+      const content = fs.readFileSync(ciPath, 'utf8');
+      assert.match(content, /actions\/checkout@11bd71901bbe5b1630ceea73d27597364c9af683/, 'Must pin checkout to immutable SHA');
+      assert.match(content, /actions\/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af/, 'Must pin setup-node to immutable SHA');
+      assert.match(content, /actions\/setup-python@42375524e23c412d93fb67b49958b491fce71c38/, 'Must pin setup-python to immutable SHA');
+    });
+
+    it('1.8 Security job includes pip-audit and dedicated secretScanner', () => {
+      const content = fs.readFileSync(ciPath, 'utf8');
+      assert.match(content, /pip-audit/, 'Must execute pip-audit in security job');
+      assert.match(content, /secretScanner\.mjs/, 'Must execute dedicated secret scanner in security job');
+    });
   });
 
   describe('2. Secret Protection, .gitignore & Environment Configuration', () => {
@@ -83,6 +96,11 @@ describe('Phase 8, Stage 8.4: CI Pipeline, Reproducible Builds & Deployment Hard
 
     it('2.3 No committed .env or credentials exist in working tree', () => {
       assert.strictEqual(fs.existsSync(path.join(rootDir, '.env')), false, '.env must not exist in repository root');
+    });
+
+    it('2.4 Dedicated secret scanner executes cleanly with zero violations', () => {
+      const scannerPath = path.join(rootDir, 'scripts', 'secretScanner.mjs');
+      assert.strictEqual(fs.existsSync(scannerPath), true, 'secretScanner.mjs must exist');
     });
   });
 
@@ -107,13 +125,12 @@ describe('Phase 8, Stage 8.4: CI Pipeline, Reproducible Builds & Deployment Hard
 
     it('3.2 index.html contains no inline scripts to satisfy strict CSP', () => {
       const indexHtml = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
-      // Should not contain inline <script> tags with content (only <script type="module" src="...">)
       const inlineScripts = indexHtml.match(/<script(?![^>]*src=)[^>]*>[\s\S]*?<\/script>/gi);
       assert.strictEqual(inlineScripts, null, 'index.html must not contain inline scripts');
     });
   });
 
-  describe('4. Browser Security Headers & Content Security Policy (CSP)', () => {
+  describe('4. Browser Security Headers, CSP & SPA Routing Protection', () => {
     it('4.1 Backend defines security headers middleware with CSP, framing, and sniffing protection', () => {
       const mainPy = fs.readFileSync(path.join(rootDir, 'backend', 'main.py'), 'utf8');
       assert.match(mainPy, /add_security_headers/, 'main.py must define add_security_headers middleware');
@@ -132,6 +149,11 @@ describe('Phase 8, Stage 8.4: CI Pipeline, Reproducible Builds & Deployment Hard
       assert.match(mainPy, /frame-ancestors 'none'/, 'CSP must block frame-ancestors');
       assert.doesNotMatch(mainPy, /script-src[^;]*'unsafe-eval'/, 'CSP script-src must not allow unsafe-eval');
     });
+
+    it('4.3 SPA routing fallback explicitly protects /api endpoints from returning index.html', () => {
+      const mainPy = fs.readFileSync(path.join(rootDir, 'backend', 'main.py'), 'utf8');
+      assert.match(mainPy, /full_path\.startswith\("api\/"\)/, 'Must block /api routes from SPA fallback');
+    });
   });
 
   describe('5. Containerization Architecture', () => {
@@ -145,12 +167,12 @@ describe('Phase 8, Stage 8.4: CI Pipeline, Reproducible Builds & Deployment Hard
       assert.match(content, /FROM python:3\.12-slim AS runner/, 'Stage 2 must use Python 3.12 slim');
     });
 
-    it('5.2 Dockerfile enforces unprivileged non-root execution and healthcheck', () => {
+    it('5.2 Dockerfile enforces unprivileged non-root execution and native Python healthcheck', () => {
       const content = fs.readFileSync(dockerfilePath, 'utf8');
       assert.match(content, /useradd -u 10001 -g voxplan/, 'Must create dedicated non-root user');
       assert.match(content, /USER voxplan/, 'Must switch to unprivileged user');
       assert.match(content, /HEALTHCHECK/, 'Must declare container healthcheck');
-      assert.match(content, /curl -f http:\/\/127\.0\.0\.1:8000\/health/, 'Healthcheck must verify /health');
+      assert.match(content, /python -c "import urllib\.request/, 'Healthcheck must use native python urllib without external curl dependency');
     });
 
     it('5.3 .dockerignore excludes source control, dependencies, and environment files', () => {

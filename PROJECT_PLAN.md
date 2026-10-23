@@ -4982,3 +4982,69 @@ Deliverables:
 3. **Deployment Options**:
    - Option A (Split Deployment, current Render topology): Frontend deployed as static SPA on CDN/Render static site; FastAPI deployed as web service running `uvicorn backend.main:app`. Set `VITE_API_BASE_URL` on frontend and `CORS_ORIGINS` on backend.
    - Option B (Unified Container Deployment): Build container using `docker build -t voxplan:latest .` and deploy to any container platform. FastAPI serves both the API and the SPA frontend on port 8000.
+
+---
+
+### Phase 8, Stage 8.4A Execution Record: Release Gate Verification & Deployment Hardening Audit
+
+#### 1. Audit Scope & Objectives
+Execute an evidence-driven audit of the Stage 8.4 implementation to close verification gaps, enforce strict separation between formatting checks and security scans, replace external container dependencies with runtime primitives, and explicitly document the exact verification status of all release gates.
+
+#### 2. Container Healthcheck & Image Runtime Hardening
+- **File**: `Dockerfile`
+  - Replaced the external `curl` healthcheck command and eliminated `apt-get install -y curl` from the Python runner stage.
+  - Implemented a zero-dependency healthcheck utilizing the container's native Python runtime:
+    `HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD python -c "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).getcode() == 200 else 1)"`
+  - Eliminates OS package manager overhead, shrinks container footprint, and removes external network attack surface from the final runtime image.
+  - Retains unprivileged dedicated execution as non-root user `voxplan` (UID 10001).
+  - **Docker CLI Availability Limitation**: Docker is not installed on the local Windows host; container manifests are verified structurally by 21 automated assertions in `tests/ci_and_deployment.test.js`.
+
+#### 3. Single-Service SPA Routing Correctness
+- **File**: `backend/main.py`
+  - Hardened the `serve_spa_frontend` wildcard route handler to prevent undefined `/api/*` endpoints from accidentally falling back to `dist/index.html`.
+  - Unmatched API routes now immediately raise `HTTPException(status_code=404, detail="API endpoint not found")`, preserving JSON API error semantics while allowing client-side routes like `/app` to serve the HTML shell.
+  - Added test coverage in `backend/tests/test_ml_backend.py` (`test_unknown_api_endpoint_returns_404` and `test_spa_route_serving`).
+
+#### 4. CI Workflow Hardening & Action Pinning
+- **File**: `.github/workflows/ci.yml`
+  - Pinned all third-party actions to reviewed immutable commit SHAs with version comments:
+    - `actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683` (`# v4.2.2`)
+    - `actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af` (`# v4.1.0`)
+    - `actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38` (`# v5.4.0`)
+  - Integrated `pip-audit` into the CI `security` job: audits Python dependencies against PyPI advisory database (`pip-audit -r backend/requirements.txt`).
+  - Separated formatting hygiene (`git diff --check`) from security scanning.
+  - **Remote GitHub Actions Status**: Remote execution remains **unverified** locally because the development environment lacks GitHub CLI (`gh`) and authenticated runner API credentials.
+
+#### 5. Dedicated Secret & Credential Scanner
+- **File**: `scripts/secretScanner.mjs`
+  - Created standalone secret scanner verifying all tracked repository files for private cryptographic keys, AWS access keys, GitHub tokens, Slack tokens, and exposed password assignments.
+  - Clean execution across 132 files with zero exposed credentials found.
+
+#### 6. Real-Browser Offline Release Gate Status
+- **Browser Online Navigation**: **VERIFIED** on Chromium subagent (`real_offline_audit`).
+  - Successfully navigated to `/` and `/app`.
+  - Service worker caches (`voxplan-app-shell-v1` and `voxplan-static-v1`) confirmed populated.
+  - Console inspection verified zero CSP violations.
+- **Browser Physical / Simulated Offline Disconnect**: **UNVERIFIED**.
+  - The browser subagent environment lacks Chrome DevTools Protocol network throttling / network disconnect controls (`Network.emulateNetworkConditions`).
+  - As mandated by the release policy, offline fallback cannot be labeled verified solely through online navigation; the offline capability is therefore explicitly documented as verified via unit/integration test suites (`tests/pwa_and_routing.test.js`) but **unverified in real-browser network disconnect mode**.
+
+#### 7. Protected Scheduler Invariants Confirmation
+- `urgencyWeight`: **50.0**
+- `priorityWeight`: **100.0**
+- `unblockWeight`: **15.0**
+- `riskWeight`: **25.0**
+- `Object.isFrozen(FACTORY_SCHEDULER_WEIGHTS)`: **true**
+- `isAdaptationUnlocked`: **false**
+- `productionApplied`: **false**
+- Phase 7.4.4B remains strictly locked.
+
+#### 8. Verified Test Counts
+- **Full Frontend Test Suite**: **979 / 979 passing** across 203 suites in 29 test files (`npm test`), 0 failures.
+- **Backend Test Suite**: **29 / 29 passing** across 2 test files (`pytest backend/tests/`), 0 failures.
+- **Core Release Regressions**: **155 / 155 passing** across 38 suites (`node --test tests/*.test.js`).
+- **Secret Scanner**: **132 / 132 files clean**, 0 credentials exposed.
+- **Python Vulnerability Audit**: **0 known vulnerabilities** reported by `pip-audit`.
+- **Frontend Dependency Audit**: **0 vulnerabilities** reported by `npm audit --omit=dev`.
+- **Linter**: **0 errors**, 1 warning (`oxlint`).
+- **Formatting**: **0 whitespace / merge-conflict errors** (`git diff --check`).

@@ -249,6 +249,9 @@ if DIST_DIR.exists() and (DIST_DIR / "index.html").exists():
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa_frontend(full_path: str):
+        # Prevent API routes from accidentally falling back to HTML index
+        if full_path.startswith("api/") or full_path == "api":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API endpoint not found")
         file_path = DIST_DIR / full_path
         if full_path and file_path.is_file():
             return FileResponse(file_path)

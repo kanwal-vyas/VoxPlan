@@ -206,3 +206,19 @@ def test_api_telemetry_batch_ingest_and_retrieval():
     res_post_clear = client.get(f"/api/telemetry/events?profile_id={profile_id}")
     assert res_post_clear.json()["count"] == 0
 
+
+def test_unknown_api_endpoint_returns_404():
+    """Verify unknown /api endpoints return 404 JSON and are not intercepted by SPA index.html."""
+    res = client.get("/api/unknown_endpoint")
+    assert res.status_code == 404
+    assert res.json()["detail"] == "API endpoint not found"
+
+
+def test_spa_route_serving():
+    """Verify SPA route /app serves HTML index when dist directory is present."""
+    from backend.main import DIST_DIR
+    if DIST_DIR.exists() and (DIST_DIR / "index.html").exists():
+        res = client.get("/app")
+        assert res.status_code == 200
+        assert "text/html" in res.headers.get("content-type", "")
+

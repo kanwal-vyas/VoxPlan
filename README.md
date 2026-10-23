@@ -40,8 +40,8 @@ npm run dev
 ```
 
 ### Verified Test Suites & Quality Metrics
-- **Frontend Test Suite**: **975 / 975 passing** across 203 test suites in 29 test files (`npm test`).
-- **Backend Test Suite**: **27 / 27 passing** across REST and ML endpoints (`pytest backend/tests/`).
+- **Frontend Test Suite**: **979 / 979 passing** across 203 test suites in 29 test files (`npm test`).
+- **Backend Test Suite**: **29 / 29 passing** across REST and ML endpoints (`pytest backend/tests/`).
 - **CI / CD Quality Gates**: Automated GitHub Actions workflow (`.github/workflows/ci.yml`) enforcing least-privilege read-only permissions, linting, tests, build artifact checks, and secret exposure verification.
 - **Linter**: Zero errors (`npm run lint` / `oxlint`).
 - **Production Build**: Clean compilation with route-level and component code splitting (75.9% initial load reduction) (`npm run build`).
