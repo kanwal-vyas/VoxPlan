@@ -5325,6 +5325,12 @@ No speculative claims were made that these environmental gates passed.
 
 #### 4. Release Gate Status & Honest Classification
 
-- **Workflow Implementation Completed**: The CI workflow and Dockerfile fixes have been implemented, tested, and validated locally.
-- **Docker Runtime Verification Status**: **PENDING CI EXECUTION**.
-- **Gate Classification**: The Docker runtime gate (Gate B) will transition from **UNVERIFIED** to **PASSED** upon the successful completion of the `docker-runtime` job in the GitHub Actions run triggered by pushing this change to `main`.
+- **Workflow Implementation Completed**: The CI workflow and Dockerfile fixes were implemented, tested, and pushed to `main` at commit `cc5142b`.
+- **Docker Runtime Verification Status**: **PASSED** (Verified on genuine Docker-capable GitHub-hosted Linux runner).
+- **Verified GitHub Actions Run Evidence**:
+  - **Run URL**: [https://github.com/kanwal-vyas/VoxPlan/actions/runs/39956547291](https://github.com/kanwal-vyas/VoxPlan/actions/runs/39956547291)
+  - **Job Name**: `Docker Container Build & Runtime Smoke Verification`
+  - **Job URL**: [https://github.com/kanwal-vyas/VoxPlan/actions/runs/39956547291/job/120423959749](https://github.com/kanwal-vyas/VoxPlan/actions/runs/39956547291/job/120423959749)
+  - **Execution Window**: Started `2026-10-23T12:52:26Z` / Completed `2026-10-23T12:53:08Z` (Duration: 42s).
+  - **Result**: `success` (All steps completed cleanly: checkout, `docker build -t voxplan:ci-smoke .`, `docker run`, container health status transition to `healthy`, host HTTP `curl -sS -f http://127.0.0.1:8000/health` verified with JSON contract `{"status": "ok", "service": "voxplan-ml"}`, SPA `/app` verified, diagnostics clean, unconditional container cleanup passed).
+- **Remaining Release Gate**: Gate A (Real Browser Network Disconnect) remains **UNVERIFIED** (documented manual procedure). Gate B (Docker Runtime Smoke Test) is now **PASSED**.
