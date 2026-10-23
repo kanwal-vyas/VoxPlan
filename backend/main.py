@@ -32,14 +32,52 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# Enable CORS for local React/Vite development server
+import os
+from pathlib import Path
+
+# Enable CORS (configurable via CORS_ORIGINS environment variable)
+cors_origins_env = os.getenv("CORS_ORIGINS", "*").strip()
+if cors_origins_env == "*":
+    allowed_origins = ["*"]
+else:
+    allowed_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    """
+    Applies defensive HTTP security headers to all responses,
+    including Content-Security-Policy (CSP), framing protection, MIME sniffing prevention,
+    and restrictive permissions policy.
+    """
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "microphone=(self), camera=(), geolocation=()"
+    csp_directives = [
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src 'self' https://fonts.gstatic.com",
+        "img-src 'self' data: blob:",
+        "connect-src 'self' http://127.0.0.1:8000 http://localhost:8000 https://voxplan-u31l.onrender.com",
+        "worker-src 'self'",
+        "manifest-src 'self'",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "frame-ancestors 'none'",
+    ]
+    response.headers["Content-Security-Policy"] = "; ".join(csp_directives)
+    return response
 
 
 @app.get("/health", response_model=HealthResponse, tags=["System"])
@@ -200,7 +238,27 @@ def clear_telemetry_events(profile_id: str):
     return {"status": "cleared", "profile_id": profile_id}
 
 
+# Optional production static asset serving (Single-service deployment mode)
+DIST_DIR = Path(__file__).resolve().parent.parent / "dist"
+if DIST_DIR.exists() and (DIST_DIR / "index.html").exists():
+    from fastapi.staticfiles import StaticFiles
+    from fastapi.responses import FileResponse
+
+    if (DIST_DIR / "assets").exists():
+        app.mount("/assets", StaticFiles(directory=str(DIST_DIR / "assets")), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa_frontend(full_path: str):
+        file_path = DIST_DIR / full_path
+        if full_path and file_path.is_file():
+            return FileResponse(file_path)
+        return FileResponse(DIST_DIR / "index.html")
+
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("backend.main:app", host="127.0.0.1", port=8000, reload=True)
+    host = os.getenv("HOST", "127.0.0.1")
+    port = int(os.getenv("PORT", "8000"))
+    reload_mode = os.getenv("ENVIRONMENT", "development") == "development"
+    uvicorn.run("backend.main:app", host=host, port=port, reload=reload_mode)
 

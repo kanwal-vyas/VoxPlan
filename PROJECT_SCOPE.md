@@ -82,7 +82,7 @@ Every capability in VoxPlan is assigned to exactly one of the six authoritative 
 | **Stage 8.1: Accessibility Audit & Keyboard Navigation** | Evaluated against WCAG 2.2 AA criteria; remediated skip links, focus rings, token contrast, dialog semantics, keyboard task buttons, and ARIA tablists. Verified by 18 regression tests. Screen-reader verification ongoing. | **Completed & Verified** (October 22, 2026) |
 | **Stage 8.2: Encrypted Local Backups & Verified Recovery** | Web Crypto AES-GCM (256-bit) + PBKDF2 (SHA-256) encrypted export, schema validation, preview inspection, and staged transactional restore with rollback recovery. 21 dedicated tests passing. | **Completed & Verified** (October 22, 2026) |
 | **Stage 8.3: PWA & Bundle Code-Splitting** | W3C manifest, offline service worker with deterministic app shell caching, route-level and modal-level code splitting (75.9% initial landing load reduction), and content-sensitive concurrency detection. 23 dedicated tests passing. | **Completed & Verified** (October 23, 2026) |
-| **Stage 8.4: CI Pipeline & Production Hosting** | Automated GitHub Actions CI workflow, CSP headers, and containerized deployment. Local Vite + Uvicorn run reliably. | Final v1.0 release |
+| **Stage 8.4: CI Pipeline & Production Hardening** | Automated GitHub Actions CI workflow (frontend, backend, security jobs), CSP response headers, non-root multi-stage Dockerfile, .env.example template, and test sandbox isolation. 17 dedicated tests passing. | **Completed & Verified** (October 23, 2026) |
 
 ### Category E: Blocked or Conditional
 
@@ -115,7 +115,7 @@ Every capability in VoxPlan is assigned to exactly one of the six authoritative 
 | **Offline PWA & Service Worker** | **In Scope & Implemented** | Manifest, offline app shell cache, network-only API. |
 | **WCAG 2.1 AA Accessibility** | **In Scope & Implemented** | WCAG 2.2 AA compliant tokens, focus rings, skip-links, ARIA. |
 | **Bundle code-splitting** | **In Scope & Implemented** | Route-level lazy loading (75.9% initial bundle reduction). |
-| **CSP, dependency audit, CI/CD** | **Deferred (Phase 8.4)** | Local test suites passing; remote CI pipeline deferred. |
+| **CSP, dependency audit, CI/CD** | **In Scope & Implemented** | GitHub Actions CI workflow, CSP response headers, non-root Dockerfile, 17 tests. |
 | **Cloud accounts & multi-user sync** | **Explicitly Out of Scope** | Local-first privacy architecture strictly preserved. |
 | **External LLM APIs** | **Explicitly Out of Scope** | 100% deterministic local algorithms; zero cloud data transmission. |
 

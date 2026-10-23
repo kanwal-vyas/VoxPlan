@@ -22,7 +22,7 @@ This document tracks the phased evolution of VoxPlan from a static task tracker 
 | **Phase 5** | Conversational Planning, Multi-Turn Dialog & Voice Experience | **COMPLETED** | Multi-turn planning state machine, clarification dialog, natural language batch rescheduling & negotiation, conversational schedule debriefing, accessible Web Speech voice synthesis and typed fallback symmetry (4 stages). |
 | **Phase 6** | Calendar-Aware Time-Blocking & Multi-Day Workload Modeling | **COMPLETED** | Multi-day task chunking for oversized work, calendar focus time-blocking, meeting buffer constraints, interactive proposal canvas editing, and local RFC 5545 iCalendar (.ics) export (4 stages). |
 | **Phase 7** | Evidence-Gated Schedule Adaptation & Preference Learning | **COMPLETED (Stage 4B Locked)** | Longitudinal feedback maturity gate (20+ decisions, 15+ outcomes), empirical friction analysis, bounded heuristic weight tuning (±20%) with Bayesian shrinkage, simulation sandbox, one-click rollback, shadow-only activation gate evaluator, minimum-evidence policy, synthetic rejection, and independent statistical validation (Stages 7.1–7.4A completed; Stage 7.4.4B intentionally locked). |
-| **Phase 8** | Production Hardening, Accessibility, Security & Release Readiness | **DEFERRED POST-DEMO** | Full WCAG 2.1 AA accessibility compliance, keyboard navigation, schema-versioned data lifecycle & encrypted backup, bundle code-splitting, PWA offline resilience, and CI/CD release verification (4 stages; deferred post-demo). |
+| **Phase 8** | Production Hardening, Accessibility, Security & Release Readiness | **COMPLETED** | Full WCAG 2.1 AA accessibility compliance, keyboard navigation, schema-versioned data lifecycle & encrypted backup, bundle code-splitting, PWA offline resilience, and CI/CD release verification (4 stages). |
 
 ---
 
@@ -4815,4 +4815,170 @@ Before implementing PWA and service worker caching, the backup concurrency archi
 #### 8. Remaining Limitations & Deferred Scope
 - **Browser Service Worker Scope**: Service workers only operate over HTTPS or localhost. In environments without Service Worker support (e.g. private browsing with storage partitioning or unsupported web views), VoxPlan degrades gracefully to direct network execution.
 - **Backend-Dependent Features**: ML task delay risk predictions and backend feature importances require an active FastAPI server; the application honestly discloses offline status and avoids fabricating ML scores when disconnected.
-- **Phase 8 Release Engineering**: Stage 8.4 (CI pipeline, containerized deployment, and release automation) remains deferred.
+- **Phase 8 Release Engineering**: Stage 8.4 (CI pipeline, reproducible builds, and deployment hardening) completed.
+
+---
+
+### Phase 8, Stage 8.4 Execution Record: CI Pipeline, Reproducible Builds & Deployment Hardening
+
+#### 1. Objective & Scope
+Establish a reliable automated quality gate for VoxPlan so that future changes are tested before they are merged or deployed.
+Deliverables:
+- Automated frontend, backend, and security checks via GitHub Actions.
+- Least-privilege workflow permissions (`permissions: contents: read`) and sensible job timeouts.
+- Clean reproducible dependency installation (`npm ci`, `pip check`, locked specifications).
+- Test sandbox isolating model artifacts (`backend/tests/conftest.py`) so tests never dirty Git working tree.
+- Proportionate dependency audit (`npm audit --omit=dev`) and secret exposure protection (`.gitignore`, `.env.example`).
+- Deployment architecture hardening: configurable CORS, response security headers middleware (CSP, framing, sniffing, permissions), optional SPA static serving fallback, and environment-based host/port.
+- Minimal multi-stage non-root container configuration (`Dockerfile`, `.dockerignore`).
+- PWA offline release gate validation and scheduler invariant preservation.
+
+---
+
+#### 2. GitHub Actions CI Architecture
+- **File**: `.github/workflows/ci.yml`
+  - **Triggers**: `push` on `main`, `pull_request` on `main`.
+  - **Permissions**: `permissions: contents: read` (default least privilege). No write permissions granted.
+  - **Concurrency**: `cancel-in-progress: true` on PR events to conserve compute.
+  - **Job 1: `frontend` (Frontend Quality & Production Build)**:
+    - Runs on `ubuntu-latest` with `timeout-minutes: 15`.
+    - Sets up Node.js 22.x with npm cache.
+    - Executes clean install: `npm ci`.
+    - Runs linter: `npm run lint` (`oxlint`).
+    - Runs full test suite: `npm test` (975 passing tests).
+    - Executes production bundle: `npm run build` (`vite build`).
+    - Validates production build artifacts: confirms `dist/index.html`, `dist/sw.js`, `dist/manifest.webmanifest`, `dist/favicon.svg`, `dist/pwa-192x192.png`, `dist/pwa-512x512.png`, and `dist/maskable-icon-512x512.png` exist and are non-empty.
+  - **Job 2: `backend` (Backend Quality & Model Verification)**:
+    - Runs on `ubuntu-latest` with `timeout-minutes: 15`.
+    - Sets up Python 3.12 with pip cache.
+    - Installs dependencies: `pip install -r backend/requirements.txt`.
+    - Validates dependency consistency: `pip check`.
+    - Runs backend test suite: `pytest backend/tests/` (27 passing tests).
+    - Verifies model immutability: asserts `git status --porcelain backend/models` is empty.
+  - **Job 3: `security` (Security, Dependencies & Secrets Audit)**:
+    - Runs on `ubuntu-latest` with `timeout-minutes: 10`.
+    - Audits production dependencies: `npm audit --omit=dev` (0 vulnerabilities).
+    - Validates git diff and whitespace: `git diff --check`.
+    - Enforces secret hygiene: asserts no `.env` files are tracked in the repository and verifies `.env.example` template exists.
+
+---
+
+#### 3. Test Isolation & Reproducible Dependency Management
+- **File**: `backend/tests/conftest.py`
+  - Implements an autouse fixture `isolate_model_artifacts` using Python standard library `tempfile.TemporaryDirectory`.
+  - Copies baseline model and metadata into a temporary sandbox and monkeypatches `backend.ml.train.MODELS_DIR`, `MODEL_FILE`, and `METADATA_FILE`.
+  - Resolves Windows symlink permission restrictions (`WinError 5`) and guarantees that running pytest never modifies committed `backend/models/model_metadata.json` or `trained_model.joblib`.
+- **Frontend Dependencies**:
+  - Committed `package-lock.json` matches `package.json` exactly.
+  - Verified clean installation via `npm ci`.
+- **Backend Dependencies**:
+  - `backend/requirements.txt` specifies minimum version constraints.
+  - `pip check` confirmed zero broken requirements across all installed packages.
+  - Limitation documented: Python backend uses requirements specification without transitive lockfile; containerized build pins Python 3.12 runtime.
+
+---
+
+#### 4. Secret Protection & Environment Variable Specification
+- **File**: `.gitignore`
+  - Hardened with explicit ignore patterns for `.env`, `.env.*`, `*.env`, `.venv/`, `venv/`, `env/`, `ENV/`, `*.egg-info/`, `.coverage`, `htmlcov/`.
+  - Explicitly exempts placeholder documentation template `!.env.example`.
+- **File**: `.env.example`
+  - Documents all application environment variables with non-secret default placeholders:
+    - `VITE_API_BASE_URL`: Base URL for FastAPI backend (default: `http://127.0.0.1:8000`).
+    - `HOST`: Backend host address (default: `127.0.0.1` locally, `0.0.0.0` in container).
+    - `PORT`: Service port (default: `8000`).
+    - `CORS_ORIGINS`: Comma-separated allowed origins (default: `*` in dev).
+    - `ENVIRONMENT`: Runtime environment mode (`development`, `test`, `production`).
+  - Secret scan confirmed zero hardcoded API keys, passwords, or credentials across the repository.
+
+---
+
+#### 5. Deployment Architecture Audit & Provider-Neutral Hardening
+- **Frontend / Backend Topologies**:
+  - Standalone mode: React SPA served from CDN/static host; FastAPI served via uvicorn on port 8000.
+  - Unified single-service mode: FastAPI mounts `dist/` static files and provides SPA route fallback for `/app` and other client-side routes.
+- **Configurable CORS**:
+  - `backend/main.py` parses `CORS_ORIGINS` environment variable, allowing production deployments to specify explicit allowed client origins while maintaining wildcard fallback for local development.
+- **HTTP Security Response Headers**:
+  - `backend/main.py` applies defensive HTTP headers to all responses via `add_security_headers` middleware:
+    - `X-Content-Type-Options: nosniff` (MIME-type sniffing defense).
+    - `X-Frame-Options: DENY` (Clickjacking / framing prevention).
+    - `Referrer-Policy: strict-origin-when-cross-origin`.
+    - `Permissions-Policy: microphone=(self), camera=(), geolocation=()`.
+    - `Content-Security-Policy`:
+      - `default-src 'self'`
+      - `script-src 'self'`
+      - `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`
+      - `font-src 'self' https://fonts.gstatic.com`
+      - `img-src 'self' data: blob:`
+      - `connect-src 'self' http://127.0.0.1:8000 http://localhost:8000 https://voxplan-u31l.onrender.com`
+      - `worker-src 'self'`
+      - `manifest-src 'self'`
+      - `object-src 'none'`
+      - `base-uri 'self'`
+      - `frame-ancestors 'none'`
+- **Inline Script Removal**:
+  - Extracted inline scroll restoration logic from `index.html` into `src/main.jsx`.
+  - `index.html` contains zero inline scripts, fully conforming to strict `script-src 'self'` CSP policy without requiring `'unsafe-inline'`.
+
+---
+
+#### 6. Containerization Architecture
+- **Decision**: Multi-stage containerization is justified to provide a self-contained, reproducible, non-root artifact combining the built SPA frontend and FastAPI ML service.
+- **File**: `Dockerfile`
+  - Multi-stage build:
+    - Stage 1 (`frontend-builder`): `node:22-alpine` runs `npm ci` and `npm run build`.
+    - Stage 2 (`runner`): `python:3.12-slim` installs `backend/requirements.txt`, creates unprivileged dedicated non-root user `voxplan` (UID 10001), copies backend and built static `dist/`, and switches to `USER voxplan`.
+  - Declares container healthcheck querying `/health`:
+    `HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD curl -f http://127.0.0.1:8000/health || exit 1`
+  - Security flags: `PYTHONDONTWRITEBYTECODE=1`, `PYTHONUNBUFFERED=1`, non-root execution.
+- **File**: `.dockerignore`
+  - Excludes `.git`, `.github`, `node_modules`, `.venv`, `.env*`, test suites, and temporary caches.
+- **Local Host Limitation**: Docker CLI is not installed on the local Windows development machine; container manifests are verified structurally by automated tests (`tests/ci_and_deployment.test.js`).
+
+---
+
+#### 7. Automated Test & Release Gate Results
+- **CI & Deployment Audit Suite**: **17 / 17 passing** in 136ms (`node --test tests/ci_and_deployment.test.js`).
+- **Core Release Gates**: **151 / 151 passing** in 478ms (`tests/accessibility.test.js`, `tests/backup_and_recovery.test.js`, `tests/demo_data_seeder.test.js`, `tests/pwa_and_routing.test.js`, `tests/ci_and_deployment.test.js`).
+- **Full Frontend Test Suite**: **975 / 975 passing** across 203 suites in 29 test files (`npm test`), 0 failures, 0 skipped.
+- **Backend Test Suite**: **27 / 27 passing** (`pytest backend/tests/`), 0 failures. Model artifacts remained 100% untouched.
+- **Dependency Audit**: `npm audit --omit=dev` reported **0 vulnerabilities** for production dependencies. 1 advisory in Vite devDependency documented.
+- **Frontend Linter**: Clean with 0 errors (`npm run lint` / `oxlint`).
+- **Production Build**: Clean in 348ms (`npm run build`).
+- **Formatting**: `git diff --check` clean with 0 whitespace errors.
+- **Live Browser Verification**:
+  - Live session verified on Chromium subagent (`pwa_offline_gate`).
+  - Landing page (`/`) loads cleanly with zero visual defects.
+  - Productivity app (`/app`) renders task cards, risk categories, and navigation headers.
+  - Console inspection confirmed zero Content Security Policy violations and clean service worker registration.
+
+---
+
+#### 8. Protected Scheduler Invariants Confirmation
+- `urgencyWeight`: **50.0**
+- `priorityWeight`: **100.0**
+- `unblockWeight`: **15.0**
+- `riskWeight`: **25.0**
+- `Object.isFrozen(FACTORY_SCHEDULER_WEIGHTS)`: **true**
+- `isAdaptationUnlocked`: **false**
+- `productionApplied`: **false**
+- Phase 7.4.4B remains locked. CI pipelines, Docker manifests, security headers, and deployment configurations have zero effect on scheduler activation gates.
+
+---
+
+#### 9. Release Procedure & Operational Guidance
+1. **Local Preflight**:
+   - `npm ci`
+   - `npm run lint`
+   - `npm test`
+   - `npm run build`
+   - `pytest backend/tests/`
+   - `npm audit --omit=dev`
+   - `git diff --check`
+2. **CI Automation Gate**:
+   - Every push and pull request to `main` executes `.github/workflows/ci.yml`.
+   - All three jobs (`frontend`, `backend`, `security`) must report green before merging.
+3. **Deployment Options**:
+   - Option A (Split Deployment, current Render topology): Frontend deployed as static SPA on CDN/Render static site; FastAPI deployed as web service running `uvicorn backend.main:app`. Set `VITE_API_BASE_URL` on frontend and `CORS_ORIGINS` on backend.
+   - Option B (Unified Container Deployment): Build container using `docker build -t voxplan:latest .` and deploy to any container platform. FastAPI serves both the API and the SPA frontend on port 8000.

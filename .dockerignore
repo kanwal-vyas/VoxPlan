@@ -1,0 +1,32 @@
+# Version control & IDE
+.git
+.github
+.vscode
+.idea
+
+# Dependencies & build environments
+node_modules
+.venv
+venv
+env
+ENV
+dist
+dist-ssr
+
+# Python byte-code & caches
+__pycache__
+*.py[cod]
+*$py.class
+.pytest_cache
+htmlcov
+.coverage
+
+# Secrets and local environments
+.env
+.env.*
+*.env
+
+# Logs & temp files
+logs
+*.log
+*.local

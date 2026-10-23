@@ -1,0 +1,116 @@
+name: VoxPlan CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+# Explicit least-privilege workflow permissions.
+# Default to read-only access to prevent unauthorized write or token leakage.
+permissions:
+  contents: read
+
+# Cancel in-progress runs for pull requests to conserve compute and avoid stale results.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  frontend:
+    name: Frontend Quality & Production Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Clean install dependencies
+        run: npm ci
+
+      - name: Run code linter
+        run: npm run lint
+
+      - name: Run frontend test suite
+        run: npm test
+
+      - name: Run production build
+        run: npm run build
+
+      - name: Verify PWA and production build artifacts
+        run: |
+          test -s dist/index.html || (echo "Missing or empty dist/index.html" && exit 1)
+          test -s dist/sw.js || (echo "Missing or empty dist/sw.js" && exit 1)
+          test -s dist/manifest.webmanifest || (echo "Missing or empty dist/manifest.webmanifest" && exit 1)
+          test -s dist/favicon.svg || (echo "Missing or empty dist/favicon.svg" && exit 1)
+          test -s dist/pwa-192x192.png || (echo "Missing or empty dist/pwa-192x192.png" && exit 1)
+          test -s dist/pwa-512x512.png || (echo "Missing or empty dist/pwa-512x512.png" && exit 1)
+          test -s dist/maskable-icon-512x512.png || (echo "Missing or empty dist/maskable-icon-512x512.png" && exit 1)
+          echo "All required PWA and production build artifacts verified."
+
+  backend:
+    name: Backend Quality & Model Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Check dependency consistency
+        run: pip check
+
+      - name: Run backend test suite
+        run: pytest backend/tests/
+
+      - name: Verify tests did not dirty model artifacts
+        run: |
+          git status --porcelain backend/models
+          test -z "$(git status --porcelain backend/models)" || (echo "Error: Backend tests modified committed model artifacts" && exit 1)
+
+  security:
+    name: Security, Dependencies & Secrets Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Clean install dependencies
+        run: npm ci
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev
+
+      - name: Verify secret protection and git hygiene
+        run: |
+          git diff --check
+          # Verify .env files are not committed
+          test ! -f .env || (echo "Error: .env file committed to repository" && exit 1)
+          # Verify template exists
+          test -s .env.example || (echo "Error: .env.example missing or empty" && exit 1)

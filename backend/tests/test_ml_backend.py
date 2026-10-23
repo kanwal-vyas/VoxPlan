@@ -15,12 +15,17 @@ client = TestClient(app)
 
 
 def test_health_endpoint():
-    """Verify /health returns status 200 and correct service payload."""
+    """Verify /health returns status 200, correct service payload, and hardened security headers."""
     response = client.get("/health")
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
     assert data["service"] == "voxplan-ml"
+    # Verify defensive security headers
+    assert response.headers.get("x-content-type-options") == "nosniff"
+    assert response.headers.get("x-frame-options") == "DENY"
+    assert response.headers.get("referrer-policy") == "strict-origin-when-cross-origin"
+    assert "default-src 'self'" in response.headers.get("content-security-policy", "")
 
 
 def test_data_generator():
