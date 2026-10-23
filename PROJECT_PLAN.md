@@ -5110,7 +5110,7 @@ Execute an evidence-driven audit of the Stage 8.4 implementation to close verifi
 
 #### 2. Dedicated Adversarial Regression Test Suite
 - **File**: `tests/secret_scanner.test.js` (**16 / 16 passing**, 0 failures):
-  1. Private-key header detection (`-----BEGIN RSA PRIVATE KEY-----`).
+  1. Private-key header detection (`-----BEGIN [RSA] PRIVATE KEY-----`).
   2. Credential-like tokens (AWS `AKIA*`, GitHub `ghp_*`, Slack `xox*`, OpenAI `sk-*`).
   3. Hardcoded password/key assignments (`api_key = "..."`).
   4. Harmless configuration placeholders pass cleanly.
