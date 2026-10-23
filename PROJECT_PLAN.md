@@ -5746,3 +5746,56 @@ Real microphone testing surfaced an intermittent acceptance failure where compou
 - **Phase 7.4.4B Activation Gate**: Permanently locked.
 - **Local-First Privacy**: 0 cloud LLMs, 0 cloud speech APIs, 0 audio logging.
 
+---
+
+### Phase 9: VoxPlan UI Redesign — Stage 1: Core Navigation and Globally Accessible Command Experience Record
+
+**Implementation Date**: October 24, 2026
+**Starting Commit**: `c0d0a5dad02bbb3e0447814c3447ca40791f31b9`
+**Stage Goal**: Eliminate excessive scrolling to discover VoxPlan's command interface. Implement a clean, 3-destination primary navigation structure (`Today`, `Tasks`, `Insights`) and refactor the Command Center into a globally accessible two-layer component (collapsed floating dock + upward-expanding assistant panel) available across all views without page reloads or state loss.
+
+#### 1. UX Problem & Architectural Strategy
+- **Previous UX Failure**: The command interface was placed at the end of a monolithic 14,460px scrolling page following task cards, ML panels, behavioral telemetry, and model calibration dashboards. New and non-technical users could not discover voice/typed commands without extensive scrolling.
+- **Architectural Solution**:
+  1. Replaced the continuous scrolling monolith with three primary destinations:
+     - **Today**: Sprint Pulse overview (`ProjectOverview`), sprint progress, metrics, and active focus section with direct link to tasks workspace.
+     - **Tasks**: Full task-management workspace (`TaskList`), including task creation, editing, completion, deadlines, priorities, filtering, reordering, timers, and clear-completed workflows.
+     - **Insights**: Machine learning predictions (`MLModelPanel`), behavioral telemetry history (`BehavioralHistoryPanel`), and personal duration model calibration (`PersonalModelDashboard`).
+  2. Maintained zero-unmount tabpanel architecture (`#view-today`, `#view-tasks`, `#view-insights`) using display toggling, ensuring all component state, timers, predictions cache, and dialogue context remain 100% preserved during view transitions.
+  3. Coordinated Two-Layer Command Interface:
+     - **Collapsed Command Dock** (`.command-dock-container`, `.command-notebook-card`): Floating at `position: fixed`, `bottom: 20px`, `z-index: 1000` across all views. Features accessible microphone control (`#voice-mic-btn`), speaker toggle (`#speech-toggle-btn`), input field (`#command-input`) with plain-language placeholder (`"Tell VoxPlan what you need… (or click mic to speak)"`), and expand toggle button (`#command-expand-toggle-btn`).
+     - **Upward-Expanding Assistant Drawer** (`#command-expanded-drawer`): Opens upward above the dock without obscuring background context. Renders live transcripts, active voice session banner (`#voice-active-indicator`), clarification cards (`#clarification-card`), schedule proposal review cards (`#proposal-apply-btn`), confirmation prompts, quick suggestions, and local-first voice privacy notice. Dismissible via `✕ Minimize` button (`#command-collapse-drawer-btn`) without discarding in-flight commands.
+     - **Minimized Attention Pill** (`#command-dock-alert-pill`): Renders a compact warning/action pill on the collapsed dock when a clarification question or proposal decision requires user input while minimized.
+  4. First-Time User Experience:
+     - Clear, encouraging empty state in `TaskList.jsx` explaining natural voice and text command syntax with an actionable shortcut button (`#empty-state-add-task-btn`).
+     - Today Focus card (`#today-focus-card`) with direct CTA to manage all tasks.
+  5. Responsive Layout & Anti-Overlap Clearance:
+     - App container configured with `padding: 0 20px 180px 20px` to guarantee zero overlap between content and floating dock.
+     - Mobile safe-area insets (`env(safe-area-inset-bottom)`) and responsive padding applied in `src/App.css`.
+
+#### 2. Verification & Regression Evidence
+- **Dedicated Navigation & Command Dock Suite**: `node --test tests/command_dock_navigation.test.js`
+  - **Result**: 14 passed, 0 failed across 5 suites.
+  - Verifies: 3-destination navigation tabs, tabpanel non-unmounting state preservation, global dock availability, dock pointer event passthrough, safe clearance padding, upward drawer expansion, accessible microphone labels, empty state onboarding guidance, and local-first privacy notice.
+- **Complete Test Suite**: `npm test`
+  - **Result**: 1070 passed, 0 failed across 225 suites.
+- **Backend Test Suite**: `python -m pytest`
+  - **Result**: 29 passed, 0 failed in 4.20s.
+- **Production Build**: `npm run build`
+  - **Result**: `vite build` completed cleanly in 217ms with zero errors.
+- **Linter**: `npm run lint` (`oxlint`)
+  - **Result**: 0 errors across 100 files.
+- **Secret Scanner**: `node scripts/secretScanner.mjs`
+  - **Result**: 0 secrets matched across 125 files.
+- **Whitespace / Git Diff Check**: `git diff --check`
+  - **Result**: 0 whitespace or formatting errors.
+- **Live Browser Verification (Desktop & Mobile)**:
+  - Recorded session `command_dock_demo_1792780323964.webp` via browser subagent.
+  - Verified tabs switch instantly between Today, Tasks, and Insights without reloads.
+  - Verified dock floats persistently and input/mic remain accessible without scrolling.
+  - Verified mobile viewport (390x844) maintains compact header and reachable dock without overflowing.
+
+#### 3. Scope & Protected Invariant Preservation
+- **Factory Scheduler Weights**: Immutable canonical values (`urgency: 50.0`, `priority: 100.0`, `unblock: 15.0`, `risk: 25.0`).
+- **Phase 7.4.4B Safety Activation Gate**: Permanently locked (`isAdaptationUnlocked === false`, `productionApplied === false`).
+- **Local-First Privacy**: 100% deterministic local storage; zero cloud LLMs, zero cloud speech APIs, zero audio uploads.

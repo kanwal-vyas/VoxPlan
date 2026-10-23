@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 export default function Header({
   isBackendOnline,
   modelMetadata,
+  currentView = 'today',
+  onSelectView,
   onScrollToSection,
   onSeedDemo,
   onClearDemo,
@@ -63,48 +65,92 @@ export default function Header({
               ← Overview
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => onScrollToSection('pulse')}
-            style={styles.navLink}
-          >
-            Today
-          </button>
-          <button
-            type="button"
-            onClick={() => onScrollToSection('landscape')}
-            style={styles.navLink}
-          >
-            Tasks
-          </button>
-          <button
-            type="button"
-            onClick={() => onScrollToSection('intelligence')}
-            style={styles.navLink}
-          >
-            Baseline
-          </button>
-          <button
-            type="button"
-            onClick={() => onScrollToSection('behavior')}
-            style={styles.navLink}
-          >
-            Habits
-          </button>
-          <button
-            type="button"
-            onClick={() => onScrollToSection('personal-model')}
-            style={styles.navLink}
-          >
-            Personal Model
-          </button>
-          <button
-            type="button"
-            onClick={() => onScrollToSection('command')}
-            style={styles.navLink}
-          >
-            Command
-          </button>
+
+          {onSelectView ? (
+            <>
+              <button
+                type="button"
+                id="nav-tab-today"
+                onClick={() => onSelectView('today')}
+                aria-current={currentView === 'today' ? 'page' : undefined}
+                style={{
+                  ...styles.navLink,
+                  ...(currentView === 'today' ? styles.activeNavLink : {}),
+                }}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                id="nav-tab-tasks"
+                onClick={() => onSelectView('tasks')}
+                aria-current={currentView === 'tasks' ? 'page' : undefined}
+                style={{
+                  ...styles.navLink,
+                  ...(currentView === 'tasks' ? styles.activeNavLink : {}),
+                }}
+              >
+                Tasks
+              </button>
+              <button
+                type="button"
+                id="nav-tab-insights"
+                onClick={() => onSelectView('insights')}
+                aria-current={currentView === 'insights' ? 'page' : undefined}
+                style={{
+                  ...styles.navLink,
+                  ...(currentView === 'insights' ? styles.activeNavLink : {}),
+                }}
+              >
+                Insights
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => onScrollToSection && onScrollToSection('pulse')}
+                style={styles.navLink}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                onClick={() => onScrollToSection && onScrollToSection('landscape')}
+                style={styles.navLink}
+              >
+                Tasks
+              </button>
+              <button
+                type="button"
+                onClick={() => onScrollToSection && onScrollToSection('intelligence')}
+                style={styles.navLink}
+              >
+                Baseline
+              </button>
+              <button
+                type="button"
+                onClick={() => onScrollToSection && onScrollToSection('behavior')}
+                style={styles.navLink}
+              >
+                Habits
+              </button>
+              <button
+                type="button"
+                onClick={() => onScrollToSection && onScrollToSection('personal-model')}
+                style={styles.navLink}
+              >
+                Personal Model
+              </button>
+              <button
+                type="button"
+                onClick={() => onScrollToSection && onScrollToSection('command')}
+                style={styles.navLink}
+              >
+                Command
+              </button>
+            </>
+          )}
         </nav>
 
         {/* Playful Human Status Capsule */}
@@ -261,6 +307,12 @@ const styles = {
     transition: 'all 0.15s ease',
     flexShrink: 0,
     whiteSpace: 'nowrap',
+  },
+  activeNavLink: {
+    backgroundColor: '#25242A',
+    color: '#FFFFFF',
+    fontWeight: '700',
+    boxShadow: '0 2px 6px rgba(0, 0, 0, 0.15)',
   },
   navLandingLink: {
     background: 'rgba(201, 182, 255, 0.22)',

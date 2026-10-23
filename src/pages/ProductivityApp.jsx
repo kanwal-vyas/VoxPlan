@@ -204,6 +204,7 @@ const UNTRAINED_MODEL_STATUS = {
 };
 
 export default function ProductivityApp({ onNavigate }) {
+  const [currentView, setCurrentView] = useState('today'); // 'today' | 'tasks' | 'insights'
   const [isLoading, setIsLoading] = useState(true);
   const [scrollProgress, setScrollProgress] = useState(0);
   const [tasks, setTasks] = useState(loadSavedTasks);
@@ -1436,12 +1437,41 @@ export default function ProductivityApp({ onNavigate }) {
     }
   };
 
-  const handleScrollToSection = (sectionId) => {
+  const handleSelectView = useCallback((view) => {
+    setCurrentView(view);
+    const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (typeof window !== 'undefined' && window.scrollTo) {
+      window.scrollTo({ top: 0, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
+    }
+    setTimeout(() => {
+      if (typeof ScrollTrigger !== 'undefined' && ScrollTrigger.refresh) {
+        ScrollTrigger.refresh();
+      }
+    }, 50);
+  }, []);
+
+  const handleScrollToSection = useCallback((sectionId) => {
+    if (sectionId === 'today' || sectionId === 'pulse') {
+      handleSelectView('today');
+      return;
+    }
+    if (sectionId === 'tasks' || sectionId === 'landscape') {
+      handleSelectView('tasks');
+      return;
+    }
+    if (sectionId === 'insights' || sectionId === 'intelligence') {
+      handleSelectView('insights');
+      return;
+    }
+    if (sectionId === 'command') {
+      handleQuickAdd();
+      return;
+    }
     const el = document.getElementById(sectionId) || document.getElementById(`section-${sectionId}`);
     if (el) {
       el.scrollIntoView({ behavior: 'smooth' });
     }
-  };
+  }, [handleSelectView, handleQuickAdd]);
 
   // Initialize GSAP Cinematic Scroll Storytelling on mount so all pin spacers and layouts are ready
   useEffect(() => {
@@ -1486,6 +1516,8 @@ export default function ProductivityApp({ onNavigate }) {
       <div style={styles.content}>
         {/* Floating Pastel Header */}
         <Header
+          currentView={currentView}
+          onSelectView={handleSelectView}
           isBackendOnline={isBackendOnline}
           modelMetadata={modelStatus}
           onScrollToSection={handleScrollToSection}
@@ -1496,133 +1528,181 @@ export default function ProductivityApp({ onNavigate }) {
         />
 
         {/* Main Landmark for Accessibility (WCAG 2.2 1.3.1 Info and Relationships & 2.4.1 Bypass Blocks) */}
-        <main id="main-content" tabIndex={-1} style={{ outline: 'none', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {/* Playful Hero */}
-          <Hero
-            modelMetadata={modelStatus}
-            onScrollToSection={handleScrollToSection}
+        <main id="main-content" tabIndex={-1} style={{ outline: 'none', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Destination 1: Today View */}
+          <div
+            id="view-today"
+            role="tabpanel"
+            aria-labelledby="nav-tab-today"
+            style={{
+              display: currentView === 'today' ? 'flex' : 'none',
+              flexDirection: 'column',
+              gap: '24px',
+              width: '100%',
+            }}
+          >
+            {/* Playful Hero */}
+            <Hero
+              modelMetadata={modelStatus}
+              onScrollToSection={handleScrollToSection}
+            />
+
+            {/* Giant Editorial Typography Ribbon 1 */}
+            <div className="editorial-ribbon-wrap" aria-hidden="true">
+              <span className="editorial-ribbon-word">PLAN</span>
+            </div>
+
+            {/* Section 01: Sprint Pulse (Butter Yellow Panel) */}
+            <ProjectOverview
+              tasks={tasks}
+              predictionsMap={guardedPredictionsMap}
+              totalCount={totalCount}
+              completedCount={completedCount}
+              progressPercent={progressPercent}
+              riskStats={effectiveRiskStats}
+              onRunPredictions={handleRunPredictions}
+              onOpenScheduleModal={() => setIsScheduleModalOpen(true)}
+              isPredicting={isPredicting}
+              modelStatus={modelStatus}
+            />
+
+            {/* Today's Focus Section */}
+            <div className="digital-card" style={styles.todayFocusCard} id="today-focus-card">
+              <div style={styles.todayFocusHeader}>
+                <div>
+                  <span style={styles.todayFocusBadge}>TODAY'S WORKSPACE</span>
+                  <h3 style={styles.todayFocusTitle}>Active Sprint Focus</h3>
+                  <p style={styles.todayFocusSubtitle}>
+                    {tasks.length === 0
+                      ? 'No tasks created yet. Speak or type a command in the dock below to get started!'
+                      : `${tasks.filter((t) => !t.completed).length} active tasks in your sprint backlog.`}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  id="today-view-all-tasks-btn"
+                  onClick={() => handleSelectView('tasks')}
+                  style={styles.openTasksWorkspaceBtn}
+                  aria-label="Open Tasks workspace"
+                >
+                  Manage All Tasks →
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Destination 2: Tasks View */}
+          <div
+            id="view-tasks"
+            role="tabpanel"
+            aria-labelledby="nav-tab-tasks"
+            style={{
+              display: currentView === 'tasks' ? 'flex' : 'none',
+              flexDirection: 'column',
+              gap: '24px',
+              width: '100%',
+            }}
+          >
+            {/* Giant Editorial Typography Ribbon 2 */}
+            <div className="editorial-ribbon-wrap" aria-hidden="true">
+              <span className="editorial-ribbon-word">TASKS</span>
+            </div>
+
+            {/* Section 02: Risk Landscape (Lavender Sticky Notes Wall) */}
+            <TaskList
+              tasks={tasks}
+              predictionsMap={guardedPredictionsMap}
+              personalDurationModel={personalDurationModel}
+              activeFilter={activeFilter}
+              onChangeFilter={setActiveFilter}
+              onToggleComplete={toggleTaskCompletion}
+              onDelete={deleteTask}
+              onUpdateTitle={updateTaskTitle}
+              onCyclePriority={cyclePriority}
+              onReschedule={handleReschedule}
+              onReviseEffort={handleReviseEffort}
+              onMoveUp={(index) => handleMoveTask(index, index - 1)}
+              onMoveDown={(index) => handleMoveTask(index, index + 1)}
+              activeTimerState={activeTimerState}
+              onStartTimer={handleStartTimer}
+              onPauseTimer={handlePauseTimer}
+              onOpenExplanation={(task, pred) =>
+                setSelectedTaskExplanation({
+                  task,
+                  pred: guardedPredictionsMap[task.id] || pred,
+                })
+              }
+              onClearCompleted={handleClearCompleted}
+              completedCount={completedCount}
+              onQuickAdd={handleQuickAdd}
+            />
+          </div>
+
+          {/* Destination 3: Insights View */}
+          <div
+            id="view-insights"
+            role="tabpanel"
+            aria-labelledby="nav-tab-insights"
+            style={{
+              display: currentView === 'insights' ? 'flex' : 'none',
+              flexDirection: 'column',
+              gap: '24px',
+              width: '100%',
+            }}
+          >
+            {/* Giant Editorial Typography Ribbon 3 */}
+            <div className="editorial-ribbon-wrap" aria-hidden="true">
+              <span className="editorial-ribbon-word">INSIGHTS</span>
+            </div>
+
+            {/* Section 03: Model Intelligence (Soft Mint Brain Panel) */}
+            <div ref={mlPanelRef}>
+              <MLModelPanel
+                modelStatus={modelStatus}
+                featureImportances={featureImportances}
+                onTrainModel={handleTrainModel}
+                isTraining={isTraining}
+                trainingStep={trainingStep}
+              />
+            </div>
+
+            {/* Section 04: Behavioral Telemetry & Habit Insights */}
+            <BehavioralHistoryPanel tasks={tasks} />
+
+            {/* Section 05: Personal Duration Model & Evaluation */}
+            <PersonalModelDashboard
+              events={telemetryEvents}
+              tasks={tasks}
+            />
+          </div>
+
+          {/* Global Floating Command Center (Visible across Today, Tasks, and Insights without scrolling) */}
+          <CommandBar
+            onExecuteCommand={executeCommand}
+            isListening={recognitionState === RECOGNITION_STATES.LISTENING}
+            recognitionState={recognitionState}
+            interimTranscript={interimTranscript}
+            onToggleListening={toggleListening}
+            speechOutputEnabled={speechOutputEnabled}
+            isSpeaking={isSpeaking}
+            onToggleSpeechOutput={toggleSpeechOutput}
+            onStopSpeech={handleStopSpeech}
+            conversationState={conversationState}
+            onConfirm={() => executeCommand('yes')}
+            onCancel={() => executeCommand('cancel')}
+            activeSubjectTask={activeSubjectTask}
+            activeProposal={activeProposal}
+            onAcceptProposal={handleAcceptProposal}
+            onDiscardProposal={handleDiscardProposal}
+            pendingClarification={pendingClarification}
+            dialogueClock={dialogueManager.clock}
+            onSelectClarificationCandidate={(candidate) => {
+              if (!candidate) return;
+              const targetId = candidate.id || candidate.title;
+              executeCommand(targetId);
+            }}
+            onCancelClarification={() => executeCommand('cancel')}
           />
-
-        {/* Giant Editorial Typography Ribbon 1 */}
-        <div className="editorial-ribbon-wrap" aria-hidden="true">
-          <span className="editorial-ribbon-word">PLAN</span>
-        </div>
-
-        {/* Section 01: Sprint Pulse (Butter Yellow Panel) */}
-        <ProjectOverview
-          tasks={tasks}
-          predictionsMap={guardedPredictionsMap}
-          totalCount={totalCount}
-          completedCount={completedCount}
-          progressPercent={progressPercent}
-          riskStats={effectiveRiskStats}
-          onRunPredictions={handleRunPredictions}
-          onOpenScheduleModal={() => setIsScheduleModalOpen(true)}
-          isPredicting={isPredicting}
-          modelStatus={modelStatus}
-        />
-
-        {/* Giant Editorial Typography Ribbon 2 */}
-        <div className="editorial-ribbon-wrap" aria-hidden="true">
-          <span className="editorial-ribbon-word">PREDICT</span>
-        </div>
-
-        {/* Section 02: Risk Landscape (Lavender Sticky Notes Wall) */}
-        <TaskList
-          tasks={tasks}
-          predictionsMap={guardedPredictionsMap}
-          personalDurationModel={personalDurationModel}
-          activeFilter={activeFilter}
-          onChangeFilter={setActiveFilter}
-          onToggleComplete={toggleTaskCompletion}
-          onDelete={deleteTask}
-          onUpdateTitle={updateTaskTitle}
-          onCyclePriority={cyclePriority}
-          onReschedule={handleReschedule}
-          onReviseEffort={handleReviseEffort}
-          onMoveUp={(index) => handleMoveTask(index, index - 1)}
-          onMoveDown={(index) => handleMoveTask(index, index + 1)}
-          activeTimerState={activeTimerState}
-          onStartTimer={handleStartTimer}
-          onPauseTimer={handlePauseTimer}
-          onOpenExplanation={(task, pred) =>
-            setSelectedTaskExplanation({
-              task,
-              pred: guardedPredictionsMap[task.id] || pred,
-            })
-          }
-          onClearCompleted={handleClearCompleted}
-          completedCount={completedCount}
-          onQuickAdd={handleQuickAdd}
-        />
-
-        {/* Giant Editorial Typography Ribbon 3 */}
-        <div className="editorial-ribbon-wrap" aria-hidden="true">
-          <span className="editorial-ribbon-word">UNDERSTAND</span>
-        </div>
-
-        {/* Section 03: Model Intelligence (Soft Mint Brain Panel) */}
-        <div ref={mlPanelRef}>
-          <MLModelPanel
-            modelStatus={modelStatus}
-            featureImportances={featureImportances}
-            onTrainModel={handleTrainModel}
-            isTraining={isTraining}
-            trainingStep={trainingStep}
-          />
-        </div>
-
-        {/* Giant Editorial Typography Ribbon 4 */}
-        <div className="editorial-ribbon-wrap" aria-hidden="true">
-          <span className="editorial-ribbon-word">REFLECT</span>
-        </div>
-
-        {/* Section 04: Behavioral Telemetry & Habit Insights */}
-        <BehavioralHistoryPanel tasks={tasks} />
-
-        {/* Giant Editorial Typography Ribbon 5 */}
-        <div className="editorial-ribbon-wrap" aria-hidden="true">
-          <span className="editorial-ribbon-word">CALIBRATE</span>
-        </div>
-
-        {/* Section 05: Personal Duration Model & Evaluation */}
-        <PersonalModelDashboard
-          events={telemetryEvents}
-          tasks={tasks}
-        />
-
-        {/* Giant Editorial Typography Ribbon 6 */}
-        <div className="editorial-ribbon-wrap" aria-hidden="true">
-          <span className="editorial-ribbon-word">ACT</span>
-        </div>
-
-        {/* Section 06: Command Center (Soft Peach Notebook Assistant) */}
-        <CommandBar
-          onExecuteCommand={executeCommand}
-          isListening={recognitionState === RECOGNITION_STATES.LISTENING}
-          recognitionState={recognitionState}
-          interimTranscript={interimTranscript}
-          onToggleListening={toggleListening}
-          speechOutputEnabled={speechOutputEnabled}
-          isSpeaking={isSpeaking}
-          onToggleSpeechOutput={toggleSpeechOutput}
-          onStopSpeech={handleStopSpeech}
-          conversationState={conversationState}
-          onConfirm={() => executeCommand('yes')}
-          onCancel={() => executeCommand('cancel')}
-          activeSubjectTask={activeSubjectTask}
-          activeProposal={activeProposal}
-          onAcceptProposal={handleAcceptProposal}
-          onDiscardProposal={handleDiscardProposal}
-          pendingClarification={pendingClarification}
-          dialogueClock={dialogueManager.clock}
-          onSelectClarificationCandidate={(candidate) => {
-            if (!candidate) return;
-            const targetId = candidate.id || candidate.title;
-            executeCommand(targetId);
-          }}
-          onCancelClarification={() => executeCommand('cancel')}
-        />
         </main>
       </div>
 
@@ -1685,7 +1765,7 @@ const styles = {
     fontFamily: "'Plus Jakarta Sans', 'Instrument Sans', sans-serif",
     position: 'relative',
     overflowX: 'hidden',
-    padding: '0 20px 80px 20px',
+    padding: '0 20px 180px 20px',
   },
   progressBarWrapper: {
     position: 'fixed',
@@ -1710,6 +1790,55 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     gap: '12px',
+  },
+  todayFocusCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: '20px',
+    border: '1.5px solid rgba(37, 36, 42, 0.08)',
+    padding: '24px 28px',
+    boxShadow: '0 4px 16px rgba(37, 36, 42, 0.04)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+  },
+  todayFocusHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: '16px',
+  },
+  todayFocusBadge: {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '11px',
+    fontWeight: '800',
+    color: '#D9483B',
+    letterSpacing: '0.08em',
+  },
+  todayFocusTitle: {
+    fontFamily: "'Syne', sans-serif",
+    fontSize: '22px',
+    fontWeight: '800',
+    color: '#25242A',
+    margin: '4px 0 2px 0',
+  },
+  todayFocusSubtitle: {
+    fontSize: '14px',
+    color: '#706D73',
+    margin: 0,
+    fontWeight: '500',
+  },
+  openTasksWorkspaceBtn: {
+    backgroundColor: '#25242A',
+    color: '#FFFFFF',
+    border: 'none',
+    padding: '12px 20px',
+    borderRadius: '12px',
+    fontSize: '14px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+    boxShadow: '0 4px 12px rgba(37, 36, 42, 0.15)',
   },
 };
 

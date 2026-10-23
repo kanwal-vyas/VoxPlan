@@ -166,9 +166,11 @@ export default function TaskList({
 
           {filteredTasks.length === 0 && (
             <div style={styles.emptyCard}>
-              <span style={styles.emptyEmoji}>🎉</span>
+              <span style={styles.emptyEmoji}>{tasks.length === 0 ? '✨' : '🎉'}</span>
               <h4 style={styles.emptyTitle}>
-                {activeFilter === 'high-risk'
+                {tasks.length === 0
+                  ? 'Your workspace is ready — no tasks created yet.'
+                  : activeFilter === 'high-risk'
                   ? 'No high-risk delay bottlenecks detected.'
                   : activeFilter === 'completed'
                   ? 'No completed tasks yet.'
@@ -177,7 +179,9 @@ export default function TaskList({
                   : 'No task cards matching this filter.'}
               </h4>
               <p style={styles.emptyDesc}>
-                {activeFilter === 'high-risk'
+                {tasks.length === 0
+                  ? 'Speak or type your instructions into the command dock below. Try: "Create task Finalize roadmap due tomorrow with high priority" or click the microphone to dictate.'
+                  : activeFilter === 'high-risk'
                   ? 'All active tasks are currently estimated at low or medium risk.'
                   : activeFilter === 'completed'
                   ? 'Complete active tasks to build your behavioral history and track accurate durations.'
@@ -189,9 +193,10 @@ export default function TaskList({
                   id="empty-state-add-task-btn"
                   onClick={onQuickAdd}
                   style={styles.emptyActionBtn}
-                  title="Scroll to Command Assistant to add a new task"
+                  title="Focus command dock to create a task"
+                  aria-label="Create a task in the command dock"
                 >
-                  <span>+ Add task in Command Assistant ↓</span>
+                  <span>{tasks.length === 0 ? '✦ Create Your First Task ↓' : '+ Add task in Command Assistant ↓'}</span>
                 </button>
               )}
             </div>

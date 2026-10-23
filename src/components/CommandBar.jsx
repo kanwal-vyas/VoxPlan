@@ -24,23 +24,37 @@ export default function CommandBar({
   onCancelClarification,
 }) {
   const [inputVal, setInputVal] = useState('');
-  const [isVisible, setIsVisible] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [userDismissed, setUserDismissed] = useState(false);
+  const prevTriggerRef = useRef(null);
   const sectionRef = useRef(null);
 
+  const hasInteractiveTrigger = Boolean(
+    pendingClarification ||
+    conversationState === 'AWAITING_CONFIRMATION' ||
+    conversationState === 'AWAITING_CLARIFICATION' ||
+    conversationState === 'AWAITING_PROPOSAL_DECISION' ||
+    activeProposal ||
+    isListening ||
+    recognitionState === 'LISTENING' ||
+    recognitionState === 'STARTING' ||
+    recognitionState === 'PROCESSING' ||
+    interimTranscript
+  );
+
+  // Auto-expand when a new interactive trigger arrives, unless dismissed by user for this exact trigger
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsVisible(true);
-        }
-      },
-      { threshold: 0.15 }
-    );
-    if (sectionRef.current) {
-      observer.observe(sectionRef.current);
+    const currentTriggerKey = `${conversationState}-${Boolean(pendingClarification)}-${Boolean(activeProposal)}-${recognitionState}-${Boolean(interimTranscript)}`;
+    if (hasInteractiveTrigger && currentTriggerKey !== prevTriggerRef.current) {
+      setIsExpanded(true);
+      setUserDismissed(false);
+    } else if (!hasInteractiveTrigger && prevTriggerRef.current && !userDismissed) {
+      setIsExpanded(false);
     }
-    return () => observer.disconnect();
-  }, []);
+    prevTriggerRef.current = currentTriggerKey;
+  }, [hasInteractiveTrigger, conversationState, pendingClarification, activeProposal, recognitionState, interimTranscript, userDismissed]);
+
+  const showExpanded = isExpanded || (hasInteractiveTrigger && !userDismissed);
 
   const liveAnnouncement =
     recognitionState === 'LISTENING'
@@ -86,17 +100,22 @@ export default function CommandBar({
       ? 'Type or speak your answer (e.g. "The one due today", "1", or "cancel")...'
       : conversationState === 'AWAITING_PROPOSAL_DECISION'
       ? 'Type or say "accept" to apply, "discard" to cancel, or ask "what if..."'
-      : 'Ask or command (e.g. "Move my database assignment to tomorrow", "Spread tasks over 3 days")...';
+      : 'Tell VoxPlan what you need… (or click mic to speak)';
 
   return (
-    <section ref={sectionRef} style={styles.section} id="command" aria-label="Command Assistant">
-      <div style={styles.container}>
-        {/* Header */}
-        <div style={styles.header}>
-          <div style={styles.titleGroup}>
-            <div style={styles.badgeRow}>
-              <span style={styles.sectionNum}>06</span>
-              <span style={styles.badge}>VOICE & NATURAL LANGUAGE</span>
+    <section
+      ref={sectionRef}
+      style={styles.dockWrapper}
+      id="command"
+      className="command-dock-container"
+      aria-label="Planning Command Center"
+    >
+      {/* Upward-Expanding Panel for Context, Transcripts, Proposals, and Suggestions */}
+      {showExpanded && (
+        <div id="command-expanded-drawer" style={styles.expandedDrawer}>
+          <div style={styles.drawerHeader}>
+            <div style={styles.drawerHeaderLeft}>
+              <span style={styles.drawerBadge}>ASSISTANT DETAILS</span>
               {conversationState === 'AWAITING_CONFIRMATION' && (
                 <span style={styles.stateBadgeConfirmation}>⚠️ CONFIRMATION REQUIRED</span>
               )}
@@ -106,27 +125,32 @@ export default function CommandBar({
               {conversationState === 'AWAITING_PROPOSAL_DECISION' && (
                 <span style={styles.stateBadgeProposal}>📋 PROPOSAL PENDING REVIEW</span>
               )}
+              {(recognitionState === 'LISTENING' || isListening) && (
+                <span style={styles.stateBadgeListening}>🎙️ LISTENING</span>
+              )}
+              {recognitionState === 'STARTING' && (
+                <span style={styles.stateBadgeStarting}>⏳ CONNECTING</span>
+              )}
+              {recognitionState === 'PROCESSING' && (
+                <span style={styles.stateBadgeProcessing}>⚙️ PROCESSING</span>
+              )}
             </div>
-            <h2 style={styles.title}>
-              <span className="command-title-word">TELL </span>
-              <span className={`command-title-word command-word-voxplan hl hl-peach ${isVisible ? 'hl-sweep' : ''}`}>VOXPLAN </span>
-              <span className="command-title-word">WHAT YOU NEED</span>
-            </h2>
-            <p style={styles.subtitle}>
-              Voice input powered by browser Speech Recognition with deterministic multi-turn planning context
-            </p>
-          </div>
-        </div>
 
-        {/* Clean Modern Assistant Box */}
-        <div
-          style={{
-            ...styles.notebookCard,
-            borderColor: isListening ? '#FF8F82' : pendingClarification || conversationState === 'AWAITING_CLARIFICATION' ? '#FFD8A8' : conversationState === 'AWAITING_CONFIRMATION' ? '#FFB5A7' : conversationState === 'AWAITING_PROPOSAL_DECISION' ? '#BFE8D0' : 'rgba(37, 36, 42, 0.08)',
-            boxShadow: isListening ? '0 12px 32px rgba(255, 143, 130, 0.2)' : pendingClarification || conversationState === 'AWAITING_CLARIFICATION' ? '0 8px 24px rgba(245, 159, 0, 0.12)' : conversationState === 'AWAITING_PROPOSAL_DECISION' ? '0 8px 24px rgba(64, 145, 108, 0.12)' : '0 4px 16px rgba(37, 36, 42, 0.04)',
-          }}
-          className="digital-card command-notebook-card"
-        >
+            <button
+              type="button"
+              id="command-collapse-drawer-btn"
+              onClick={() => {
+                setIsExpanded(false);
+                setUserDismissed(true);
+              }}
+              style={styles.minimizeBtn}
+              title="Minimize panel"
+              aria-label="Minimize assistant panel"
+            >
+              ✕ Minimize
+            </button>
+          </div>
+
           {/* Active Context Indicator */}
           {activeSubjectTask && (
             <div style={styles.contextBar} title="Follow-up commands like 'mark it done' or 'move it to Friday' apply to this task">
@@ -138,13 +162,13 @@ export default function CommandBar({
           )}
 
           {/* Persistent Active Voice Session Banner */}
-          {(recognitionState === 'LISTENING' || isListening || recognitionState === 'PROCESSING') && (
+          {(recognitionState === 'LISTENING' || isListening || recognitionState === 'PROCESSING' || recognitionState === 'STARTING') && (
             <div
               id="voice-active-indicator"
               style={{
                 ...styles.voiceSessionCard,
-                backgroundColor: recognitionState === 'PROCESSING' ? '#F4F0FF' : '#FFF0EE',
-                borderColor: recognitionState === 'PROCESSING' ? '#C9B6FF' : '#FF8F82',
+                backgroundColor: recognitionState === 'PROCESSING' ? '#F4F0FF' : recognitionState === 'STARTING' ? '#FFFBEB' : '#FFF0EE',
+                borderColor: recognitionState === 'PROCESSING' ? '#C9B6FF' : recognitionState === 'STARTING' ? '#FDE68A' : '#FF8F82',
               }}
               aria-label="Active Voice Recognition Session"
             >
@@ -153,11 +177,15 @@ export default function CommandBar({
                   <span
                     style={{
                       ...styles.voicePulseDot,
-                      backgroundColor: recognitionState === 'PROCESSING' ? '#5B44BA' : '#E5484D',
+                      backgroundColor: recognitionState === 'PROCESSING' ? '#5B44BA' : recognitionState === 'STARTING' ? '#D97706' : '#E5484D',
                     }}
                   />
                   <span style={styles.voiceSessionStateText}>
-                    {recognitionState === 'PROCESSING' ? 'PROCESSING AUDIO...' : 'LISTENING (MIC ACTIVE)'}
+                    {recognitionState === 'PROCESSING'
+                      ? 'PROCESSING AUDIO...'
+                      : recognitionState === 'STARTING'
+                      ? 'CONNECTING MICROPHONE...'
+                      : 'LISTENING (MIC ACTIVE)'}
                   </span>
                 </div>
 
@@ -170,6 +198,8 @@ export default function CommandBar({
                     <span style={styles.voiceListeningHint}>
                       {recognitionState === 'PROCESSING'
                         ? 'Analyzing captured command...'
+                        : recognitionState === 'STARTING'
+                        ? 'Connecting microphone stream... please wait before speaking'
                         : 'Speak clearly into your microphone... (e.g. "Add a database assignment due tomorrow")'}
                     </span>
                   )}
@@ -190,198 +220,6 @@ export default function CommandBar({
               </div>
             </div>
           )}
-
-          {/* Input Form */}
-          <form onSubmit={handleSubmit} style={styles.form}>
-            <div style={styles.inputRow}>
-              <span style={styles.promptIcon}>
-                {conversationState === 'AWAITING_CONFIRMATION' ? '⚠️' : conversationState === 'AWAITING_PROPOSAL_DECISION' ? '📋' : '💬'}
-              </span>
-              <label htmlFor="command-input" className="sr-only">
-                Planning command or task input
-              </label>
-              <input
-                type="text"
-                value={inputVal}
-                onChange={(e) => setInputVal(e.target.value)}
-                onInput={(e) => setInputVal(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleSubmit(e);
-                }}
-                id="command-input"
-                aria-label="Planning command or task input"
-                placeholder={placeholderText}
-                style={styles.input}
-              />
-
-              {/* Spoken Responses Toggle (Speaker Button) */}
-              <button
-                id="speech-toggle-btn"
-                type="button"
-                onClick={onToggleSpeechOutput}
-                style={{
-                  ...styles.speakerBtn,
-                  backgroundColor: speechOutputEnabled ? '#D1F2D9' : '#F3F0EC',
-                  color: speechOutputEnabled ? '#166534' : '#706D73',
-                  borderColor: speechOutputEnabled ? '#BFE8D0' : 'rgba(37, 36, 42, 0.12)',
-                }}
-                title={
-                  speechOutputEnabled
-                    ? isSpeaking
-                      ? 'Assistant is speaking... Click to mute or press Esc to stop'
-                      : 'Spoken responses: ON (Click to mute)'
-                    : 'Spoken responses: OFF (Click to unmute)'
-                }
-                aria-label={speechOutputEnabled ? 'Mute spoken responses' : 'Enable spoken responses'}
-              >
-                {speechOutputEnabled ? (
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-                  </svg>
-                ) : (
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                    <line x1="23" y1="9" x2="17" y2="15" />
-                    <line x1="17" y1="9" x2="23" y2="15" />
-                  </svg>
-                )}
-              </button>
-
-              {/* Stop Speech Quick Button (visible when assistant is speaking) */}
-              {isSpeaking && (
-                <button
-                  id="stop-speech-btn"
-                  type="button"
-                  onClick={onStopSpeech}
-                  style={styles.stopSpeechBtn}
-                  title="Stop speaking (or press Esc)"
-                  aria-label="Stop speaking"
-                >
-                  ■ Stop
-                </button>
-              )}
-
-              {/* Browser Speech Dictation Mic Button (5 Lifecycle States) */}
-              <button
-                id="voice-mic-btn"
-                type="button"
-                disabled={recognitionState === 'UNSUPPORTED'}
-                onClick={onToggleListening}
-                style={{
-                  ...styles.micBtn,
-                  backgroundColor:
-                    recognitionState === 'LISTENING' || isListening
-                      ? '#FF8F82'
-                      : recognitionState === 'STARTING'
-                      ? '#FFF0B3'
-                      : recognitionState === 'PROCESSING'
-                      ? '#E4DAFF'
-                      : recognitionState === 'ERROR'
-                      ? '#FFE8E5'
-                      : recognitionState === 'UNSUPPORTED'
-                      ? '#EAE8E4'
-                      : '#FFE58A',
-                  color:
-                    recognitionState === 'LISTENING' || isListening
-                      ? '#FFFFFF'
-                      : recognitionState === 'ERROR'
-                      ? '#991B1B'
-                      : '#25242A',
-                  cursor: recognitionState === 'UNSUPPORTED' ? 'not-allowed' : 'pointer',
-                  opacity: recognitionState === 'UNSUPPORTED' ? 0.6 : 1,
-                }}
-                title={
-                  recognitionState === 'LISTENING' || isListening
-                    ? 'Listening via microphone... click to stop (or press Esc)'
-                    : recognitionState === 'STARTING'
-                    ? 'Connecting microphone... please wait before speaking (click to cancel)'
-                    : recognitionState === 'PROCESSING'
-                    ? 'Processing voice command...'
-                    : recognitionState === 'ERROR'
-                    ? 'Microphone error. Click to retry.'
-                    : recognitionState === 'UNSUPPORTED'
-                    ? 'Speech recognition not supported in this browser'
-                    : 'Dictate command using browser speech recognition'
-                }
-                aria-label={
-                  recognitionState === 'LISTENING' || isListening
-                    ? 'Stop voice listening'
-                    : recognitionState === 'STARTING'
-                    ? 'Connecting microphone... click to cancel'
-                    : recognitionState === 'PROCESSING'
-                    ? 'Processing voice command'
-                    : recognitionState === 'ERROR'
-                    ? 'Microphone error. Click to retry'
-                    : recognitionState === 'UNSUPPORTED'
-                    ? 'Speech recognition not supported in this browser'
-                    : 'Toggle voice listening'
-                }
-              >
-                {recognitionState === 'LISTENING' || isListening ? (
-                  <div style={styles.waveBars}>
-                    <span style={{ ...styles.bar, animation: 'waveBar 0.6s infinite ease-in-out 0ms' }} />
-                    <span style={{ ...styles.bar, animation: 'waveBar 0.6s infinite ease-in-out 150ms' }} />
-                    <span style={{ ...styles.bar, animation: 'waveBar 0.6s infinite ease-in-out 300ms' }} />
-                    <span style={{ ...styles.bar, animation: 'waveBar 0.6s infinite ease-in-out 150ms' }} />
-                  </div>
-                ) : recognitionState === 'STARTING' ? (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#D97706', animation: 'waveBar 0.8s infinite ease-in-out' }} />
-                  </div>
-                ) : recognitionState === 'PROCESSING' ? (
-                  <div style={styles.waveBars}>
-                    <span style={{ ...styles.bar, backgroundColor: '#5B44BA', animation: 'waveBar 0.4s infinite ease-in-out 0ms' }} />
-                    <span style={{ ...styles.bar, backgroundColor: '#5B44BA', animation: 'waveBar 0.4s infinite ease-in-out 100ms' }} />
-                    <span style={{ ...styles.bar, backgroundColor: '#5B44BA', animation: 'waveBar 0.4s infinite ease-in-out 200ms' }} />
-                  </div>
-                ) : recognitionState === 'UNSUPPORTED' ? (
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="2" y1="2" x2="22" y2="22" />
-                    <path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2" />
-                    <path d="M5 10v2a7 7 0 0 0 12 5" />
-                    <path d="M15 9.34V5a3 3 0 0 0-5.68-1.33" />
-                    <path d="M9 9v3a3 3 0 0 0 5.12 2.12" />
-                    <line x1="12" y1="19" x2="12" y2="22" />
-                  </svg>
-                ) : (
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                    <line x1="12" y1="19" x2="12" y2="22" />
-                  </svg>
-                )}
-              </button>
-
-              {/* Submit Button */}
-              <button
-                id="command-submit-btn"
-                type="submit"
-                style={styles.sendBtn}
-                title="Execute command"
-                aria-label="Execute command"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                  <polyline points="12 5 19 12 12 19" />
-                </svg>
-              </button>
-            </div>
-          </form>
-
-          {/* Accessible Screen-Reader Live Region */}
-          <div role="status" aria-live="polite" style={styles.srOnly}>
-            {liveAnnouncement}
-          </div>
-
-          {/* Voice Privacy & Browser Compatibility Notice */}
-          <div style={styles.privacyNote} aria-label="Voice privacy notice">
-            <span style={styles.privacyLockIcon}>🔒</span>
-            <span style={styles.privacyText}>
-              <strong>Voice Privacy:</strong> Spoken commands use your browser's native Web Speech API. Audio recognition is performed by your browser vendor (e.g. Google or Apple) and is never sent to third-party AI services or stored on VoxPlan servers.
-            </span>
-          </div>
 
           {/* Schedule Proposal Review Card */}
           {activeProposal && (
@@ -681,6 +519,246 @@ export default function CommandBar({
               </button>
             ))}
           </div>
+
+          {/* Voice Privacy & Browser Compatibility Notice */}
+          <div style={styles.privacyNote} aria-label="Voice privacy notice">
+            <span style={styles.privacyLockIcon}>🔒</span>
+            <span style={styles.privacyText}>
+              <strong>Voice Privacy:</strong> Spoken commands use your browser's native Web Speech API. Audio recognition is performed by your browser vendor (e.g. Google or Apple) and is never sent to third-party AI services or stored on VoxPlan servers.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Layer 2: Persistent Collapsed Command Dock Card */}
+      <div className="digital-card command-notebook-card" style={styles.notebookCard}>
+        {/* Compact Alert Pill when drawer is collapsed but attention needed */}
+        {!showExpanded && (pendingClarification || conversationState === 'AWAITING_CONFIRMATION' || conversationState === 'AWAITING_PROPOSAL_DECISION' || activeProposal || isListening || recognitionState === 'LISTENING') && (
+          <button
+            type="button"
+            id="command-dock-alert-pill"
+            onClick={() => {
+              setIsExpanded(true);
+              setUserDismissed(false);
+            }}
+            style={styles.dockAlertPill}
+            aria-label="Expand assistant details to view pending state"
+          >
+            <span>
+              {pendingClarification
+                ? '💬 Clarification needed — Click to choose task'
+                : activeProposal
+                ? '📋 Schedule Proposal ready for review'
+                : conversationState === 'AWAITING_CONFIRMATION'
+                ? '⚠️ Confirmation required'
+                : '🎙️ Microphone listening...'}
+            </span>
+            <span style={styles.dockAlertPillAction}>View Details ▲</span>
+          </button>
+        )}
+
+        {/* Input Form */}
+        <form onSubmit={handleSubmit} style={styles.form}>
+          <div style={styles.inputRow}>
+            <span style={styles.promptIcon}>
+              {conversationState === 'AWAITING_CONFIRMATION' ? '⚠️' : conversationState === 'AWAITING_PROPOSAL_DECISION' ? '📋' : '💬'}
+            </span>
+            <label htmlFor="command-input" className="sr-only">
+              Planning command or task input
+            </label>
+            <input
+              type="text"
+              value={inputVal}
+              onChange={(e) => setInputVal(e.target.value)}
+              onInput={(e) => setInputVal(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSubmit(e);
+              }}
+              id="command-input"
+              aria-label="Planning command or task input"
+              placeholder={placeholderText}
+              style={styles.input}
+            />
+
+            {/* Spoken Responses Toggle (Speaker Button) */}
+            <button
+              id="speech-toggle-btn"
+              type="button"
+              onClick={onToggleSpeechOutput}
+              style={{
+                ...styles.speakerBtn,
+                backgroundColor: speechOutputEnabled ? '#D1F2D9' : '#F3F0EC',
+                color: speechOutputEnabled ? '#166534' : '#706D73',
+                borderColor: speechOutputEnabled ? '#BFE8D0' : 'rgba(37, 36, 42, 0.12)',
+              }}
+              title={
+                speechOutputEnabled
+                  ? isSpeaking
+                    ? 'Assistant is speaking... Click to mute or press Esc to stop'
+                    : 'Spoken responses: ON (Click to mute)'
+                  : 'Spoken responses: OFF (Click to unmute)'
+              }
+              aria-label={speechOutputEnabled ? 'Mute spoken responses' : 'Enable spoken responses'}
+            >
+              {speechOutputEnabled ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                  <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                </svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                  <line x1="23" y1="9" x2="17" y2="15" />
+                  <line x1="17" y1="9" x2="23" y2="15" />
+                </svg>
+              )}
+            </button>
+
+            {/* Stop Speech Quick Button (visible when assistant is speaking) */}
+            {isSpeaking && (
+              <button
+                id="stop-speech-btn"
+                type="button"
+                onClick={onStopSpeech}
+                style={styles.stopSpeechBtn}
+                title="Stop speaking (or press Esc)"
+                aria-label="Stop speaking"
+              >
+                ■ Stop
+              </button>
+            )}
+
+            {/* Browser Speech Dictation Mic Button (5 Lifecycle States) */}
+            <button
+              id="voice-mic-btn"
+              type="button"
+              disabled={recognitionState === 'UNSUPPORTED'}
+              onClick={onToggleListening}
+              style={{
+                ...styles.micBtn,
+                backgroundColor:
+                  recognitionState === 'LISTENING' || isListening
+                    ? '#FF8F82'
+                    : recognitionState === 'STARTING'
+                    ? '#FFF0B3'
+                    : recognitionState === 'PROCESSING'
+                    ? '#E4DAFF'
+                    : recognitionState === 'ERROR'
+                    ? '#FFE8E5'
+                    : recognitionState === 'UNSUPPORTED'
+                    ? '#EAE8E4'
+                    : '#FFE58A',
+                color:
+                  recognitionState === 'LISTENING' || isListening
+                    ? '#FFFFFF'
+                    : recognitionState === 'ERROR'
+                    ? '#991B1B'
+                    : '#25242A',
+                cursor: recognitionState === 'UNSUPPORTED' ? 'not-allowed' : 'pointer',
+                opacity: recognitionState === 'UNSUPPORTED' ? 0.6 : 1,
+              }}
+              title={
+                recognitionState === 'LISTENING' || isListening
+                  ? 'Listening via microphone... click to stop (or press Esc)'
+                  : recognitionState === 'STARTING'
+                  ? 'Connecting microphone... please wait before speaking (click to cancel)'
+                  : recognitionState === 'PROCESSING'
+                  ? 'Processing voice command...'
+                  : recognitionState === 'ERROR'
+                  ? 'Microphone error. Click to retry.'
+                  : recognitionState === 'UNSUPPORTED'
+                  ? 'Speech recognition not supported in this browser'
+                  : 'Dictate command using browser speech recognition'
+              }
+              aria-label={
+                recognitionState === 'LISTENING' || isListening
+                  ? 'Stop voice listening'
+                  : recognitionState === 'STARTING'
+                  ? 'Connecting microphone... click to cancel'
+                  : recognitionState === 'PROCESSING'
+                  ? 'Processing voice command'
+                  : recognitionState === 'ERROR'
+                  ? 'Microphone error. Click to retry'
+                  : recognitionState === 'UNSUPPORTED'
+                  ? 'Speech recognition not supported in this browser'
+                  : 'Toggle voice listening'
+              }
+            >
+              {recognitionState === 'LISTENING' || isListening ? (
+                <div style={styles.waveBars}>
+                  <span style={{ ...styles.bar, animation: 'waveBar 0.6s infinite ease-in-out 0ms' }} />
+                  <span style={{ ...styles.bar, animation: 'waveBar 0.6s infinite ease-in-out 150ms' }} />
+                  <span style={{ ...styles.bar, animation: 'waveBar 0.6s infinite ease-in-out 300ms' }} />
+                  <span style={{ ...styles.bar, animation: 'waveBar 0.6s infinite ease-in-out 150ms' }} />
+                </div>
+              ) : recognitionState === 'STARTING' ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#D97706', animation: 'waveBar 0.8s infinite ease-in-out' }} />
+                </div>
+              ) : recognitionState === 'PROCESSING' ? (
+                <div style={styles.waveBars}>
+                  <span style={{ ...styles.bar, backgroundColor: '#5B44BA', animation: 'waveBar 0.4s infinite ease-in-out 0ms' }} />
+                  <span style={{ ...styles.bar, backgroundColor: '#5B44BA', animation: 'waveBar 0.4s infinite ease-in-out 100ms' }} />
+                  <span style={{ ...styles.bar, backgroundColor: '#5B44BA', animation: 'waveBar 0.4s infinite ease-in-out 200ms' }} />
+                </div>
+              ) : recognitionState === 'UNSUPPORTED' ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="2" y1="2" x2="22" y2="22" />
+                  <path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2" />
+                  <path d="M5 10v2a7 7 0 0 0 12 5" />
+                  <path d="M15 9.34V5a3 3 0 0 0-5.68-1.33" />
+                  <path d="M9 9v3a3 3 0 0 0 5.12 2.12" />
+                  <line x1="12" y1="19" x2="12" y2="22" />
+                </svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  <line x1="12" y1="19" x2="12" y2="22" />
+                </svg>
+              )}
+            </button>
+
+            {/* Submit Button */}
+            <button
+              id="command-submit-btn"
+              type="submit"
+              style={styles.sendBtn}
+              title="Execute command"
+              aria-label="Execute command"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12" />
+                <polyline points="12 5 19 12 12 19" />
+              </svg>
+            </button>
+
+            {/* Expand / Minimize Toggle Button */}
+            <button
+              id="command-expand-toggle-btn"
+              type="button"
+              onClick={() => {
+                if (showExpanded) {
+                  setIsExpanded(false);
+                  setUserDismissed(true);
+                } else {
+                  setIsExpanded(true);
+                  setUserDismissed(false);
+                }
+              }}
+              style={styles.expandToggleBtn}
+              title={showExpanded ? 'Minimize details' : 'Expand details and suggestions'}
+              aria-label={showExpanded ? 'Minimize command assistant panel' : 'Expand command assistant panel'}
+            >
+              {showExpanded ? '▼' : '▲'}
+            </button>
+          </div>
+        </form>
+
+        {/* Accessible Screen-Reader Live Region */}
+        <div role="status" aria-live="polite" style={styles.srOnly}>
+          {liveAnnouncement}
         </div>
       </div>
     </section>
@@ -688,6 +766,134 @@ export default function CommandBar({
 }
 
 const styles = {
+  dockWrapper: {
+    position: 'fixed',
+    bottom: '20px',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    width: 'calc(100% - 32px)',
+    maxWidth: '780px',
+    zIndex: 1000,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    pointerEvents: 'none',
+  },
+  expandedDrawer: {
+    pointerEvents: 'auto',
+    backgroundColor: '#FFFFFF',
+    borderRadius: '20px',
+    border: '1.5px solid rgba(37, 36, 42, 0.12)',
+    boxShadow: '0 16px 40px rgba(37, 36, 42, 0.18), 0 2px 8px rgba(37, 36, 42, 0.08)',
+    padding: '20px 24px',
+    marginBottom: '10px',
+    maxHeight: '62vh',
+    overflowY: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+    backdropFilter: 'blur(10px)',
+  },
+  drawerHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: '8px',
+    borderBottom: '1px solid rgba(37, 36, 42, 0.06)',
+    gap: '10px',
+  },
+  drawerHeaderLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexWrap: 'wrap',
+  },
+  drawerBadge: {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '11px',
+    fontWeight: '800',
+    color: '#D9483B',
+    letterSpacing: '0.08em',
+  },
+  minimizeBtn: {
+    backgroundColor: 'transparent',
+    border: '1px solid rgba(37, 36, 42, 0.15)',
+    borderRadius: '6px',
+    padding: '4px 10px',
+    fontSize: '12px',
+    fontWeight: '700',
+    color: '#706D73',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+  },
+  dockAlertPill: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFF4E5',
+    border: '1px solid #FFE0B2',
+    color: '#B45309',
+    borderRadius: '10px',
+    padding: '6px 14px',
+    fontSize: '12px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    marginBottom: '4px',
+    width: '100%',
+  },
+  dockAlertPillAction: {
+    fontSize: '11px',
+    fontWeight: '800',
+    color: '#D97706',
+  },
+  expandToggleBtn: {
+    width: '38px',
+    height: '38px',
+    minWidth: '38px',
+    minHeight: '38px',
+    borderRadius: '8px',
+    backgroundColor: '#F3F0EC',
+    color: '#555259',
+    border: '1px solid rgba(37, 36, 42, 0.12)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: '700',
+    flexShrink: 0,
+    transition: 'all 0.15s ease',
+  },
+  stateBadgeListening: {
+    backgroundColor: '#FFE8E5',
+    color: '#991B1B',
+    padding: '4px 10px',
+    borderRadius: '9999px',
+    fontSize: '11px',
+    fontWeight: '800',
+    letterSpacing: '0.04em',
+    border: '1px solid #FF8F82',
+  },
+  stateBadgeStarting: {
+    backgroundColor: '#FFFBEB',
+    color: '#D97706',
+    padding: '4px 10px',
+    borderRadius: '9999px',
+    fontSize: '11px',
+    fontWeight: '800',
+    letterSpacing: '0.04em',
+    border: '1px solid #FDE68A',
+  },
+  stateBadgeProcessing: {
+    backgroundColor: '#F4F0FF',
+    color: '#5B44BA',
+    padding: '4px 10px',
+    borderRadius: '9999px',
+    fontSize: '11px',
+    fontWeight: '800',
+    letterSpacing: '0.04em',
+    border: '1px solid #C9B6FF',
+  },
   section: {
     padding: '36px 0 64px 0',
   },
