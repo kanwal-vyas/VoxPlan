@@ -117,6 +117,22 @@ export function generateSpokenSummary(result, options = {}) {
     if (action.type === 'REOPEN_TASK') {
       return `Reopened task.`;
     }
+    if (action.type === 'CHANGE_PRIORITY') {
+      return `Updated task priority to ${action.priority}.`;
+    }
+    if (action.type === 'RENAME_TASK') {
+      return `Renamed task to ${action.newTitle}.`;
+    }
+    if (action.type === 'RESCHEDULE_TASK') {
+      return action.newDueDate ? `Rescheduled task to ${action.newDueDate}.` : `Cleared task deadline.`;
+    }
+    if (action.type === 'REVISE_EFFORT') {
+      return `Updated estimated effort to ${action.estimatedEffort} hours.`;
+    }
+    if (action.type === 'COMPOUND_ACTIONS') {
+      const count = Array.isArray(action.actions) ? action.actions.length : 0;
+      return `Executed ${count} operations.`;
+    }
   }
 
   // 5. Standard Informative Response

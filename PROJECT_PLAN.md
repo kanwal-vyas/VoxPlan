@@ -5381,3 +5381,73 @@ With the completion of Stages 8.4E and 8.4F, both previously outstanding release
 - **Adaptation Flags**: `isAdaptationUnlocked === false`, `productionApplied === false`.
 - **Phase 7.4.4B Activation Gate**: Permanently locked (`outcome: infeasible` on empty caller claims).
 - **Local-First Privacy**: 100% deterministic local browser IndexedDB storage; zero cloud LLMs, zero cloud telemetry transmission.
+
+---
+
+### Phase 8, Stage 8.4G: Voice Command Reliability & Existing-Task Editing Hardening Record
+
+**Verification Date**: October 23, 2026
+**Starting Commit**: `8430ab47de9998e93ebdd5b544eaa8354d7e19f4`
+
+#### 1. Problem Statement & Root Cause Analysis
+
+Two primary user-facing defects were reported in VoxPlan's natural-language command workflow:
+1. **Defect 1 — Compound Utterances**: A single utterance containing multiple task operations (e.g., `"Create task XYZ for ABC with high priority, and create another task DEF for PQR with low priority"`) did not reliably execute all intended operations.
+   - *Root Cause 1a (Parsing)*: `splitCompoundCommands` in `compoundCommandParser.js` only split on `, then`, `and then`, or `;`. Conjunctions like `, and create another...` or `and set its priority to...` were not split, resulting in the entire compound utterance being passed as a single task creation with corrupt title and dropped operations.
+   - *Root Cause 1b (Identity Coordination)*: `_handleCompoundCommands` simulated transient IDs (`temp-...`) that did not match the deterministic IDs assigned during React execution.
+   - *Root Cause 1c (Stale React Closure)*: In `ProductivityApp.jsx`, `dispatchAction` verified `tasks.some(t => t.id === targetId)` against a stale `tasks` state closure. Sequential operations in the same utterance (e.g. creating a task and immediately changing its priority) aborted with `"Mutation aborted: Target task ID no longer exists in task store"`.
+2. **Defect 2 — Existing-Task Voice Editing**: Voice commands could not reliably edit existing tasks after creation (e.g. `"Change XYZ's priority to high"`, `"Rename XYZ to Final Report"`).
+   - *Root Cause 2a (Possessive & Prefix Matching)*: `dialogueManager.js` priority regex required `priority of ...`, failing on possessive forms (`XYZ's priority`) and `task ` prefixes (`task DEF`).
+   - *Root Cause 2b (Missing Intents in Dispatch)*: `RENAME_TASK` was missing from `CONVERSATION_INTENTS`, `_handleIdleState`, and `ProductivityApp.jsx`. `REVISE_EFFORT` was missing execution dispatching.
+   - *Root Cause 2c (Single-User Schema Truthfulness)*: VoxPlan's local data model has no `assignee` field. Assigning tasks via voice previously either failed silently or corrupted task titles. Now, assignment requests receive clear, truthful feedback that assignment is unsupported in VoxPlan's local-first single-user workspace.
+
+#### 2. Implemented Behavioral Changes
+
+1. **Compound Command Splitting & Attribute Separation** (`src/conversation/compoundCommandParser.js`):
+   - Expanded `splitCompoundCommands` with comprehensive conjunction regex covering `, and (create|add|set|change|update|mark|complete|uncomplete|reopen|delete|remove|reschedule|rename|assign)`, `and create another`, and `and set its...`.
+   - Added `extractAssignee(text)` to extract assignees independently and prevent assignee text from leaking into task titles or cross-contaminating other tasks.
+   - Enhanced `parseCompoundTaskCreation` to strip `another task called`, `another called`, and `another named` prefixes cleanly.
+2. **Dialogue Manager Normalization & Intent Routing** (`src/conversation/dialogueManager.js`):
+   - Added `CONVERSATION_INTENTS.RENAME_TASK`.
+   - Updated `resolveTaskReference` to strip possessives (`'s`, `’s`) and `task ` prefixes, resolve `its` as a valid pronoun, and normalize tokens for reliable fuzzy/exact matching.
+   - In `_handleCompoundCommands`, assigned deterministic task IDs, maintained in-memory state across sub-commands, preserved partial successes on ambiguity, and returned accurate operation summaries.
+   - Handled priority changes (with validation for `high`, `medium`, `low`), task renaming, effort revision, direct rescheduling/clearing of deadlines, and task assignment explanations.
+3. **Execution Pipeline & Reactive State Synchronization** (`src/pages/ProductivityApp.jsx`):
+   - Maintained synchronous `workingTasks` copy within `executeCommand` to ensure compound actions execute sequentially without React stale closure aborts.
+   - Added `fallbackTarget` parameter across `completeTask`, `reopenTask`, `deleteTask`, and `handleReschedule` to support immediate mutation of newly created tasks within the same utterance.
+   - Added full dispatch handlers for `RENAME_TASK` and `REVISE_EFFORT`.
+   - All mutations trigger reactive UI updates and persist to `localStorage` safely via `safePersistTasks`.
+4. **Accessible Spoken Summaries** (`src/conversation/speechEngine.js`):
+   - Added spoken summaries for `RENAME_TASK`, `REVISE_EFFORT`, `CHANGE_PRIORITY`, and `COMPOUND_ACTIONS`.
+
+#### 3. Automated Test Verification & Results
+
+- **Node.js Test Suite**: `npm test` (`node --test tests/**/*.test.js`)
+  - **Result**: `1028 passed, 0 failed across 216 suites` (Duration: 18.2s).
+- **Dedicated Regression Suite**: `node --test tests/voice_command_reliability.test.js`
+  - **Result**: `17 passed, 0 failed across 4 suites`.
+    - Multiple operations in one utterance (2 tasks, 3 tasks, compound attributes, create + update).
+    - Existing task editing (priority change with possessive, task prefix, rename, completion, reopening, rescheduling).
+    - Ambiguous task clarification without mutation.
+    - Invalid priority value rejection with guidance.
+    - Task assignment explanation without mutating tasks.
+    - Speech recognition interim/final submission lifecycle and deduplication.
+    - Consistency between voice transcripts and typed commands.
+- **Backend Pytest Suite**: `python -m pytest`
+  - **Result**: `29 passed, 0 failed in 6.15s`.
+- **Production Build**: `npm run build`
+  - **Result**: `vite build` completed in 244ms with zero errors.
+- **Dedicated Secret Scanner**: `node scripts/secretScanner.mjs`
+  - **Result**: Clean scan (130 files scanned, 0 secrets found).
+
+#### 4. Scope & Protected Invariant Preservation
+
+- **Factory Scheduler Weights**:
+  - `urgencyWeight`: **50.0**
+  - `priorityWeight`: **100.0**
+  - `unblockWeight`: **15.0**
+  - `riskWeight`: **25.0**
+- **Scheduler Immutability**: `Object.isFrozen(FACTORY_SCHEDULER_WEIGHTS) === true`.
+- **Adaptation Flags**: `isAdaptationUnlocked === false`, `productionApplied === false`.
+- **Phase 7.4.4B Activation Gate**: Permanently locked (`outcome: infeasible` on empty caller claims).
+- **Local-First Privacy**: 100% deterministic local browser IndexedDB and localStorage task mutations; zero cloud LLMs, zero cloud telemetry transmission.

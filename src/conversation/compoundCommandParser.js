@@ -289,12 +289,50 @@ export function extractEstimatedEffort(text) {
 }
 
 /**
+ * Extracts task assignee from an utterance if present.
+ * Distinguishes assignees ("for ABC", "assigned to PQR") from date/effort keywords ("for today", "for 2 hours").
+ *
+ * @param {string} text
+ * @returns {string|null}
+ */
+export function extractAssignee(text) {
+  if (!text || typeof text !== 'string') return null;
+  const dateKeywords = new Set([
+    'today', 'tomorrow', 'yesterday',
+    'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
+    'jan', 'january', 'feb', 'february', 'mar', 'march', 'apr', 'april', 'may', 'jun', 'june',
+    'jul', 'july', 'aug', 'august', 'sep', 'september', 'oct', 'october', 'nov', 'november', 'dec', 'december',
+    'the', 'this', 'next', 'completion'
+  ]);
+
+  // Case 1: explicit assigned to / assignee is <Name>
+  const assignedMatch = text.match(/\b(?:assigned\s+to|assignee\s+(?:is\s+|to\s+)?)\s+([A-Za-z0-9_-]+)\b/i);
+  if (assignedMatch) {
+    const candidate = assignedMatch[1].toLowerCase();
+    if (!dateKeywords.has(candidate) && !/^\d+$/.test(candidate)) {
+      return assignedMatch[1];
+    }
+  }
+
+  // Case 2: (task|called|named) <Title> for <Assignee> (with|due|deadline|and|$)
+  const forMatch = text.match(/\b(?:task|called|named)\s+(.+?)\s+for\s+([A-Za-z0-9_-]+)(?=[,;\s]*(?:with\b|and\b|due\b|deadline\b|$))/i);
+  if (forMatch) {
+    const candidate = forMatch[2].toLowerCase();
+    if (!dateKeywords.has(candidate) && !/^\d+$/.test(candidate)) {
+      return forMatch[2];
+    }
+  }
+
+  return null;
+}
+
+/**
  * Parses compound task creation from natural language.
  * Extracts title cleanly without command words, without deadline phrases, and without priority words.
  *
  * @param {string} rawText
  * @param {Date} [referenceDate]
- * @returns {Object|null} { title, dueDate, priority, estimatedEffort } or null if not task creation
+ * @returns {Object|null} { title, dueDate, priority, estimatedEffort, assignee } or null if not task creation
  */
 export function parseCompoundTaskCreation(rawText, referenceDate = new Date()) {
   if (!rawText || typeof rawText !== 'string') return null;
@@ -302,10 +340,11 @@ export function parseCompoundTaskCreation(rawText, referenceDate = new Date()) {
 
   // Pattern detection for task creation intent:
   const isCreationIntent =
-    /^(?:create|add|new|make|schedule)\s+(?:a\s+|an\s+)?(?:new\s+)?task\b/i.test(text) ||
-    /^(?:create|add|make|schedule)\s+(?:a\s+|an\s+)?/i.test(text) ||
+    /^(?:create|add|new|make|schedule)\s+(?:a\s+|an\s+)?(?:new\s+)?(?:another\s+)?task\b/i.test(text) ||
+    /^(?:create|add|make|schedule)\s+(?:a\s+|an\s+)?(?:another\s+)?/i.test(text) ||
+    /^(?:another\s+task|another\s+called|another\s+named)\b/i.test(text) ||
     /^(?:remind\s+me\s+to|i\s+need\s+to|i\s+have\s+to|i\s+must|don't\s+forget\s+to)\s+/i.test(text) ||
-    /^(?:put|place)\s+(.+?)\s+on\s+(?:my\s+)?(?:task\s+list|to-do\s+list|tasks|board)\b/i.test(text) ||
+    /^(?:put|place)\s+(.+?)\s+on\s+(?:my\s+)?(?:task\s+)?(?:list|to-do\s+list|tasks|board)\b/i.test(text) ||
     /^(?:create|add)\s+(?:a\s+)?new\s+task\s*:\s*/i.test(text) ||
     /\badd\s+(?:it\s+)?to\s+(?:my\s+)?tasks\b/i.test(text);
 
@@ -317,7 +356,10 @@ export function parseCompoundTaskCreation(rawText, referenceDate = new Date()) {
   // 2. Extract Estimated Effort
   const estimatedEffort = extractEstimatedEffort(text);
 
-  // 3. Extract Due Date
+  // 3. Extract Assignee
+  const assignee = extractAssignee(text);
+
+  // 4. Extract Due Date
   let dueDate = null;
   let deadlinePhrase = '';
 
@@ -371,14 +413,17 @@ export function parseCompoundTaskCreation(rawText, referenceDate = new Date()) {
   // Strip instruction prefixes
   cleanTitle = cleanTitle
     .replace(/^(?:create|add)\s+(?:a\s+)?new\s+task\s*:\s*/i, '')
-    .replace(/^(?:create|add|make|schedule)\s+(?:a\s+|an\s+)?(?:new\s+)?task\s+(?:called|named)\s+/i, '')
+    .replace(/^(?:create|add|make|schedule)\s+(?:a\s+|an\s+)?(?:new\s+)?(?:another\s+)?task\s+(?:called|named)\s+/i, '')
+    .replace(/^(?:create|add|make|schedule)\s+(?:a\s+|an\s+)?(?:another\s+)?called\s+/i, '')
+    .replace(/^(?:create|add|make|schedule)\s+(?:a\s+|an\s+)?(?:another\s+)?named\s+/i, '')
     .replace(/^(?:create|add|make|schedule)\s+(?:a\s+|an\s+)?(?:new\s+)?task\s+(?:for|to)\s+/i, '')
-    .replace(/^(?:create|add|make|schedule)\s+(?:a\s+|an\s+)?(?:new\s+)?task\b/i, '')
-    .replace(/^(?:create|add|make|schedule)\s+(?:a\s+|an\s+)?/i, '')
+    .replace(/^(?:create|add|make|schedule)\s+(?:a\s+|an\s+)?(?:new\s+)?(?:another\s+)?task\b/i, '')
+    .replace(/^(?:create|add|make|schedule)\s+(?:a\s+|an\s+)?(?:another\b)?/i, '')
+    .replace(/^(?:another\s+task\s+(?:called|named)\s+|another\s+task\b|another\s+called\s+|another\s+named\s+|another\b)\s*/i, '')
+    .replace(/^(?:called|named)\s+/i, '')
     .replace(/^(?:remind\s+me\s+to|i\s+need\s+to|i\s+have\s+to|i\s+must|don't\s+forget\s+to)\s+/i, '')
     .replace(/^(?:finish|complete|do|work\s+on)\s+(?:the\s+|my\s+)?/i, '')
     .replace(/^(?:put|place)\s+/i, '')
-    .replace(/^(?:called|named)\s+/i, '')
     .replace(/\badd\s+(?:it\s+)?to\s+(?:my\s+)?tasks\b/gi, '');
 
   // Strip exact deadline phrase if detected
@@ -398,6 +443,11 @@ export function parseCompoundTaskCreation(rawText, referenceDate = new Date()) {
   // Strip effort phrases
   cleanTitle = cleanTitle
     .replace(/\b(?:for|effort(?:\s+of)?|estimate(?:\s+of)?)\s+\d+(?:\.\d+)?\s*(?:hours?|hrs?|h)\b/gi, '');
+
+  // Strip assignee phrases
+  if (assignee) {
+    cleanTitle = cleanTitle.replace(new RegExp(`\\b(?:assigned\\s+to|for)\\s+${assignee}\\b`, 'gi'), ' ');
+  }
 
   // Clean punctuation before checking trailing task
   cleanTitle = cleanTitle
@@ -425,6 +475,7 @@ export function parseCompoundTaskCreation(rawText, referenceDate = new Date()) {
     dueDate,
     priority,
     estimatedEffort,
+    assignee: assignee || null,
   };
 }
 
@@ -446,12 +497,29 @@ export function splitCompoundCommands(text) {
     return [clean];
   }
 
-  // Split on "and then", ", then", "then", or explicit semicolon
-  if (/\b(?:and\s+then|,\s*then|;\s*)/i.test(clean)) {
+  // Semicolons
+  if (/;\s*/.test(clean)) {
     return clean
-      .split(/\b(?:and\s+then|,\s*then|;\s*)/i)
-      .map((s) => s.trim())
+      .split(/;\s*/)
+      .map((s) => s.trim().replace(/[.]+$/, ''))
       .filter(Boolean);
+  }
+
+  // Compound command delimiter regex:
+  // - "and then", ", then", "then"
+  // - ", and create / add / set / change / update / mark / complete / delete / reschedule / rename / assign"
+  // - ", create / add (another|a task|task)"
+  // - " and create / add (another|a task|task)"
+  // - " and (set|change|update|mark|reschedule|rename) (its|it|that|this)"
+  const splitRegex = /(?:,\s*and\s+then\s+|,\s*then\s+|\s+and\s+then\s+|,\s*and\s+(?:also\s+)?(?=(?:create|add|set|change|update|mark|complete|uncomplete|reopen|delete|remove|reschedule|rename|assign)\b)|,\s*(?=(?:create|add)\s+(?:another\b|task\b|a\s+task\b|a\s+new\s+task\b))|\s+and\s+(?=(?:create|add)\s+(?:another\b|task\b|a\s+task\b|a\s+new\s+task\b))|\s+(?:,\s*)?and\s+(?=(?:set|change|update|mark|reschedule|rename)\s+(?:its|it|that|this)\b))/i;
+
+  const parts = clean
+    .split(splitRegex)
+    .map((s) => s.trim().replace(/[.]+$/, ''))
+    .filter(Boolean);
+
+  if (parts.length > 1) {
+    return parts;
   }
 
   // Look for sequential "and" between known query patterns

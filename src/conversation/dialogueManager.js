@@ -56,6 +56,7 @@ export const CONVERSATION_INTENTS = Object.freeze({
   DESCRIBE_TASK: 'DESCRIBE_TASK',
   RESCHEDULE_TASK: 'RESCHEDULE_TASK',
   REVISE_EFFORT: 'REVISE_EFFORT',
+  RENAME_TASK: 'RENAME_TASK',
   TRAIN_MODEL: 'TRAIN_MODEL',
   PREDICT_RISK: 'PREDICT_RISK',
   OPEN_SCHEDULER: 'OPEN_SCHEDULER',
@@ -290,7 +291,7 @@ export class DialogueManager {
     }
 
     // 2. Check for pronoun or contextual reference
-    const isPronoun = /^(?:it|this|that|this\s+task|that\s+task|the\s+task|my\s+task)$/i.test(cleanLower);
+    const isPronoun = /^(?:it|this|that|this\s+task|that\s+task|the\s+task|my\s+task|its)$/i.test(cleanLower);
     if (isPronoun) {
       if (!this.activeSubjectTaskId) {
         if (tasks.length === 1) {
@@ -532,8 +533,9 @@ export class DialogueManager {
     // 5. Strip conversational noise words for clean matching
     let stripped = (queryWithoutAttr || cleanLower)
       .replace(/^(?:the|my|a|an)\s+/i, '')
-      .replace(/^(?:task\s+(?:about|for|called|named)\s+)/i, '')
+      .replace(/^(?:task\s+(?:about|for|called|named)\s+|task\s+)/i, '')
       .replace(/\s+task$/i, '')
+      .replace(/['’]s$/i, '')
       .trim();
 
     if (!stripped) {
@@ -542,10 +544,18 @@ export class DialogueManager {
 
     // 6. Full Matching across all available tasks
     // Step 6a: Exact title matches
+    const cleanNoPossessive = cleanLower.replace(/['’]s$/i, '').trim();
+    const queryNoPossessive = (queryWithoutAttr || '').replace(/['’]s$/i, '').trim();
     const exactTitleMatches = tasks.filter((t) => {
       if (!t.title) return false;
       const tClean = t.title.trim().toLowerCase();
-      return tClean === cleanLower || tClean === queryWithoutAttr || tClean === stripped;
+      return (
+        tClean === cleanLower ||
+        tClean === cleanNoPossessive ||
+        tClean === queryWithoutAttr ||
+        tClean === queryNoPossessive ||
+        tClean === stripped
+      );
     });
 
     // Step 6b: Exact stripped title matches
@@ -553,17 +563,18 @@ export class DialogueManager {
       if (!t.title) return false;
       const tStripped = t.title.trim().toLowerCase()
         .replace(/^(?:the|my|a|an)\s+/i, '')
-        .replace(/^(?:task\s+(?:about|for|called|named)\s+)/i, '')
+        .replace(/^(?:task\s+(?:about|for|called|named)\s+|task\s+)/i, '')
         .replace(/\s+task$/i, '')
+        .replace(/['’]s$/i, '')
         .trim();
-      return tStripped === stripped;
+      return tStripped === stripped || tStripped === cleanNoPossessive;
     });
 
     // Step 6c: Word and token overlap matches
     const STOP_WORDS = new Set(['the', 'my', 'a', 'an', 'task', 'tasks', 'called', 'named', 'about', 'for', 'to', 'of', 'in', 'on', 'at', 'with', 'and', 'is']);
-    const normalize = (s) => s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    const normalize = (s) => s.toLowerCase().replace(/['’]s\b/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
     const qNorm = normalize(stripped);
-    const qTokens = qNorm.split(' ').filter((tok) => tok.length > 0 && !STOP_WORDS.has(tok));
+    const qTokens = qNorm.split(' ').filter((tok) => tok.length > 0 && !STOP_WORDS.has(tok) && tok !== 's');
 
     const candidateMap = new Map();
 
@@ -1836,18 +1847,32 @@ export class DialogueManager {
     let compoundActions = [];
     let combinedResponses = [];
     let feedbackType = 'info';
+    let completedCount = 0;
 
     for (let i = 0; i < subCommands.length; i++) {
       const subCmd = subCommands[i];
       const res = this.processInput(subCmd, { ...context, tasks: currentTasks });
       results.push(res);
 
-      // If any subCommand triggers clarification or confirmation, stop and present that immediately to preserve safety
+      // If any subCommand triggers clarification or confirmation, preserve completed actions
       if (
         res.state === CONVERSATION_STATES.AWAITING_CONFIRMATION ||
         res.state === CONVERSATION_STATES.AWAITING_CLARIFICATION ||
         res.state === CONVERSATION_STATES.AWAITING_PROPOSAL_DECISION
       ) {
+        if (compoundActions.length > 0) {
+          const summaryPrefix = `Completed ${completedCount} operation${completedCount === 1 ? '' : 's'}.`;
+          return {
+            ...res,
+            completedCount,
+            responseText: `${summaryPrefix} ${res.responseText}`,
+            action: compoundActions.length === 1 ? compoundActions[0] : {
+              type: 'COMPOUND_ACTIONS',
+              actions: compoundActions,
+            },
+            isAuthorized: true,
+          };
+        }
         return res;
       }
 
@@ -1857,6 +1882,11 @@ export class DialogueManager {
           responseText: combinedResponses.length > 0
             ? `${combinedResponses.join(' ')} Then encountered error: ${res.responseText}`
             : res.responseText,
+          action: compoundActions.length > 0 ? (compoundActions.length === 1 ? compoundActions[0] : {
+            type: 'COMPOUND_ACTIONS',
+            actions: compoundActions,
+          }) : null,
+          isAuthorized: compoundActions.length > 0,
         };
       }
 
@@ -1868,11 +1898,13 @@ export class DialogueManager {
       }
 
       if (res.action) {
-        compoundActions.push(res.action);
+        completedCount++;
         // If it created a task or mutated tasks in memory, update currentTasks for subsequent commands
         if (res.action.type === CONVERSATION_INTENTS.CREATE_TASK) {
+          const taskId = res.action.taskId || `task-${this.clock()}-${Math.random().toString(36).substring(2, 6)}`;
+          res.action.taskId = taskId;
           const simulatedTask = {
-            id: `temp-${Date.now()}-${i}`,
+            id: taskId,
             title: res.action.title,
             dueDate: res.action.dueDate,
             priority: res.action.priority,
@@ -1880,17 +1912,35 @@ export class DialogueManager {
             completed: false,
           };
           currentTasks.push(simulatedTask);
-          this.activeSubjectTaskId = simulatedTask.id;
+          this.activeSubjectTaskId = taskId;
+        } else if (res.action.taskId) {
+          currentTasks = currentTasks.map((t) => {
+            if (t.id !== res.action.taskId) return t;
+            const updated = { ...t };
+            if (res.action.type === CONVERSATION_INTENTS.CHANGE_PRIORITY) updated.priority = res.action.priority;
+            if (res.action.type === CONVERSATION_INTENTS.RESCHEDULE_TASK) updated.dueDate = res.action.newDueDate;
+            if (res.action.type === CONVERSATION_INTENTS.RENAME_TASK) updated.title = res.action.newTitle;
+            if (res.action.type === CONVERSATION_INTENTS.COMPLETE_TASK) updated.completed = true;
+            if (res.action.type === CONVERSATION_INTENTS.REOPEN_TASK) updated.completed = false;
+            return updated;
+          });
+          this.activeSubjectTaskId = res.action.taskId;
         }
+        compoundActions.push(res.action);
       }
     }
 
     const lastResult = results[results.length - 1] || {};
+    const summaryPrefix = compoundActions.length > 1 ? `Executed ${compoundActions.length} operations.` : '';
+    const finalResponseText = summaryPrefix
+      ? `${summaryPrefix} ${combinedResponses.join(' ')}`
+      : combinedResponses.join(' ');
+
     return {
       state: this.state,
       intent: 'COMPOUND_COMMANDS',
       targetTask: lastResult.targetTask || null,
-      responseText: combinedResponses.join(' '),
+      responseText: finalResponseText,
       feedbackType,
       requiresConfirmation: false,
       isAuthorized: compoundActions.length > 0,
@@ -2654,23 +2704,98 @@ export class DialogueManager {
       return this._resolveAndDispatch(CONVERSATION_INTENTS.DESCRIBE_TASK, taskName, {}, tasks);
     }
 
-    // 14. Priority Change Command ("Make it high priority", "Set priority to low", "Make the English assignment high priority")
-    const priorityMatch = text.match(/^(?:make\s+(?:it|this\s+task)|set\s+(?:the\s+)?priority(?:\s+of)?|change\s+priority(?:\s+of)?|mark\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?)(.+?)(?:\s+to|\s+as)?\s+(high|medium|low|urgent|critical|minor|trivial)(?:\s+priority)?$/i) ||
-                         text.match(/^(?:make)\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+(?:to\s+|as\s+)?(high|medium|low|urgent|critical|minor|trivial)(?:\s+priority)?$/i) ||
-                         text.match(/^(?:make\s+(?:it|this\s+task)|set\s+priority\s+to|change\s+to)\s+(high|medium|low|urgent|critical|minor|trivial)(?:\s+priority)?$/i);
-    if (priorityMatch) {
-      let targetName = 'it';
-      let priorityWord = 'medium';
-      if (priorityMatch[2]) {
-        targetName = priorityMatch[1].trim();
-        priorityWord = priorityMatch[2].toLowerCase();
-      } else {
-        priorityWord = priorityMatch[1].toLowerCase();
-      }
-      const priority = ['urgent', 'critical', 'high'].includes(priorityWord) ? 'high'
-        : ['minor', 'trivial', 'low'].includes(priorityWord) ? 'low' : 'medium';
+    // 14. Priority Change Command
+    // e.g. "Change XYZ's priority to high", "Set the priority of task DEF to low", "Make it high priority", "Set DEF's priority to low"
+    const prioOfMatch = text.match(/^(?:change|set|update)\s+(?:the\s+)?priority\s+(?:of|for)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+(?:to|as)?\s+(.+)$/i);
+    const prioPossMatch = text.match(/^(?:change|set|update)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)(?:'s|’s)\s+priority\s+(?:to|as)?\s+(.+)$/i);
+    const prioDirectMatch = text.match(/^(?:change|set|update)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+priority\s+(?:to|as)?\s+(.+)$/i);
+    const prioMakeMatch = text.match(/^(?:make)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+(?:to\s+|as\s+)?(high|medium|low|urgent|critical|minor|trivial)(?:\s+priority)?$/i);
+    const prioPronounMatch = text.match(/^(?:make\s+(?:it|this|that|this\s+task|that\s+task)|set\s+(?:it|that|this)\s+(?:to|as)?|set\s+priority\s+to|change\s+to|change\s+priority\s+to)\s+(.+)$/i);
 
-      return this._resolveAndDispatch(CONVERSATION_INTENTS.CHANGE_PRIORITY, targetName, { priority }, tasks);
+    let priorityTarget = null;
+    let priorityValue = null;
+
+    if (prioOfMatch) {
+      priorityTarget = prioOfMatch[1].trim();
+      priorityValue = prioOfMatch[2].trim();
+    } else if (prioPossMatch) {
+      priorityTarget = prioPossMatch[1].trim();
+      priorityValue = prioPossMatch[2].trim();
+    } else if (prioDirectMatch) {
+      priorityTarget = prioDirectMatch[1].trim();
+      priorityValue = prioDirectMatch[2].trim();
+    } else if (prioMakeMatch) {
+      priorityTarget = prioMakeMatch[1].trim();
+      priorityValue = prioMakeMatch[2].trim();
+    } else if (prioPronounMatch) {
+      priorityTarget = 'it';
+      priorityValue = prioPronounMatch[1].trim();
+    }
+
+    if (priorityTarget && priorityValue) {
+      const cleanVal = priorityValue.toLowerCase().replace(/\s+priority$/i, '').trim();
+      let priority = null;
+      if (['high', 'urgent', 'critical', 'highest'].includes(cleanVal)) priority = 'high';
+      else if (['medium', 'normal'].includes(cleanVal)) priority = 'medium';
+      else if (['low', 'minor', 'trivial', 'lowest'].includes(cleanVal)) priority = 'low';
+
+      if (!priority) {
+        return {
+          state: CONVERSATION_STATES.IDLE,
+          intent: CONVERSATION_INTENTS.CHANGE_PRIORITY,
+          targetTask: null,
+          responseText: `Invalid priority "${priorityValue}". Priority must be high, medium, or low.`,
+          feedbackType: 'error',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: null,
+          error: 'invalid_priority',
+        };
+      }
+
+      return this._resolveAndDispatch(CONVERSATION_INTENTS.CHANGE_PRIORITY, priorityTarget, { priority }, tasks);
+    }
+
+    // 14b. Rename Task Command ("Rename XYZ to Prepare report", "Change title of DEF to Review code", "Rename it to ...")
+    const rnMatch1 = text.match(/^rename\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+to\s+(.+)$/i);
+    const rnMatch2 = text.match(/^(?:change|update)\s+(?:the\s+)?(?:title|name)\s+(?:of|for)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+to\s+(.+)$/i);
+    const rnMatch3 = text.match(/^(?:change|update)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)(?:'s|’s)\s+(?:title|name)\s+to\s+(.+)$/i);
+    const rnMatch4 = text.match(/^(?:rename\s+(?:it|that|this)|change\s+its\s+(?:title|name))\s+to\s+(.+)$/i);
+
+    const renameMatch = rnMatch1 || rnMatch2 || rnMatch3 || rnMatch4;
+    if (renameMatch) {
+      const targetName = rnMatch4 ? 'it' : renameMatch[1].trim();
+      const newTitle = (rnMatch4 ? rnMatch4[1] : renameMatch[2]).trim().replace(/^[.,;:\s]+|[.,;:\s]+$/g, '');
+      if (!newTitle) {
+        return {
+          state: CONVERSATION_STATES.IDLE,
+          intent: CONVERSATION_INTENTS.RENAME_TASK,
+          targetTask: null,
+          responseText: 'New task title cannot be empty.',
+          feedbackType: 'error',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: null,
+          error: 'invalid_title',
+        };
+      }
+      return this._resolveAndDispatch(CONVERSATION_INTENTS.RENAME_TASK, targetName, { newTitle }, tasks);
+    }
+
+    // 14c. Task Assignment Command ("Assign XYZ to ABC" - truthful local-first explanation)
+    const assignMatch = text.match(/^assign\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+to\s+(.+)$/i);
+    if (assignMatch) {
+      return {
+        state: CONVERSATION_STATES.IDLE,
+        intent: 'ASSIGN_TASK',
+        targetTask: null,
+        responseText: "Task assignment is not supported in VoxPlan's local-first single-user workspace. Active tasks remain assigned to you.",
+        feedbackType: 'info',
+        requiresConfirmation: false,
+        isAuthorized: false,
+        action: null,
+        error: null,
+      };
     }
 
     // 15. Task Inquiry / Inspection ("Tell me about...", "Describe task...", "Show task...", "Find...", "Lookup...", "What about the other English task?")
@@ -2703,13 +2828,72 @@ export class DialogueManager {
       return this._resolveAndDispatch(CONVERSATION_INTENTS.DELETE_TASK, taskName, {}, tasks);
     }
 
-    // 19. Task Command: Reschedule task
-    const rescheduleMatch = text.match(/^reschedule\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)(?:\s+to(?:\s+(.+))?)?$/i);
-    if (rescheduleMatch) {
-      const taskName = rescheduleMatch[1].trim();
-      const rawDate = rescheduleMatch[2] ? rescheduleMatch[2].trim() : '';
-      const parsedDate = rawDate ? (parseEnhancedDate(rawDate, new Date(this.clock())) || parseDateExpression(rawDate, new Date(this.clock()))) : null;
+    // 19. Task Command: Reschedule task / Deadline updates
+    const reschedDirectMatch = text.match(/^reschedule\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)(?:\s+to(?:\s+(.+))?)?$/i) ||
+                               text.match(/^(?:change|update|set)\s+(?:the\s+)?deadline\s+(?:of|for)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)(?:\s+to(?:\s+(.+))?)?$/i) ||
+                               text.match(/^(?:change|update|set)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)(?:'s|’s)\s+deadline(?:\s+to(?:\s+(.+))?)?$/i) ||
+                               text.match(/^(?:change|set|update|reschedule)\s+(?:its|it|that|this)\s+(?:deadline\s+)?to(?:\s+(.+))?$/i);
+
+    const clearDeadlineMatch = text.match(/^(?:remove|clear|delete)\s+(?:the\s+)?deadline\s+(?:of|for)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+)$/i) ||
+                               text.match(/^(?:remove|clear|delete)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)(?:'s|’s)\s+deadline$/i);
+
+    if (clearDeadlineMatch) {
+      const taskName = clearDeadlineMatch[1].trim();
+      return this._resolveAndDispatch(CONVERSATION_INTENTS.RESCHEDULE_TASK, taskName, { newDueDate: null, rawDate: 'none' }, tasks);
+    }
+
+    if (reschedDirectMatch) {
+      const isPronounResched = /^(?:change|set|update|reschedule)\s+(?:its|it|that|this)/i.test(reschedDirectMatch[0]);
+      const taskName = isPronounResched ? 'it' : reschedDirectMatch[1].trim();
+      const rawDate = (isPronounResched ? reschedDirectMatch[1] : reschedDirectMatch[2])?.trim() || '';
+      let parsedDate = null;
+      if (rawDate) {
+        if (/^(?:none|no\s+deadline|clear|remove)$/i.test(rawDate)) {
+          parsedDate = null;
+        } else {
+          parsedDate = parseEnhancedDate(rawDate, new Date(this.clock())) || parseDateExpression(rawDate, new Date(this.clock()));
+          if (!parsedDate) {
+            return {
+              state: CONVERSATION_STATES.IDLE,
+              intent: CONVERSATION_INTENTS.RESCHEDULE_TASK,
+              targetTask: null,
+              responseText: `Could not determine a valid date from "${rawDate}". Please specify a date like "tomorrow", "Friday", or "2026-10-25".`,
+              feedbackType: 'error',
+              requiresConfirmation: false,
+              isAuthorized: false,
+              action: null,
+              error: 'invalid_date',
+            };
+          }
+        }
+      }
       return this._resolveAndDispatch(CONVERSATION_INTENTS.RESCHEDULE_TASK, taskName, { newDueDate: parsedDate, rawDate }, tasks);
+    }
+
+    // 19b. Effort Revision Command ("Change effort of XYZ to 3 hours", "Revise its effort to 2h")
+    const effMatch1 = text.match(/^(?:change|set|update|revise)\s+(?:the\s+)?(?:effort|estimate|estimated\s+effort)\s+(?:of|for)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+to\s+(.+)$/i);
+    const effMatch2 = text.match(/^(?:change|set|update|revise)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)(?:'s|’s)\s+(?:effort|estimate|estimated\s+effort)\s+to\s+(.+)$/i);
+    const effMatch3 = text.match(/^(?:change|set|update|revise)\s+its\s+(?:effort|estimate|estimated\s+effort)\s+to\s+(.+)$/i);
+
+    const effMatch = effMatch1 || effMatch2 || effMatch3;
+    if (effMatch) {
+      const taskName = effMatch3 ? 'it' : effMatch[1].trim();
+      const rawEffort = effMatch3 ? effMatch3[1] : effMatch[2];
+      const parsedNum = parseFloat(rawEffort.replace(/[^\d.]/g, ''));
+      if (isNaN(parsedNum) || parsedNum <= 0) {
+        return {
+          state: CONVERSATION_STATES.IDLE,
+          intent: CONVERSATION_INTENTS.REVISE_EFFORT,
+          targetTask: null,
+          responseText: 'Estimated effort must be a positive number of hours.',
+          feedbackType: 'error',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: null,
+          error: 'invalid_effort',
+        };
+      }
+      return this._resolveAndDispatch(CONVERSATION_INTENTS.REVISE_EFFORT, taskName, { newEffort: parsedNum }, tasks);
     }
 
     // 20. Task Command: Create / Add task (handles simple and compound requests)
@@ -3026,6 +3210,75 @@ export class DialogueManager {
           taskId: target.id,
           targetTask: target,
           priority,
+        },
+        error: null,
+      };
+    }
+
+    // 6b. Rename Task
+    if (intent === CONVERSATION_INTENTS.RENAME_TASK) {
+      const newTitle = params?.newTitle;
+      if (!newTitle || typeof newTitle !== 'string' || !newTitle.trim()) {
+        return {
+          state: CONVERSATION_STATES.IDLE,
+          intent: CONVERSATION_INTENTS.RENAME_TASK,
+          targetTask: target,
+          responseText: 'New task title cannot be empty.',
+          feedbackType: 'error',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: null,
+          error: 'invalid_title',
+        };
+      }
+      const cleanTitle = newTitle.trim();
+      return {
+        state: CONVERSATION_STATES.IDLE,
+        intent: CONVERSATION_INTENTS.RENAME_TASK,
+        targetTask: target,
+        responseText: `Renamed task "${target.title}" to "${cleanTitle}".`,
+        feedbackType: 'success',
+        requiresConfirmation: false,
+        isAuthorized: true,
+        action: {
+          type: CONVERSATION_INTENTS.RENAME_TASK,
+          taskId: target.id,
+          targetTask: target,
+          newTitle: cleanTitle,
+        },
+        error: null,
+      };
+    }
+
+    // 6c. Revise Effort
+    if (intent === CONVERSATION_INTENTS.REVISE_EFFORT) {
+      const newEffort = params?.newEffort;
+      if (typeof newEffort !== 'number' || isNaN(newEffort) || newEffort <= 0) {
+        return {
+          state: CONVERSATION_STATES.IDLE,
+          intent: CONVERSATION_INTENTS.REVISE_EFFORT,
+          targetTask: target,
+          responseText: 'Estimated effort must be a positive number of hours.',
+          feedbackType: 'error',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: null,
+          error: 'invalid_effort',
+        };
+      }
+      return {
+        state: CONVERSATION_STATES.IDLE,
+        intent: CONVERSATION_INTENTS.REVISE_EFFORT,
+        targetTask: target,
+        responseText: `Updated effort estimate for "${target.title}" to ${newEffort}h.`,
+        feedbackType: 'info',
+        requiresConfirmation: false,
+        isAuthorized: true,
+        action: {
+          type: CONVERSATION_INTENTS.REVISE_EFFORT,
+          taskId: target.id,
+          targetTask: target,
+          newEffort,
         },
         error: null,
       };

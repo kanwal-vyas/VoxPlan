@@ -679,8 +679,8 @@ export default function ProductivityApp({ onNavigate }) {
   };
 
   // Task Operations with Telemetry Logging & Shared Lifecycle Transitions
-  const completeTask = async (taskId, durationInfo = {}) => {
-    const target = tasks.find((t) => t.id === taskId);
+  const completeTask = async (taskId, durationInfo = {}, fallbackTarget = null) => {
+    const target = tasks.find((t) => t.id === taskId) || fallbackTarget;
     if (!target) return;
 
     const result = await completeTaskLifecycle({
@@ -722,8 +722,8 @@ export default function ProductivityApp({ onNavigate }) {
     });
   };
 
-  const reopenTask = async (taskId) => {
-    const target = tasks.find((t) => t.id === taskId);
+  const reopenTask = async (taskId, fallbackTarget = null) => {
+    const target = tasks.find((t) => t.id === taskId) || fallbackTarget;
     if (!target) return;
 
     const result = reopenTaskLifecycle({ task: target });
@@ -758,12 +758,12 @@ export default function ProductivityApp({ onNavigate }) {
     return completeTask(taskId, durationInfo);
   };
 
-  const deleteTask = (taskId) => {
+  const deleteTask = (taskId, fallbackTarget = null) => {
     dialogueManager.invalidateTask(taskId);
     if (activeSubjectTaskId === taskId) {
       setActiveSubjectTaskId(null);
     }
-    const taskToDelete = tasks.find((t) => t.id === taskId);
+    const taskToDelete = tasks.find((t) => t.id === taskId) || fallbackTarget;
     const originalIndex = tasks.findIndex((t) => t.id === taskId);
     if (!taskToDelete) return;
 
@@ -808,8 +808,8 @@ export default function ProductivityApp({ onNavigate }) {
     await telemetry.recordTaskPriorityChanged(taskId, target.priority, nextPriority);
   };
 
-  const handleReschedule = async (taskId, newDueDate) => {
-    const target = tasks.find((t) => t.id === taskId);
+  const handleReschedule = async (taskId, newDueDate, fallbackTarget = null) => {
+    const target = tasks.find((t) => t.id === taskId) || fallbackTarget;
     if (!target) return;
     const prevDue = target.dueDate;
     setTasks((prev) =>
@@ -1115,6 +1115,8 @@ export default function ProductivityApp({ onNavigate }) {
 
     const { action } = result;
 
+    let workingTasks = [...tasks];
+
     const dispatchAction = async (act) => {
       if (!act) return;
 
@@ -1127,6 +1129,8 @@ export default function ProductivityApp({ onNavigate }) {
         CONVERSATION_INTENTS.DELETE_TASK,
         CONVERSATION_INTENTS.RESCHEDULE_TASK,
         CONVERSATION_INTENTS.CHANGE_PRIORITY,
+        CONVERSATION_INTENTS.RENAME_TASK,
+        CONVERSATION_INTENTS.REVISE_EFFORT,
       ]);
 
       if (MUTATING_INTENTS.has(act.type)) {
@@ -1138,7 +1142,7 @@ export default function ProductivityApp({ onNavigate }) {
           });
           return;
         }
-        const exists = tasks.some((t) => t.id === targetId);
+        const exists = workingTasks.some((t) => t.id === targetId);
         if (!exists) {
           setFeedback({
             type: 'error',
@@ -1198,7 +1202,7 @@ export default function ProductivityApp({ onNavigate }) {
           break;
 
         case CONVERSATION_INTENTS.CLEAR_COMPLETED: {
-          const completedTasks = tasks.filter((t) => t.completed);
+          const completedTasks = workingTasks.filter((t) => t.completed);
           if (completedTasks.length === 0) {
             setFeedback({
               type: 'info',
@@ -1210,6 +1214,7 @@ export default function ProductivityApp({ onNavigate }) {
           for (const t of completedTasks) {
             dialogueManager.invalidateTask(t.id);
           }
+          workingTasks = workingTasks.filter((t) => !t.completed);
           setTasks((prev) => prev.filter((t) => !t.completed));
           setFeedback({
             type: 'success',
@@ -1227,31 +1232,44 @@ export default function ProductivityApp({ onNavigate }) {
           break;
         }
 
-        case CONVERSATION_INTENTS.COMPLETE_TASK:
-          await completeTask(act.taskId);
+        case CONVERSATION_INTENTS.COMPLETE_TASK: {
+          const target = workingTasks.find((t) => t.id === act.taskId);
+          workingTasks = workingTasks.map((t) => (t.id === act.taskId ? { ...t, completed: true } : t));
+          await completeTask(act.taskId, {}, target);
           dialogueManager.setActiveSubject(act.taskId);
           setActiveSubjectTaskId(act.taskId);
           break;
+        }
 
-        case CONVERSATION_INTENTS.REOPEN_TASK:
-          await reopenTask(act.taskId);
+        case CONVERSATION_INTENTS.REOPEN_TASK: {
+          const target = workingTasks.find((t) => t.id === act.taskId);
+          workingTasks = workingTasks.map((t) => (t.id === act.taskId ? { ...t, completed: false } : t));
+          await reopenTask(act.taskId, target);
           dialogueManager.setActiveSubject(act.taskId);
           setActiveSubjectTaskId(act.taskId);
           break;
+        }
 
-        case CONVERSATION_INTENTS.DELETE_TASK:
-          deleteTask(act.taskId);
+        case CONVERSATION_INTENTS.DELETE_TASK: {
+          const target = workingTasks.find((t) => t.id === act.taskId);
+          workingTasks = workingTasks.filter((t) => t.id !== act.taskId);
+          deleteTask(act.taskId, target);
           break;
+        }
 
-        case CONVERSATION_INTENTS.RESCHEDULE_TASK:
-          await handleReschedule(act.taskId, act.newDueDate);
+        case CONVERSATION_INTENTS.RESCHEDULE_TASK: {
+          const target = workingTasks.find((t) => t.id === act.taskId);
+          workingTasks = workingTasks.map((t) => (t.id === act.taskId ? { ...t, dueDate: act.newDueDate } : t));
+          await handleReschedule(act.taskId, act.newDueDate, target);
           dialogueManager.setActiveSubject(act.taskId);
           setActiveSubjectTaskId(act.taskId);
           break;
+        }
 
         case CONVERSATION_INTENTS.CHANGE_PRIORITY: {
-          const target = tasks.find((t) => t.id === act.taskId);
+          const target = workingTasks.find((t) => t.id === act.taskId);
           const prevPriority = target ? target.priority : 'medium';
+          workingTasks = workingTasks.map((t) => (t.id === act.taskId ? { ...t, priority: act.priority } : t));
           setTasks((prev) =>
             prev.map((t) => (t.id === act.taskId ? { ...t, priority: act.priority } : t))
           );
@@ -1261,9 +1279,40 @@ export default function ProductivityApp({ onNavigate }) {
           break;
         }
 
+        case CONVERSATION_INTENTS.RENAME_TASK: {
+          const target = workingTasks.find((t) => t.id === act.taskId);
+          const oldTitle = target ? target.title : '';
+          const newTitle = act.newTitle;
+          workingTasks = workingTasks.map((t) => (t.id === act.taskId ? { ...t, title: newTitle } : t));
+          updateTaskTitle(act.taskId, newTitle);
+          dialogueManager.setActiveSubject(act.taskId);
+          setActiveSubjectTaskId(act.taskId);
+          setFeedback({
+            type: 'success',
+            message: `Renamed "${oldTitle || 'task'}" to "${newTitle}".`,
+          });
+          break;
+        }
+
+        case CONVERSATION_INTENTS.REVISE_EFFORT: {
+          const target = workingTasks.find((t) => t.id === act.taskId);
+          const newEffort = act.estimatedEffort;
+          workingTasks = workingTasks.map((t) => (t.id === act.taskId ? { ...t, estimatedEffort: newEffort } : t));
+          setTasks((prev) =>
+            prev.map((t) => (t.id === act.taskId ? { ...t, estimatedEffort: newEffort } : t))
+          );
+          dialogueManager.setActiveSubject(act.taskId);
+          setActiveSubjectTaskId(act.taskId);
+          setFeedback({
+            type: 'info',
+            message: `Updated estimated effort for "${target ? target.title : 'task'}" to ${newEffort}h.`,
+          });
+          break;
+        }
+
         case CONVERSATION_INTENTS.CREATE_TASK: {
           const newTask = {
-            id: `task-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            id: act.taskId || `task-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
             title: act.title,
             description: '',
             priority: act.priority || 'medium',
@@ -1274,7 +1323,8 @@ export default function ProductivityApp({ onNavigate }) {
             dependencies: [],
             createdAt: new Date().toISOString(),
           };
-          setTasks((prev) => [newTask, ...prev]);
+          workingTasks = [newTask, ...workingTasks];
+          setTasks((prev) => [newTask, ...prev.filter((t) => t.id !== newTask.id)]);
           await telemetry.recordTaskCreated(newTask);
           dialogueManager.setActiveSubject(newTask.id);
           setActiveSubjectTaskId(newTask.id);
