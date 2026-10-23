@@ -55,10 +55,11 @@ describe('Phase 8, Stage 8.4: CI Pipeline, Reproducible Builds & Deployment Hard
       assert.match(content, /npm ci/, 'Must use npm ci for dependency installation');
     });
 
-    it('1.6 Verifies backend dependency check and model immutability in CI', () => {
+    it('1.6 Verifies backend dependency check, PYTHONPATH, and model immutability in CI', () => {
       const content = fs.readFileSync(ciPath, 'utf8');
       assert.match(content, /pip check/, 'Must run pip check in backend job');
       assert.match(content, /pytest backend\/tests\//, 'Must run pytest in backend job');
+      assert.match(content, /PYTHONPATH:\s*\./, 'Must specify PYTHONPATH: . to ensure backend module resolution');
       assert.match(content, /git status --porcelain backend\/models/, 'Must verify model files are not dirtied by tests');
     });
 

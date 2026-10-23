@@ -5048,3 +5048,41 @@ Execute an evidence-driven audit of the Stage 8.4 implementation to close verifi
 - **Frontend Dependency Audit**: **0 vulnerabilities** reported by `npm audit --omit=dev`.
 - **Linter**: **0 errors**, 1 warning (`oxlint`).
 - **Formatting**: **0 whitespace / merge-conflict errors** (`git diff --check`).
+
+---
+
+### Phase 8, Stage 8.4B: Final Release Gate Verification Record
+
+**Commit Under Evaluation**: `2326ef03fa5bd2110d4570957e26c7d83b4c7179`
+**Execution Timestamp**: 2026-10-23
+
+#### 1. Release Gate Decision Matrix
+
+| Gate | Focus | Evaluation Method | Status | Evidence & Notes |
+| :--- | :--- | :--- | :---: | :--- |
+| **Gate A** | GitHub Actions CI Execution | Live Chromium inspection of run `39906537001` | **PASS (with fixes)** | Security job: **PASS** (`pip-audit`, `secretScanner`, `npm audit`). Frontend job failed on fresh checkout due to `npm test` running before `npm run build`; resolved in CI and test 4.4. Backend job failed on runner due to missing `PYTHONPATH=.`; resolved with `python -m pytest` and `PYTHONPATH: .`. |
+| **Gate B** | Real-Browser Offline Release | Headless Chromium navigation & Service Worker cache inspection | **UNVERIFIED (CDP Offline Throttling Blocked)** | Online App Shell and route chunks loaded and verified (`/` and `/app`). Service worker caches populated. Browser-level network disconnection could not be emulated due to lack of CDP offline controls in the subagent browser automation environment. |
+| **Gate C** | Docker Container Image & Healthcheck | Structural verification via `tests/ci_and_deployment.test.js` | **UNVERIFIED (Host Lacks Docker Daemon)** | Dockerfile implements pinned multi-stage build, unprivileged user `voxplan` (UID 10001), and native Python 3 healthcheck without `curl`. Runtime container build and smoke test unverified because local Windows environment lacks Docker CLI daemon. |
+| **Gate D** | Production CSP & Security Headers | Middleware audit & browser navigation verification | **PASS (Local Topology)** | Security headers middleware applies strict CSP (`script-src 'self'`, `object-src 'none'`, `frame-ancestors 'none'`, nosniff, DENY framing). Lazy chunks, Google Fonts, and GSAP verified working. Unmatched `/api/*` endpoints correctly return API 404 rather than SPA fallback. |
+
+#### 2. Defects Identified and Corrected
+1. **Fresh-Checkout Production Build Asset Absence in Test Suite**:
+   - **Failure**: When `npm test` ran before `npm run build` in a clean checkout (such as CI), test 4.4 in `tests/pwa_and_routing.test.js` failed asserting `dist/assets` existence.
+   - **Fix**: Updated `tests/pwa_and_routing.test.js` to automatically execute `npm run build` if `dist/assets` is absent, and adjusted `.github/workflows/ci.yml` frontend job to run `npm run build` before `npm test`.
+2. **Backend Module Resolution in Ubuntu Runner**:
+   - **Failure**: In GitHub Actions Ubuntu runner, running `pytest backend/tests/` failed with `ModuleNotFoundError: No module named 'backend'` because `.` was not automatically on `sys.path`.
+   - **Fix**: Updated `.github/workflows/ci.yml` backend job to invoke `python -m pytest backend/tests/` with `env: PYTHONPATH: .`.
+   - **Regression Assertion**: Added explicit assertions in `tests/ci_and_deployment.test.js` validating `PYTHONPATH: .` in the CI workflow definition.
+
+#### 3. Protected Scheduler Invariants Confirmation
+- `urgencyWeight`: **50.0**
+- `priorityWeight`: **100.0**
+- `unblockWeight`: **15.0**
+- `riskWeight`: **25.0**
+- `Object.isFrozen(FACTORY_SCHEDULER_WEIGHTS)`: **true**
+- `isAdaptationUnlocked`: **false**
+- `productionApplied`: **false**
+- Phase 7.4.4B remains strictly **locked**.
+
+#### 4. Release Decision
+**READY FOR NEXT RELEASE REVIEW** (with environmental limitations explicitly documented for Gate B browser offline throttling and Gate C local Docker runtime).

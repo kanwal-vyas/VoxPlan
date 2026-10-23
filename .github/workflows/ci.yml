@@ -38,11 +38,11 @@ jobs:
       - name: Run code linter
         run: npm run lint
 
-      - name: Run frontend test suite
-        run: npm test
-
       - name: Run production build
         run: npm run build
+
+      - name: Run frontend test suite
+        run: npm test
 
       - name: Verify PWA and production build artifacts
         run: |
@@ -79,7 +79,9 @@ jobs:
         run: pip check
 
       - name: Run backend test suite
-        run: pytest backend/tests/
+        env:
+          PYTHONPATH: .
+        run: python -m pytest backend/tests/
 
       - name: Verify tests did not dirty model artifacts
         run: |

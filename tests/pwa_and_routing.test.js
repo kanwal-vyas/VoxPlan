@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   isServiceWorkerSupported,
@@ -243,6 +244,9 @@ describe('Phase 8, Stage 8.3: PWA Readiness, Safe Offline Behavior & Bundle Opti
 
     it('4.4 dist/ build output verifies chunk separation and reduced initial bundle', () => {
       const distAssetsPath = path.join(projectRoot, 'dist', 'assets');
+      if (!fs.existsSync(distAssetsPath)) {
+        execSync('npm run build', { cwd: projectRoot, stdio: 'pipe' });
+      }
       assert.strictEqual(fs.existsSync(distAssetsPath), true, 'dist/assets must exist after build');
 
       const files = fs.readdirSync(distAssetsPath);
