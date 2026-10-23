@@ -212,14 +212,14 @@ const styles = {
     padding: '36px 0',
   },
   container: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: '16px',
+    backgroundColor: '#F5F2EA',
+    borderRadius: '20px',
     padding: '32px',
-    boxShadow: '0 2px 10px rgba(30, 30, 34, 0.04)',
+    boxShadow: '0 4px 16px rgba(61, 38, 69, 0.04)',
     display: 'flex',
     flexDirection: 'column',
     gap: '28px',
-    border: '1px solid rgba(30, 30, 34, 0.08)',
+    border: '1.5px solid rgba(61, 38, 69, 0.10)',
   },
   header: {
     display: 'flex',

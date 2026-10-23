@@ -5920,3 +5920,64 @@ Real microphone testing surfaced an intermittent acceptance failure where compou
 - **Factory Scheduler Weights**: Immutable canonical values (`urgency: 50.0`, `priority: 100.0`, `unblock: 15.0`, `risk: 25.0`).
 - **Phase 7.4.4B Safety Activation Gate**: Permanently locked (`isAdaptationUnlocked === false`, `productionApplied === false`).
 - **Local-First Privacy**: 100% deterministic local storage; zero cloud LLMs, zero cloud speech APIs, zero audio uploads.
+
+---
+
+### Stage 4: Restore Colourful Backgrounds and Compact the Mobile Command Dock
+
+**Date**: October 24, 2026
+**Commit Target**: `style(ui): restore colourful surfaces and compact mobile command dock`
+**Stage Goal**: Restore a distinctive, colourful, cohesive background design across major application sections while making the collapsed mobile command dock smaller, pill-like, and discreet (~54–60px) without removing any existing voice or planning functionality.
+
+#### 1. Architectural & Visual Improvements
+1. **Colourful, Cohesive Section Backgrounds**:
+   - Diagnosed root cause: Earlier repairs standardized all outer section containers to plain `#FFFFFF` on `#FBF9F4` canvas, erasing the warm editorial atmosphere.
+   - Restored coordinated, distinct surface treatments across major sections:
+     - **Hero / Today Introduction**: Recognizable warm butter-yellow surface (`#FEF9E7`, border `rgba(229, 168, 59, 0.28)`, `borderRadius: 20px`).
+     - **Sprint Overview (`ProjectOverview`)**: Coordinated warm peach / soft coral surface (`#FAF0E8`, border `rgba(200, 90, 50, 0.16)`).
+     - **Today's Focus Card (`#today-focus-card`)**: Coordinated soft coral/peach (`#FFF5EB`, border `rgba(200, 90, 50, 0.18)`).
+     - **Task Workspace (`TaskList`)**: Calm warm alabaster / parchment surface (`#F5F2EA`, border `rgba(61, 38, 69, 0.10)`) with crisp `#FFFFFF` task cards and priority highlights.
+     - **ML Model Panel (`MLModelPanel`)**: Dusty lavender / soft plum surface (`#F3EEF8`, border `rgba(61, 38, 69, 0.14)`).
+     - **Behavioral History Panel (`BehavioralHistoryPanel`)**: Muted sage green surface (`#EBF4EE`, border `rgba(45, 106, 79, 0.16)`).
+     - **Personal Model Dashboard (`PersonalModelDashboard`)**: Soft warm cream surface (`#FAF5ED`, border `rgba(61, 38, 69, 0.10)`).
+   - Preserved layout stability: Zero GSAP scroll-driven background morphs, pin-spacers, or opacity bleeds.
+2. **Compact Mobile Command Dock (~54–58px Height)**:
+   - Mobile Collapsed State:
+     - Applied pill-like border radius (`9999px`) and restrained padding (`6px 10px`).
+     - Reduced text input min-height (`36px`) and font size (`14px`).
+     - Scaled microphone button (`#voice-mic-btn`) and submit button (`#command-submit-btn`) to compact 36px circular touch targets.
+     - Scaled expand/minimize toggle (`#command-expand-toggle-btn`) to subtle 30px pill.
+     - Automatically hid secondary controls (such as `#speech-toggle-btn`) in collapsed mobile state (`.command-dock-collapsed-mobile .secondary-control-mobile { display: none !important; }`), keeping the row uncluttered and thumb-friendly.
+     - Applied restrained, warm card styling and soft shadow (`0 4px 16px rgba(61, 38, 69, 0.10)`) so the dock belongs to the interface rather than hovering like a large card.
+     - Maintained full bottom safe-area insets (`env(safe-area-inset-bottom)`).
+   - Mobile Expanded State:
+     - Tapping expand or pending alert pill expands the upward drawer (`#command-expanded-drawer`) smoothly with max-height `48vh`.
+     - Displays full controls including speaker toggle, quick prompt chips, voice session state, active transcripts, clarification questions, schedule proposals, and voice privacy notices without colliding with header.
+   - Desktop Behavior:
+     - Unchanged spacious desktop dock (`max-width: 680px`, `10px 16px` padding, 42px mic button, persistent speaker button).
+   - Voice Reliability:
+     - 100% preservation of microphone control, Web Speech API lifecycle, startup reliability guard, transcripts, and zero-audio-upload privacy guarantees.
+
+#### 2. Verification & Regression Evidence
+- **Complete Frontend Test Suite**: `npm test`
+  - **Result**: 1070 passed, 0 failed across 225 suites.
+- **Backend Test Suite**: `python -m pytest`
+  - **Result**: 29 passed, 0 failed in 5.64s.
+- **Production Build**: `npm run build`
+  - **Result**: `vite build` completed cleanly in 252ms.
+- **Linter**: `npm run lint` (`oxlint`)
+  - **Result**: 0 errors across 100 files.
+- **Secret Scanner**: `node scripts/secretScanner.mjs`
+  - **Result**: 0 secrets matched across 125 files.
+- **Whitespace / Git Diff Check**: `git diff --check`
+  - **Result**: Clean; 0 whitespace or formatting errors.
+- **Live Browser Verification (Desktop 1280x800 & Mobile 390x844)**:
+  - Recorded session `verify_surfaces_and_dock` via browser subagent.
+  - Verified desktop colorful backgrounds: Butter-yellow Hero, Peach Sprint Overview, Soft coral Today Focus card, Alabaster TaskList container, Lavender ML panel, Sage Behavioral History panel, and Soft Cream Personal Model dashboard.
+  - Verified mobile collapsed dock: Compact pill (~54-58px height), ample breathing room for tasks/content, secondary buttons hidden while collapsed, 36px mic and send buttons.
+  - Verified mobile upward expansion and minimization: Smooth drawer opening with suggestion chips and speech controls, closing back to discreet pill.
+
+#### 3. Scope & Protected Invariant Preservation
+- **Factory Scheduler Weights**: Canonical values unchanged (`urgency: 50.0`, `priority: 100.0`, `unblock: 15.0`, `risk: 25.0`).
+- **Phase 7.4.4B Safety Activation Gate**: Permanently locked (`isAdaptationUnlocked === false`).
+- **Local-First Privacy**: 100% deterministic local storage; zero cloud LLMs, zero audio uploads.

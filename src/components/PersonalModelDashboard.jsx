@@ -502,13 +502,17 @@ export default function PersonalModelDashboard({ events = [], tasks = [] }) {
 
 const styles = {
   section: {
-    padding: '80px 24px',
-    backgroundColor: 'var(--c-canvas, #FFFDF8)',
-    borderTop: '2px solid rgba(37, 36, 42, 0.06)',
+    padding: '16px 0',
   },
   container: {
-    maxWidth: '1240px',
-    margin: '0 auto',
+    backgroundColor: '#FAF5ED',
+    borderRadius: '20px',
+    padding: '32px',
+    boxShadow: '0 4px 18px rgba(61, 38, 69, 0.05)',
+    border: '1.5px solid rgba(61, 38, 69, 0.10)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '28px',
   },
   header: {
     display: 'flex',

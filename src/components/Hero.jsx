@@ -9,7 +9,8 @@ export default function Hero() {
       style={styles.hero}
       aria-label="Hero"
     >
-      <div style={styles.grid} className="hero-composition">
+      <div style={styles.heroContainer} className="hero-container-card">
+        <div style={styles.grid} className="hero-composition">
         {/* Left: Editorial Typography & Intent */}
         <div style={styles.leftColumn}>
           <div style={styles.eyebrowPill}>
@@ -131,14 +132,24 @@ export default function Hero() {
           </div>
         </div>
       </div>
-    </section>
-  );
+    </div>
+  </section>
+);
 }
 
 const styles = {
   hero: {
-    padding: '36px 0 24px 0',
+    padding: '12px 0',
     position: 'relative',
+  },
+  heroContainer: {
+    backgroundColor: '#FEF9E7',
+    border: '1.5px solid rgba(229, 168, 59, 0.28)',
+    borderRadius: '20px',
+    padding: '36px 38px',
+    boxShadow: '0 4px 18px rgba(229, 168, 59, 0.08)',
+    position: 'relative',
+    overflow: 'hidden',
   },
   grid: {
     display: 'grid',

@@ -107,7 +107,7 @@ export default function CommandBar({
       ref={sectionRef}
       style={styles.dockWrapper}
       id="command"
-      className="command-dock-container"
+      className={`command-dock-container ${!showExpanded ? 'command-dock-collapsed-mobile' : ''}`}
       aria-label="Planning Command Center"
     >
       {/* Upward-Expanding Panel for Context, Transcripts, Proposals, and Suggestions */}
@@ -560,7 +560,7 @@ export default function CommandBar({
         {/* Input Form */}
         <form onSubmit={handleSubmit} style={styles.form}>
           <div style={styles.inputRow}>
-            <span style={styles.promptIcon}>
+            <span className="prompt-icon-mobile" style={styles.promptIcon}>
               {conversationState === 'AWAITING_CONFIRMATION' ? '⚠️' : conversationState === 'AWAITING_PROPOSAL_DECISION' ? '📋' : '💬'}
             </span>
             <label htmlFor="command-input" className="sr-only">
@@ -584,6 +584,7 @@ export default function CommandBar({
             <button
               id="speech-toggle-btn"
               type="button"
+              className="secondary-control-mobile"
               onClick={onToggleSpeechOutput}
               style={{
                 ...styles.speakerBtn,
