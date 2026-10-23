@@ -20,6 +20,7 @@ RUN npm run build
 # Stage 2: Runtime image with FastAPI ML backend + static SPA frontend
 # -----------------------------------------------------------------------------
 FROM python:3.12-slim AS runner
+WORKDIR /app
 
 # Set secure Python execution flags
 ENV PYTHONDONTWRITEBYTECODE=1 \

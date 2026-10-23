@@ -76,6 +76,19 @@ describe('Phase 8, Stage 8.4: CI Pipeline, Reproducible Builds & Deployment Hard
       assert.match(content, /pip-audit/, 'Must execute pip-audit in security job');
       assert.match(content, /secretScanner\.mjs/, 'Must execute dedicated secret scanner in security job');
     });
+
+    it('1.9 Configures Docker runtime smoke test job with health check polling and cleanup', () => {
+      const content = fs.readFileSync(ciPath, 'utf8');
+      assert.match(content, /docker-runtime:/, 'Must define docker-runtime job');
+      assert.match(content, /needs:\s*\[frontend,\s*backend,\s*security\]/, 'Must depend on quality and security gates');
+      assert.match(content, /docker build -t voxplan:ci-smoke \./, 'Must build Dockerfile image');
+      assert.match(content, /docker run -d --name voxplan-ci-smoke-container/, 'Must start container on port 8000');
+      assert.match(content, /docker inspect --format=.*\.State\.Health/, 'Must poll container health status');
+      assert.match(content, /curl -sS -f .* http:\/\/127\.0\.0\.1:8000\/health/, 'Must verify /health endpoint contract');
+      assert.match(content, /assert data\.get\('status'\) == 'ok'/, 'Must assert status == ok');
+      assert.match(content, /assert data\.get\('service'\) == 'voxplan-ml'/, 'Must assert service == voxplan-ml');
+      assert.match(content, /docker rm -f voxplan-ci-smoke-container/, 'Must execute unconditional cleanup');
+    });
   });
 
   describe('2. Secret Protection, .gitignore & Environment Configuration', () => {

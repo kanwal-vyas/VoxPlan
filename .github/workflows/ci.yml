@@ -125,3 +125,82 @@ jobs:
 
       - name: Verify formatting and whitespace hygiene
         run: git diff --check
+
+  docker-runtime:
+    name: Docker Container Build & Runtime Smoke Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [frontend, backend, security]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Build production Docker image
+        run: docker build -t voxplan:ci-smoke .
+
+      - name: Start isolated container instance
+        run: docker run -d --name voxplan-ci-smoke-container -p 8000:8000 voxplan:ci-smoke
+
+      - name: Wait for container healthcheck to transition to healthy
+        run: |
+          echo "Awaiting container health status transition to 'healthy'..."
+          HEALTHY=false
+          FINAL_STATUS="unknown"
+          for i in $(seq 1 30); do
+            STATUS=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' voxplan-ci-smoke-container 2>/dev/null || echo "unknown")
+            FINAL_STATUS="$STATUS"
+            echo "Health poll attempt $i/30: status is '$STATUS'"
+            if [ "$STATUS" = "healthy" ]; then
+              HEALTHY=true
+              break
+            elif [ "$STATUS" = "unhealthy" ]; then
+              echo "Container healthcheck explicitly reported 'unhealthy'"
+              break
+            fi
+            sleep 2
+          done
+
+          if [ "$HEALTHY" != "true" ]; then
+            echo "ERROR: Container health status failed to reach 'healthy'. Final status: '$FINAL_STATUS'"
+            exit 1
+          fi
+          echo "Container is verified healthy."
+
+      - name: Verify application /health endpoint contract
+        run: |
+          echo "Querying http://127.0.0.1:8000/health from host..."
+          RESPONSE=$(curl -sS -f --max-time 10 http://127.0.0.1:8000/health)
+          echo "Received response: $RESPONSE"
+
+          # Validate schema and values: {"status": "ok", "service": "voxplan-ml"}
+          python3 -c "
+          import json, sys
+          payload = '''$RESPONSE'''
+          data = json.loads(payload)
+          assert data.get('status') == 'ok', f'Unexpected status: {data.get(\"status\")}'
+          assert data.get('service') == 'voxplan-ml', f'Unexpected service: {data.get(\"service\")}'
+          print('Successfully verified HealthResponse contract: status=ok, service=voxplan-ml')
+          "
+
+      - name: Verify static SPA /app serving
+        run: |
+          echo "Querying http://127.0.0.1:8000/app from host..."
+          APP_HTML=$(curl -sS -f --max-time 10 http://127.0.0.1:8000/app)
+          echo "$APP_HTML" | grep -q "VoxPlan" || (echo "ERROR: /app did not return VoxPlan application HTML" && exit 1)
+          echo "SPA /app route successfully verified."
+
+      - name: Dump container diagnostics on failure
+        if: failure()
+        run: |
+          echo "=== Docker Container Inspect ==="
+          docker inspect voxplan-ci-smoke-container || true
+          echo "=== Docker Container Logs ==="
+          docker logs --tail 200 voxplan-ci-smoke-container || true
+
+      - name: Cleanup test container and image
+        if: always()
+        run: |
+          echo "Cleaning up test container..."
+          docker rm -f voxplan-ci-smoke-container || true
+          docker rmi voxplan:ci-smoke || true
