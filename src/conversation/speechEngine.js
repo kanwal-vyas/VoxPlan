@@ -173,6 +173,7 @@ export class VoiceRecognitionController {
     this._isStarting = false;
     this._visibilityHandler = null;
     this._silenceTimer = null;
+    this._startupTimer = null;
     this._latestDraft = '';
     this._dispatchedInSession = false;
 
@@ -183,6 +184,13 @@ export class VoiceRecognitionController {
     if (this._silenceTimer) {
       clearTimeout(this._silenceTimer);
       this._silenceTimer = null;
+    }
+  }
+
+  _clearStartupTimer() {
+    if (this._startupTimer) {
+      clearTimeout(this._startupTimer);
+      this._startupTimer = null;
     }
   }
 
@@ -278,7 +286,24 @@ export class VoiceRecognitionController {
     this._latestDraft = '';
 
     this._clearSilenceTimer();
+    this._clearStartupTimer();
     this._setState(RECOGNITION_STATES.STARTING);
+
+    // Bounded startup safety timer: if browser speech service hangs or does not fire onstart/onerror within 8s
+    this._startupTimer = setTimeout(() => {
+      if (this.sessionId === currentSessionId && (this.state === RECOGNITION_STATES.STARTING || this._isStarting)) {
+        this._isStarting = false;
+        this._setState(RECOGNITION_STATES.ERROR);
+        this._onError({
+          code: 'startup-timeout',
+          message: 'Microphone took too long to connect. Please check permissions or try again.',
+        });
+        if (this.activeSession) {
+          try { this.activeSession.abort(); } catch {}
+          this.activeSession = null;
+        }
+      }
+    }, 8000);
 
     try {
       const recognition = new SpeechRecognition();
@@ -289,6 +314,7 @@ export class VoiceRecognitionController {
 
       recognition.onstart = () => {
         if (this.sessionId !== currentSessionId) return;
+        this._clearStartupTimer();
         this._isStarting = false;
         this._setState(RECOGNITION_STATES.LISTENING);
       };
@@ -371,8 +397,8 @@ export class VoiceRecognitionController {
 
         // When all collected segments are marked final:
         if (hasFinalResult && fullFinal) {
-          if (!this.continuous) {
-            // In single-phrase mode with no in-flight interim, dispatch immediately
+          if (!this.continuous || this.state === RECOGNITION_STATES.PROCESSING) {
+            // In single-phrase mode or when stop() was already requested, dispatch immediately
             this._finalizeSession(currentSessionId, fullFinal);
           } else {
             // In continuous mode, arm silence debounce so compound clauses across pauses are unified
@@ -384,18 +410,21 @@ export class VoiceRecognitionController {
             }, this.silenceTimeoutMs);
           }
         } else if (!combinedDraft && hasFinalResult) {
-          this._clearSilenceTimer();
-          if (this.activeSession) {
-            try {
-              this.activeSession.stop();
-            } catch {}
+          if (!this.continuous) {
+            this._clearSilenceTimer();
+            if (this.activeSession) {
+              try {
+                this.activeSession.stop();
+              } catch {}
+            }
+            this._setState(RECOGNITION_STATES.IDLE);
           }
-          this._setState(RECOGNITION_STATES.IDLE);
         }
       };
 
       recognition.onerror = (event) => {
         if (this.sessionId !== currentSessionId) return;
+        this._clearStartupTimer();
         this._clearSilenceTimer();
         this._isStarting = false;
 
@@ -403,11 +432,13 @@ export class VoiceRecognitionController {
         if (errorType === 'no-speech' || errorType === 'aborted') {
           if (!this._dispatchedInSession && this._latestDraft) {
             this._finalizeSession(currentSessionId);
+            this.activeSession = null;
             return;
           }
           this._latestDraft = '';
           this._onInterimResult('');
           this._setState(RECOGNITION_STATES.IDLE);
+          this.activeSession = null;
           if (errorType === 'no-speech') {
             this._onError({
               code: 'no-speech',
@@ -420,8 +451,9 @@ export class VoiceRecognitionController {
         this._latestDraft = '';
         this._onInterimResult('');
         this._setState(RECOGNITION_STATES.ERROR);
+        this.activeSession = null;
         let userMessage = `Voice recognition error: ${errorType}`;
-        if (errorType === 'not-allowed') {
+        if (errorType === 'not-allowed' || errorType === 'service-not-allowed') {
           userMessage = 'Microphone permission was denied. Please allow microphone access or type your command.';
         } else if (errorType === 'network') {
           userMessage = 'Speech recognition network connection failed. You can type your command.';
@@ -437,12 +469,14 @@ export class VoiceRecognitionController {
 
       recognition.onend = () => {
         if (this.sessionId !== currentSessionId) return;
+        this._clearStartupTimer();
         this._clearSilenceTimer();
         this._isStarting = false;
 
         // If recognition session ended with an unsubmitted draft, dispatch it intact
         if (!this._dispatchedInSession && this._latestDraft) {
           this._finalizeSession(currentSessionId);
+          this.activeSession = null;
           return;
         }
 
@@ -457,11 +491,13 @@ export class VoiceRecognitionController {
       recognition.start();
       return true;
     } catch (err) {
+      this._clearStartupTimer();
       this._clearSilenceTimer();
       this._isStarting = false;
       this._latestDraft = '';
       this._onInterimResult('');
       this._setState(RECOGNITION_STATES.ERROR);
+      this.activeSession = null;
       this._onError({
         code: 'start_failed',
         message: `Could not start voice recognition: ${err.message}`,
@@ -476,11 +512,26 @@ export class VoiceRecognitionController {
    */
   stop({ submit = true } = {}) {
     const currentSessionId = this.sessionId;
+    this._clearStartupTimer();
     this._clearSilenceTimer();
     this._isStarting = false;
 
     if (submit && !this._dispatchedInSession && this._latestDraft) {
       this._finalizeSession(currentSessionId);
+      return;
+    }
+
+    // In continuous mode, if the user explicitly stops with submit intent while speech is in-flight before the final packet arrived
+    if (submit && this.continuous && this.activeSession && !this._dispatchedInSession) {
+      this._setState(RECOGNITION_STATES.PROCESSING);
+      try {
+        this.activeSession.stop();
+      } catch {}
+      this._silenceTimer = setTimeout(() => {
+        if (this.sessionId === currentSessionId && !this._dispatchedInSession) {
+          this._finalizeSession(currentSessionId);
+        }
+      }, 800);
       return;
     }
 
@@ -512,6 +563,8 @@ export class VoiceRecognitionController {
    * Cleans up all listeners and aborts any active session.
    */
   destroy() {
+    this._clearStartupTimer();
+    this._clearSilenceTimer();
     this.stop({ submit: false });
     if (this._visibilityHandler && typeof document !== 'undefined' && document.removeEventListener) {
       document.removeEventListener('visibilitychange', this._visibilityHandler);

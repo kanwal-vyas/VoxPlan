@@ -46,7 +46,7 @@ export default function CommandBar({
     recognitionState === 'LISTENING'
       ? 'Microphone active. Listening for voice command.'
       : recognitionState === 'STARTING'
-      ? 'Starting voice recognition.'
+      ? 'Connecting microphone. Please wait for listening indicator before speaking.'
       : recognitionState === 'PROCESSING'
       ? 'Processing spoken command.'
       : recognitionState === 'ERROR'
@@ -74,10 +74,10 @@ export default function CommandBar({
   };
 
   const placeholderText =
-    recognitionState === 'LISTENING' || isListening
+    recognitionState === 'LISTENING'
       ? 'Listening via microphone... speak clearly! (Press Esc to stop)'
       : recognitionState === 'STARTING'
-      ? 'Starting microphone session...'
+      ? 'Connecting microphone... please wait before speaking (click to cancel)'
       : recognitionState === 'PROCESSING'
       ? 'Processing spoken command...'
       : conversationState === 'AWAITING_CONFIRMATION'
@@ -274,6 +274,8 @@ export default function CommandBar({
                   backgroundColor:
                     recognitionState === 'LISTENING' || isListening
                       ? '#FF8F82'
+                      : recognitionState === 'STARTING'
+                      ? '#FFF0B3'
                       : recognitionState === 'PROCESSING'
                       ? '#E4DAFF'
                       : recognitionState === 'ERROR'
@@ -293,6 +295,8 @@ export default function CommandBar({
                 title={
                   recognitionState === 'LISTENING' || isListening
                     ? 'Listening via microphone... click to stop (or press Esc)'
+                    : recognitionState === 'STARTING'
+                    ? 'Connecting microphone... please wait before speaking (click to cancel)'
                     : recognitionState === 'PROCESSING'
                     ? 'Processing voice command...'
                     : recognitionState === 'ERROR'
@@ -304,6 +308,8 @@ export default function CommandBar({
                 aria-label={
                   recognitionState === 'LISTENING' || isListening
                     ? 'Stop voice listening'
+                    : recognitionState === 'STARTING'
+                    ? 'Connecting microphone... click to cancel'
                     : recognitionState === 'PROCESSING'
                     ? 'Processing voice command'
                     : recognitionState === 'ERROR'
@@ -319,6 +325,10 @@ export default function CommandBar({
                     <span style={{ ...styles.bar, animation: 'waveBar 0.6s infinite ease-in-out 150ms' }} />
                     <span style={{ ...styles.bar, animation: 'waveBar 0.6s infinite ease-in-out 300ms' }} />
                     <span style={{ ...styles.bar, animation: 'waveBar 0.6s infinite ease-in-out 150ms' }} />
+                  </div>
+                ) : recognitionState === 'STARTING' ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#D97706', animation: 'waveBar 0.8s infinite ease-in-out' }} />
                   </div>
                 ) : recognitionState === 'PROCESSING' ? (
                   <div style={styles.waveBars}>

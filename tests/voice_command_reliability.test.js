@@ -18,10 +18,12 @@ class MockSpeechRecognition {
     this.onend = null;
     this.isStarted = false;
     this.isStopped = false;
+    this.autoStart = true;
+    this.autoEnd = true;
   }
-  start() { this.isStarted = true; if (this.onstart) this.onstart(); }
-  stop() { this.isStopped = true; if (this.onend) this.onend(); }
-  abort() { this.isStopped = true; if (this.onend) this.onend(); }
+  start() { this.isStarted = true; if (this.autoStart && this.onstart) this.onstart(); }
+  stop() { this.isStopped = true; if (this.autoEnd && this.onend) this.onend(); }
+  abort() { this.isStopped = true; if (this.autoEnd && this.onend) this.onend(); }
   simulateResult(transcript, isFinal = true) {
     if (this.onresult) {
       this.onresult({
@@ -859,6 +861,238 @@ describe('Voice Command Reliability — Phase 2 & 3 Regression Tests', () => {
 
       assert.equal(executedUtterances.length, 1);
       assert.equal(executedUtterances[0], 'Create task Beta with low priority');
+    });
+  });
+
+  describe('F. Recognition Session Lifecycle & First Attempt Reliability', () => {
+    test('First session starts, survives initial empty calibration packet, and submits first utterance', () => {
+      let mockRec = null;
+      let executedUtterance = null;
+      let stateTransitions = [];
+
+      const controller = new VoiceRecognitionController({
+        continuous: true,
+        getSpeechRecognition: () => {
+          return function() {
+            mockRec = new MockSpeechRecognition();
+            mockRec.autoStart = false;
+            return mockRec;
+          };
+        },
+        onStateChange: (st) => stateTransitions.push(st),
+        onResult: (transcript) => {
+          executedUtterance = transcript;
+        },
+      });
+
+      // 1. Initial state is IDLE
+      assert.equal(controller.getState(), RECOGNITION_STATES.IDLE);
+
+      // 2. Click mic: transitions to STARTING
+      controller.start();
+      assert.equal(controller.getState(), RECOGNITION_STATES.STARTING);
+
+      // 3. Browser fires onstart: transitions to LISTENING
+      if (mockRec.onstart) mockRec.onstart();
+      assert.equal(controller.getState(), RECOGNITION_STATES.LISTENING);
+
+      // 4. Browser emits empty calibration/silence packet with isFinal = true:
+      // CRITICAL: Must NOT terminate the active session or drop to IDLE!
+      mockRec.onresult({
+        results: [
+          Object.assign([{ transcript: '' }], { isFinal: true }),
+        ],
+      });
+      assert.equal(controller.getState(), RECOGNITION_STATES.LISTENING, 'Must remain LISTENING after empty packet');
+      assert.equal(executedUtterance, null);
+
+      // 5. User speaks first voice command
+      mockRec.onresult({
+        results: [
+          Object.assign([{ transcript: 'Create task Beta with low priority' }], { isFinal: true }),
+        ],
+      });
+
+      // 6. User stops to finalize
+      controller.stop({ submit: true });
+
+      assert.equal(executedUtterance, 'Create task Beta with low priority', 'First utterance must be dispatched');
+    });
+
+    test('First-session startup failure gives useful actionable feedback and cleans up', () => {
+      let mockRec = null;
+      let capturedError = null;
+
+      const controller = new VoiceRecognitionController({
+        continuous: true,
+        getSpeechRecognition: () => {
+          return function() {
+            mockRec = new MockSpeechRecognition();
+            mockRec.autoStart = false;
+            return mockRec;
+          };
+        },
+        onError: (err) => {
+          capturedError = err;
+        },
+      });
+
+      controller.start();
+      assert.equal(controller.getState(), RECOGNITION_STATES.STARTING);
+
+      // Startup fails with permission denied
+      mockRec.simulateError('not-allowed');
+
+      assert.equal(controller.getState(), RECOGNITION_STATES.ERROR);
+      assert.ok(capturedError);
+      assert.equal(capturedError.code, 'not-allowed');
+      assert.ok(capturedError.message.includes('permission was denied'));
+      assert.equal(controller.activeSession, null);
+    });
+
+    test('onend does not silently discard captured text', () => {
+      let mockRec = null;
+      let executedUtterance = null;
+
+      const controller = new VoiceRecognitionController({
+        continuous: true,
+        getSpeechRecognition: () => {
+          return function() {
+            mockRec = new MockSpeechRecognition();
+            return mockRec;
+          };
+        },
+        onResult: (transcript) => {
+          executedUtterance = transcript;
+        },
+      });
+
+      controller.start();
+      if (mockRec.onstart) mockRec.onstart();
+
+      // User speaks interim speech
+      mockRec.simulateResult('Create task Gamma with high priority', false);
+      assert.equal(executedUtterance, null);
+
+      // Browser recognition ends unexpectedly (e.g. stream interruption)
+      if (mockRec.onend) mockRec.onend();
+
+      assert.equal(executedUtterance, 'Create task Gamma with high priority', 'Captured draft must not be lost on onend');
+      assert.equal(controller.getState(), RECOGNITION_STATES.IDLE);
+    });
+
+    test('Restarting recognition does not lose the next utterance', () => {
+      let mockRec = null;
+      let executedUtterances = [];
+
+      const controller = new VoiceRecognitionController({
+        continuous: true,
+        getSpeechRecognition: () => {
+          return function() {
+            mockRec = new MockSpeechRecognition();
+            return mockRec;
+          };
+        },
+        onResult: (transcript) => {
+          executedUtterances.push(transcript);
+        },
+      });
+
+      // Session 1: Completed
+      controller.start();
+      if (mockRec.onstart) mockRec.onstart();
+      mockRec.simulateResult('Create task One', true);
+      controller.stop({ submit: true });
+      assert.equal(executedUtterances.length, 1);
+      assert.equal(executedUtterances[0], 'Create task One');
+
+      // Session 2: Started immediately after
+      controller.start();
+      if (mockRec.onstart) mockRec.onstart();
+      mockRec.simulateResult('Create task Two', true);
+      controller.stop({ submit: true });
+
+      assert.equal(executedUtterances.length, 2);
+      assert.equal(executedUtterances[1], 'Create task Two', 'Second session must submit cleanly');
+    });
+
+    test('Each utterance is submitted exactly once even if multiple end events trigger', () => {
+      let mockRec = null;
+      let executionCount = 0;
+
+      const controller = new VoiceRecognitionController({
+        continuous: true,
+        getSpeechRecognition: () => {
+          return function() {
+            mockRec = new MockSpeechRecognition();
+            return mockRec;
+          };
+        },
+        onResult: () => {
+          executionCount += 1;
+        },
+      });
+
+      controller.start();
+      if (mockRec.onstart) mockRec.onstart();
+      mockRec.simulateResult('Complete task Alpha', true);
+
+      // 1. Explicit stop
+      controller.stop({ submit: true });
+      assert.equal(executionCount, 1);
+
+      // 2. Subsequent onend event from browser
+      if (mockRec.onend) mockRec.onend();
+      assert.equal(executionCount, 1, 'Must NOT execute twice on subsequent onend');
+
+      // 3. Repeated stop call
+      controller.stop({ submit: true });
+      assert.equal(executionCount, 1, 'Must NOT execute twice on repeated stop');
+    });
+
+    test('In-flight speech is preserved when stop({ submit: true }) is called before draft is populated', () => {
+      let mockRec = null;
+      let executedUtterance = null;
+
+      const controller = new VoiceRecognitionController({
+        continuous: true,
+        getSpeechRecognition: () => {
+          return function() {
+            mockRec = new MockSpeechRecognition();
+            mockRec.autoEnd = false;
+            return mockRec;
+          };
+        },
+        onResult: (transcript) => {
+          executedUtterance = transcript;
+        },
+      });
+
+      controller.start();
+      if (mockRec.onstart) mockRec.onstart();
+
+      // User speaks, but recognizer hasn't emitted onresult yet.
+      // User clicks mic button to stop and submit:
+      controller.stop({ submit: true });
+      assert.equal(controller.getState(), RECOGNITION_STATES.PROCESSING);
+
+      // Browser recognizer emits the final result for the session
+      mockRec.simulateResult('Create task Delta with urgent priority', true);
+
+      assert.equal(executedUtterance, 'Create task Delta with urgent priority', 'In-flight speech must be finalized and dispatched');
+    });
+
+    test('Compound commands execute end-to-end through DialogueManager after lifecycle updates', async () => {
+      const dm = new DialogueManager({ clock: injectedClock });
+      const utterance = 'Create task Alpha with high priority, and create another task Beta with low priority.';
+      const res = dm.processInput(utterance, { tasks: [] });
+
+      assert.equal(res.action.type, 'COMPOUND_ACTIONS');
+      assert.equal(res.action.actions.length, 2);
+      assert.equal(res.action.actions[0].title, 'Alpha');
+      assert.equal(res.action.actions[0].priority, 'high');
+      assert.equal(res.action.actions[1].title, 'Beta');
+      assert.equal(res.action.actions[1].priority, 'low');
     });
   });
 });

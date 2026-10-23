@@ -5693,3 +5693,56 @@ Real microphone testing surfaced an intermittent acceptance failure where compou
 - **Adaptation Flags**: `isAdaptationUnlocked === false`, `productionApplied === false`.
 - **Phase 7.4.4B Activation Gate**: Permanently locked (`outcome: infeasible` on empty caller claims).
 - **Local-First Privacy**: Deterministic local browser execution; zero cloud LLMs, zero cloud speech API dependencies, zero audio recording.
+
+### Stage 8.4K: Voice Recognition Session Lifecycle & First-Attempt Detection Reliability
+
+#### 1. Defect Description & Precise Root Cause Analysis
+- **Observed User Failure**:
+  - The first voice command was not detected at all when the user clicked the microphone.
+  - Repeating the command a second time worked as expected.
+- **Root Cause Analysis & Investigation Findings**:
+  1. *Premature Session Termination on Calibration Packets*: In `VoiceRecognitionController` (`src/conversation/speechEngine.js`), an `else if (!combinedDraft && hasFinalResult)` handler was indiscriminately calling `this.activeSession.stop()` and setting state to `IDLE`. In Web Speech API implementations (especially Chromium/Chrome), upon starting continuous recognition the browser audio subsystem often emits an initial empty calibration packet with `isFinal: true` before speech is spoken. In continuous mode (`continuous: true`), this caused VoxPlan to terminate the recognition session immediately after starting, leaving the microphone dead while the user spoke their first command.
+  2. *Premature "Listening" UI Cue*: The UI previously passed `isListening={recognitionState === RECOGNITION_STATES.LISTENING || isListening}`, and the microphone button did not visually distinguish the `STARTING` (connecting) state from active `LISTENING`. Users naturally started speaking during connection before the recognition engine's `onstart` fired, so words spoken during the audio initialization handshake were lost.
+  3. *Unbounded Startup Failure*: If the browser recognition service hung or stalled during initial microphone permission / engine handshake without firing `onstart` or `onerror`, the controller remained permanently stuck in `STARTING` state without user feedback.
+  4. *Session Cancellation and Stop Cleanliness*: In continuous mode, when stopping or restarting recognition, draft state and session tracking must ensure late events are safely ignored while in-flight speech prior to user-initiated stop is cleanly flushed and submitted once.
+
+#### 2. Architecture & Implementation Corrections
+1. **Calibration Packet Guard (`src/conversation/speechEngine.js`)**:
+   - In `recognition.onresult`: guarded empty final results (`!combinedDraft && hasFinalResult`) so that only single-phrase recognition (`!this.continuous`) stops the session. In continuous mode, initial empty packets are safely ignored and the controller remains in `LISTENING`.
+2. **Explicit `STARTING` Connecting State & UI Transparency (`src/components/CommandBar.jsx`, `src/pages/ProductivityApp.jsx`)**:
+   - `isListening` prop is strictly bound to `recognitionState === RECOGNITION_STATES.LISTENING`.
+   - Distinct amber styling (`#FFF0B3`), animated indicator, clear tooltip, and aria-labels for `STARTING` state inform the user: `"Connecting microphone... please wait before speaking (click to cancel)"`.
+   - Clicking while `STARTING` cleanly cancels the connecting attempt via `recog.cancel()`.
+3. **Startup Safety Timeout (`src/conversation/speechEngine.js`)**:
+   - Added bounded 8-second safety timer `_startupTimer`. If the browser speech service hangs or fails to start, it safely transitions to `RECOGNITION_STATES.ERROR` and notifies the user: `"Microphone took too long to connect. Please check permissions or try again."`.
+4. **Clean Session Teardown & In-Flight Speech Preservation**:
+   - In `stop({ submit: true })`: if the user explicitly stops while speech is in-flight before the final packet arrived, transitions to `PROCESSING` to flush in-flight speech without dropping utterances.
+   - In `cancel()` / `stop({ submit: false })`: increments `sessionId`, discards drafts, and aborts cleanly to reject any subsequent late events.
+   - `onend` preserves and finalizes any unsubmitted draft intact.
+
+#### 3. Verification & Acceptance Evidence
+- **Voice Reliability & Lifecycle Regression Suite**: `node --test tests/voice_command_reliability.test.js`
+  - **Result**: 45 passed, 0 failed across 7 suites (Section F: 7 new tests verifying first session start, calibration packet survival, in-flight speech, startup failure feedback, onend preservation, and compound execution).
+- **Core Voice Interaction Suite**: `node --test tests/voice_interaction.test.js`
+  - **Result**: 34 passed, 0 failed across 4 suites.
+- **Full Test Suite**: `npm test`
+  - **Result**: 1056 passed, 0 failed across 219 suites.
+- **Backend Pytest Suite**: `python -m pytest`
+  - **Result**: 29 passed, 0 failed in 3.96s.
+- **Production Build**: `npm run build`
+  - **Result**: `vite build` completed cleanly in 275ms with zero errors.
+- **Code Quality & Linter**: `npm run lint` (`oxlint`)
+  - **Result**: 0 errors across 99 files.
+- **Secret Scanner**: `node scripts/secretScanner.mjs`
+  - **Result**: Clean scan (124 files scanned, 0 secrets found).
+- **Whitespace / Git Diff Check**: `git diff --check`
+  - **Result**: 0 formatting or whitespace errors.
+- **Browser UI Lifecycle Testing**: Verified live via browser subagent. Clicking microphone displays amber "Connecting microphone..." indicator and actionable feedback notification without premature listening state or crashes.
+- **Physical Hardware Microphone Gate**:
+  - Deterministically verified via automated mock events and browser UI lifecycle tests. Real physical microphone verification with local audio input hardware remains an open manual acceptance check for the user.
+
+#### 4. Scope & Protected Invariant Preservation
+- **Factory Scheduler Weights**: Immutable canonical weights (`urgency: 50.0`, `priority: 100.0`, `unblock: 15.0`, `risk: 25.0`).
+- **Phase 7.4.4B Activation Gate**: Permanently locked.
+- **Local-First Privacy**: 0 cloud LLMs, 0 cloud speech APIs, 0 audio logging.
+

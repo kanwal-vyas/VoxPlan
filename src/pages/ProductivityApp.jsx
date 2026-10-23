@@ -209,7 +209,6 @@ export default function ProductivityApp({ onNavigate }) {
   const [tasks, setTasks] = useState(loadSavedTasks);
   const [activeFilter, setActiveFilter] = useState('all');
   const [feedback, setFeedback] = useState(null);
-  const [isListening, setIsListening] = useState(false);
   const [recognitionState, setRecognitionState] = useState(RECOGNITION_STATES.IDLE);
   const [interimTranscript, setInterimTranscript] = useState('');
   const [speechOutputEnabled, setSpeechOutputEnabled] = useState(() => {
@@ -1363,7 +1362,6 @@ export default function ProductivityApp({ onNavigate }) {
       silenceTimeoutMs: 1400,
       onStateChange: (state) => {
         setRecognitionState(state);
-        setIsListening(state === RECOGNITION_STATES.LISTENING);
         if (state !== RECOGNITION_STATES.LISTENING && state !== RECOGNITION_STATES.PROCESSING) {
           setInterimTranscript('');
         }
@@ -1411,6 +1409,8 @@ export default function ProductivityApp({ onNavigate }) {
     if (!voiceRecognitionRef.current) return;
     if (recognitionState === RECOGNITION_STATES.LISTENING) {
       voiceRecognitionRef.current.stop({ submit: true });
+    } else if (recognitionState === RECOGNITION_STATES.STARTING) {
+      voiceRecognitionRef.current.cancel();
     } else {
       // Cancel speech before listening so microphone does not pick up assistant's voice
       if (speechSynthesisRef.current) {
@@ -1599,7 +1599,7 @@ export default function ProductivityApp({ onNavigate }) {
         {/* Section 06: Command Center (Soft Peach Notebook Assistant) */}
         <CommandBar
           onExecuteCommand={executeCommand}
-          isListening={recognitionState === RECOGNITION_STATES.LISTENING || isListening}
+          isListening={recognitionState === RECOGNITION_STATES.LISTENING}
           recognitionState={recognitionState}
           interimTranscript={interimTranscript}
           onToggleListening={toggleListening}
