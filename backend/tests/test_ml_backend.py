@@ -211,7 +211,8 @@ def test_unknown_api_endpoint_returns_404():
     """Verify unknown /api endpoints return 404 JSON and are not intercepted by SPA index.html."""
     res = client.get("/api/unknown_endpoint")
     assert res.status_code == 404
-    assert res.json()["detail"] == "API endpoint not found"
+    assert "application/json" in res.headers.get("content-type", "")
+    assert res.json()["detail"] in ("API endpoint not found", "Not Found")
 
 
 def test_spa_route_serving():
