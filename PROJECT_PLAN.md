@@ -5451,3 +5451,75 @@ Two primary user-facing defects were reported in VoxPlan's natural-language comm
 - **Adaptation Flags**: `isAdaptationUnlocked === false`, `productionApplied === false`.
 - **Phase 7.4.4B Activation Gate**: Permanently locked (`outcome: infeasible` on empty caller claims).
 - **Local-First Privacy**: 100% deterministic local browser IndexedDB and localStorage task mutations; zero cloud LLMs, zero cloud telemetry transmission.
+
+---
+
+### Critical Voice Reliability Fix: Real UI, Compound Commands, First-Attempt Accuracy (Stage 8.4H — COMPLETED)
+
+#### 1. Failure Analysis & Root Cause Findings
+
+Comprehensive tracing from microphone audio capture through speech recognition, transcript submission, parser splitting, action dispatch, and reactive task state updates revealed two distinct root causes:
+
+1. **Premature Truncation on Intermediate `isFinal` Events**:
+   - In Chrome and Chromium-based Web Speech API implementations, streaming speech is segmented into multiple recognition results (`event.results[0]`, `event.results[1]`, etc.).
+   - When a speaker dictates a compound sentence ("Create task Alpha with high priority, and create another task Beta with low priority"), Chrome marks `results[0]` (`"Create task Alpha with high priority"`) as `isFinal: true` while `results[1]` (`"and create another task Beta with low priority"`) remains in-flight with `isFinal: false`.
+   - The previous `VoiceRecognitionController.onresult` checked if any chunk was final, immediately dispatched `finalTranscript` (`"Create task Alpha with high priority"`), called `activeSession.stop()`, and marked `dispatchedInSession = true`.
+   - This caused compound commands to truncate after the first clause, discarding the second clause completely. It also caused single commands to be cut in half if the user paused briefly before speaking priority or deadline words.
+
+2. **Destructive `stop()` and Premature `onspeechend` Abortions**:
+   - In `VoiceRecognitionController.stop()`, calling `stop()` directly invoked `this.activeSession.abort()`, incremented `sessionId`, and wiped `_onInterimResult('')` without submitting. When users clicked "■ Stop Listening" or the microphone button after speaking, their entire spoken draft was discarded.
+   - `onspeechend` and `onsoundend` called `activeSession.stop()` on any 200–400ms pause, terminating recognition mid-utterance.
+   - In `ProductivityApp.jsx`, `VoiceRecognitionController` was instantiated without `continuous: true`, defaulting to single-phrase listening which halted on pauses.
+
+#### 2. Architectural Solutions & Changes Implemented
+
+1. **Continuous Voice Recognition & Draft Unification** (`src/conversation/speechEngine.js`):
+   - Track `_latestDraft` combining all finalized chunks and active interim text.
+   - Do NOT dispatch early when interim text is in-flight (`hasInterim === true`).
+   - Arm a silence debouncing timer (`silenceTimeoutMs = 1400ms`) on speech events so natural conversational pauses between clauses do not fragment the utterance.
+   - When the silence timer expires without further speech, `_finalizeSession` dispatches the complete unified compound utterance.
+   - On `recognition.onend`, if an undispatched draft exists, `_finalizeSession` dispatches it intact so no speech is ever lost.
+   - Replaced destructive `onspeechend` behavior in continuous mode with debounce arming.
+
+2. **Non-Destructive Explicit Stop Semantics** (`src/conversation/speechEngine.js`, `src/pages/ProductivityApp.jsx`):
+   - Added `stop({ submit = true })`: if user explicitly clicks the microphone button when done speaking, any captured draft is immediately finalized and submitted without waiting for the silence timer.
+   - Added `cancel()`: strictly discards pending drafts and aborts without submitting (bound to the `Escape` key).
+   - In `ProductivityApp.jsx`, configured `VoiceRecognitionController` with `continuous: true` and `silenceTimeoutMs: 1400ms`.
+
+3. **Multi-Operation Sequential Execution & State Verification** (`tests/voice_command_reliability.test.js`):
+   - Verified that all 4 compound utterance patterns execute cleanly end-to-end:
+     1. `"Create task Alpha with high priority, and create another task Beta with low priority."` -> creates 2 tasks with respective high and low priorities.
+     2. `"Create task Gamma with high priority, then create task Delta with low priority."` -> creates 2 tasks with respective priorities.
+     3. `"Create task Epsilon with high priority, and set its priority to low."` -> creates 1 task and updates its priority to low on latest working state.
+     4. `"Create task Zeta with high priority, create task Eta with low priority, and mark Zeta as completed."` -> creates 2 tasks and marks Zeta completed.
+   - Verified title conjunction protection: `"Create task Research and Development with high priority, and create another task Sales with low priority."` preserves "Research and Development" as a unified title without splitting on internal conjunctions.
+
+#### 3. Verification & Test Evidence
+
+- **Frontend Node Test Suite**: `npm test`
+  - **Result**: `1037 passed, 0 failed across 217 suites` (baseline: 1028 passed).
+  - Added 9 new regression tests in `tests/voice_command_reliability.test.js`:
+    - Intermediate `isFinal` chunk with in-flight interim text does not execute early or truncate.
+    - Explicit `stop({ submit: true })` with pending draft text submits intact.
+    - Explicit `cancel()` discards pending draft and returns to `IDLE`.
+    - Session `onend` finalizes unsubmitted draft.
+    - Conjunction within task title does not split title.
+    - End-to-end task store simulation for Phase 2 Examples 1–4.
+- **Backend Pytest Suite**: `python -m pytest`
+  - **Result**: `29 passed, 0 failed in 6.22s`.
+- **Production Build**: `npm run build`
+  - **Result**: `vite build` completed cleanly in 340ms with zero errors.
+- **Code Quality & Linter**: `npm run lint` (`oxlint`)
+  - **Result**: 0 errors across 99 files.
+- **Secret Scanner**: `node scripts/secretScanner.mjs`
+  - **Result**: Clean scan (124 files scanned, 0 secrets found).
+- **Browser Subagent Live UI Acceptance**:
+  - Executed on `http://127.0.0.1:8000/app` (recording: `verify_ui_voice_page_1792765078470.webp`).
+  - Verified accessible microphone button attributes: `aria-label="Toggle voice listening"`, `title="Dictate command using browser speech recognition"`.
+  - Executed compound command: `"Create task Alpha with high priority, and create another task Beta with low priority."`
+  - Verified that task Alpha (high priority) and task Beta (low priority) were created, visible in task cards, and persisted to `localStorage`.
+
+#### 4. Real-World Physical Microphone Gate Limitation Disclosure
+
+- **Hardware Note**: In this headless and automated agent execution environment, real human acoustic larynx input via an OS hardware microphone driver cannot be performed without a physical human speaker.
+- **Tested & Verified**: Real browser UI execution, Web Speech API controller lifecycle, continuous recognition event handling, and multi-clause sequential task mutations have been empirically validated through the live browser UI and automated deterministic mock recognition streams. Physical acoustic microphone testing in a real human environment remains the final user-facing acceptance step.

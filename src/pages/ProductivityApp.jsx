@@ -1359,6 +1359,8 @@ export default function ProductivityApp({ onNavigate }) {
     speechSynthesisRef.current = synth;
 
     const recog = new VoiceRecognitionController({
+      continuous: true,
+      silenceTimeoutMs: 1400,
       onStateChange: (state) => {
         setRecognitionState(state);
         setIsListening(state === RECOGNITION_STATES.LISTENING);
@@ -1392,7 +1394,7 @@ export default function ProductivityApp({ onNavigate }) {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         synth.stop();
-        recog.stop();
+        recog.cancel();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -1408,7 +1410,7 @@ export default function ProductivityApp({ onNavigate }) {
   const toggleListening = () => {
     if (!voiceRecognitionRef.current) return;
     if (recognitionState === RECOGNITION_STATES.LISTENING) {
-      voiceRecognitionRef.current.stop();
+      voiceRecognitionRef.current.stop({ submit: true });
     } else {
       // Cancel speech before listening so microphone does not pick up assistant's voice
       if (speechSynthesisRef.current) {

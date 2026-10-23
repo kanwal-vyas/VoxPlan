@@ -300,5 +300,245 @@ describe('Voice Command Reliability — Phase 2 & 3 Regression Tests', () => {
       assert.deepEqual(typedResult.action.actions.map(a => ({ title: a.title, priority: a.priority })),
                        voiceResult.action.actions.map(a => ({ title: a.title, priority: a.priority })));
     });
+
+    test('Intermediate isFinal chunk does not execute early while interim text is in-flight', () => {
+      let mockRec = null;
+      let executedUtterance = null;
+      let draftUpdates = [];
+
+      const controller = new VoiceRecognitionController({
+        continuous: true,
+        silenceTimeoutMs: 50,
+        getSpeechRecognition: () => {
+          return function() {
+            mockRec = new MockSpeechRecognition();
+            return mockRec;
+          };
+        },
+        onInterimResult: (draft) => draftUpdates.push(draft),
+        onResult: (transcript) => {
+          executedUtterance = transcript;
+        },
+      });
+
+      controller.start();
+
+      // Chunk 0 is marked final, but Chunk 1 is in-flight interim
+      mockRec.onresult({
+        results: [
+          Object.assign([{ transcript: 'Create task Alpha with high priority' }], { isFinal: true }),
+          Object.assign([{ transcript: 'and create another task Beta with low priority' }], { isFinal: false }),
+        ],
+      });
+
+      // Must NOT dispatch immediately because interim is in-flight
+      assert.equal(executedUtterance, null);
+      assert.ok(draftUpdates.includes('Create task Alpha with high priority and create another task Beta with low priority'));
+
+      // When stop({ submit: true }) is called, it finalizes the complete unified utterance
+      controller.stop({ submit: true });
+      assert.equal(executedUtterance, 'Create task Alpha with high priority and create another task Beta with low priority');
+    });
+
+    test('Explicit stop with pending draft text submits the transcript intact', () => {
+      let mockRec = null;
+      let executedUtterance = null;
+
+      const controller = new VoiceRecognitionController({
+        continuous: true,
+        getSpeechRecognition: () => {
+          return function() {
+            mockRec = new MockSpeechRecognition();
+            return mockRec;
+          };
+        },
+        onResult: (transcript) => {
+          executedUtterance = transcript;
+        },
+      });
+
+      controller.start();
+      // User speaks interim draft
+      mockRec.simulateResult('Create task Gamma with high priority', false);
+      assert.equal(executedUtterance, null);
+
+      // User clicks mic/stop button to finalize
+      controller.stop({ submit: true });
+      assert.equal(executedUtterance, 'Create task Gamma with high priority');
+    });
+
+    test('Explicit cancel() discards pending draft and does not submit', () => {
+      let mockRec = null;
+      let executedUtterance = null;
+
+      const controller = new VoiceRecognitionController({
+        continuous: true,
+        getSpeechRecognition: () => {
+          return function() {
+            mockRec = new MockSpeechRecognition();
+            return mockRec;
+          };
+        },
+        onResult: (transcript) => {
+          executedUtterance = transcript;
+        },
+      });
+
+      controller.start();
+      mockRec.simulateResult('Delete all tasks', false);
+      controller.cancel();
+
+      assert.equal(executedUtterance, null);
+      assert.equal(controller.getState(), RECOGNITION_STATES.IDLE);
+    });
+
+    test('Session onend finalizes and dispatches unsubmitted draft', () => {
+      let mockRec = null;
+      let executedUtterance = null;
+
+      const controller = new VoiceRecognitionController({
+        continuous: true,
+        getSpeechRecognition: () => {
+          return function() {
+            mockRec = new MockSpeechRecognition();
+            return mockRec;
+          };
+        },
+        onResult: (transcript) => {
+          executedUtterance = transcript;
+        },
+      });
+
+      controller.start();
+      mockRec.simulateResult('Create task Delta with low priority', false);
+      assert.equal(executedUtterance, null);
+
+      // Browser fires onend (e.g. microphone stream closed)
+      if (mockRec.onend) mockRec.onend();
+      assert.equal(executedUtterance, 'Create task Delta with low priority');
+    });
+
+    test('Conjunction within task title does not accidentally split the title', () => {
+      const dm = new DialogueManager({ clock: injectedClock });
+      const utterance = 'Create task Research and Development with high priority, and create another task Sales with low priority.';
+      const res = dm.processInput(utterance, { tasks: [] });
+
+      assert.equal(res.state, CONVERSATION_STATES.IDLE);
+      assert.equal(res.action.type, 'COMPOUND_ACTIONS');
+      assert.equal(res.action.actions.length, 2);
+
+      assert.equal(res.action.actions[0].title, 'Research and Development');
+      assert.equal(res.action.actions[0].priority, 'high');
+
+      assert.equal(res.action.actions[1].title, 'Sales');
+      assert.equal(res.action.actions[1].priority, 'low');
+    });
+  });
+
+  describe('D. End-to-End Compound Task Store Simulation', () => {
+    // Helper simulating ProductivityApp.jsx executeCommand and dispatchAction flow
+    async function simulateAppExecution(dm, utterance, initialTasks = []) {
+      let workingTasks = [...initialTasks];
+      const res = dm.processInput(utterance, { tasks: workingTasks });
+
+      if (res.action) {
+        const dispatch = async (act) => {
+          if (act.type === 'COMPOUND_ACTIONS') {
+            for (const sub of act.actions) {
+              await dispatch(sub);
+            }
+          } else if (act.type === CONVERSATION_INTENTS.CREATE_TASK) {
+            const newTask = {
+              id: act.taskId || `task-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+              title: act.title,
+              priority: act.priority || 'medium',
+              dueDate: act.dueDate || null,
+              completed: false,
+              category: 'General',
+              estimatedEffort: act.estimatedEffort || null,
+              dependencies: [],
+              createdAt: new Date().toISOString(),
+            };
+            workingTasks = [newTask, ...workingTasks];
+            dm.setActiveSubject(newTask.id);
+          } else if (act.type === CONVERSATION_INTENTS.CHANGE_PRIORITY) {
+            workingTasks = workingTasks.map(t => t.id === act.taskId ? { ...t, priority: act.priority } : t);
+            dm.setActiveSubject(act.taskId);
+          } else if (act.type === CONVERSATION_INTENTS.COMPLETE_TASK) {
+            workingTasks = workingTasks.map(t => t.id === act.taskId ? { ...t, completed: true } : t);
+            dm.setActiveSubject(act.taskId);
+          }
+        };
+        await dispatch(res.action);
+      }
+
+      return { res, finalTasks: workingTasks };
+    }
+
+    test('Phase 2 Example 1: Create task Alpha with high priority, and create another task Beta with low priority.', async () => {
+      const dm = new DialogueManager({ clock: injectedClock });
+      const utterance = 'Create task Alpha with high priority, and create another task Beta with low priority.';
+      const { res, finalTasks } = await simulateAppExecution(dm, utterance, []);
+
+      assert.equal(res.action.type, 'COMPOUND_ACTIONS');
+      assert.equal(finalTasks.length, 2);
+
+      const alpha = finalTasks.find(t => t.title === 'Alpha');
+      const beta = finalTasks.find(t => t.title === 'Beta');
+
+      assert.ok(alpha, 'Alpha task must exist');
+      assert.ok(beta, 'Beta task must exist');
+      assert.equal(alpha.priority, 'high');
+      assert.equal(beta.priority, 'low');
+    });
+
+    test('Phase 2 Example 2: Create task Gamma with high priority, then create task Delta with low priority.', async () => {
+      const dm = new DialogueManager({ clock: injectedClock });
+      const utterance = 'Create task Gamma with high priority, then create task Delta with low priority.';
+      const { res, finalTasks } = await simulateAppExecution(dm, utterance, []);
+
+      assert.equal(res.action.type, 'COMPOUND_ACTIONS');
+      assert.equal(finalTasks.length, 2);
+
+      const gamma = finalTasks.find(t => t.title === 'Gamma');
+      const delta = finalTasks.find(t => t.title === 'Delta');
+
+      assert.ok(gamma, 'Gamma task must exist');
+      assert.ok(delta, 'Delta task must exist');
+      assert.equal(gamma.priority, 'high');
+      assert.equal(delta.priority, 'low');
+    });
+
+    test('Phase 2 Example 3: Create task Epsilon with high priority, and set its priority to low.', async () => {
+      const dm = new DialogueManager({ clock: injectedClock });
+      const utterance = 'Create task Epsilon with high priority, and set its priority to low.';
+      const { res, finalTasks } = await simulateAppExecution(dm, utterance, []);
+
+      assert.equal(res.action.type, 'COMPOUND_ACTIONS');
+      assert.equal(finalTasks.length, 1);
+
+      const epsilon = finalTasks.find(t => t.title === 'Epsilon');
+      assert.ok(epsilon, 'Epsilon task must exist');
+      assert.equal(epsilon.priority, 'low', 'Priority should have been updated to low');
+    });
+
+    test('Phase 2 Example 4: Create task Zeta with high priority, create task Eta with low priority, and mark Zeta as completed.', async () => {
+      const dm = new DialogueManager({ clock: injectedClock });
+      const utterance = 'Create task Zeta with high priority, create task Eta with low priority, and mark Zeta as completed.';
+      const { res, finalTasks } = await simulateAppExecution(dm, utterance, []);
+
+      assert.equal(res.action.type, 'COMPOUND_ACTIONS');
+      assert.equal(finalTasks.length, 2);
+
+      const zeta = finalTasks.find(t => t.title === 'Zeta');
+      const eta = finalTasks.find(t => t.title === 'Eta');
+
+      assert.ok(zeta, 'Zeta task must exist');
+      assert.ok(eta, 'Eta task must exist');
+      assert.equal(zeta.priority, 'high');
+      assert.equal(zeta.completed, true, 'Zeta must be marked as completed');
+      assert.equal(eta.priority, 'low');
+      assert.equal(eta.completed, false, 'Eta must be active');
+    });
   });
 });
