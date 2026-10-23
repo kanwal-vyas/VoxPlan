@@ -34,6 +34,7 @@ import {
   saveEventsBatch,
   clearEventsByProfile,
   getTimerSessionsByTask,
+  getTimerSessionsByProfile,
   saveTimerSession,
   clearTimerSessionsByProfile,
 } from '../telemetry/indexedDbStore.js';
@@ -96,7 +97,10 @@ function hashString(str) {
 
 /**
  * Computes a composite fingerprint representing the complete restorable workspace state across stores.
- * Detects cross-tab concurrency for tasks, schedules, time-blocks, preferences, and telemetry events.
+ * Detects cross-tab concurrency for tasks, schedules, time-blocks, preferences, telemetry events,
+ * and timer sessions using content-sensitive deterministic hashes.
+ *
+ * Avoids leaking personal information by only hashing structural IDs, timestamps, and one-way digests.
  *
  * @param {Storage} [injectedStorage]
  * @param {string} [profileId='prof_default']
@@ -114,11 +118,43 @@ export async function computeWorkspaceFingerprint(injectedStorage = null, profil
   const revision = storage.getItem(REVISION_KEY) || '';
 
   let telemetryCount = 0;
+  let telemetryHash = '0';
   try {
-    const events = await getEventsByProfile(profileId);
-    telemetryCount = (events || []).length;
+    const events = (await getEventsByProfile(profileId)) || [];
+    telemetryCount = events.length;
+    if (telemetryCount > 0) {
+      // Deterministically sort and hash content-sensitive structural event tokens
+      // Avoiding personal text while detecting event modifications, deletions, or replacements
+      const sortedEventTokens = events
+        .map((e) => {
+          const payloadDigest = e.payload ? hashString(JSON.stringify(e.payload)) : '0';
+          return `${e.event_id || ''}:${e.event_type || ''}:${e.timestamp || ''}:${e.task_id || ''}:${payloadDigest}`;
+        })
+        .sort();
+      telemetryHash = hashString(sortedEventTokens.join(';'));
+    }
   } catch {
     telemetryCount = 0;
+    telemetryHash = '0';
+  }
+
+  let sessionsCount = 0;
+  let sessionsHash = '0';
+  try {
+    const sessions = (await getTimerSessionsByProfile(profileId)) || [];
+    sessionsCount = sessions.length;
+    if (sessionsCount > 0) {
+      const sortedSessionTokens = sessions
+        .map((s) => {
+          const intervalsCount = Array.isArray(s.intervals) ? s.intervals.length : 0;
+          return `${s.session_id || ''}:${s.task_id || ''}:${s.status || ''}:${s.started_at || ''}:${s.duration_seconds || s.elapsed_seconds || 0}:${intervalsCount}`;
+        })
+        .sort();
+      sessionsHash = hashString(sortedSessionTokens.join(';'));
+    }
+  } catch {
+    sessionsCount = 0;
+    sessionsHash = '0';
   }
 
   return JSON.stringify({
@@ -129,6 +165,9 @@ export async function computeWorkspaceFingerprint(injectedStorage = null, profil
     pref,
     revision,
     telemetryCount,
+    telemetryHash,
+    sessionsCount,
+    sessionsHash,
   });
 }
 
@@ -652,6 +691,35 @@ export async function restoreBackupData(validatedPayload, options = {}) {
 
     if (options.injectFailureAfter === 'after_snapshot') {
       throw new Error('Injected failure after snapshot persistence');
+    }
+
+    // Final pre-commit concurrency verification immediately before mutation begins
+    if (options.workspaceFingerprint !== undefined) {
+      const preCommitFingerprint = await computeWorkspaceFingerprint(storage, profileId);
+      if (preCommitFingerprint !== options.workspaceFingerprint) {
+        storage.removeItem(RESTORE_IN_PROGRESS_KEY);
+        storage.removeItem(RESTORE_PRE_SNAPSHOT_KEY);
+        storage.removeItem(RESTORE_JOURNAL_KEY);
+        return {
+          success: false,
+          error: 'concurrent_modification',
+          message: 'A concurrent workspace modification occurred before mutation began. Restoration aborted to protect data integrity.',
+        };
+      }
+    }
+
+    if (options.expectedRevision !== undefined) {
+      const currentRevision = storage.getItem(REVISION_KEY) || '';
+      if (currentRevision !== options.expectedRevision) {
+        storage.removeItem(RESTORE_IN_PROGRESS_KEY);
+        storage.removeItem(RESTORE_PRE_SNAPSHOT_KEY);
+        storage.removeItem(RESTORE_JOURNAL_KEY);
+        return {
+          success: false,
+          error: 'concurrent_modification',
+          message: 'A concurrent task revision occurred before mutation began. Restoration aborted to protect data integrity.',
+        };
+      }
     }
 
     // 4. Mutate IndexedDB: Telemetry Events & Sessions

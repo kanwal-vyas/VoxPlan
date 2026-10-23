@@ -1021,6 +1021,187 @@ describe('Phase 8, Stage 8.2: Encrypted Local Backups & Verified Recovery Test S
       assert.strictEqual(res.success, false);
       assert.strictEqual(res.error, 'demo_action_in_progress');
     });
+
+    it('9.6 rejects restore if an existing telemetry event content is modified without changing record count', async () => {
+      const profileId = 'prof_test_96';
+      mockStorage.setItem('voxplan_tasks', JSON.stringify([{ id: 't-96', title: 'Task 96' }]));
+      mockStorage.setItem('voxplan_profile_id', profileId);
+
+      await clearEventsByProfile(profileId);
+      await saveEventsBatch([
+        { event_id: 'ev-96-1', profile_id: profileId, event_type: 'task_created', timestamp: '2026-10-20T10:00:00Z', payload: { category: 'Planning' } },
+      ]);
+
+      const fingerprint = await computeWorkspaceFingerprint(mockStorage, profileId);
+
+      // Mutate the event payload without changing total count (count remains 1)
+      await saveEventsBatch([
+        { event_id: 'ev-96-1', profile_id: profileId, event_type: 'task_created', timestamp: '2026-10-20T10:00:00Z', payload: { category: 'Execution' } },
+      ]);
+
+      const payload = {
+        exported_at: new Date().toISOString(),
+        profile_id: profileId,
+        data: {
+          tasks: [{ id: 't-96-restored', title: 'Restored' }],
+        },
+      };
+
+      const res = await restoreBackupData(payload, {
+        storage: mockStorage,
+        workspaceFingerprint: fingerprint,
+      });
+
+      assert.strictEqual(res.success, false);
+      assert.strictEqual(res.error, 'concurrent_modification');
+    });
+
+    it('9.7 rejects restore if an existing timer session is modified without changing session count', async () => {
+      const profileId = 'prof_test_97';
+      mockStorage.setItem('voxplan_tasks', JSON.stringify([{ id: 't-97', title: 'Task 97' }]));
+      mockStorage.setItem('voxplan_profile_id', profileId);
+
+      await clearTimerSessionsByProfile(profileId);
+      await saveTimerSession({
+        session_id: 'sess-97-1',
+        profile_id: profileId,
+        task_id: 't-97',
+        status: 'active',
+        started_at: '2026-10-20T10:00:00Z',
+        duration_seconds: 120,
+      });
+
+      const fingerprint = await computeWorkspaceFingerprint(mockStorage, profileId);
+
+      // Mutate the session status and duration without changing session count
+      await saveTimerSession({
+        session_id: 'sess-97-1',
+        profile_id: profileId,
+        task_id: 't-97',
+        status: 'paused',
+        started_at: '2026-10-20T10:00:00Z',
+        duration_seconds: 240,
+      });
+
+      const payload = {
+        exported_at: new Date().toISOString(),
+        profile_id: profileId,
+        data: {
+          tasks: [{ id: 't-97-restored', title: 'Restored' }],
+        },
+      };
+
+      const res = await restoreBackupData(payload, {
+        storage: mockStorage,
+        workspaceFingerprint: fingerprint,
+      });
+
+      assert.strictEqual(res.success, false);
+      assert.strictEqual(res.error, 'concurrent_modification');
+    });
+
+    it('9.8 rejects restore if one record is replaced with another while preserving total count', async () => {
+      const profileId = 'prof_test_98';
+      mockStorage.setItem('voxplan_tasks', JSON.stringify([{ id: 't-98', title: 'Task 98' }]));
+      mockStorage.setItem('voxplan_profile_id', profileId);
+
+      await clearEventsByProfile(profileId);
+      await saveEventsBatch([
+        { event_id: 'ev-98-orig', profile_id: profileId, event_type: 'task_created', timestamp: '2026-10-20T10:00:00Z' },
+      ]);
+
+      const fingerprint = await computeWorkspaceFingerprint(mockStorage, profileId);
+
+      // Replace the record: clear and insert a different event ID (preserving count = 1)
+      await clearEventsByProfile(profileId);
+      await saveEventsBatch([
+        { event_id: 'ev-98-replacement', profile_id: profileId, event_type: 'task_started', timestamp: '2026-10-20T10:05:00Z' },
+      ]);
+
+      const payload = {
+        exported_at: new Date().toISOString(),
+        profile_id: profileId,
+        data: {
+          tasks: [{ id: 't-98-restored', title: 'Restored' }],
+        },
+      };
+
+      const res = await restoreBackupData(payload, {
+        storage: mockStorage,
+        workspaceFingerprint: fingerprint,
+      });
+
+      assert.strictEqual(res.success, false);
+      assert.strictEqual(res.error, 'concurrent_modification');
+    });
+
+    it('9.9 rejects restore if schedule, preference, or time-block is modified between preview and restore', async () => {
+      mockStorage.setItem('voxplan_tasks', JSON.stringify([{ id: 't-99', title: 'Task 99' }]));
+      mockStorage.setItem('voxplan_time_block_settings', JSON.stringify({ focusHours: 3 }));
+      mockStorage.setItem('voxplan_preference_collection_enabled', 'true');
+
+      const previewFingerprint = await computeWorkspaceFingerprint(mockStorage);
+
+      // User or background worker updates preference between preview and restore
+      mockStorage.setItem('voxplan_preference_collection_enabled', 'false');
+
+      const payload = {
+        exported_at: new Date().toISOString(),
+        profile_id: 'prof_default',
+        data: {
+          tasks: [{ id: 't-99-new', title: 'Restored' }],
+        },
+      };
+
+      const res = await restoreBackupData(payload, {
+        storage: mockStorage,
+        workspaceFingerprint: previewFingerprint,
+      });
+
+      assert.strictEqual(res.success, false);
+      assert.strictEqual(res.error, 'concurrent_modification');
+    });
+
+    it('9.10 rejects restore if data changes after initial concurrency check but before mutation begins (pre-commit check)', async () => {
+      const profileId = 'prof_test_910';
+      mockStorage.setItem('voxplan_tasks', JSON.stringify([{ id: 't-910', title: 'Task 910' }]));
+      mockStorage.setItem('voxplan_profile_id', profileId);
+
+      const fingerprint = await computeWorkspaceFingerprint(mockStorage, profileId);
+
+      // Create a storage proxy that modifies workspace state after initial concurrency check (e.g. during pre-snapshot write)
+      const concurrentStorage = {
+        getItem: (k) => mockStorage.getItem(k),
+        removeItem: (k) => mockStorage.removeItem(k),
+        setItem: (k, v) => {
+          mockStorage.setItem(k, v);
+          // When snapshot key is written, simulate a concurrent write from another tab before mutation
+          if (k === RESTORE_PRE_SNAPSHOT_KEY) {
+            mockStorage.setItem('voxplan_tasks', JSON.stringify([{ id: 't-910-concurrent', title: 'Concurrent Edit' }]));
+          }
+        },
+      };
+
+      const payload = {
+        exported_at: new Date().toISOString(),
+        profile_id: profileId,
+        data: {
+          tasks: [{ id: 't-910-restored', title: 'Restored' }],
+        },
+      };
+
+      const res = await restoreBackupData(payload, {
+        storage: concurrentStorage,
+        workspaceFingerprint: fingerprint,
+      });
+
+      assert.strictEqual(res.success, false);
+      assert.strictEqual(res.error, 'concurrent_modification');
+      // Verify markers were cleaned up and did not leave in-progress state
+      assert.strictEqual(mockStorage.getItem(RESTORE_IN_PROGRESS_KEY), null);
+      assert.strictEqual(mockStorage.getItem(RESTORE_PRE_SNAPSHOT_KEY), null);
+      assert.strictEqual(mockStorage.getItem(RESTORE_JOURNAL_KEY), null);
+    });
   });
 
   describe('10. Complete Multi-Store Workspace Preservation & Restart Persistence', () => {

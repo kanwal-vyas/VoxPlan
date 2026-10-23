@@ -40,10 +40,11 @@ npm run dev
 ```
 
 ### Verified Test Suites & Quality Metrics
-- **Frontend Test Suite**: **848 / 848 passing** across 166 test suites in 25 test files (`npm test`).
+- **Frontend Test Suite**: **958 / 958 passing** across 196 test suites in 28 test files (`npm test`).
 - **Backend Test Suite**: **27 / 27 passing** across REST and ML endpoints (`python -m pytest backend/tests/`).
 - **Linter**: Zero errors (`npm run lint`).
-- **Production Build**: Clean compilation (`npm run build`).
+- **Production Build**: Clean compilation with route-level and component code splitting (75.9% initial load reduction) (`npm run build`).
+- **PWA & Offline Readiness**: W3C manifest, service worker app shell caching, and standalone installability.
 - **Authoritative Scope Document**: See [PROJECT_SCOPE.md](file:///c:/Users/kaval%20vyas/OneDrive/Desktop/Projects/VoxPlan/PROJECT_SCOPE.md) for full classification (Categories A through F).
 
 ---

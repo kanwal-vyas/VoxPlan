@@ -1,13 +1,20 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import LandingPage from './pages/LandingPage';
-import ProductivityApp from './pages/ProductivityApp';
+import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
+import RouteLoadingFallback from './components/RouteLoadingFallback';
+import RouteErrorBoundary from './components/RouteErrorBoundary';
+import OfflineBanner from './components/OfflineBanner';
+import UpdateNotification from './components/UpdateNotification';
+import { registerServiceWorker, initInstallPromptListener } from './utils/pwaManager';
+
+// Dynamic route-level code splitting (Phase 8, Stage 8.3)
+const LandingPage = lazy(() => import('./pages/LandingPage'));
+const ProductivityApp = lazy(() => import('./pages/ProductivityApp'));
 
 /**
  * VoxPlan Top-Level Router & Experience Orchestrator
  *
  * Routes:
- * - /      : Polished product landing page with features, preview, and how-it-works
- * - /app   : Existing functional VoxPlan productivity intelligence application
+ * - /      : Polished product landing page with features, preview, and how-it-works (lazy loaded)
+ * - /app   : Existing functional VoxPlan productivity intelligence application (lazy loaded)
  */
 export default function App() {
   const [currentPath, setCurrentPath] = useState(() => {
@@ -17,6 +24,12 @@ export default function App() {
     }
     return '/';
   });
+
+  // Initialize PWA service worker and install prompt listener on mount
+  useEffect(() => {
+    registerServiceWorker();
+    initInstallPromptListener();
+  }, []);
 
   // Listen for browser forward/back buttons
   useEffect(() => {
@@ -80,11 +93,17 @@ export default function App() {
       <a href="#main-content" className="skip-link">
         Skip to main content
       </a>
-      {isApp ? (
-        <ProductivityApp onNavigate={navigate} />
-      ) : (
-        <LandingPage onNavigate={navigate} />
-      )}
+      <OfflineBanner />
+      <RouteErrorBoundary>
+        <Suspense fallback={<RouteLoadingFallback message={isApp ? 'Loading productivity workspace...' : 'Loading VoxPlan...'} />}>
+          {isApp ? (
+            <ProductivityApp onNavigate={navigate} />
+          ) : (
+            <LandingPage onNavigate={navigate} />
+          )}
+        </Suspense>
+      </RouteErrorBoundary>
+      <UpdateNotification />
     </>
   );
 }

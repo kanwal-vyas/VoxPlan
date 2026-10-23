@@ -152,6 +152,15 @@ button, input {
   background: #D4C5B5;
 }
 
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* Reduced Motion Preference (WCAG 2.2 2.3.3 Animation from Interactions) */
 @media (prefers-reduced-motion: reduce) {
   html {

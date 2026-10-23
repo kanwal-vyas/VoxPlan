@@ -391,6 +391,37 @@ export async function getTimerSessionsByTask(taskId) {
 }
 
 /**
+ * Retrieves all timer sessions for a profile ID.
+ * @param {string} profileId
+ * @returns {Promise<object[]>}
+ */
+export async function getTimerSessionsByProfile(profileId) {
+  const db = await getDb();
+  if (!db) {
+    return Array.from(memoryFallback.sessions.values())
+      .filter((s) => s.profile_id === profileId)
+      .sort((a, b) => new Date(a.started_at).getTime() - new Date(b.started_at).getTime());
+  }
+
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction([SESSIONS_STORE], 'readonly');
+      const store = tx.objectStore(SESSIONS_STORE);
+      const index = store.index('profile_id');
+      const req = index.getAll(profileId);
+      req.onsuccess = (e) => {
+        const list = e.target.result || [];
+        list.sort((a, b) => new Date(a.started_at).getTime() - new Date(b.started_at).getTime());
+        resolve(list);
+      };
+      req.onerror = () => resolve([]);
+    } catch {
+      resolve([]);
+    }
+  });
+}
+
+/**
  * Clears timer sessions belonging to a profile ID.
  */
 export async function clearTimerSessionsByProfile(profileId) {

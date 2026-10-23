@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import '../App.css';
 
 import Header from '../components/Header';
@@ -9,10 +9,12 @@ import MLModelPanel from '../components/MLModelPanel';
 import BehavioralHistoryPanel from '../components/BehavioralHistoryPanel';
 import PersonalModelDashboard from '../components/PersonalModelDashboard';
 import TaskList from '../components/TaskList';
-import TaskExplanationModal from '../components/TaskExplanationModal';
-import AdaptiveScheduleModal from '../components/AdaptiveScheduleModal';
-import BackupModal from '../components/BackupModal';
 import LoadingScreen from '../components/LoadingScreen';
+
+// Lazy-loaded on-demand heavy modals (Phase 8, Stage 8.3)
+const TaskExplanationModal = lazy(() => import('../components/TaskExplanationModal'));
+const AdaptiveScheduleModal = lazy(() => import('../components/AdaptiveScheduleModal'));
+const BackupModal = lazy(() => import('../components/BackupModal'));
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { initCinematicScrollStory } from '../animations/scrollStory';
 import { telemetry } from '../telemetry/telemetryManager';
@@ -1504,35 +1506,45 @@ export default function ProductivityApp({ onNavigate }) {
 
       {/* Task ML Explainability Modal (Smart Note) */}
       {selectedTaskExplanation && (
-        <TaskExplanationModal
-          task={selectedTaskExplanation.task}
-          prediction={guardedPredictionsMap[selectedTaskExplanation.task.id] || selectedTaskExplanation.pred}
-          onClose={() => setSelectedTaskExplanation(null)}
-        />
+        <Suspense fallback={null}>
+          <TaskExplanationModal
+            task={selectedTaskExplanation.task}
+            prediction={guardedPredictionsMap[selectedTaskExplanation.task.id] || selectedTaskExplanation.pred}
+            onClose={() => setSelectedTaskExplanation(null)}
+          />
+        </Suspense>
       )}
 
       {/* Adaptive Sprint Proposal Modal */}
-      <AdaptiveScheduleModal
-        isOpen={isScheduleModalOpen}
-        tasks={tasks}
-        events={telemetryEvents}
-        personalDurationModel={personalDurationModel}
-        guardedPredictionsMap={guardedPredictionsMap}
-        acceptedSchedule={acceptedSchedule}
-        onExportSchedule={handleExportCalendar}
-        onClose={() => setIsScheduleModalOpen(false)}
-        onApplySchedule={handleApplySchedule}
-        onProposalGenerated={handleProposalGenerated}
-        onDiscardSchedule={handleDiscardSchedule}
-      />
+      {isScheduleModalOpen && (
+        <Suspense fallback={null}>
+          <AdaptiveScheduleModal
+            isOpen={isScheduleModalOpen}
+            tasks={tasks}
+            events={telemetryEvents}
+            personalDurationModel={personalDurationModel}
+            guardedPredictionsMap={guardedPredictionsMap}
+            acceptedSchedule={acceptedSchedule}
+            onExportSchedule={handleExportCalendar}
+            onClose={() => setIsScheduleModalOpen(false)}
+            onApplySchedule={handleApplySchedule}
+            onProposalGenerated={handleProposalGenerated}
+            onDiscardSchedule={handleDiscardSchedule}
+          />
+        </Suspense>
+      )}
 
       {/* Encrypted Workspace Backup & Recovery Modal */}
-      <BackupModal
-        isOpen={isBackupModalOpen}
-        onClose={() => setIsBackupModalOpen(false)}
-        currentTasks={tasks}
-        onRestoreSuccess={handleRestoreSuccess}
-      />
+      {isBackupModalOpen && (
+        <Suspense fallback={null}>
+          <BackupModal
+            isOpen={isBackupModalOpen}
+            onClose={() => setIsBackupModalOpen(false)}
+            currentTasks={tasks}
+            onRestoreSuccess={handleRestoreSuccess}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

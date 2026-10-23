@@ -188,8 +188,39 @@ describe('Phase 8, Stage 8.1: Accessibility Audit & Keyboard Navigation Test Sui
     });
   });
 
-  describe('6. Protected Scheduler Invariants & Production Gate Preservation', () => {
-    it('6.1 strictly preserves factory baseline weights and object immutability', () => {
+  describe('6. PWA, Offline & Route Splitting Accessibility Verification', () => {
+    it('6.1 RouteLoadingFallback exposes role="status", aria-live="polite", and descriptive label', () => {
+      const content = fs.readFileSync(path.join(rootDir, 'src', 'components', 'RouteLoadingFallback.jsx'), 'utf-8');
+      assert.ok(content.includes('role="status"'), 'RouteLoadingFallback must have role="status"');
+      assert.ok(content.includes('aria-live="polite"'), 'RouteLoadingFallback must have aria-live="polite"');
+      assert.ok(content.includes('aria-label='), 'RouteLoadingFallback must have aria-label');
+      assert.ok(content.includes('className="sr-only"'), 'RouteLoadingFallback must include sr-only explanation');
+    });
+
+    it('6.2 OfflineBanner exposes role="status", aria-live="polite", and accessible dismiss label', () => {
+      const content = fs.readFileSync(path.join(rootDir, 'src', 'components', 'OfflineBanner.jsx'), 'utf-8');
+      assert.ok(content.includes('role="status"'), 'OfflineBanner must have role="status"');
+      assert.ok(content.includes('aria-live="polite"'), 'OfflineBanner must have aria-live="polite"');
+      assert.ok(content.includes('aria-label="Dismiss offline notice"'), 'OfflineBanner must provide accessible dismiss label');
+    });
+
+    it('6.3 UpdateNotification exposes role="region", aria-label, and keyboard focusable action buttons', () => {
+      const content = fs.readFileSync(path.join(rootDir, 'src', 'components', 'UpdateNotification.jsx'), 'utf-8');
+      assert.ok(content.includes('role="region"'), 'UpdateNotification must have role="region"');
+      assert.ok(content.includes('aria-label="Application update available"'), 'UpdateNotification must provide region label');
+      assert.ok(content.includes('aria-label="Refresh now to apply update"'), 'UpdateNotification must provide refresh button label');
+      assert.ok(content.includes('aria-label="Dismiss update notification"'), 'UpdateNotification must provide dismiss button label');
+    });
+
+    it('6.4 RouteErrorBoundary exposes role="alert" and accessible retry action', () => {
+      const content = fs.readFileSync(path.join(rootDir, 'src', 'components', 'RouteErrorBoundary.jsx'), 'utf-8');
+      assert.ok(content.includes('role="alert"'), 'RouteErrorBoundary must have role="alert"');
+      assert.ok(content.includes('aria-label="Retry loading view"'), 'RouteErrorBoundary must have accessible retry button');
+    });
+  });
+
+  describe('7. Protected Scheduler Invariants & Production Gate Preservation', () => {
+    it('7.1 strictly preserves factory baseline weights and object immutability', () => {
       assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.urgencyWeight, 50.0);
       assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.priorityWeight, 100.0);
       assert.strictEqual(FACTORY_SCHEDULER_WEIGHTS.unblockWeight, 15.0);
@@ -197,7 +228,7 @@ describe('Phase 8, Stage 8.1: Accessibility Audit & Keyboard Navigation Test Sui
       assert.strictEqual(Object.isFrozen(FACTORY_SCHEDULER_WEIGHTS), true);
     });
 
-    it('6.2 production activation gate fails closed and adaptation is locked', () => {
+    it('7.2 production activation gate fails closed and adaptation is locked', () => {
       const evalResult = evaluateActivationGate();
 
       assert.strictEqual(evalResult.isAdaptationUnlocked, false);

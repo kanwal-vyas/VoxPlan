@@ -4688,4 +4688,131 @@ stateDiagram-v2
 
 - **Disclosed Browser Storage Limitation**: Web browsers do not provide a hardware or OS-level two-phase commit across disparate storage engines (`localStorage` and `IndexedDB`). While our staged recovery journal and pre-restore snapshots guarantee deterministic recovery upon application launch for all interrupted or crashed operations, instantaneous cross-store hardware atomicity during a mid-turn browser power loss is physically impossible under standard Web Platform APIs.
 - **Encrypted Cloud Sync**: Explicitly out of scope.
-- **Phase 8 Release Engineering**: Stage 8.3 (PWA / service worker and code splitting) and Stage 8.4 (CI / deployment) remain deferred.
+- **Phase 8 Release Engineering**: Stage 8.3 (PWA / service worker and code splitting) completed below. Stage 8.4 (CI / deployment) remains deferred.
+
+---
+
+### Phase 8, Stage 8.3: PWA Readiness, Safe Offline Behavior & Bundle Optimization (Executed: October 23, 2026)
+
+**Baseline Commit**: `2c3e6ca3ca2318dbc833da3a00ef9a1d33aa450d`
+**Execution Status**: **IMPLEMENTED & VERIFIED** (PWA web app manifest, offline service worker with deterministic app-shell caching, route-level and modal-level code splitting, vendor chunk isolation, content-sensitive backup fingerprinting, and pre-commit concurrency verification).
+
+---
+
+#### 1. Concurrency Audit Findings & Hardened Pre-Commit Protection
+Before implementing PWA and service worker caching, the backup concurrency architecture in `src/utils/backupManager.js` was audited across 5 specific concurrency scenarios:
+1. **Telemetry Event Content Modification without Count Change**: Confirmed that previously only event counts were checked. Remediated by computing `telemetryHash`, a deterministic, privacy-preserving digest over sorted structural event tokens (`event_id`, `event_type`, `timestamp`, `task_id`, and payload hash). Personal task titles and notes are never hashed or leaked into persistent metadata.
+2. **Timer Session Modification without Count Change**: Confirmed that timer sessions in IndexedDB were previously excluded from the fingerprint. Remediated by exporting `getTimerSessionsByProfile` from `src/telemetry/indexedDbStore.js` and including `sessionsHash` and `sessionsCount` in `computeWorkspaceFingerprint`.
+3. **Record Replacement Preserving Total Count**: Verified that replacing any record changes structural event or session IDs, thereby altering the composite fingerprint.
+4. **Schedule, Preference, or Time-Block Changes between Preview & Restore**: Verified that changes to `voxplan_accepted_schedule`, `voxplan_time_block_settings`, or preferences advance the respective hashes (`schedHash`, `tbHash`, `speech`, `pref`), triggering instant rejection with `error: 'concurrent_modification'`.
+5. **Data Changes after Initial Check but before Mutation Begins**: Implemented a final pre-commit check immediately before the first mutation phase (IndexedDB clearing). If any concurrent modification occurs during the snapshot-gathering window, restoration aborts cleanly, removes temporary markers, and protects workspace data integrity.
+6. **Unavoidable Browser Storage Disclosures**: Documented that because web browsers lack an OS-level atomic lock across disparate storage engines (`localStorage` and `IndexedDB`), instantaneous cross-store hardware atomicity during mid-turn browser crashes cannot be physically guaranteed. The two-phase restore journal and pre-restore snapshot guarantee deterministic recovery to baseline.
+
+---
+
+#### 2. PWA Manifest & Installation Readiness
+- **File**: `public/manifest.webmanifest`
+  - Name: `VoxPlan — Predictive Task & Schedule Intelligence`
+  - Short Name: `VoxPlan`
+  - Start URL: `/app` (direct navigation into productivity workspace)
+  - Scope: `/`
+  - Display Mode: `standalone`
+  - Theme Color & Background Color: `#FFF8EF` (matching VoxPlan's warm editorial cream design)
+  - Categories: `["productivity", "utilities"]`
+  - Icons:
+    - `/favicon.svg`: Vector icon (`purpose: "any"`)
+    - `/pwa-192x192.png`: 192x192 PNG (`purpose: "any"`, 22.7 kB)
+    - `/pwa-512x512.png`: 512x512 PNG (`purpose: "any"`, 126 kB)
+    - `/maskable-icon-512x512.png`: 512x512 PNG with 80% safe zone on `#FFF8EF` background (`purpose: "maskable"`, 59.7 kB)
+- **File**: `index.html`
+  - Added `<link rel="manifest" href="/manifest.webmanifest" />`
+  - Added `<link rel="apple-touch-icon" href="/pwa-192x192.png" />`
+  - Added `<meta name="theme-color" content="#FFF8EF" />`
+  - Added `<meta name="description" content="Local-first predictive task and scheduling intelligence with adaptive constraint planning." />`
+
+---
+
+#### 3. Service Worker Caching & Offline Safety Strategy
+- **File**: `public/sw.js`
+  - **Versioned Cache Ownership**: `voxplan-app-shell-v1` and `voxplan-static-v1`. On `activate`, deletes only obsolete caches prefixed with `voxplan-`, guaranteeing never to touch unrelated origin caches.
+  - **Application Shell**: Navigation requests (`mode: 'navigate'`) use a network-first strategy with cache fallback to cached `/index.html`. Direct navigation and browser refresh to `/app` and `/` work seamlessly while offline.
+  - **Content-Hashed Bundles**: Immutable assets under `/assets/*-[hash].*` use cache-first strategy with network fallback.
+  - **Static Assets & Icons**: Manifest, fonts, and icons use stale-while-revalidate.
+  - **API Exclusions**: API calls to `/api/*` and backend port 8000 are strictly network-only. The service worker never caches ML predictions or task mutations.
+  - **Local-First Boundary**: The service worker never acts as an alternate store of truth for task data. Local tasks, timers, and schedules remain 100% governed by `indexedDbStore.js` and `localStorage`.
+  - **Safe Update Flow**: Does not call `skipWaiting()` on install to prevent unprompted reloads during active editing or restoring. Listens for explicit `{ type: 'SKIP_WAITING' }` messages from user-initiated UI prompts.
+
+---
+
+#### 4. PWA Lifecycle Management & Accessible UI
+- **File**: `src/utils/pwaManager.js`
+  - Centralized module for service worker registration, network status observation (`subscribeNetworkStatus`), waiting update notifications (`subscribeServiceWorkerUpdate`), and `beforeinstallprompt` capture.
+- **File**: `src/components/OfflineBanner.jsx`
+  - Accessible banner announcing offline connectivity (`role="status"`, `aria-live="polite"`). Clearly distinguishes local-first task and scheduling operations from backend-dependent ML predictions. Includes accessible dismiss button.
+- **File**: `src/components/UpdateNotification.jsx`
+  - Non-intrusive update toast (`role="region"`, `aria-label="Application update available"`) offering "Refresh Now" and "Dismiss" buttons. Never forces an immediate reload.
+- **File**: `src/components/RouteLoadingFallback.jsx`
+  - Accessible Suspense loading indicator with `role="status"`, `aria-live="polite"`, and screen-reader explanation.
+- **File**: `src/components/RouteErrorBoundary.jsx`
+  - Accessible chunk-load error boundary (`role="alert"`) providing friendly retry action without wiping tasks or altering persistence.
+
+---
+
+#### 5. Bundle Optimization & Code Splitting Results
+- **Route-Level Splitting**: `src/App.jsx` dynamically loads `LandingPage` and `ProductivityApp` via `React.lazy` and `Suspense`.
+- **Component-Level Splitting**: `src/pages/ProductivityApp.jsx` dynamically loads `AdaptiveScheduleModal`, `BackupModal`, and `TaskExplanationModal` on demand.
+- **Vendor Chunk Isolation**: `vite.config.js` extracts `vendor-react` (React & React-DOM runtime, 218.83 kB) and `vendor-gsap` (GSAP animation engine, 112.92 kB).
+
+##### Production Bundle Comparison Table
+
+| Bundle Artifact | Baseline Size (Stage 8.2A) | Post-Optimization Size (Stage 8.3) | Change / Status |
+| :--- | :--- | :--- | :--- |
+| **`dist/index.html`** | 0.80 kB (gzip: 0.44 kB) | 1.27 kB (gzip: 0.62 kB) | PWA manifest & head tags added |
+| **CSS Bundles** | `index.css`: 8.91 kB (gzip: 2.79 kB) | `index.css`: 2.71 kB + `ProductivityApp.css`: 6.26 kB | Split by route |
+| **Initial Landing Page JS (`/`)** | **1,156.74 kB (gzip: 314.98 kB)** | **278.42 kB (gzip: 83.19 kB)** | **-878.32 kB (-75.9% reduction)** |
+| ↳ `index-[hash].js` | Monolithic | 13.68 kB (gzip: 4.65 kB) | App shell & router |
+| ↳ `vendor-react-[hash].js` | Monolithic | 218.83 kB (gzip: 68.25 kB) | Shared React runtime |
+| ↳ `LandingPage-[hash].js` | Monolithic | 45.91 kB (gzip: 10.29 kB) | Product landing view |
+| **Productivity App JS (`/app`)** | Monolithic | 640.88 kB (gzip: 160.07 kB) | Lazy-loaded on navigation |
+| **`AdaptiveScheduleModal-[hash].js`** | Monolithic | 101.23 kB (gzip: 24.59 kB) | Lazy-loaded on schedule click |
+| **`vendor-gsap-[hash].js`** | Monolithic | 112.92 kB (gzip: 44.39 kB) | Lazy-loaded with ProductivityApp |
+| **`BackupModal-[hash].js`** | Monolithic | 15.40 kB (gzip: 4.39 kB) | Lazy-loaded on backup click |
+| **`TaskExplanationModal-[hash].js`** | Monolithic | 10.30 kB (gzip: 3.14 kB) | Lazy-loaded on task explain click |
+| **`indexedDbStore-[hash].js`** | Monolithic | 10.79 kB (gzip: 2.73 kB) | Shared async storage |
+
+---
+
+#### 6. Verification & Automated Test Results
+- **PWA & Routing Suite**: **23 / 23 passing** across 6 suites in 14ms (`node --test tests/pwa_and_routing.test.js`).
+- **Backup & Recovery Audit Suite**: **52 / 52 passing** across 12 suites in 502ms (`node --test tests/backup_and_recovery.test.js`), including new tests 9.6–9.10 verifying content-sensitive telemetry/session concurrency.
+- **Accessibility Regression Suite**: **22 / 22 passing** across 8 suites in 18ms (`node --test tests/accessibility.test.js`), verifying PWA fallback and offline banner semantics.
+- **Demo Data Seeder Suite**: **37 / 37 passing** across 5 suites in 31ms (`node --test tests/demo_data_seeder.test.js`).
+- **Full Frontend Test Suite**: **958 / 958 passing** across 196 suites in 28 test files (`npm test`), 0 failures, 0 skipped.
+- **Backend Test Suite**: **27 / 27 passing** (`python -m pytest backend/tests/`).
+- **Linter**: Zero errors (`npm run lint` / `oxlint`).
+- **Production Build**: Built cleanly with Vite in 429ms (`npm run build`).
+- **Formatting & Whitespace**: Zero errors (`git diff --check`).
+- **Browser Navigation Walkthrough**: Verified live on Chromium subagent with recorded session (`pwa_offline_walkthrough`):
+  - Direct navigation to `/` renders LandingPage with title "VoxPlan — Playful Project Intelligence".
+  - Navigation to `/app` updates title to "VoxPlan App — Tasks & Adaptive Scheduling" and loads task list.
+  - Browser back to `/` and forward to `/app` work smoothly.
+  - Direct refresh on `/app` succeeds without errors.
+
+---
+
+#### 7. Protected Scheduler Invariants Confirmation
+- `urgencyWeight`: **50.0**
+- `priorityWeight`: **100.0**
+- `unblockWeight`: **15.0**
+- `riskWeight`: **25.0**
+- `Object.isFrozen(FACTORY_SCHEDULER_WEIGHTS)`: **true**
+- `isAdaptationUnlocked`: **false**
+- `productionApplied`: **false**
+- Candidate weights remain confined to shadow evaluation; Phase 7.4.4B remains locked.
+
+---
+
+#### 8. Remaining Limitations & Deferred Scope
+- **Browser Service Worker Scope**: Service workers only operate over HTTPS or localhost. In environments without Service Worker support (e.g. private browsing with storage partitioning or unsupported web views), VoxPlan degrades gracefully to direct network execution.
+- **Backend-Dependent Features**: ML task delay risk predictions and backend feature importances require an active FastAPI server; the application honestly discloses offline status and avoids fabricating ML scores when disconnected.
+- **Phase 8 Release Engineering**: Stage 8.4 (CI pipeline, containerized deployment, and release automation) remains deferred.
