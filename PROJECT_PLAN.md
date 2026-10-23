@@ -5139,3 +5139,54 @@ Execute an evidence-driven audit of the Stage 8.4 implementation to close verifi
 - **Linter**: **0 errors**, 1 warning (`oxlint`).
 - **Formatting**: **0 errors** (`git diff --check`).
 - **Dependency Audits**: **0 vulnerabilities** (`npm audit --omit=dev` and `pip-audit`).
+
+---
+
+### Phase 8, Stage 8.4D: Release-Gate Closure Assessment Record
+
+**Starting & Reference Commit**: `17df667706b339e43f1013e85adcefb3b76e48d1`
+**Assessment Timestamp**: 2026-10-23
+**Focus**: Environmental closure assessment of the two remaining unverified release gates (Gate A: Real Browser Offline Disconnect; Gate B: Docker Container Runtime Smoke Test).
+
+#### 1. Release Gate Closure Assessment Matrix
+
+| Gate | Acceptance Criteria Assessed | Current Environment Capability Check | Gate Status | Observable Evidence & Environmental Blocker | Reproducible Manual Verification Procedure for Repository Owner |
+| :--- | :--- | :--- | :---: | :--- | :--- |
+| **Gate A** | Genuine network disconnect in real browser, reload of `/app`, graceful degradation of ML endpoints without data corruption, clean reconnect recovery. | Browser automation subagent lacks Chrome DevTools Protocol network throttling / network disconnect controls (`Network.emulateNetworkConditions({ offline: true })`). Terminating host OS network adapter would disconnect AI session. | **UNVERIFIED (Browser Network Disconnect Controls Unavailable)** | - Online App Shell loads and hydrates cleanly on `http://127.0.0.1:8000/app` and `http://localhost:4173/app`.<br>- Service worker registered and static caches populated (`voxplan-app-shell-v1`, `voxplan-static-v1`).<br>- Offline fallback behavior verified via 16 automated integration tests in `tests/pwa_and_routing.test.js`, but physical browser disconnection is unverified. | 1. Start unified server: `python -m uvicorn backend.main:app --port 8000`<br>2. Open Chromium/Chrome to `http://localhost:8000/app`.<br>3. Open DevTools (F12) -> Network tab -> Change throttling from "No throttling" to **"Offline"**.<br>4. Hard reload `/app` (Ctrl+F5 / Cmd+Shift+R).<br>5. Verify App Shell renders and tasks remain editable.<br>6. Trigger ML prediction; verify graceful offline error badge without app crash.<br>7. Restore network to "No throttling" and verify recovery. |
+| **Gate B** | Docker image multi-stage build, container startup, unprivileged non-root user execution, `/health` response HTTP 200, native Python healthcheck transitions to healthy. | Local Windows host lacks Docker daemon, Docker CLI, Podman, and WSL (`Get-Command docker`: CommandNotFoundException; `wsl --list`: Windows Subsystem for Linux is not installed). | **UNVERIFIED (Host Lacks Docker Daemon / Runtime)** | - Dockerfile structurally audited and verified: pinned `node:22-alpine` builder, `python:3.12-slim` runner, dedicated non-root user `voxplan` (UID 10001), native Python standard library healthcheck without external `curl` bloat.<br>- Validated by 21 structural assertions in `tests/ci_and_deployment.test.js`.<br>- Actual container build and runtime execution cannot be executed on this host. | On a machine with Docker installed, execute:<br>`docker build -t voxplan:release .`<br>`docker run -d --name voxplan-gate -p 8000:8000 voxplan:release`<br>`sleep 15`<br>`docker inspect --format='{{.State.Health.Status}}' voxplan-gate`<br>`curl -f http://localhost:8000/health`<br>`docker stop voxplan-gate && docker rm voxplan-gate` |
+
+#### 2. Defects Identified and Corrected
+- **No Application or Configuration Defects Found**:
+  - The application code, build pipeline, CSP directives, service worker, and test suites are fully operational.
+  - Zero code changes were warranted in Stage 8.4D.
+  - As mandated by the fix policy, no speculative changes were introduced to falsely represent an environmental blocker as a passed gate.
+
+#### 3. Scope & Protected Invariant Verification
+- Factory Weights:
+  - `urgencyWeight`: **50.0**
+  - `priorityWeight`: **100.0**
+  - `unblockWeight`: **15.0**
+  - `riskWeight`: **25.0**
+- Immutability: `Object.isFrozen(FACTORY_SCHEDULER_WEIGHTS) === true`
+- Adaptability Flags:
+  - `isAdaptationUnlocked`: **false**
+  - `productionApplied`: **false**
+- Guardrail: **Phase 7.4.4B activation gate remains strictly locked**.
+- Privacy: Zero external telemetry, zero cloud task synchronization.
+
+#### 4. Verified Test Execution Counts
+- **Full Frontend & Security Suite**: **995 / 995 passed** across 204 suites in 30 test files (`npm test`), 0 failures.
+- **Backend Test Suite**: **29 / 29 passed** across 2 test files (`pytest backend/tests/`), 0 failures.
+- **Dedicated Adversarial Secret Scanner Suite**: **16 / 16 passed** (`tests/secret_scanner.test.js`).
+- **Core Release Regression Suite**: **155 / 155 passed** across 38 suites.
+- **Linter**: **0 errors**, 1 warning (`oxlint`).
+- **Production Build**: **Built in 423ms** (`npm run build`).
+- **Dependency Security Audits**: **0 vulnerabilities** (`npm audit --omit=dev` and `pip-audit`).
+- **Secret Scanner**: **121 files clean**, 0 credentials exposed (`node scripts/secretScanner.mjs`).
+- **Formatting Hygiene**: **0 whitespace or conflict errors** (`git diff --check`).
+
+#### 5. Release-Gate Closure Decision
+**ONE OR BOTH GATES UNVERIFIED**
+- **Gate A (Real Browser Network Disconnect)**: **UNVERIFIED** due to subagent browser automation environment lacking CDP network disconnection controls.
+- **Gate B (Docker Runtime Smoke Test)**: **UNVERIFIED** due to host system lacking Docker daemon/CLI and WSL.
+- **Readiness Classification**: Full production readiness cannot be declared solely on unit/integration passes until the repository owner runs the documented manual verification procedures on capable hardware or CI runner.
