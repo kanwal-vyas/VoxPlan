@@ -10,6 +10,7 @@ import BehavioralHistoryPanel from '../components/BehavioralHistoryPanel';
 import PersonalModelDashboard from '../components/PersonalModelDashboard';
 import TaskList from '../components/TaskList';
 import LoadingScreen from '../components/LoadingScreen';
+import FeedbackToast from '../components/FeedbackToast';
 
 // Lazy-loaded on-demand heavy modals (Phase 8, Stage 8.3)
 const TaskExplanationModal = lazy(() => import('../components/TaskExplanationModal'));
@@ -472,12 +473,13 @@ export default function ProductivityApp({ onNavigate }) {
     }
   }, [tasks]);
 
-  // Auto-dismiss feedback messages
+  // Auto-dismiss feedback messages with extended duration for undoable actions
   useEffect(() => {
     if (!feedback) return;
+    const duration = feedback.onUndo ? 7000 : 4500;
     const timer = setTimeout(() => {
       setFeedback(null);
-    }, 4500);
+    }, duration);
     return () => clearTimeout(timer);
   }, [feedback]);
 
@@ -762,17 +764,31 @@ export default function ProductivityApp({ onNavigate }) {
       setActiveSubjectTaskId(null);
     }
     const taskToDelete = tasks.find((t) => t.id === taskId);
+    const originalIndex = tasks.findIndex((t) => t.id === taskId);
+    if (!taskToDelete) return;
+
     if (activeTimerState && activeTimerState.taskId === taskId) {
       telemetry.stopTimer(taskId);
       setActiveTimerState(null);
     }
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
-    if (taskToDelete) {
-      setFeedback({
-        type: 'success',
-        message: `Deleted task: ${taskToDelete.title}`,
-      });
-    }
+    setFeedback({
+      type: 'success',
+      message: `Deleted task: "${taskToDelete.title}"`,
+      onUndo: () => {
+        setTasks((prev) => {
+          if (prev.some((t) => t.id === taskToDelete.id)) return prev;
+          const next = [...prev];
+          const insertAt = originalIndex >= 0 && originalIndex <= next.length ? originalIndex : next.length;
+          next.splice(insertAt, 0, taskToDelete);
+          return next;
+        });
+        setFeedback({
+          type: 'info',
+          message: `Restored task: "${taskToDelete.title}"`,
+        });
+      },
+    });
   };
 
   const updateTaskTitle = (taskId, newTitle) => {
@@ -805,6 +821,47 @@ export default function ProductivityApp({ onNavigate }) {
       message: `Rescheduled "${target.title}" to ${newDueDate || 'no deadline'}`,
     });
   };
+
+  const handleClearCompleted = useCallback(() => {
+    const completedTasks = tasks.filter((t) => t.completed);
+    if (completedTasks.length === 0) {
+      setFeedback({
+        type: 'info',
+        message: 'No completed tasks to clear.',
+      });
+      return;
+    }
+    const count = completedTasks.length;
+    const ok = typeof window !== 'undefined' && window.confirm
+      ? window.confirm(
+          `Clear ${count} completed task${count === 1 ? '' : 's'}?\n\nThis will remove completed tasks from your active task list. Completed telemetry and duration records remain safely preserved.`
+        )
+      : true;
+    if (!ok) return;
+
+    for (const t of completedTasks) {
+      dialogueManager.invalidateTask(t.id);
+    }
+    setTasks((prev) => prev.filter((t) => !t.completed));
+    setFeedback({
+      type: 'success',
+      message: `Cleared ${count} completed task${count === 1 ? '' : 's'}.`,
+    });
+  }, [tasks]);
+
+  const handleQuickAdd = useCallback(() => {
+    const input = document.getElementById('command-input');
+    const container = document.getElementById('command');
+    if (container) {
+      const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      container.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth' });
+    }
+    if (input) {
+      setTimeout(() => {
+        input.focus();
+      }, 300);
+    }
+  }, []);
 
   const handleApplySchedule = async (proposal) => {
     const placements = proposal?.proposedPlacements || proposal?.placements || [];
@@ -1142,10 +1199,22 @@ export default function ProductivityApp({ onNavigate }) {
 
         case CONVERSATION_INTENTS.CLEAR_COMPLETED: {
           const completedTasks = tasks.filter((t) => t.completed);
+          if (completedTasks.length === 0) {
+            setFeedback({
+              type: 'info',
+              message: 'No completed tasks to clear.',
+            });
+            break;
+          }
+          const count = completedTasks.length;
           for (const t of completedTasks) {
             dialogueManager.invalidateTask(t.id);
           }
           setTasks((prev) => prev.filter((t) => !t.completed));
+          setFeedback({
+            type: 'success',
+            message: `Cleared ${count} completed task${count === 1 ? '' : 's'}.`,
+          });
           break;
         }
 
@@ -1430,6 +1499,9 @@ export default function ProductivityApp({ onNavigate }) {
               pred: guardedPredictionsMap[task.id] || pred,
             })
           }
+          onClearCompleted={handleClearCompleted}
+          completedCount={completedCount}
+          onQuickAdd={handleQuickAdd}
         />
 
         {/* Giant Editorial Typography Ribbon 3 */}
@@ -1475,8 +1547,6 @@ export default function ProductivityApp({ onNavigate }) {
         {/* Section 06: Command Center (Soft Peach Notebook Assistant) */}
         <CommandBar
           onExecuteCommand={executeCommand}
-          feedback={feedback}
-          onDismissFeedback={() => setFeedback(null)}
           isListening={recognitionState === RECOGNITION_STATES.LISTENING || isListening}
           recognitionState={recognitionState}
           interimTranscript={interimTranscript}
@@ -1545,6 +1615,12 @@ export default function ProductivityApp({ onNavigate }) {
           />
         </Suspense>
       )}
+
+      {/* Global Floating Feedback Toast with Undo & Accessible Announcements */}
+      <FeedbackToast
+        feedback={feedback}
+        onDismiss={() => setFeedback(null)}
+      />
     </div>
   );
 }

@@ -77,6 +77,8 @@ export default function App() {
   }, []);
 
   const isApp = currentPath === '/app' || currentPath.startsWith('/app/');
+  const [dismissedRoutePath, setDismissedRoutePath] = useState(null);
+  const isUnknownRoute = !isApp && currentPath !== '/' && currentPath !== '' && dismissedRoutePath !== currentPath;
 
   // Dynamic route document titles and focus restoration (WCAG 2.2 2.4.2 Page Titled & 2.4.3 Focus Order)
   useEffect(() => {
@@ -94,6 +96,38 @@ export default function App() {
         Skip to main content
       </a>
       <OfflineBanner />
+      {isUnknownRoute && (
+        <aside
+          role="status"
+          aria-label="Route notice"
+          style={styles.unknownRouteBanner}
+          id="unknown-route-banner"
+        >
+          <div style={styles.unknownRouteInner}>
+            <span style={styles.unknownRouteText}>
+              ℹ️ Route <code>{currentPath}</code> was not recognized. Showing VoxPlan home.
+            </span>
+            <div style={styles.unknownRouteActions}>
+              <button
+                type="button"
+                onClick={() => navigate('/app')}
+                style={styles.unknownRouteActionBtn}
+                id="unknown-route-to-app-btn"
+              >
+                Go to Workspace (/app) →
+              </button>
+              <button
+                type="button"
+                onClick={() => setDismissedRoutePath(currentPath)}
+                style={styles.unknownRouteDismissBtn}
+                aria-label="Dismiss route notice"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        </aside>
+      )}
       <RouteErrorBoundary>
         <Suspense fallback={<RouteLoadingFallback message={isApp ? 'Loading productivity workspace...' : 'Loading VoxPlan...'} />}>
           {isApp ? (
@@ -107,3 +141,54 @@ export default function App() {
     </>
   );
 }
+
+const styles = {
+  unknownRouteBanner: {
+    backgroundColor: '#FFF4E5',
+    borderBottom: '1px solid #FFE0B2',
+    color: '#B45309',
+    padding: '10px 16px',
+    fontSize: '13px',
+    fontFamily: "var(--font-sans, 'Plus Jakarta Sans', sans-serif)",
+    position: 'sticky',
+    top: 0,
+    zIndex: 1000,
+  },
+  unknownRouteInner: {
+    maxWidth: '1120px',
+    margin: '0 auto',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    flexWrap: 'wrap',
+  },
+  unknownRouteText: {
+    fontWeight: '600',
+  },
+  unknownRouteActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  unknownRouteActionBtn: {
+    background: '#B45309',
+    color: '#FFFFFF',
+    border: 'none',
+    borderRadius: '9999px',
+    padding: '4px 12px',
+    fontSize: '12px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+  },
+  unknownRouteDismissBtn: {
+    background: 'transparent',
+    border: 'none',
+    color: '#B45309',
+    cursor: 'pointer',
+    padding: '4px 8px',
+    fontSize: '13px',
+    fontWeight: '700',
+  },
+};

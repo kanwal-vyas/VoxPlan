@@ -243,6 +243,11 @@ const styles = {
     padding: '4px 6px',
     borderRadius: '9999px',
     border: '1px solid rgba(37, 36, 42, 0.05)',
+    overflowX: 'auto',
+    maxWidth: '100%',
+    scrollbarWidth: 'none',
+    WebkitOverflowScrolling: 'touch',
+    flexShrink: 1,
   },
   navLink: {
     background: 'transparent',
@@ -254,6 +259,8 @@ const styles = {
     padding: '6px 14px',
     borderRadius: '9999px',
     transition: 'all 0.15s ease',
+    flexShrink: 0,
+    whiteSpace: 'nowrap',
   },
   navLandingLink: {
     background: 'rgba(201, 182, 255, 0.22)',
@@ -268,6 +275,8 @@ const styles = {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '3px',
+    flexShrink: 0,
+    whiteSpace: 'nowrap',
   },
   statusPill: {
     display: 'flex',

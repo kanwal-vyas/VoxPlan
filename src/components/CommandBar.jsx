@@ -3,8 +3,6 @@ import { formatTaskDueDate } from '../conversation/compoundCommandParser';
 
 export default function CommandBar({
   onExecuteCommand,
-  feedback,
-  onDismissFeedback,
   isListening = false,
   recognitionState = 'IDLE',
   interimTranscript = '',
@@ -57,7 +55,7 @@ export default function CommandBar({
       ? 'Assistant is speaking response.'
       : pendingClarification
       ? `Clarification needed: ${pendingClarification.prompt || 'Which task did you mean?'}`
-      : feedback?.message || '';
+      : '';
 
   const handleSubmit = (e) => {
     if (e && e.preventDefault) e.preventDefault();
@@ -374,32 +372,6 @@ export default function CommandBar({
               <strong>Voice Privacy:</strong> Spoken commands use your browser's native Web Speech API. Audio recognition is performed by your browser vendor (e.g. Google or Apple) and is never sent to third-party AI services or stored on VoxPlan servers.
             </span>
           </div>
-
-          {/* Feedback Toast Banner */}
-          {feedback && (
-            <div
-              role="status"
-              style={{
-                ...styles.feedbackBanner,
-                backgroundColor: feedback.type === 'success' ? '#EBF8F1' : feedback.type === 'error' ? '#FFE8E5' : feedback.type === 'warning' ? '#FFF4E5' : '#F3EEFF',
-                borderColor: feedback.type === 'success' ? '#BFE8D0' : feedback.type === 'error' ? '#FFB5A7' : feedback.type === 'warning' ? '#FFE0B2' : '#C9B6FF',
-                color: feedback.type === 'success' ? '#166534' : feedback.type === 'error' ? '#991B1B' : feedback.type === 'warning' ? '#B45309' : '#5B44BA',
-              }}
-            >
-              <span style={styles.feedbackEmoji}>
-                {feedback.type === 'success' ? '✓' : feedback.type === 'error' ? '!' : feedback.type === 'warning' ? '⚠️' : 'i'}
-              </span>
-              <span style={styles.feedbackMessage}>{feedback.message}</span>
-              <button
-                type="button"
-                onClick={onDismissFeedback}
-                style={styles.closeFeedback}
-                aria-label="Dismiss feedback"
-              >
-                ✕
-              </button>
-            </div>
-          )}
 
           {/* Schedule Proposal Review Card */}
           {activeProposal && (

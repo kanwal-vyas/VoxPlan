@@ -5190,3 +5190,89 @@ Execute an evidence-driven audit of the Stage 8.4 implementation to close verifi
 - **Gate A (Real Browser Network Disconnect)**: **UNVERIFIED** due to subagent browser automation environment lacking CDP network disconnection controls.
 - **Gate B (Docker Runtime Smoke Test)**: **UNVERIFIED** due to host system lacking Docker daemon/CLI and WSL.
 - **Readiness Classification**: Full production readiness cannot be declared solely on unit/integration passes until the repository owner runs the documented manual verification procedures on capable hardware or CI runner.
+
+---
+
+### Phase 8, Stage 8.5: Workflow Clarity & UX Polish Pass Record
+
+**Starting & Reference Commit**: `4cbbe077d6813da2437c6f77abaf57cdec3223e9`
+**Implementation Timestamp**: 2026-10-23
+**Focus**: Core user workflow predictability, feedback visibility, task deletion recovery, mobile navigation, route resilience, and zero-regression preservation.
+
+#### 1. Approved Scope Deliverables & Implementation Details
+
+1. **Global Floating Feedback Toast (`src/components/FeedbackToast.jsx`, `src/pages/ProductivityApp.jsx`, `src/App.css`)**:
+   - Fixed-position viewport overlay (`bottom: 24px; right: 24px; z-index: 10000`) with `@keyframes toastRiseIn` slide-up animation.
+   - Screen-reader accessible announcement via `role="status"` and `aria-live="polite"`.
+   - Distinct, accessible styling for feedback variants (`success`, `error`, `warning`, `info`).
+   - Single-action Undo button with accessible keyboard focus and visual prominence.
+   - Configurable auto-dismiss timers: standard actions dismiss in 5,000ms; actions offering Undo extend window to 7,000ms. Manual dismiss (✕) button available at all times.
+   - Centralized presentation: removed redundant duplicate feedback presentation and live announcements from `CommandBar.jsx` to prevent double screen-reader vocalizations.
+
+2. **Safe Task Deletion & Lossless Undo Recovery (`src/pages/ProductivityApp.jsx`, `src/components/TaskCard.jsx`)**:
+   - Deletion removes task from the active array and immediately schedules a persistent feedback toast with an `Undo` callback.
+   - Lossless state restoration: clicking `Undo` re-inserts the deleted task object at its `originalIndex` using a functional state setter (`prev => ...`), preventing overwrite of concurrent edits to other tasks during the 7-second recovery window.
+   - IndexedDB synchronization: both deletion and undo restoration invoke `saveTasks(next)` to ensure immediate persistence across page reloads.
+   - Clear disclosure: TaskCard delete button discloses `(with undo)` in tooltip while retaining canonical accessible names.
+
+3. **Clear Completed Action (`src/components/TaskList.jsx`, `src/pages/ProductivityApp.jsx`)**:
+   - Filter-aware contextual button: renders `#tasklist-clear-completed-btn` only when `activeFilter === 'completed'` and `completedCount > 0`.
+   - Accurate task count: button displays `Clear Completed (${completedCount})` and tooltip discloses exact task count.
+   - Accidental destruction guard: triggers native confirmation dialog (`window.confirm`) indicating the exact count before removal.
+   - Shared domain logic: filters out completed tasks in `ProductivityApp.jsx` and dispatches feedback `"Cleared ${count} completed task(s)"`.
+   - Command engine parity: `CONVERSATION_INTENTS.CLEAR_COMPLETED` updated to display the exact number of cleared tasks.
+
+4. **Quick-Add Navigation Affordance (`src/components/TaskList.jsx`, `src/pages/ProductivityApp.jsx`)**:
+   - Contextual shortcut: renders `#tasklist-quick-add-btn` in Section 02 task header and `#empty-state-add-task-btn` in the empty task state.
+   - Accessible navigation: `handleQuickAdd` checks `window.matchMedia('(prefers-reduced-motion: reduce)')`, scrolling smoothly for standard users and instantly for reduced-motion users to `#command-input`.
+   - Automatic keyboard focus: focuses `#command-input` upon completion of the scroll, streamlining task entry without mouse repositioning.
+
+5. **Mobile Navigation Usability (`src/components/Header.jsx`, `src/App.css`)**:
+   - Horizontal touch scrolling: nav pills styled with `overflowX: 'auto'`, `-webkit-overflow-scrolling: touch`, `maxWidth: '100%'`, and `scrollbarWidth: 'none'`.
+   - Layout stability: nav buttons styled with `flexShrink: 0` and `whiteSpace: 'nowrap'` to prevent squishing or line-wrapping on narrow mobile viewports.
+   - Toast positioning: media query adjusts `#global-feedback-toast` to `left: 12px; right: 12px; bottom: 16px` on viewports `<= 640px` with 100% width adaptation.
+
+6. **Unknown Route Fallback Notice (`src/App.jsx`)**:
+   - Detects unrecognized paths (neither `/` nor `/app`) and presents a non-misleading alert banner `#unknown-route-banner`.
+   - Clear context: explains that the URL is not recognized and provides a primary `#unknown-route-to-app-btn` button routing directly to `/app`.
+   - Dismissible & idempotent: dismiss button allows hiding without infinite re-render loops by computing `dismissedRoutePath !== currentPath`.
+
+#### 2. Scope & Invariant Verification Matrix
+
+| Invariant / Guardrail | Required State | Actual Verified State | Status |
+| :--- | :--- | :--- | :---: |
+| **Urgency Weight** | `50.0` | `50.0` | **VERIFIED** |
+| **Priority Weight** | `100.0` | `100.0` | **VERIFIED** |
+| **Unblock Weight** | `15.0` | `15.0` | **VERIFIED** |
+| **Risk Weight** | `25.0` | `25.0` | **VERIFIED** |
+| **Scheduler Immutability** | `Object.isFrozen(FACTORY_SCHEDULER_WEIGHTS) === true` | `true` | **VERIFIED** |
+| **Adaptation Locked** | `isAdaptationUnlocked === false` | `false` | **VERIFIED** |
+| **Production Applied** | `productionApplied === false` | `false` | **VERIFIED** |
+| **Phase 7.4.4B Gate** | Permanently blocked / locked | Locked (`outcome: infeasible` on empty claims) | **VERIFIED** |
+| **Local-First Privacy** | Zero cloud task sync, zero external LLMs | 100% local IndexedDB & in-memory deterministic state | **VERIFIED** |
+
+#### 3. Verification & Test Execution Results
+
+- **Full Frontend Test Suite (`npm test`)**:
+  - **1,010 / 1,010 passed** across 212 suites in 31 test files (0 failures).
+- **Dedicated Workflow Polish Regression Suite (`tests/workflow_polish.test.js`)**:
+  - **15 / 15 passed** across 8 suites (100% pass).
+- **Backend Test Suite (`pytest backend/tests/`)**:
+  - **29 / 29 passed** (0 failures).
+- **Dedicated Secret Scanner Test Suite (`tests/secret_scanner.test.js`)**:
+  - **16 / 16 passed** (0 failures).
+- **Secret Scanner Working-Tree Scan (`scripts/secretScanner.mjs`)**:
+  - **123 files clean**, 0 credentials exposed.
+- **Linter (`npm run lint` / `oxlint`)**:
+  - **0 errors**, 1 preexisting warning in `AdaptiveScheduleModal.jsx`.
+- **Production Bundle Build (`npm run build` / `vite build`)**:
+  - **Clean build in 241ms** (`dist/` generated successfully).
+- **Whitespace / Git Hygiene (`git diff --check`)**:
+  - **0 errors**.
+
+#### 4. Unresolved Release Gates Status
+
+In accordance with release honesty policy, the two release gates from Stage 8.4D remain:
+- **Gate A (Real Browser Network Disconnect)**: **UNVERIFIED** (subagent browser automation lacks CDP offline emulation; manual procedure documented in Stage 8.4D).
+- **Gate B (Docker Runtime Smoke Test)**: **UNVERIFIED** (host Windows machine lacks Docker daemon and WSL; manual procedure documented in Stage 8.4D).
+No speculative claims were made that these environmental gates passed.

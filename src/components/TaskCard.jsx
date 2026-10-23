@@ -310,7 +310,7 @@ export default function TaskCard({
               onDelete(task.id);
             }}
             style={styles.deleteBtn}
-            title={`Delete "${task.title}"`}
+            title={`Delete "${task.title}" (with undo)`}
             aria-label={`Delete task "${task.title}"`}
           >
             ✕
