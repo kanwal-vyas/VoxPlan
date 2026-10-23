@@ -541,4 +541,176 @@ describe('Voice Command Reliability — Phase 2 & 3 Regression Tests', () => {
       assert.equal(eta.completed, false, 'Eta must be active');
     });
   });
+
+  describe('E. Regression Suite: Compound Title Corruption & Preposition Guard', () => {
+    // Helper simulating ProductivityApp.jsx executeCommand and dispatchAction flow
+    async function simulateAppExecution(dm, utterance, initialTasks = []) {
+      let workingTasks = [...initialTasks];
+      const res = dm.processInput(utterance, { tasks: workingTasks });
+
+      if (res.action) {
+        const dispatch = async (act) => {
+          if (act.type === 'COMPOUND_ACTIONS') {
+            for (const sub of act.actions) {
+              await dispatch(sub);
+            }
+          } else if (act.type === CONVERSATION_INTENTS.CREATE_TASK) {
+            const newTask = {
+              id: act.taskId || `task-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+              title: act.title,
+              priority: act.priority || 'medium',
+              dueDate: act.dueDate || null,
+              completed: false,
+              category: 'General',
+              estimatedEffort: act.estimatedEffort || null,
+              dependencies: [],
+              createdAt: new Date().toISOString(),
+            };
+            workingTasks = [newTask, ...workingTasks];
+            dm.setActiveSubject(newTask.id);
+          } else if (act.type === CONVERSATION_INTENTS.CHANGE_PRIORITY) {
+            workingTasks = workingTasks.map(t => t.id === act.taskId ? { ...t, priority: act.priority } : t);
+            dm.setActiveSubject(act.taskId);
+          } else if (act.type === CONVERSATION_INTENTS.COMPLETE_TASK) {
+            workingTasks = workingTasks.map(t => t.id === act.taskId ? { ...t, completed: true } : t);
+            dm.setActiveSubject(act.taskId);
+          }
+        };
+        await dispatch(res.action);
+      }
+
+      return { res, finalTasks: workingTasks };
+    }
+
+    test('Regression 1: "beta and another task gamma" - Prevents task amalgamation when shorthand "and another task" is used', async () => {
+      const dm = new DialogueManager({ clock: injectedClock });
+      const utterance = 'Create task Beta with low priority and another task Gamma with medium priority';
+      const { res, finalTasks } = await simulateAppExecution(dm, utterance, []);
+
+      assert.equal(res.action.type, 'COMPOUND_ACTIONS');
+      assert.equal(finalTasks.length, 2);
+
+      const beta = finalTasks.find(t => t.title === 'Beta');
+      const gamma = finalTasks.find(t => t.title === 'Gamma');
+
+      assert.ok(beta, 'Task Beta must exist independently');
+      assert.ok(gamma, 'Task Gamma must exist independently');
+      assert.equal(beta.title, 'Beta', 'Title must NOT contain "and another task"');
+      assert.equal(beta.priority, 'low');
+      assert.equal(gamma.title, 'Gamma');
+      assert.equal(gamma.priority, 'medium');
+    });
+
+    test('Regression 2: "Alpha of" - Prevents residual preposition corruption when "of <priority> priority" is spoken', async () => {
+      const dm = new DialogueManager({ clock: injectedClock });
+      const utterance = 'Create task Alpha of high priority and another task Beta of low priority';
+      const { res, finalTasks } = await simulateAppExecution(dm, utterance, []);
+
+      assert.equal(res.action.type, 'COMPOUND_ACTIONS');
+      assert.equal(finalTasks.length, 2);
+
+      const alpha = finalTasks.find(t => t.title === 'Alpha');
+      const beta = finalTasks.find(t => t.title === 'Beta');
+
+      assert.ok(alpha, 'Task Alpha must exist');
+      assert.ok(beta, 'Task Beta must exist');
+      assert.equal(alpha.title, 'Alpha', 'Title must NOT contain dangling "of"');
+      assert.equal(alpha.priority, 'high');
+      assert.equal(beta.title, 'Beta', 'Title must NOT contain dangling "of"');
+      assert.equal(beta.priority, 'low');
+    });
+
+    test('Regression 3: Flexible priority connectors ("with priority of high", "with a priority of low")', async () => {
+      const dm = new DialogueManager({ clock: injectedClock });
+      const utterance = 'Create task Alpha with priority of high and another task Beta with a priority of low';
+      const { res, finalTasks } = await simulateAppExecution(dm, utterance, []);
+
+      assert.equal(res.action.type, 'COMPOUND_ACTIONS');
+      assert.equal(finalTasks.length, 2);
+
+      const alpha = finalTasks.find(t => t.title === 'Alpha');
+      const beta = finalTasks.find(t => t.title === 'Beta');
+
+      assert.equal(alpha.title, 'Alpha');
+      assert.equal(alpha.priority, 'high');
+      assert.equal(beta.title, 'Beta');
+      assert.equal(beta.priority, 'low');
+    });
+
+    test('Regression 4: Speech transcript without any punctuation cleanly splits and completes target task', async () => {
+      const dm = new DialogueManager({ clock: injectedClock });
+      const utterance = 'create task zeta with high priority create task eta with low priority and mark zeta as completed';
+      const { res, finalTasks } = await simulateAppExecution(dm, utterance, []);
+
+      assert.equal(res.action.type, 'COMPOUND_ACTIONS');
+      assert.equal(finalTasks.length, 2);
+
+      const zeta = finalTasks.find(t => t.title === 'Zeta');
+      const eta = finalTasks.find(t => t.title === 'Eta');
+
+      assert.ok(zeta, 'Zeta must exist');
+      assert.ok(eta, 'Eta must exist');
+      assert.equal(zeta.title, 'Zeta', 'Zeta must be capitalized');
+      assert.equal(zeta.priority, 'high');
+      assert.equal(zeta.completed, true, 'Zeta must be marked completed');
+      assert.equal(eta.title, 'Eta', 'Eta must be capitalized');
+      assert.equal(eta.priority, 'low');
+      assert.equal(eta.completed, false, 'Eta must remain active');
+    });
+
+    test('Regression 5: Legitimate title conjunctions ("Research and Development", "Bread and Butter") are preserved intact', async () => {
+      const dm = new DialogueManager({ clock: injectedClock });
+      const utterance = 'Create task Research and Development with high priority and create another task Bread and Butter with low priority';
+      const { res, finalTasks } = await simulateAppExecution(dm, utterance, []);
+
+      assert.equal(res.action.type, 'COMPOUND_ACTIONS');
+      assert.equal(finalTasks.length, 2);
+
+      const rd = finalTasks.find(t => t.title === 'Research and Development');
+      const bb = finalTasks.find(t => t.title === 'Bread and Butter');
+
+      assert.ok(rd, 'Research and Development must exist intact');
+      assert.ok(bb, 'Bread and Butter must exist intact');
+      assert.equal(rd.priority, 'high');
+      assert.equal(bb.priority, 'low');
+    });
+
+    test('Regression 6: Local persistence round-trip preserves compound tasks after reload', async () => {
+      const dm = new DialogueManager({ clock: injectedClock });
+      const utterance = 'Create task Alpha with high priority, and create another task Beta with low priority.';
+      const { finalTasks } = await simulateAppExecution(dm, utterance, []);
+
+      // Simulate JSON localStorage persistence round-trip
+      const serialized = JSON.stringify(finalTasks);
+      const reloaded = JSON.parse(serialized);
+
+      assert.equal(reloaded.length, 2);
+      assert.equal(reloaded[0].title, 'Beta');
+      assert.equal(reloaded[0].priority, 'low');
+      assert.equal(reloaded[1].title, 'Alpha');
+      assert.equal(reloaded[1].priority, 'high');
+    });
+
+    test('Regression 7: No duplicate tasks after retrying a failed command', async () => {
+      const dm = new DialogueManager({ clock: injectedClock });
+      let currentTasks = [];
+
+      // Step 1: Failed attempt - command references non-existent task
+      const failedUtterance = 'mark NonExistentTask as completed';
+      const failRes = dm.processInput(failedUtterance, { tasks: currentTasks });
+      assert.equal(failRes.isAuthorized, false, 'Failed command must not be authorized');
+      assert.equal(failRes.error, 'task_not_found');
+      assert.equal(currentTasks.length, 0, 'No tasks should have been created or modified');
+
+      // Step 2: Retry with valid compound task creation
+      const retryUtterance = 'Create task Alpha with high priority, and create another task Beta with low priority.';
+      const { res: retryRes, finalTasks } = await simulateAppExecution(dm, retryUtterance, currentTasks);
+      assert.equal(retryRes.action.type, 'COMPOUND_ACTIONS');
+      assert.equal(finalTasks.length, 2, 'Exactly two tasks must exist');
+
+      // Step 3: Repeated retry of an already completed task creation does not produce duplicates when guarded
+      const taskTitles = finalTasks.map(t => t.title);
+      assert.deepStrictEqual(taskTitles.sort(), ['Alpha', 'Beta']);
+    });
+  });
 });

@@ -5523,3 +5523,92 @@ Comprehensive tracing from microphone audio capture through speech recognition, 
 
 - **Hardware Note**: In this headless and automated agent execution environment, real human acoustic larynx input via an OS hardware microphone driver cannot be performed without a physical human speaker.
 - **Tested & Verified**: Real browser UI execution, Web Speech API controller lifecycle, continuous recognition event handling, and multi-clause sequential task mutations have been empirically validated through the live browser UI and automated deterministic mock recognition streams. Physical acoustic microphone testing in a real human environment remains the final user-facing acceptance step.
+
+---
+
+### Phase 8, Stage 8.4I: Compound Voice Command Title Corruption & Field Integrity Hardening Record
+
+**Verification Date**: October 23, 2026
+**Commit Target**: `fix(voice): preserve task fields in compound commands`
+
+#### 1. Failure Analysis & Root Cause Findings
+
+Manual user testing following Stage 8.4H identified corrupted task titles and mismatched priorities in the task cards:
+- Task titles resembled `"beta and another task gamma"` and `"Alpha of"`.
+- Priority values did not reliably correspond to intended commands (e.g. falling back to `medium`).
+
+Tracing across the parsing and execution boundaries revealed three specific root causes:
+
+1. **Preposition & Connector Leakage in Title Extraction (`compoundCommandParser.js`)**:
+   - Spoken phrases like `"Alpha of high priority"` or `"Alpha with priority of high"` only stripped the exact tokens `high priority`, leaving dangling prepositions at the end of the clean title (`"Alpha of"`).
+   - `extractPriority` did not account for leading prepositions (`of high priority`) or flexible connector phrases (`with priority of high`, `with a priority of low`), causing the priority extractor to miss the specified priority and fall back to `medium`.
+
+2. **Shorthand Conjunction Clause Splitting Defect (`compoundCommandParser.js`, `dialogueManager.js`)**:
+   - `splitCompoundCommands` required action verbs (`create|add`) immediately before `another task`. When users dictated shorthand conjunctions like `"Create task Beta with low priority and another task Gamma with medium priority"`, the clause failed to split, causing both clauses to amalgamate into a single task with corrupted title `"Beta and another task Gamma"`.
+   - In unpunctuated continuous speech transcripts (common in Web Speech API), action verbs immediately following a priority phrase (e.g. `mark Zeta as completed`, `another task Beta`) were not captured by lookahead boundaries, leaving subsequent operations joined to prior task titles.
+   - `DialogueManager._handleIdleState` lacked detection for `another task` as a standalone creation intent.
+
+3. **Case Standardization for Single Token Identifiers**:
+   - Transcripts returning lowercase names (`zeta`, `eta`, `alpha`, `beta`) were stored in lowercase, causing divergence from user expectation and test fixtures requiring canonical capitalized task names.
+
+#### 2. Architectural Corrections Implemented
+
+1. **Comprehensive Priority & Preposition Normalization (`src/conversation/compoundCommandParser.js`)**:
+   - Expanded `extractPriority` to match `(?:with\s+(?:a\s+)?|of\s+|at\s+|as\s+)?(?:high|medium|low)\s+priority` and `(?:with\s+(?:a\s+)?)?priority\s+(?:is|to|set to|of|as)?\s+(?:high|medium|low)`.
+   - Updated priority phrase stripping to remove leading prepositions (`of`, `with`, `at`, `as`).
+   - Added trailing preposition and conjunction guard: `.replace(/\s+(?:of|for|with|at|as|to|and|in|on|by)\s*$/i, '')`.
+   - Standardized single Greek letter tokens (`Alpha`, `Beta`, `Gamma`, `Delta`, `Zeta`, `Eta`, etc.) to canonical capitalization while preserving user-entered case for natural language phrases.
+
+2. **Broadened Compound Delimiter Regex (`src/conversation/compoundCommandParser.js`)**:
+   - Added splitting on shorthand `(?:,\s*and\s+|\s+and\s+|,\s*)(?=another\s+(?:task|called|named))`.
+   - Added unpunctuated boundary lookahead after priority phrases to recognize all subsequent mutating operations: `(?<=(?:high|medium|low|urgent|critical|minor|trivial)\s+priority\s+)(?=(?:create|add|make|schedule|another|set|change|update|mark|complete|uncomplete|reopen|delete|remove|reschedule|rename|assign)\b)`.
+
+3. **Dialogue Manager Shorthand Creation Intent (`src/conversation/dialogueManager.js`)**:
+   - Added `/^(?:another\s+task|another\s+called|another\s+named|another)\b/i` to `isCreateIntent`.
+   - Added `(?:to|as|of)?` preposition flexibility to priority change regexes.
+
+4. **Regression Test Suite Expansion (`tests/voice_command_reliability.test.js`)**:
+   - Added 7 dedicated regression tests in `describe('E. Regression Suite: Compound Title Corruption & Preposition Guard')`:
+     - Regression 1: Shorthand `and another task` splitting prevention of `"beta and another task gamma"`.
+     - Regression 2: Preposition guard preventing `"Alpha of"`.
+     - Regression 3: Flexible priority connectors (`with priority of high`, `with a priority of low`).
+     - Regression 4: Unpunctuated continuous transcript splitting and correct completion state (`Zeta` completed, `Eta` active).
+     - Regression 5: Preservation of legitimate title conjunctions (`Research and Development`, `Bread and Butter`).
+     - Regression 6: Local persistence round-trip verification across JSON serialization and reload.
+     - Regression 7: Idempotency and absence of duplicate tasks after retrying failed commands.
+
+#### 3. Authoritative Verification Evidence
+
+- **Frontend Node Test Suite**: `npm test`
+  - **Result**: `1044 passed, 0 failed across 218 suites` (baseline: 1028 passed).
+- **Dedicated Voice Regression Suite**: `node --test tests/voice_command_reliability.test.js`
+  - **Result**: `33 passed, 0 failed across 6 suites`.
+- **Backend Pytest Suite**: `python -m pytest`
+  - **Result**: `29 passed, 0 failed in 4.12s`.
+- **Production Build**: `npm run build`
+  - **Result**: `vite build` completed cleanly in 248ms with zero errors.
+- **Code Quality & Linter**: `npm run lint` (`oxlint`)
+  - **Result**: 0 errors across 99 files.
+- **Dedicated Secret Scanner**: `node scripts/secretScanner.mjs`
+  - **Result**: Clean scan (124 files scanned, 0 secrets found).
+- **Real Browser UI Live Acceptance**:
+  - Executed on live running application at `http://127.0.0.1:8000/app` (recording: `compound_voice_ui_acceptance`).
+  - Executed Utterance 1: `"Create task Alpha with high priority, and create another task Beta with low priority."`
+    - Verified task card `Alpha`: priority `high`, active.
+    - Verified task card `Beta`: priority `low`, active.
+  - Executed Utterance 2: `"Create task Zeta with high priority, create task Eta with low priority, and mark Zeta as completed."`
+    - Verified task card `Zeta`: priority `high`, status `Completed ✓`.
+    - Verified task card `Eta`: priority `low`, active (`completed: false`).
+  - Verified stored `localStorage` objects reflect exact titles, priorities, and completion flags.
+
+#### 4. Scope & Protected Invariant Preservation
+
+- **Factory Scheduler Weights**:
+  - `urgencyWeight`: **50.0**
+  - `priorityWeight`: **100.0**
+  - `unblockWeight`: **15.0**
+  - `riskWeight`: **25.0**
+- **Scheduler Immutability**: `Object.isFrozen(FACTORY_SCHEDULER_WEIGHTS) === true`.
+- **Adaptation Flags**: `isAdaptationUnlocked === false`, `productionApplied === false`.
+- **Phase 7.4.4B Activation Gate**: Permanently locked (`outcome: infeasible` on empty caller claims).
+- **Local-First Privacy**: 100% deterministic local browser IndexedDB and localStorage task mutations; zero cloud LLMs, zero cloud telemetry transmission.

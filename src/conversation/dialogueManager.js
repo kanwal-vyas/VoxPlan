@@ -2706,11 +2706,11 @@ export class DialogueManager {
 
     // 14. Priority Change Command
     // e.g. "Change XYZ's priority to high", "Set the priority of task DEF to low", "Make it high priority", "Set DEF's priority to low"
-    const prioOfMatch = text.match(/^(?:change|set|update)\s+(?:the\s+)?priority\s+(?:of|for)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+(?:to|as)?\s+(.+)$/i);
-    const prioPossMatch = text.match(/^(?:change|set|update)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)(?:'s|’s)\s+priority\s+(?:to|as)?\s+(.+)$/i);
-    const prioDirectMatch = text.match(/^(?:change|set|update)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+priority\s+(?:to|as)?\s+(.+)$/i);
+    const prioOfMatch = text.match(/^(?:change|set|update)\s+(?:the\s+)?priority\s+(?:of|for)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+(?:to|as|of)?\s+(.+)$/i);
+    const prioPossMatch = text.match(/^(?:change|set|update)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)(?:'s|’s)\s+priority\s+(?:to|as|of)?\s+(.+)$/i);
+    const prioDirectMatch = text.match(/^(?:change|set|update)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+priority\s+(?:to|as|of)?\s+(.+)$/i);
     const prioMakeMatch = text.match(/^(?:make)\s+(?:the\s+|my\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+(?:to\s+|as\s+)?(high|medium|low|urgent|critical|minor|trivial)(?:\s+priority)?$/i);
-    const prioPronounMatch = text.match(/^(?:make\s+(?:it|this|that|this\s+task|that\s+task)|set\s+(?:it|that|this)\s+(?:to|as)?|set\s+priority\s+to|change\s+to|change\s+priority\s+to)\s+(.+)$/i);
+    const prioPronounMatch = text.match(/^(?:make\s+(?:it|this|that|this\s+task|that\s+task)|set\s+(?:it|that|this)\s+(?:to|as|of)?|set\s+priority\s+(?:to|as|of)|change\s+(?:to|as|of)|change\s+priority\s+(?:to|as|of))\s+(.+)$/i);
 
     let priorityTarget = null;
     let priorityValue = null;
@@ -2898,6 +2898,7 @@ export class DialogueManager {
 
     // 20. Task Command: Create / Add task (handles simple and compound requests)
     const isCreateIntent = /^(?:create|add|new|make|schedule)\b/i.test(text) ||
+      /^(?:another\s+task|another\s+called|another\s+named|another)\b/i.test(text) ||
       /^(?:remind\s+me\s+to|i\s+need\s+to|i\s+have\s+to|i\s+must|put|place)\b/i.test(text) ||
       /\badd\s+(?:it\s+)?to\s+(?:my\s+)?tasks\b/i.test(text);
     if (isCreateIntent) {

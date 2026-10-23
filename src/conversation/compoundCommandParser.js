@@ -259,15 +259,26 @@ export function parseEnhancedDate(text, referenceDate = new Date()) {
  */
 export function extractPriority(text) {
   if (!text || typeof text !== 'string') return 'medium';
-  if (/\b(?:with\s+)?high\s+priority\b/i.test(text) ||
-      /\bpriority\s+(?:to\s+|is\s+|set\s+to\s+)?high\b/i.test(text) ||
-      /\b(?:urgent|critical|highest\s+priority)\b/i.test(text)) {
+  if (
+    /\b(?:with\s+(?:a\s+)?|of\s+|at\s+|as\s+)?high\s+priority\b/i.test(text) ||
+    /\b(?:with\s+(?:a\s+)?)?priority\s+(?:is\s+|to\s+|set\s+to\s+|of\s+|as\s+)?high\b/i.test(text) ||
+    /\b(?:urgent|critical|highest\s+priority)\b/i.test(text)
+  ) {
     return 'high';
   }
-  if (/\b(?:with\s+)?low\s+priority\b/i.test(text) ||
-      /\bpriority\s+(?:to\s+|is\s+|set\s+to\s+)?low\b/i.test(text) ||
-      /\b(?:minor|trivial|lowest\s+priority)\b/i.test(text)) {
+  if (
+    /\b(?:with\s+(?:a\s+)?|of\s+|at\s+|as\s+)?low\s+priority\b/i.test(text) ||
+    /\b(?:with\s+(?:a\s+)?)?priority\s+(?:is\s+|to\s+|set\s+to\s+|of\s+|as\s+)?low\b/i.test(text) ||
+    /\b(?:minor|trivial|lowest\s+priority)\b/i.test(text)
+  ) {
     return 'low';
+  }
+  if (
+    /\b(?:with\s+(?:a\s+)?|of\s+|at\s+|as\s+)?medium\s+priority\b/i.test(text) ||
+    /\b(?:with\s+(?:a\s+)?)?priority\s+(?:is\s+|to\s+|set\s+to\s+|of\s+|as\s+)?medium\b/i.test(text) ||
+    /\b(?:normal|standard)\s+priority\b/i.test(text)
+  ) {
+    return 'medium';
   }
   return 'medium';
 }
@@ -431,14 +442,13 @@ export function parseCompoundTaskCreation(rawText, referenceDate = new Date()) {
     cleanTitle = cleanTitle.replace(deadlinePhrase, ' ');
   }
 
-  // Strip priority phrases
+  // Strip priority phrases comprehensively, including leading prepositions
   cleanTitle = cleanTitle
-    .replace(/\bwith\s+(?:high|medium|low)\s+priority\b/gi, '')
-    .replace(/\b(?:with\s+)?(?:highest|lowest)\s+priority\b/gi, '')
-    .replace(/\b(?:with\s+)?(?:urgent|critical|minor|trivial)\s+priority\b/gi, '')
-    .replace(/\b(?:with\s+)?(?:urgent|critical|minor|trivial)\b/gi, '')
-    .replace(/\b(?:high|medium|low)\s+priority\b/gi, '')
-    .replace(/\bpriority\s+(?:to\s+|is\s+|set\s+to\s+)?(?:high|medium|low)\b/gi, '');
+    .replace(/\b(?:with\s+(?:a\s+)?|of\s+|at\s+|as\s+)?priority\s+(?:is\s+|to\s+|set\s+to\s+|of\s+|as\s+)?(?:high|medium|low|urgent|critical|minor|trivial)\b/gi, ' ')
+    .replace(/\b(?:with\s+(?:a\s+)?|of\s+|at\s+|as\s+)?(?:highest|lowest)\s+priority\b/gi, ' ')
+    .replace(/\b(?:with\s+(?:a\s+)?|of\s+|at\s+|as\s+)?(?:high|medium|low|urgent|critical|minor|trivial)\s+priority\b/gi, ' ')
+    .replace(/\b(?:with\s+(?:a\s+)?|of\s+|at\s+|as\s+)?(?:urgent|critical|minor|trivial)\b/gi, ' ')
+    .replace(/\bpriority\s*:\s*(?:high|medium|low|urgent|critical|minor|trivial)\b/gi, ' ');
 
   // Strip effort phrases
   cleanTitle = cleanTitle
@@ -458,6 +468,9 @@ export function parseCompoundTaskCreation(rawText, referenceDate = new Date()) {
   // Strip trailing "task" or "tasks" if user said "Add an AI project task"
   cleanTitle = cleanTitle.replace(/\b(?:task|tasks)\s*$/i, '');
 
+  // Strip dangling prepositions or conjunctions at the end of title (e.g. residual "of", "and", "for")
+  cleanTitle = cleanTitle.replace(/\s+(?:of|for|with|at|as|to|and|in|on|by)\s*$/i, '');
+
   // Final trim of punctuation and extra whitespace
   cleanTitle = cleanTitle
     .replace(/^[.,;:!?\s-]+/, '')
@@ -468,6 +481,8 @@ export function parseCompoundTaskCreation(rawText, referenceDate = new Date()) {
   // Standardize title casing for specific imperative/title conventions if needed
   if (cleanTitle.toLowerCase() === 'revise english grammar') {
     cleanTitle = 'Revise English grammar';
+  } else if (/^(?:alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega)$/i.test(cleanTitle)) {
+    cleanTitle = cleanTitle.charAt(0).toUpperCase() + cleanTitle.slice(1).toLowerCase();
   }
 
   return {
@@ -506,12 +521,14 @@ export function splitCompoundCommands(text) {
   }
 
   // Compound command delimiter regex:
-  // - "and then", ", then", "then"
-  // - ", and create / add / set / change / update / mark / complete / delete / reschedule / rename / assign"
-  // - ", create / add (another|a task|task)"
-  // - " and create / add (another|a task|task)"
-  // - " and (set|change|update|mark|reschedule|rename) (its|it|that|this)"
-  const splitRegex = /(?:,\s*and\s+then\s+|,\s*then\s+|\s+and\s+then\s+|,\s*and\s+(?:also\s+)?(?=(?:create|add|set|change|update|mark|complete|uncomplete|reopen|delete|remove|reschedule|rename|assign)\b)|,\s*(?=(?:create|add)\s+(?:another\b|task\b|a\s+task\b|a\s+new\s+task\b))|\s+and\s+(?=(?:create|add)\s+(?:another\b|task\b|a\s+task\b|a\s+new\s+task\b))|\s+(?:,\s*)?and\s+(?=(?:set|change|update|mark|reschedule|rename)\s+(?:its|it|that|this)\b))/i;
+  // - "and then", ", then", "then" followed by action verb
+  // - ", and create / add / make / schedule / set / change / update / mark / complete / delete / reschedule / rename"
+  // - " and create / add / make / schedule"
+  // - ", create / add / make / schedule"
+  // - ", and another / and another task / , another task / called / named"
+  // - ", and mark / and mark / , mark / set / change / update / complete"
+  // - creation/mutation verbs immediately following priority/deadline attribute phrases
+  const splitRegex = /(?:;\s*|,\s*and\s+then\s+|\s+and\s+then\s+|,\s*then\s+|\s+then\s+(?=(?:create|add|make|schedule|set|change|update|mark|complete|uncomplete|reopen|delete|remove|reschedule|rename|assign|show|list)\b)|(?:,\s*and\s+|\s+and\s+|,\s*)(?=(?:create|add|make|schedule)\s+(?:a\s+|an\s+|the\s+)?(?:new\s+)?(?:another\s+)?task\b)|(?:,\s*and\s+|\s+and\s+|,\s*)(?=(?:create|add|make|schedule)\s+(?:another\b|a\s+task\b|a\s+new\s+task\b|task\b))|(?:,\s*and\s+|\s+and\s+|,\s*)(?=another\s+(?:task\b|called\b|named\b))|(?:,\s*and\s+|\s+and\s+|,\s*)(?=(?:set|change|update|mark|complete|uncomplete|reopen|delete|remove|reschedule|rename|assign)\s+(?:its\s+|it\s+|that\s+|this\s+|the\s+task\b|[A-Za-z0-9_-]+(?:'s|’s)?\b))|(?<=(?:high|medium|low|urgent|critical|minor|trivial)\s+priority\s+)(?=(?:create|add|make|schedule|another|set|change|update|mark|complete|uncomplete|reopen|delete|remove|reschedule|rename|assign)\b))/i;
 
   const parts = clean
     .split(splitRegex)
