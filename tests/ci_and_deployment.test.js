@@ -14,6 +14,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
 import { FACTORY_SCHEDULER_WEIGHTS } from '../src/scheduler/adaptiveScheduler.js';
 
 const rootDir = process.cwd();
@@ -102,6 +103,9 @@ describe('Phase 8, Stage 8.4: CI Pipeline, Reproducible Builds & Deployment Hard
     it('2.4 Dedicated secret scanner executes cleanly with zero violations', () => {
       const scannerPath = path.join(rootDir, 'scripts', 'secretScanner.mjs');
       assert.strictEqual(fs.existsSync(scannerPath), true, 'secretScanner.mjs must exist');
+
+      const output = execSync('node scripts/secretScanner.mjs', { cwd: rootDir, encoding: 'utf-8' });
+      assert.match(output, /No configured secret patterns matched/);
     });
   });
 

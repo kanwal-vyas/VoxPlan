@@ -5089,3 +5089,53 @@ Execute an evidence-driven audit of the Stage 8.4 implementation to close verifi
 
 #### 4. Release Decision
 **READY FOR NEXT RELEASE REVIEW** (Gate A and Gate D verified PASS; Gate B browser-level offline network disconnection and Gate C runtime Docker container build documented as UNVERIFIED due to local environment constraints).
+
+---
+
+### Phase 8, Stage 8.4C: Adversarial Audit & Hardening of the Secret Scanner
+
+**Commit Under Evaluation**: `f6a1ef6ebf4e1be8fa074351f9b052bdbf334359`
+**Execution Timestamp**: 2026-10-23
+
+#### 1. Adversarial Audit Findings & Remediations
+
+| Vulnerability / Risk | Severity | Original Behavior | Hardened Remediation in Stage 8.4C |
+| :--- | :---: | :--- | :--- |
+| **Incomplete .env Detection** | High | Only checked 4 hardcoded filenames in root dir (`.env`, `.env.local`, `.env.production`, `.env.staging`). | Implemented recursive search `findEnvironmentFiles` checking any directory depth for `.env`, `.env.*`, `*.env`. Preserves documented `.env.example` template exemption. |
+| **Broad Substring Path Exemptions** | High | Used `norm.includes(ex)` substring matching, inadvertently exempting ordinary paths like `src/utils/distance.js` or `components/bad_example.js`. | Replaced with strict path-boundary matching: exact files (`.env.example`, `package-lock.json`, scanner/test paths) and directory boundaries (`norm.startsWith(prefix)` or `norm.includes('/' + prefix)`). |
+| **Whole-Line Suppression Keyword Bypasses** | Critical | Skipped any line containing words like `placeholder`, `example`, `EXEMPT`, or `SECRET_PATTERNS`. | Removed whole-line keyword suppression. Real credentials on lines with comments or explanatory words are strictly flagged. Narrowed exceptions solely to dummy test passwords in test files. |
+| **Credential Value Leakage in Logs** | High | Printed up to 80 characters of the matching line to stderr/CI logs (`Snippet: ${line.trim().slice(0, 80)}...`). | Redacted completely. Scanner outputs only the pattern name, relative file path, and line number without leaking credential values. |
+| **Incomplete File Coverage & False Confidence Fallback** | Critical | Silently fell back to 5 files on git failure and reported a normal zero-violation pass. Checked only tracked files. | Added untracked working-tree file discovery (`git ls-files --others --exclude-standard`). If git is unavailable, runs comprehensive directory walk of all non-exempt workspace files and logs an explicit fallback notice. |
+| **Pathological Runtime / ReDoS Protection** | Medium | Checked 7 regular expressions across all lines indiscriminately. | Added fast trigger pre-check `lineMightContainSecret` to short-circuit benign text, skipped binary files via null-byte buffer inspection, and skipped oversized files (> 2 MB) with warning. |
+
+#### 2. Dedicated Adversarial Regression Test Suite
+- **File**: `tests/secret_scanner.test.js` (**16 / 16 passing**, 0 failures):
+  1. Private-key header detection (`-----BEGIN RSA PRIVATE KEY-----`).
+  2. Credential-like tokens (AWS `AKIA*`, GitHub `ghp_*`, Slack `xox*`, OpenAI `sk-*`).
+  3. Hardcoded password/key assignments (`api_key = "..."`).
+  4. Harmless configuration placeholders pass cleanly.
+  5. `.env.example` template exemption.
+  6. Nested `.env` file detection at arbitrary directory depths.
+  7. Credentials on lines containing "example" are still detected.
+  8. Credentials in paths containing "placeholder" are still detected.
+  9. Normal source paths not exempt because of substring collisions (e.g. `distance.js`).
+  10. Working-tree modifications (staged/unstaged) scanned accurately.
+  11. Untracked suspicious files scanned according to policy.
+  12. Git command failure triggers directory walk fallback without false confidence.
+  13. Unreadable files generate operational errors without silent clean passes.
+  14. Stderr/CI output strictly redacts credential values.
+  15. Large inputs (2,500 lines) complete in milliseconds without pathological runtime.
+  16. Clean repositories report accurate file counts and exclusions.
+
+#### 3. Scope & Working-Tree vs. History Scanning Limitation
+- **Working-Tree Scanner**: Scans current repository working tree, tracked files, and untracked non-ignored files.
+- **Git-History Scanning Limitation**: The working-tree scanner does not inspect historical, deleted, or orphaned commits. Historical secret auditing requires specialized external tooling (such as Gitleaks or TruffleHog) run against the full git commit log.
+- **Passing Scan Guarantee**: A clean scan proves that no configured secret patterns matched the examined files; it does not constitute an absolute guarantee that no bespoke or encrypted secrets exist.
+
+#### 4. Updated Test Metrics
+- **Frontend Test Suite**: **995 / 995 passing** across 204 suites in 30 test files (`npm test`), 0 failures.
+- **Backend Test Suite**: **29 / 29 passing** across 2 test files (`pytest backend/tests/`), 0 failures.
+- **Core Release Regressions**: **155 / 155 passing** across 38 suites.
+- **Linter**: **0 errors**, 1 warning (`oxlint`).
+- **Formatting**: **0 errors** (`git diff --check`).
+- **Dependency Audits**: **0 vulnerabilities** (`npm audit --omit=dev` and `pip-audit`).
