@@ -5333,4 +5333,51 @@ No speculative claims were made that these environmental gates passed.
   - **Job URL**: [https://github.com/kanwal-vyas/VoxPlan/actions/runs/39956547291/job/120423959749](https://github.com/kanwal-vyas/VoxPlan/actions/runs/39956547291/job/120423959749)
   - **Execution Window**: Started `2026-10-23T12:52:26Z` / Completed `2026-10-23T12:53:08Z` (Duration: 42s).
   - **Result**: `success` (All steps completed cleanly: checkout, `docker build -t voxplan:ci-smoke .`, `docker run`, container health status transition to `healthy`, host HTTP `curl -sS -f http://127.0.0.1:8000/health` verified with JSON contract `{"status": "ok", "service": "voxplan-ml"}`, SPA `/app` verified, diagnostics clean, unconditional container cleanup passed).
-- **Remaining Release Gate**: Gate A (Real Browser Network Disconnect) remains **UNVERIFIED** (documented manual procedure). Gate B (Docker Runtime Smoke Test) is now **PASSED**.
+- **Release Gate Transition**: Gate B (Docker Runtime Smoke Test) is now **PASSED**. Gate A manual verification was subsequently executed by the repository owner (recorded in Stage 8.4F below).
+
+---
+
+### Phase 8, Stage 8.4F: Offline Browser Release Gate Manual Closure Record
+
+**Starting & Reference Commit**: `bfe3a76bd9235ec778e98a653cf5dd37aec43ac6`
+**Verification Date**: October 23, 2026
+**Verification Modality**: Manual repository-owner verification in real Chromium/Chrome browser under explicit DevTools network disconnection.
+
+#### 1. Repository-Owner Verified Evidence
+
+As documented in the Stage 8.4D manual verification procedure, the repository owner executed physical offline testing on `http://localhost:8000/app` and confirmed the following empirical findings:
+1. **Network Disconnection**: Chrome DevTools (F12) Network tab throttling was set to **"Offline"**, severing all network access to the server.
+2. **App Shell Cache Retrieval**: The `/app` application shell rendered and hydrated cleanly from the Service Worker cache (`voxplan-app-shell-v1` and `voxplan-static-v1`).
+3. **Offline State Notice**: The application correctly detected the offline state and rendered the accessible `#offline-banner` notice.
+4. **Offline Task Operations**: Core local-first task operations (creating, editing, and updating tasks) functioned seamlessly while disconnected from the network.
+5. **Persistence Across Disconnected Reload**: A disposable test task was created while offline; upon hard reload of `/app` with DevTools network remaining strictly **"Offline"**, the task remained intact and persisted via local IndexedDB storage.
+
+#### 2. Verification Scoping & Documented Boundaries
+
+In strict compliance with release honesty constraints:
+- **Scope Verified**: Gate A is marked **PASSED** specifically for the core local-first offline workflow: Service Worker shell retrieval, offline notification display, local task mutations, and IndexedDB persistence across offline reloads.
+- **Explicit Non-Claims**:
+  - Does *not* claim that every auxiliary application feature operates offline (features requiring backend Python computation, such as ML model training and delay risk inference, degrade gracefully with clear offline notices as designed).
+  - Does *not* claim that OS screen-reader audio output was physically recorded.
+  - Does *not* claim that all pathological Service Worker failure modes (e.g. storage quota exhaustion, partial browser cache eviction) were exercised.
+
+#### 3. Consolidated Release Gate Status
+
+With the completion of Stages 8.4E and 8.4F, both previously outstanding release gates are now empirically verified and closed:
+
+| Gate | Scope | Status | Authoritative Verification Evidence |
+| :--- | :--- | :---: | :--- |
+| **Gate A** | Real Browser Offline Disconnect & Reload | **PASSED** (Core Workflow) | **Manual Owner Verification**: Chrome DevTools Network set to "Offline", `/app` shell rendered, offline notice displayed, local task operations succeeded, disposable task persisted across offline reload (October 23, 2026). |
+| **Gate B** | Docker Image Build & Runtime Smoke Test | **PASSED** | **GitHub Actions CI Execution**: Ubuntu runner built real Dockerfile, container transitioned to `healthy`, host `/health` returned HTTP 200 with contract `{"status": "ok", "service": "voxplan-ml"}`, SPA `/app` verified, unconditional cleanup succeeded ([Job 120423959749](https://github.com/kanwal-vyas/VoxPlan/actions/runs/39956547291/job/120423959749)). |
+
+#### 4. Scope & Protected Invariant Preservation
+
+- **Factory Scheduler Weights**:
+  - `urgencyWeight`: **50.0**
+  - `priorityWeight`: **100.0**
+  - `unblockWeight`: **15.0**
+  - `riskWeight`: **25.0**
+- **Scheduler Immutability**: `Object.isFrozen(FACTORY_SCHEDULER_WEIGHTS) === true`.
+- **Adaptation Flags**: `isAdaptationUnlocked === false`, `productionApplied === false`.
+- **Phase 7.4.4B Activation Gate**: Permanently locked (`outcome: infeasible` on empty caller claims).
+- **Local-First Privacy**: 100% deterministic local browser IndexedDB storage; zero cloud LLMs, zero cloud telemetry transmission.
