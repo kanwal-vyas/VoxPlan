@@ -5612,3 +5612,84 @@ Tracing across the parsing and execution boundaries revealed three specific root
 - **Adaptation Flags**: `isAdaptationUnlocked === false`, `productionApplied === false`.
 - **Phase 7.4.4B Activation Gate**: Permanently locked (`outcome: infeasible` on empty caller claims).
 - **Local-First Privacy**: 100% deterministic local browser IndexedDB and localStorage task mutations; zero cloud LLMs, zero cloud telemetry transmission.
+---
+
+### Phase 8, Stage 8.4J: Prevention of Intermittent Compound Command Voice Corruption Record
+
+#### 1. Empirical Failure Investigation & Divergence Boundary
+
+Real microphone testing surfaced an intermittent acceptance failure where compound utterances resulted in malformed task titles:
+1. **Outcome 1**: Utterance transcribed with phonetic/grammar variances produced a malformed task with the title `Alpha in another task beta and marked task Alpha is complete`.
+2. **Outcome 2**: In successful runs, `Beta` was created with `low` priority and `Alpha` was marked completed.
+
+##### Tracing the Divergence Boundary Across Stages:
+1. **Spoken Utterance**: `"Create task Alpha in another task beta and marked task Alpha is complete"` or `"Create task Beta with low priority, and mark Alpha as completed."`
+2. **Web Speech API Variations**: Speech recognition engines (Chrome Web Speech API) decode natural continuous speech with phonetic shifts: `"and another"` -> `"in another"`, `"an another"`; `"mark"` -> `"marked"`; `"as complete"` -> `"is complete"`.
+3. **Accumulated Transcript**: The accumulated transcript was intact, but non-canonical phonetic tokens bypassed previous delimiter regexes.
+4. **Boundary Failure 1 (Clause Splitting in `splitCompoundCommands`)**:
+   - `splitRegex` expected `, and` / `and` and present-tense verbs (`mark`, `complete`), completely missing `"in another task"` and `"marked task Alpha is complete"`.
+   - Result: `splitCompoundCommands` returned `[ 'Create task Alpha in another task beta and marked task Alpha is complete' ]` as a single unsplit clause.
+5. **Boundary Failure 2 (Missing Title Guard in `parseCompoundTaskCreation`)**:
+   - Because the utterance started with `Create task `, `_handleIdleState` routed it to `_handleCreateTaskIntent`.
+   - `parseCompoundTaskCreation` stripped `Create task ` and absorbed the entire remainder of the string into `cleanTitle`, creating a task with the embedded command text.
+6. **Boundary Failure 3 (Action-Intent Parser Rigidity)**:
+   - `markCompletedMatch` in `DialogueManager` only recognized `^mark` and `as completed|complete`, failing on `marked` and `is complete`.
+
+#### 2. Architectural Corrections Implemented
+
+1. **Embedded Command Title Guard (`src/conversation/compoundCommandParser.js`)**:
+   - Added `containsEmbeddedCommand` regex to detect operation keywords (`another task`, `marked task`, `is complete`, etc.) inside `cleanTitle`.
+   - When detected, returns `{ title: null, isAmbiguousCompound: true, ... }` to prevent command syntax from being absorbed into a task card title.
+
+2. **Compound Delimiter Broadening (`src/conversation/compoundCommandParser.js`)**:
+   - Broadened `splitRegex` to match connector variations: `(?:s*,s*(?:and|then|in|an|also|plus)?s*|s+(?:and|then|in|an|also|plus)s+)`.
+   - Added past-tense and auxiliary verb forms: `mark|marked|complete|completed|uncomplete|reopen|delete|remove|reschedule|rename|assign`.
+   - Supports shorthand `another task`, `another called`, `another named`.
+
+3. **Ambiguity Clarification in Dialogue Manager (`src/conversation/dialogueManager.js`)**:
+   - In `_handleCreateTaskIntent`, when `parsed?.isAmbiguousCompound` is detected, the dialogue manager transitions to `CONVERSATION_STATES.AWAITING_CLARIFICATION` with error `'ambiguous_compound_command'` and responds: `"I detected multiple actions in your command, but couldn't clearly separate them. Could you please state each task or action separately?"`.
+   - Refuses to create malformed task titles.
+   - Updated completion/reopening regexes in `_handleIdleState` to support `(?:mark|marked)` and `(?:ass+|iss+|tos+bes+)?(?:completed|complete|done|finished)`.
+
+4. **Speech Recognition Session Deduplication (`src/conversation/speechEngine.js`)**:
+   - Verified `VoiceRecognitionController` accumulator: multiple `isFinal` segments are combined with interim results, and speech session stops submit accumulated transcripts exactly once.
+   - Re-starting sessions resets `sessionId` and clears stale drafts.
+
+5. **Deterministic Regression Tests (`tests/voice_command_reliability.test.js`)**:
+   - `Regression 8`: Speech transcript with colloquial phonetics (`"Create task Alpha in another task beta and marked task Alpha is complete"`) splits into 3 operations: creates `Alpha`, creates `Beta`, and marks `Alpha` completed.
+   - `Regression 9`: Explicit compound creation and completion: `"Create task Beta with low priority, and mark Alpha as completed."` when `Alpha` exists: creates `Beta` (low, uncompleted) and completes `Alpha` (high, completed); zero malformed tasks created.
+   - `Regression 10`: Ambiguous unsegmented compound command transitions to `AWAITING_CLARIFICATION` rather than creating a corrupted task card.
+   - `Regression 11`: `VoiceRecognitionController` correctly handles multiple finalized segments and interim results across pauses without duplication.
+   - `Regression 12`: `VoiceRecognitionController` resets state cleanly across repeated sessions without leaking stale draft text.
+
+#### 3. Authoritative Verification Evidence
+
+- **Frontend Node Test Suite**: `npm test`
+  - **Result**: `1049 passed, 0 failed across 218 suites` (5 new tests added, all passing).
+- **Dedicated Voice Reliability Suite**: `node --test tests/voice_command_reliability.test.js`
+  - **Result**: `38 passed, 0 failed across 6 suites`.
+- **Backend Pytest Suite**: `python -m pytest`
+  - **Result**: `29 passed, 0 failed in 5.16s`.
+- **Production Build**: `npm run build`
+  - **Result**: `vite build` completed cleanly in 324ms with zero errors.
+- **Code Quality & Linter**: `npm run lint` (`oxlint`)
+  - **Result**: 0 errors across 99 files.
+- **Dedicated Secret Scanner**: `node scripts/secretScanner.mjs`
+  - **Result**: Clean scan (124 files scanned, 0 secrets found).
+- **Whitespace / Git Diff Check**: `git diff --check`
+  - **Result**: 0 formatting or whitespace errors.
+- **Physical Hardware Microphone Gate**:
+  - Recognition event flow, segmentation, interim draft handling, and compound clause execution are deterministically verified in the automated suite.
+  - In accordance with release honesty policy, physical microphone testing in the user's specific acoustic and hardware environment remains an open manual acceptance check for the repository owner.
+
+#### 4. Scope & Protected Invariant Preservation
+
+- **Factory Scheduler Weights**:
+  - `urgencyWeight`: **50.0**
+  - `priorityWeight`: **100.0**
+  - `unblockWeight`: **15.0**
+  - `riskWeight`: **25.0**
+- **Scheduler Immutability**: `Object.isFrozen(FACTORY_SCHEDULER_WEIGHTS) === true`.
+- **Adaptation Flags**: `isAdaptationUnlocked === false`, `productionApplied === false`.
+- **Phase 7.4.4B Activation Gate**: Permanently locked (`outcome: infeasible` on empty caller claims).
+- **Local-First Privacy**: Deterministic local browser execution; zero cloud LLMs, zero cloud speech API dependencies, zero audio recording.

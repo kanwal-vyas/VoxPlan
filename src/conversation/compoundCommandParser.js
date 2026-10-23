@@ -485,6 +485,21 @@ export function parseCompoundTaskCreation(rawText, referenceDate = new Date()) {
     cleanTitle = cleanTitle.charAt(0).toUpperCase() + cleanTitle.slice(1).toLowerCase();
   }
 
+  // Guard against unsegmented compound utterances: A single task title must not absorb subsequent operation syntax
+  const containsEmbeddedCommand = /\b(?:(?:and|in|an|then|also|with)\s+another\s+(?:task|called|named)\b|another\s+(?:task|called|named)\b|(?:and|then|also)\s+(?:mark|marked|complete|completed|delete|remove|reschedule|rename)\b|(?:mark|marked)\s+(?:the\s+)?task\b|\b(?:as|is)\s+(?:completed|complete|done)\b)/i.test(cleanTitle);
+
+  if (containsEmbeddedCommand) {
+    return {
+      title: null,
+      isAmbiguousCompound: true,
+      rawTitle: cleanTitle,
+      dueDate,
+      priority,
+      estimatedEffort,
+      assignee: assignee || null,
+    };
+  }
+
   return {
     title: cleanTitle,
     dueDate,
@@ -522,13 +537,11 @@ export function splitCompoundCommands(text) {
 
   // Compound command delimiter regex:
   // - "and then", ", then", "then" followed by action verb
-  // - ", and create / add / make / schedule / set / change / update / mark / complete / delete / reschedule / rename"
-  // - " and create / add / make / schedule"
-  // - ", create / add / make / schedule"
-  // - ", and another / and another task / , another task / called / named"
-  // - ", and mark / and mark / , mark / set / change / update / complete"
+  // - ", and / and / in / an / then / also / plus create / add / make / schedule / set / change / update / mark / complete / delete / reschedule / rename"
+  // - " and / in / then another / another task / called / named"
+  // - " and / in / then mark / marked / complete / completed / set / change / update"
   // - creation/mutation verbs immediately following priority/deadline attribute phrases
-  const splitRegex = /(?:;\s*|,\s*and\s+then\s+|\s+and\s+then\s+|,\s*then\s+|\s+then\s+(?=(?:create|add|make|schedule|set|change|update|mark|complete|uncomplete|reopen|delete|remove|reschedule|rename|assign|show|list)\b)|(?:,\s*and\s+|\s+and\s+|,\s*)(?=(?:create|add|make|schedule)\s+(?:a\s+|an\s+|the\s+)?(?:new\s+)?(?:another\s+)?task\b)|(?:,\s*and\s+|\s+and\s+|,\s*)(?=(?:create|add|make|schedule)\s+(?:another\b|a\s+task\b|a\s+new\s+task\b|task\b))|(?:,\s*and\s+|\s+and\s+|,\s*)(?=another\s+(?:task\b|called\b|named\b))|(?:,\s*and\s+|\s+and\s+|,\s*)(?=(?:set|change|update|mark|complete|uncomplete|reopen|delete|remove|reschedule|rename|assign)\s+(?:its\s+|it\s+|that\s+|this\s+|the\s+task\b|[A-Za-z0-9_-]+(?:'s|’s)?\b))|(?<=(?:high|medium|low|urgent|critical|minor|trivial)\s+priority\s+)(?=(?:create|add|make|schedule|another|set|change|update|mark|complete|uncomplete|reopen|delete|remove|reschedule|rename|assign)\b))/i;
+  const splitRegex = /(?:;\s*|,\s*and\s+then\s+|\s+and\s+then\s+|,\s*then\s+|\s+then\s+(?=(?:create|add|make|schedule|set|change|update|mark|marked|complete|completed|uncomplete|reopen|delete|remove|reschedule|rename|assign|show|list)\b)|(?:\s*,\s*(?:and|then|in|an|also|plus)?\s*|\s+(?:and|then|in|an|also|plus)\s+)(?=(?:create|add|make|schedule)\s+(?:a\s+|an\s+|the\s+)?(?:new\s+)?(?:another\s+)?task\b)|(?:\s*,\s*(?:and|then|in|an|also|plus)?\s*|\s+(?:and|then|in|an|also|plus)\s+)(?=(?:create|add|make|schedule)\s+(?:another\b|a\s+task\b|a\s+new\s+task\b|task\b))|(?:\s*,\s*(?:and|then|in|an|also|plus)?\s*|\s+(?:and|then|in|an|also|plus)\s+)(?=another\s+(?:task\b|called\b|named\b))|(?:\s*,\s*(?:and|then|in|an|also|plus)?\s*|\s+(?:and|then|in|an|also|plus)\s+)(?=(?:set|change|update|mark|marked|complete|completed|uncomplete|reopen|delete|remove|reschedule|rename|assign)\s+(?:its\s+|it\s+|that\s+|this\s+|the\s+task\b|[A-Za-z0-9_-]+(?:'s|’s)?\b))|(?<=(?:high|medium|low|urgent|critical|minor|trivial)\s+priority\s+)(?=(?:create|add|make|schedule|another|set|change|update|mark|marked|complete|completed|uncomplete|reopen|delete|remove|reschedule|rename|assign)\b))/i;
 
   const parts = clean
     .split(splitRegex)

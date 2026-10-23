@@ -2806,16 +2806,16 @@ export class DialogueManager {
     }
 
     // 16. Task Command: Uncomplete / Mark as pending / Reopen
-    const markPendingMatch = text.match(/^mark\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+as\s+(?:pending|incomplete|uncompleted|not\s+done|open)$/i);
-    const uncompleteMatch = text.match(/^(?:uncomplete|uncheck|reopen)\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+)$/i);
+    const markPendingMatch = text.match(/^(?:mark|marked)\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+(?:as\s+|is\s+)?(?:pending|incomplete|uncompleted|not\s+done|open)$/i);
+    const uncompleteMatch = text.match(/^(?:uncomplete|uncompleted|uncheck|unchecked|reopen|reopened)\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+)$/i);
     if (markPendingMatch || uncompleteMatch) {
       const taskName = (markPendingMatch ? markPendingMatch[1] : uncompleteMatch[1]).trim();
       return this._resolveAndDispatch(CONVERSATION_INTENTS.REOPEN_TASK, taskName, {}, tasks);
     }
 
     // 17. Task Command: Complete / Mark as completed / "Mark it done"
-    const markCompletedMatch = text.match(/^mark\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+(?:as\s+)?(?:completed|complete|done|finished)$/i);
-    const completeMatch = text.match(/^(?:complete|finish|check(?:\s+off)?)\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+)$/i);
+    const markCompletedMatch = text.match(/^(?:mark|marked)\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+?)\s+(?:as\s+|is\s+|to\s+be\s+)?(?:completed|complete|done|finished)$/i);
+    const completeMatch = text.match(/^(?:complete|completed|finish|finished|check(?:\s+off)?)\s+(?:the\s+)?(?:task\s+)?(?:called\s+|named\s+)?(.+)$/i);
     if (markCompletedMatch || completeMatch) {
       const taskName = (markCompletedMatch ? markCompletedMatch[1] : completeMatch[1]).trim();
       return this._resolveAndDispatch(CONVERSATION_INTENTS.COMPLETE_TASK, taskName, {}, tasks);
@@ -3361,6 +3361,25 @@ export class DialogueManager {
     const parsed = parseCompoundTaskCreation(text, new Date(this.clock()));
 
     if (!parsed || !parsed.title) {
+      if (parsed?.isAmbiguousCompound) {
+        this.state = CONVERSATION_STATES.AWAITING_CLARIFICATION;
+        this.pendingIntent = null;
+        this.pendingClarification = {
+          issue: 'ambiguous_compound_command',
+        };
+        return {
+          state: CONVERSATION_STATES.AWAITING_CLARIFICATION,
+          intent: CONVERSATION_INTENTS.CREATE_TASK,
+          targetTask: null,
+          responseText: "I detected multiple actions in your command, but couldn't clearly separate them. Could you please state each task or action separately?",
+          feedbackType: 'warning',
+          requiresConfirmation: false,
+          isAuthorized: false,
+          action: null,
+          error: 'ambiguous_compound_command',
+        };
+      }
+
       // Missing title -> transition to AWAITING_CLARIFICATION
       this.state = CONVERSATION_STATES.AWAITING_CLARIFICATION;
       this.pendingIntent = {

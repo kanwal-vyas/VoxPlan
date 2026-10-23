@@ -712,5 +712,153 @@ describe('Voice Command Reliability — Phase 2 & 3 Regression Tests', () => {
       const taskTitles = finalTasks.map(t => t.title);
       assert.deepStrictEqual(taskTitles.sort(), ['Alpha', 'Beta']);
     });
+
+    test('Regression 8: Speech transcript with colloquial phonetics ("in another task ... and marked task ... is complete") correctly splits and completes target task', async () => {
+      const dm = new DialogueManager({ clock: injectedClock });
+      const utterance = 'Create task Alpha in another task beta and marked task Alpha is complete';
+      const { res, finalTasks } = await simulateAppExecution(dm, utterance, []);
+
+      assert.equal(res.action.type, 'COMPOUND_ACTIONS');
+      assert.equal(res.action.actions.length, 3, 'Must split into 3 distinct operations');
+
+      const alpha = finalTasks.find(t => t.title === 'Alpha');
+      const beta = finalTasks.find(t => t.title === 'Beta');
+
+      assert.ok(alpha, 'Alpha must exist');
+      assert.ok(beta, 'Beta must exist');
+      assert.equal(alpha.title, 'Alpha');
+      assert.equal(alpha.completed, true, 'Alpha must be marked completed');
+      assert.equal(beta.title, 'Beta');
+      assert.equal(beta.completed, false, 'Beta must be active');
+    });
+
+    test('Regression 9: Two-task creation and completion with explicit priorities: "Create task Beta with low priority, and mark Alpha as completed."', async () => {
+      const dm = new DialogueManager({ clock: injectedClock });
+      const existingAlpha = {
+        id: 'task-alpha-123',
+        title: 'Alpha',
+        priority: 'high',
+        completed: false,
+        createdAt: new Date(injectedClock()).toISOString(),
+      };
+      const utterance = 'Create task Beta with low priority, and mark Alpha as completed.';
+      const { res, finalTasks } = await simulateAppExecution(dm, utterance, [existingAlpha]);
+
+      assert.equal(res.action.type, 'COMPOUND_ACTIONS');
+      assert.equal(finalTasks.length, 2, 'Must have exactly Alpha and Beta, no malformed extra task');
+
+      const alpha = finalTasks.find(t => t.title === 'Alpha');
+      const beta = finalTasks.find(t => t.title === 'Beta');
+
+      assert.ok(alpha, 'Alpha must exist');
+      assert.ok(beta, 'Beta must exist');
+      assert.equal(alpha.completed, true, 'Alpha must be completed');
+      assert.equal(alpha.priority, 'high', 'Alpha retains high priority');
+      assert.equal(beta.title, 'Beta');
+      assert.equal(beta.priority, 'low', 'Beta must have low priority');
+      assert.equal(beta.completed, false, 'Beta must be active (not completed)');
+    });
+
+    test('Regression 10: Truly ambiguous unsegmented compound command requests clarification rather than creating corrupted task title', async () => {
+      const dm = new DialogueManager({ clock: injectedClock });
+      // Utterance containing embedded command syntax that cannot be cleanly separated
+      const ambiguousUtterance = 'Create task Alpha marked task complete';
+      const res = dm.processInput(ambiguousUtterance, { tasks: [] });
+
+      assert.equal(res.state, CONVERSATION_STATES.AWAITING_CLARIFICATION);
+      assert.equal(res.error, 'ambiguous_compound_command');
+      assert.equal(res.action, null, 'Must NOT create a corrupted action');
+      assert.ok(res.responseText.includes('state each task or action separately'));
+
+      // Direct call to _handleCreateTaskIntent with the unsegmented failure utterance
+      const directRes = dm._handleCreateTaskIntent('Create task Alpha in another task beta and marked task Alpha is complete');
+      assert.equal(directRes.state, CONVERSATION_STATES.AWAITING_CLARIFICATION);
+      assert.equal(directRes.error, 'ambiguous_compound_command');
+      assert.equal(directRes.action, null);
+    });
+
+    test('Regression 11: VoiceRecognitionController handles multiple finalized segments and interim results across pauses without duplication', () => {
+      let mockRec = null;
+      let executedUtterance = null;
+      let interimUpdates = [];
+
+      const controller = new VoiceRecognitionController({
+        continuous: true,
+        silenceTimeoutMs: 100,
+        getSpeechRecognition: () => {
+          return function() {
+            mockRec = new MockSpeechRecognition();
+            return mockRec;
+          };
+        },
+        onInterimResult: (draft) => interimUpdates.push(draft),
+        onResult: (transcript) => {
+          executedUtterance = transcript;
+        },
+      });
+
+      controller.start();
+
+      // Chunk 0 is final
+      mockRec.onresult({
+        results: [
+          Object.assign([{ transcript: 'Create task Beta with low priority' }], { isFinal: true }),
+        ],
+      });
+
+      // Chunk 1 is interim
+      mockRec.onresult({
+        results: [
+          Object.assign([{ transcript: 'Create task Beta with low priority' }], { isFinal: true }),
+          Object.assign([{ transcript: 'and mark Alpha as completed' }], { isFinal: false }),
+        ],
+      });
+
+      assert.equal(executedUtterance, null, 'Should not dispatch while interim is in-flight');
+
+      // Chunk 1 becomes final
+      mockRec.onresult({
+        results: [
+          Object.assign([{ transcript: 'Create task Beta with low priority' }], { isFinal: true }),
+          Object.assign([{ transcript: 'and mark Alpha as completed' }], { isFinal: true }),
+        ],
+      });
+
+      // User stops to finalize command
+      controller.stop({ submit: true });
+
+      assert.equal(executedUtterance, 'Create task Beta with low priority and mark Alpha as completed');
+    });
+
+    test('Regression 12: VoiceRecognitionController resets state cleanly across repeated sessions without leaking stale draft', () => {
+      let mockRec = null;
+      let executedUtterances = [];
+
+      const controller = new VoiceRecognitionController({
+        continuous: true,
+        getSpeechRecognition: () => {
+          return function() {
+            mockRec = new MockSpeechRecognition();
+            return mockRec;
+          };
+        },
+        onResult: (transcript) => {
+          executedUtterances.push(transcript);
+        },
+      });
+
+      // Session 1: Started then aborted/cancelled
+      controller.start();
+      mockRec.simulateResult('stale text from abandoned attempt', false);
+      controller.cancel();
+
+      // Session 2: New session should have zero stale text
+      controller.start();
+      mockRec.simulateResult('Create task Beta with low priority', true);
+      controller.stop({ submit: true });
+
+      assert.equal(executedUtterances.length, 1);
+      assert.equal(executedUtterances[0], 'Create task Beta with low priority');
+    });
   });
 });
