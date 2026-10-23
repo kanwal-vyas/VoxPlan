@@ -5799,3 +5799,65 @@ Real microphone testing surfaced an intermittent acceptance failure where compou
 - **Factory Scheduler Weights**: Immutable canonical values (`urgency: 50.0`, `priority: 100.0`, `unblock: 15.0`, `risk: 25.0`).
 - **Phase 7.4.4B Safety Activation Gate**: Permanently locked (`isAdaptationUnlocked === false`, `productionApplied === false`).
 - **Local-First Privacy**: 100% deterministic local storage; zero cloud LLMs, zero cloud speech APIs, zero audio uploads.
+
+---
+
+### Phase 9: VoxPlan UI Redesign — Stage 2: Critical UI Repair: Layout Integrity, Layering, and Visual Cohesion Record
+
+**Implementation Date**: October 24, 2026
+**Commit Target**: `fix(ui): repair responsive layout and unify visual design`
+**Stage Goal**: Eliminate layout distortion, stacking collisions, faded background bleeds, oversized components, and discordant color schemes. Unify the desktop and mobile interface into a restrained, warm editorial design system with compact mobile header, proportionate hero, and non-obstructive floating command dock.
+
+#### 1. Root-Cause Diagnosis & Architectural Solutions
+1. **Conflicting Layout Systems & Translucent Bleed**:
+   - *Root Cause*: Legacy `initCinematicScrollStory()` in `src/animations/scrollStory.js` created ScrollTrigger pins, background color interpolations (`#FFF8EF` -> `#FFF9DB` -> `#F3EEFF` -> `#EBF8F1` -> `#FFEFEA`), yellow wipe animations, and initial low opacities (`opacity: 0.3` to `0.4`) on sections. In the tabbed view architecture, GSAP pin-spacers pushed active content off-screen and caused ghostly faded text and ribbon watermarks (`PLAN`, `TASKS`, `INSIGHTS`) to bleed through views.
+   - *Fix*: Neutered conflicting GSAP pins, background color morphing, yellow wipe transforms, and opacity reductions in `src/animations/scrollStory.js`. Removed floating watermark ribbons in `ProductivityApp.jsx`. All cards and views now render 100% opaque, consistent, and immediately visible.
+2. **Mobile Header Crowding**:
+   - *Root Cause*: In `src/components/Header.jsx`, 3 uncollapsed rows (Brand + status, 3 secondary action buttons, and nav links) wrapped unpredictably, consuming 150–180px of initial mobile viewport height.
+   - *Fix*: Refactored `Header.jsx` with a responsive hierarchy. On mobile screens (<= 768px):
+     - Row 1: Brand (`VOXPLAN` + terracotta mark), concise status dot indicator, and an accessible `•••` overflow menu button (`#header-actions-menu-btn`).
+     - Overflow Dropdown: Contains *Return to Overview*, *Encrypted Backup*, *Load Demo Seed*, and *Reset Workspace*.
+     - Row 2: Clean 3-tab navigation bar (`Today`, `Tasks`, `Insights`) with touch-friendly 36px pills.
+     - Total mobile header height reduced to ~60px.
+3. **Hero & Today View Spacing**:
+   - *Root Cause*: In `src/components/Hero.jsx`, headline typography (`clamp(48px, 6vw, 82px)`), margins, and 3 decorative illustrative dummy cards consumed over 1000px of vertical space on mobile before real sprint content could be reached.
+   - *Fix*: Scaled hero headline to `clamp(26px, 6.5vw, 34px)` on mobile and tightened vertical padding. Hid decorative illustrative preview cards on mobile viewports (`.hero-preview-cards { display: none !important }`) so mobile users immediately reach the actual sprint overview and Today workspace cards.
+4. **Command Dock Clearance & Proportions**:
+   - *Root Cause*: Dock width (`780px`) and excessive padding (`24px 28px`) dominated desktop viewports, while lacking explicit `pointerEvents: 'auto'` on `notebookCard`. Expanded drawer had `62vh` height which risked colliding with top headers on short viewports.
+   - *Fix*: In `src/components/CommandBar.jsx` and `src/App.css`, constrained dock max-width to `680px`, tightened padding to `10px 16px` (desktop) and `8px 12px` (mobile), aligned all control buttons (mic, speaker, send, expand toggle) to 38px, ensured `pointerEvents: 'auto'`, capped expanded drawer height at `50vh` (desktop) and `48vh` (mobile) with clean internal scrolling, and verified `180px` bottom clearance guarantees the last task can be viewed and interacted with cleanly above the dock.
+5. **Unified Visual System (Warm Editorial Palette)**:
+   - *Root Cause*: Discordant color combinations (bright butter yellow, lavender purple, mint green, peach, and coral) created a disjointed experience where every card felt like a separate application.
+   - *Fix*:
+     - Canvas: Warm alabaster/off-white (`#FAFAF7`).
+     - Surfaces: Clean, unified white (`#FFFFFF`) cards with subtle borders (`1px solid rgba(30, 30, 34, 0.08)`) and soft shadows across `ProjectOverview`, `TaskList`, `MLModelPanel`, and `BehavioralHistoryPanel`.
+     - Text: Dark warm charcoal (`#1E1E22`) primary, readable muted neutral (`#5E5B66`) secondary.
+     - Primary Action: Restrained terracotta/rust (`#C85A32`).
+     - Semantic States: Muted sage (`#2D6A4F`) for success/on-track, amber (`#B45309`) for warning/caution, red (`#D9383A`) reserved strictly for critical delay risk.
+
+#### 2. Verification & Regression Evidence
+- **Dedicated Navigation & Command Dock Suite**: `node --test tests/command_dock_navigation.test.js`
+  - **Result**: 14 passed, 0 failed across 5 suites.
+- **Accessibility & Contrast Suite**: `node --test tests/accessibility.test.js`
+  - **Result**: 22 passed, 0 failed across 8 suites. Verifies WCAG AA color contrast, keyboard-accessible brand button, sr-only labels, and modal focus trapping.
+- **Complete Frontend Test Suite**: `npm test`
+  - **Result**: 1070 passed, 0 failed across 225 suites.
+- **Backend Test Suite**: `python -m pytest`
+  - **Result**: 29 passed, 0 failed.
+- **Production Build**: `npm run build`
+  - **Result**: `vite build` completed cleanly in 236ms.
+- **Linter**: `npm run lint` (`oxlint`)
+  - **Result**: 0 errors across 100 files.
+- **Secret Scanner**: `node scripts/secretScanner.mjs`
+  - **Result**: 0 secrets matched across 125 files.
+- **Whitespace / Git Diff Check**: `git diff --check`
+  - **Result**: 0 whitespace or formatting errors.
+- **Live Browser Verification (Desktop & Mobile 390x844)**:
+  - Recorded session `ui_verification_run_1792781990258.webp` via browser subagent.
+  - Verified desktop layout (1536x826): header, hero, sprint pulse, active focus cards, and floating command dock render with clean, unified surfaces and no layout bleed.
+  - Verified mobile layout (390x844): compact header (< 60px), overflow menu opens with Backup/Demo Seed/Reset cleanly, hero is properly proportioned, no overlapping elements, bottom content scrolls completely above the floating dock.
+  - Verified command dock: Typing and task submission work smoothly, and drawer expands upward cleanly without header collision.
+
+#### 3. Scope & Protected Invariant Preservation
+- **Factory Scheduler Weights**: Immutable canonical values (`urgency: 50.0`, `priority: 100.0`, `unblock: 15.0`, `risk: 25.0`).
+- **Phase 7.4.4B Safety Activation Gate**: Permanently locked (`isAdaptationUnlocked === false`, `productionApplied === false`).
+- **Local-First Privacy**: 100% deterministic local storage; zero cloud LLMs, zero cloud speech APIs, zero audio uploads.

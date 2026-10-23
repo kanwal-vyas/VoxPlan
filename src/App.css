@@ -400,18 +400,27 @@ a:focus-visible {
 
   /* Hero Section Mobile */
   .hero-section {
-    padding: 24px 0 16px 0 !important;
+    padding: 18px 0 12px 0 !important;
     min-height: auto !important;
   }
 
+  .hero-composition {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+
+  .hero-preview-cards {
+    display: none !important;
+  }
+
   .hero-headline {
-    font-size: clamp(34px, 8.5vw, 44px) !important;
-    line-height: 1.05 !important;
+    font-size: clamp(26px, 6.5vw, 34px) !important;
+    line-height: 1.15 !important;
   }
 
   .hero-statement {
-    font-size: 15px !important;
-    line-height: 1.45 !important;
+    font-size: 14px !important;
+    line-height: 1.5 !important;
   }
 
   /* Full-width CTA with touch target */
@@ -421,14 +430,9 @@ a:focus-visible {
   }
 
   .hero-composition button {
-    min-height: 48px !important;
+    min-height: 44px !important;
     justify-content: center !important;
     width: 100% !important;
-  }
-
-  /* Task Cards Mobile Spacing */
-  .hero-card-item {
-    padding: 16px !important;
   }
 
   /* ML Metrics: 2x2 Grid */
@@ -552,15 +556,15 @@ a:focus-visible {
   }
 
   .command-dock-container .command-notebook-card {
-    padding: 10px 14px !important;
+    padding: 8px 12px !important;
   }
 
   #command-expanded-drawer {
-    max-height: 55vh !important;
-    padding: 14px 16px !important;
+    max-height: 48vh !important;
+    padding: 12px 14px !important;
   }
 
   #today-focus-card {
-    padding: 18px 20px !important;
+    padding: 16px 18px !important;
   }
 }

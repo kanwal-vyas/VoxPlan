@@ -12,14 +12,37 @@ export default function Header({
   onOpenBackup,
 }) {
   const [scrolled, setScrolled] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => {
-      setScrolled(window.scrollY > 20);
+      setScrolled(window.scrollY > 15);
     };
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  // Close dropdown menu on outside click
+  useEffect(() => {
+    if (!isMenuOpen) return;
+    const handleOutsideClick = (e) => {
+      if (!e.target.closest('#header-overflow-menu') && !e.target.closest('#header-actions-menu-btn')) {
+        setIsMenuOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', handleOutsideClick);
+    return () => document.removeEventListener('pointerdown', handleOutsideClick);
+  }, [isMenuOpen]);
 
   const isTrained = modelMetadata && modelMetadata.is_trained;
 
@@ -31,7 +54,9 @@ export default function Header({
       }}
     >
       <div style={styles.headerInner}>
-        {/* Brand Wordmark & Sticker */}
+        {/* Top / Main Bar */}
+        <div style={styles.topRow}>
+        {/* Brand Wordmark & Dot */}
         <button
           type="button"
           style={styles.brand}
@@ -49,169 +74,298 @@ export default function Header({
             <span>✦</span>
           </div>
           <span style={styles.brandName}>VOXPLAN</span>
-          <span style={styles.taglineNote}>smart notebook</span>
         </button>
 
-        {/* Floating Nav Capsule */}
-        <nav style={styles.nav} aria-label="Sections">
-          {onNavigate && (
-            <button
-              type="button"
-              id="header-nav-landing-btn"
-              onClick={() => onNavigate('/')}
-              style={styles.navLandingLink}
-              title="Return to Product Landing Page"
-            >
-              ← Overview
-            </button>
-          )}
-
-          {onSelectView ? (
-            <>
-              <button
-                type="button"
-                id="nav-tab-today"
-                onClick={() => onSelectView('today')}
-                aria-current={currentView === 'today' ? 'page' : undefined}
-                style={{
-                  ...styles.navLink,
-                  ...(currentView === 'today' ? styles.activeNavLink : {}),
-                }}
-              >
-                Today
-              </button>
-              <button
-                type="button"
-                id="nav-tab-tasks"
-                onClick={() => onSelectView('tasks')}
-                aria-current={currentView === 'tasks' ? 'page' : undefined}
-                style={{
-                  ...styles.navLink,
-                  ...(currentView === 'tasks' ? styles.activeNavLink : {}),
-                }}
-              >
-                Tasks
-              </button>
-              <button
-                type="button"
-                id="nav-tab-insights"
-                onClick={() => onSelectView('insights')}
-                aria-current={currentView === 'insights' ? 'page' : undefined}
-                style={{
-                  ...styles.navLink,
-                  ...(currentView === 'insights' ? styles.activeNavLink : {}),
-                }}
-              >
-                Insights
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => onScrollToSection && onScrollToSection('pulse')}
-                style={styles.navLink}
-              >
-                Today
-              </button>
-              <button
-                type="button"
-                onClick={() => onScrollToSection && onScrollToSection('landscape')}
-                style={styles.navLink}
-              >
-                Tasks
-              </button>
-              <button
-                type="button"
-                onClick={() => onScrollToSection && onScrollToSection('intelligence')}
-                style={styles.navLink}
-              >
-                Baseline
-              </button>
-              <button
-                type="button"
-                onClick={() => onScrollToSection && onScrollToSection('behavior')}
-                style={styles.navLink}
-              >
-                Habits
-              </button>
-              <button
-                type="button"
-                onClick={() => onScrollToSection && onScrollToSection('personal-model')}
-                style={styles.navLink}
-              >
-                Personal Model
-              </button>
-              <button
-                type="button"
-                onClick={() => onScrollToSection && onScrollToSection('command')}
-                style={styles.navLink}
-              >
-                Command
-              </button>
-            </>
-          )}
-        </nav>
-
-        {/* Playful Human Status Capsule */}
-        <div style={styles.statusPill}>
-          <span
-            style={{
-              ...styles.statusDot,
-              backgroundColor: isBackendOnline ? '#3EA370' : '#FF8F82',
-            }}
-          />
-          <span style={styles.statusText}>
-            {isBackendOnline
-              ? (isTrained ? 'Brain is awake' : 'VoxPlan is ready')
-              : 'VoxPlan is resting'}
-          </span>
-        </div>
-
-        {/* Header Actions: Encrypted Backup & Demo Seeding */}
-        <div style={styles.actionControls}>
-          {onOpenBackup && (
-            <button
-              type="button"
-              id="header-backup-btn"
-              onClick={onOpenBackup}
-              title="Open Encrypted Workspace Backup & Restore"
-              style={styles.backupBtn}
-              aria-label="Open Encrypted Workspace Backup and Restore dialog"
-            >
-              <span>🔐</span>
-              <span>Backup</span>
-            </button>
-          )}
-
-          {(onSeedDemo || onClearDemo) && (
-            <div style={styles.demoControls}>
-              {onSeedDemo && (
+          {/* Center Navigation on Desktop */}
+          {!isMobile && (
+            <nav style={styles.nav} aria-label="Sections">
+              {onNavigate && (
                 <button
                   type="button"
-                  id="demo-seed-profile-btn"
-                  onClick={onSeedDemo}
-                  title="Load calibrated demo profile (8 completed tasks + 4 active tasks)"
-                  style={styles.demoSeedBtn}
+                  id="header-nav-landing-btn"
+                  onClick={() => onNavigate('/')}
+                  style={styles.navLandingLink}
+                  title="Return to Product Landing Page"
                 >
-                  <span>⚡</span>
-                  <span>Demo Seed</span>
+                  ← Overview
                 </button>
               )}
-              {onClearDemo && (
-                <button
-                  type="button"
-                  id="demo-clear-profile-btn"
-                  onClick={onClearDemo}
-                  title="Reset to clean default welcome state"
-                  style={styles.demoClearBtn}
-                >
-                  Reset
-                </button>
+
+              {onSelectView ? (
+                <>
+                  <button
+                    type="button"
+                    id="nav-tab-today"
+                    onClick={() => onSelectView('today')}
+                    aria-current={currentView === 'today' ? 'page' : undefined}
+                    style={{
+                      ...styles.navLink,
+                      ...(currentView === 'today' ? styles.activeNavLink : {}),
+                    }}
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    id="nav-tab-tasks"
+                    onClick={() => onSelectView('tasks')}
+                    aria-current={currentView === 'tasks' ? 'page' : undefined}
+                    style={{
+                      ...styles.navLink,
+                      ...(currentView === 'tasks' ? styles.activeNavLink : {}),
+                    }}
+                  >
+                    Tasks
+                  </button>
+                  <button
+                    type="button"
+                    id="nav-tab-insights"
+                    onClick={() => onSelectView('insights')}
+                    aria-current={currentView === 'insights' ? 'page' : undefined}
+                    style={{
+                      ...styles.navLink,
+                      ...(currentView === 'insights' ? styles.activeNavLink : {}),
+                    }}
+                  >
+                    Insights
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onScrollToSection && onScrollToSection('pulse')}
+                    style={styles.navLink}
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onScrollToSection && onScrollToSection('landscape')}
+                    style={styles.navLink}
+                  >
+                    Tasks
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onScrollToSection && onScrollToSection('intelligence')}
+                    style={styles.navLink}
+                  >
+                    Baseline
+                  </button>
+                </>
               )}
+            </nav>
+          )}
+
+          {/* Right Controls: Status & Actions */}
+          <div style={styles.rightGroup}>
+            {/* Concise Status Indicator */}
+            <div style={styles.statusPill} title={isBackendOnline ? (isTrained ? 'Model trained & ready' : 'Local planner active') : 'Offline'}>
+              <span
+                style={{
+                  ...styles.statusDot,
+                  backgroundColor: isBackendOnline ? '#2D6A4F' : '#D9383A',
+                }}
+              />
+              <span style={styles.statusText}>
+                {isBackendOnline
+                  ? (isTrained ? 'Brain active' : 'Ready')
+                  : 'Offline'}
+              </span>
             </div>
-          )}
+
+            {/* Desktop Actions */}
+            {!isMobile && (
+              <div style={styles.actionControls}>
+                {onOpenBackup && (
+                  <button
+                    type="button"
+                    id="header-backup-btn"
+                    onClick={onOpenBackup}
+                    title="Open Encrypted Workspace Backup & Restore"
+                    style={styles.backupBtn}
+                    aria-label="Open Encrypted Workspace Backup and Restore dialog"
+                  >
+                    <span>🔐</span>
+                    <span>Backup</span>
+                  </button>
+                )}
+
+                {(onSeedDemo || onClearDemo) && (
+                  <div style={styles.demoControls}>
+                    {onSeedDemo && (
+                      <button
+                        type="button"
+                        id="demo-seed-profile-btn"
+                        onClick={onSeedDemo}
+                        title="Load calibrated demo profile (8 completed tasks + 4 active tasks)"
+                        style={styles.demoSeedBtn}
+                      >
+                        <span>Demo Seed</span>
+                      </button>
+                    )}
+                    {onClearDemo && (
+                      <button
+                        type="button"
+                        id="demo-clear-profile-btn"
+                        onClick={onClearDemo}
+                        title="Reset to clean default welcome state"
+                        style={styles.demoClearBtn}
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Mobile Actions Overflow Menu Button */}
+            {isMobile && (
+              <div style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  id="header-actions-menu-btn"
+                  onClick={() => setIsMenuOpen(!isMenuOpen)}
+                  style={styles.overflowMenuBtn}
+                  aria-label="Workspace options and tools menu"
+                  aria-expanded={isMenuOpen}
+                >
+                  •••
+                </button>
+
+                {/* Mobile Dropdown Menu */}
+                {isMenuOpen && (
+                  <div id="header-overflow-menu" style={styles.dropdownMenu}>
+                    {onNavigate && (
+                      <button
+                        type="button"
+                        id="header-nav-landing-btn"
+                        onClick={() => {
+                          setIsMenuOpen(false);
+                          onNavigate('/');
+                        }}
+                        style={styles.menuItem}
+                      >
+                        <span>← Return to Overview</span>
+                      </button>
+                    )}
+                    {onOpenBackup && (
+                      <button
+                        type="button"
+                        id="header-backup-btn"
+                        onClick={() => {
+                          setIsMenuOpen(false);
+                          onOpenBackup();
+                        }}
+                        style={styles.menuItem}
+                      >
+                        <span>🔐 Encrypted Backup</span>
+                      </button>
+                    )}
+                    {onSeedDemo && (
+                      <button
+                        type="button"
+                        id="demo-seed-profile-btn"
+                        onClick={() => {
+                          setIsMenuOpen(false);
+                          onSeedDemo();
+                        }}
+                        style={styles.menuItem}
+                      >
+                        <span>⚡ Load Demo Seed</span>
+                      </button>
+                    )}
+                    {onClearDemo && (
+                      <button
+                        type="button"
+                        id="demo-clear-profile-btn"
+                        onClick={() => {
+                          setIsMenuOpen(false);
+                          onClearDemo();
+                        }}
+                        style={{ ...styles.menuItem, color: '#D9383A' }}
+                      >
+                        <span>↺ Reset Workspace</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Mobile Navigation Tabs: Compact 2nd row */}
+        {isMobile && (
+          <nav style={styles.navMobile} aria-label="Sections">
+            {onSelectView ? (
+              <>
+                <button
+                  type="button"
+                  id="nav-tab-today"
+                  onClick={() => onSelectView('today')}
+                  aria-current={currentView === 'today' ? 'page' : undefined}
+                  style={{
+                    ...styles.navLinkMobile,
+                    ...(currentView === 'today' ? styles.activeNavLinkMobile : {}),
+                  }}
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
+                  id="nav-tab-tasks"
+                  onClick={() => onSelectView('tasks')}
+                  aria-current={currentView === 'tasks' ? 'page' : undefined}
+                  style={{
+                    ...styles.navLinkMobile,
+                    ...(currentView === 'tasks' ? styles.activeNavLinkMobile : {}),
+                  }}
+                >
+                  Tasks
+                </button>
+                <button
+                  type="button"
+                  id="nav-tab-insights"
+                  onClick={() => onSelectView('insights')}
+                  aria-current={currentView === 'insights' ? 'page' : undefined}
+                  style={{
+                    ...styles.navLinkMobile,
+                    ...(currentView === 'insights' ? styles.activeNavLinkMobile : {}),
+                  }}
+                >
+                  Insights
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onScrollToSection && onScrollToSection('pulse')}
+                  style={styles.navLinkMobile}
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onScrollToSection && onScrollToSection('landscape')}
+                  style={styles.navLinkMobile}
+                >
+                  Tasks
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onScrollToSection && onScrollToSection('intelligence')}
+                  style={styles.navLinkMobile}
+                >
+                  Insights
+                </button>
+              </>
+            )}
+          </nav>
+        )}
       </div>
     </header>
   );
@@ -220,34 +374,39 @@ export default function Header({
 const styles = {
   header: {
     position: 'sticky',
-    top: '16px',
+    top: '10px',
     zIndex: 100,
     width: '100%',
-    padding: '0 12px',
-    transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+    padding: '0 8px',
+    transition: 'top 0.2s ease',
   },
   headerScrolled: {
-    top: '10px',
+    top: '6px',
   },
   headerInner: {
     maxWidth: '1120px',
     margin: '0 auto',
     display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    padding: '8px 14px',
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    backdropFilter: 'blur(12px)',
+    borderRadius: '16px',
+    border: '1px solid rgba(30, 30, 34, 0.08)',
+    boxShadow: '0 2px 10px rgba(30, 30, 34, 0.04)',
+  },
+  topRow: {
+    display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '12px 24px',
-    backgroundColor: 'rgba(255, 248, 239, 0.88)',
-    backdropFilter: 'blur(16px)',
-    borderRadius: '9999px',
-    border: '1px solid rgba(37, 36, 42, 0.08)',
-    boxShadow: '0 8px 24px rgba(37, 36, 42, 0.04)',
-    flexWrap: 'wrap',
-    gap: '12px',
+    width: '100%',
+    gap: '10px',
   },
   brand: {
     display: 'flex',
     alignItems: 'center',
-    gap: '10px',
+    gap: '8px',
     cursor: 'pointer',
     userSelect: 'none',
     background: 'none',
@@ -255,40 +414,35 @@ const styles = {
     padding: 0,
     font: 'inherit',
     textAlign: 'left',
+    flexShrink: 0,
   },
   brandBadge: {
-    width: '28px',
-    height: '28px',
-    borderRadius: '50%',
-    backgroundColor: '#FFE58A',
+    width: '24px',
+    height: '24px',
+    borderRadius: '6px',
+    backgroundColor: '#C85A32',
+    color: '#FFFFFF',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '14px',
-    boxShadow: '0 2px 6px rgba(0, 0, 0, 0.06)',
+    fontSize: '12px',
+    boxShadow: '0 2px 4px rgba(200, 90, 50, 0.2)',
   },
   brandName: {
     fontFamily: "'Syne', sans-serif",
-    fontSize: '20px',
-    fontWeight: '800',
-    letterSpacing: '-0.03em',
-    color: '#25242A',
-  },
-  taglineNote: {
-    fontFamily: "'Caveat', cursive",
     fontSize: '17px',
-    color: '#7A7782',
-    fontWeight: '600',
-    marginLeft: '2px',
+    fontWeight: '800',
+    letterSpacing: '-0.02em',
+    color: '#1E1E22',
   },
   nav: {
     display: 'flex',
     alignItems: 'center',
-    gap: '6px',
-    backgroundColor: 'rgba(255, 255, 255, 0.6)',
-    padding: '4px 6px',
-    borderRadius: '9999px',
-    border: '1px solid rgba(37, 36, 42, 0.05)',
+    gap: '4px',
+    backgroundColor: '#FAFAF7',
+    padding: '3px 4px',
+    borderRadius: '10px',
+    border: '1px solid rgba(30, 30, 34, 0.06)',
     overflowX: 'auto',
     maxWidth: '100%',
     scrollbarWidth: 'none',
@@ -298,31 +452,31 @@ const styles = {
   navLink: {
     background: 'transparent',
     border: 'none',
-    color: '#4A4852',
+    color: '#5E5B66',
     fontSize: '13px',
     fontWeight: '600',
     cursor: 'pointer',
     padding: '6px 14px',
-    borderRadius: '9999px',
+    borderRadius: '8px',
     transition: 'all 0.15s ease',
     flexShrink: 0,
     whiteSpace: 'nowrap',
   },
   activeNavLink: {
-    backgroundColor: '#25242A',
+    backgroundColor: '#1E1E22',
     color: '#FFFFFF',
     fontWeight: '700',
-    boxShadow: '0 2px 6px rgba(0, 0, 0, 0.15)',
+    boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)',
   },
   navLandingLink: {
-    background: 'rgba(201, 182, 255, 0.22)',
-    border: '1px solid rgba(201, 182, 255, 0.5)',
-    color: '#5B35C2',
+    background: 'transparent',
+    border: 'none',
+    color: '#7C7885',
     fontSize: '12px',
-    fontWeight: '700',
+    fontWeight: '600',
     cursor: 'pointer',
-    padding: '5px 12px',
-    borderRadius: '9999px',
+    padding: '6px 10px',
+    borderRadius: '8px',
     transition: 'all 0.15s ease',
     display: 'inline-flex',
     alignItems: 'center',
@@ -330,80 +484,161 @@ const styles = {
     flexShrink: 0,
     whiteSpace: 'nowrap',
   },
-  statusPill: {
+  navMobile: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, 1fr)',
+    gap: '4px',
+    width: '100%',
+    backgroundColor: '#FAFAF7',
+    padding: '3px',
+    borderRadius: '10px',
+    border: '1px solid rgba(30, 30, 34, 0.06)',
+    overflowX: 'auto',
+    maxWidth: '100%',
+  },
+  navLinkMobile: {
+    background: 'transparent',
+    border: 'none',
+    color: '#5E5B66',
+    fontSize: '13px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    padding: '7px 0',
+    textAlign: 'center',
+    borderRadius: '8px',
+    transition: 'all 0.15s ease',
+    flexShrink: 0,
+    whiteSpace: 'nowrap',
+  },
+  activeNavLinkMobile: {
+    backgroundColor: '#1E1E22',
+    color: '#FFFFFF',
+    fontWeight: '700',
+    boxShadow: '0 1px 4px rgba(0, 0, 0, 0.12)',
+  },
+  rightGroup: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    padding: '6px 14px',
-    borderRadius: '9999px',
-    backgroundColor: 'rgba(255, 255, 255, 0.7)',
-    border: '1px solid rgba(37, 36, 42, 0.06)',
+    flexShrink: 0,
+  },
+  statusPill: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '4px 10px',
+    borderRadius: '8px',
+    backgroundColor: '#FAFAF7',
+    border: '1px solid rgba(30, 30, 34, 0.06)',
   },
   statusDot: {
-    width: '8px',
-    height: '8px',
+    width: '7px',
+    height: '7px',
     borderRadius: '50%',
     animation: 'pulseDot 2s infinite ease-in-out',
   },
   statusText: {
-    fontSize: '12px',
-    fontWeight: '600',
-    color: '#4A4852',
+    fontSize: '11px',
+    fontWeight: '700',
+    color: '#5E5B66',
+    letterSpacing: '0.02em',
   },
   actionControls: {
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
-    marginLeft: '4px',
   },
   backupBtn: {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '4px',
-    padding: '6px 12px',
-    fontSize: '11px',
+    padding: '5px 12px',
+    fontSize: '12px',
     fontWeight: '600',
     fontFamily: 'inherit',
-    color: '#1F1E24',
+    color: '#1E1E22',
     backgroundColor: '#FFFFFF',
-    border: '1px solid rgba(37, 36, 42, 0.18)',
-    borderRadius: '9999px',
+    border: '1px solid rgba(30, 30, 34, 0.14)',
+    borderRadius: '8px',
     cursor: 'pointer',
     transition: 'all 0.15s ease',
   },
   demoControls: {
     display: 'flex',
     alignItems: 'center',
-    gap: '6px',
-    marginLeft: '2px',
+    gap: '4px',
   },
   demoSeedBtn: {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '4px',
-    padding: '6px 12px',
-    fontSize: '11px',
+    padding: '5px 10px',
+    fontSize: '12px',
     fontWeight: '600',
     fontFamily: 'inherit',
-    color: '#684200',
-    backgroundColor: '#FFE58A',
-    border: '1px solid rgba(104, 66, 0, 0.2)',
-    borderRadius: '9999px',
+    color: '#C85A32',
+    backgroundColor: 'rgba(200, 90, 50, 0.08)',
+    border: '1px solid rgba(200, 90, 50, 0.25)',
+    borderRadius: '8px',
     cursor: 'pointer',
     transition: 'all 0.15s ease',
   },
   demoClearBtn: {
     display: 'inline-flex',
     alignItems: 'center',
-    padding: '6px 10px',
-    fontSize: '11px',
+    padding: '5px 9px',
+    fontSize: '12px',
     fontWeight: '500',
     fontFamily: 'inherit',
-    color: '#625F69',
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    border: '1px solid rgba(37, 36, 42, 0.12)',
-    borderRadius: '9999px',
+    color: '#7C7885',
+    backgroundColor: '#FAFAF7',
+    border: '1px solid rgba(30, 30, 34, 0.1)',
+    borderRadius: '8px',
     cursor: 'pointer',
     transition: 'all 0.15s ease',
+  },
+  overflowMenuBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '32px',
+    height: '30px',
+    borderRadius: '8px',
+    backgroundColor: '#FAFAF7',
+    border: '1px solid rgba(30, 30, 34, 0.12)',
+    color: '#1E1E22',
+    fontSize: '13px',
+    fontWeight: '800',
+    letterSpacing: '1px',
+    cursor: 'pointer',
+  },
+  dropdownMenu: {
+    position: 'absolute',
+    top: '36px',
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    borderRadius: '12px',
+    border: '1px solid rgba(30, 30, 34, 0.1)',
+    boxShadow: '0 8px 24px rgba(30, 30, 34, 0.12)',
+    padding: '6px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    zIndex: 200,
+    minWidth: '170px',
+  },
+  menuItem: {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '8px 12px',
+    fontSize: '12px',
+    fontWeight: '600',
+    color: '#1E1E22',
+    backgroundColor: 'transparent',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    textAlign: 'left',
+    width: '100%',
+    transition: 'background 0.15s ease',
   },
 };

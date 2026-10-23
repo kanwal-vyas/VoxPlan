@@ -9,79 +9,72 @@ export default function Hero() {
       style={styles.hero}
       aria-label="Hero"
     >
-      {/* Background Blobs */}
-      <div className="hero-bg-blob" style={styles.bgBlobYellow} />
-      <div className="hero-bg-blob" style={styles.bgBlobPeach} />
-      <div className="hero-bg-blob" style={styles.bgBlobMint} />
-
-      {/* Large Yellow Wipe Transition Shape */}
-      <div className="hero-wipe-yellow" style={styles.heroWipeYellow} />
-
       <div style={styles.grid} className="hero-composition">
-        {/* Left: Choreographed Editorial Typography */}
+        {/* Left: Editorial Typography & Intent */}
         <div style={styles.leftColumn}>
           <div style={styles.eyebrowPill}>
-            <span>✦</span>
-            <span style={styles.eyebrowText}>PREDICTIVE STUDY & TASK INTELLIGENCE</span>
+            <span style={styles.eyebrowIcon}>✦</span>
+            <span style={styles.eyebrowText}>PREDICTIVE TASK INTELLIGENCE</span>
           </div>
 
           <h1 className="hero-headline" style={styles.headline}>
-            PLAN <span className="hl hl-butter">LESS.</span><br />
-            DO <span className="hl hl-lilac">MORE.</span>
+            Plan with clarity.<br />
+            Act with focus.
           </h1>
 
           <p className="hero-statement" style={styles.statement}>
-            VoxPlan turns your messy to-do list into a structured plan, then uses <span className="hl hl-mint">supervised machine learning</span> to highlight which initiatives are likely to fall behind.
+            VoxPlan turns daily tasks into structured timelines, using private local intelligence to highlight which initiatives are at risk before deadlines slip.
           </p>
 
-          <div style={styles.ctaRow}>
+          <div style={styles.ctaRow} className="ctaRow">
             <button
               type="button"
               onClick={() => {
-                const el = document.getElementById('landscape') || document.getElementById('pulse');
+                const el = document.getElementById('pulse') || document.getElementById('today-focus-card');
                 if (el) el.scrollIntoView({ behavior: 'smooth' });
               }}
               style={styles.primaryBtn}
             >
-              <span>Explore active notes</span>
+              <span>Explore Today's Workspace</span>
               <span>↓</span>
             </button>
 
-            <span className="note-tag" style={{ marginLeft: '6px' }}>
-              ✎ real-time risk predictions
+            <span style={styles.noteTag}>
+              Local-first · Offline reliable
             </span>
           </div>
         </div>
 
-        {/* Right: Layered Task Cards */}
-        <div style={styles.rightColumn}>
+        {/* Right: Layered Preview Cards (Desktop only) */}
+        <div style={styles.rightColumn} className="hero-preview-cards">
           <div style={styles.previewHeader}>
             <span style={styles.previewTag}>✦ ILLUSTRATIVE PREVIEW</span>
             <span style={styles.previewSub}>Design demonstration</span>
           </div>
+
           {/* Card 1: High Risk */}
           <div
             style={{
               ...styles.cleanCard,
-              borderLeft: '4px solid #FF8F82',
+              borderLeft: '4px solid #D9383A',
             }}
-            className="digital-card hero-card-item"
+            className="hero-card-item"
           >
             <div style={styles.cardHeader}>
               <div style={styles.categoryWrap}>
                 <span style={styles.categoryLabel}>SECURITY</span>
-                <span className="hl hl-coral" style={styles.priorityHighlight}>
-                  HIGH PRIORITY
+                <span style={styles.priorityHighlightRisk}>
+                  HIGH RISK
                 </span>
               </div>
-              <span className="annotated-circle" style={{ color: '#D9483B', fontSize: '13px', fontWeight: '800' }}>
+              <span style={{ color: '#D9383A', fontSize: '13px', fontWeight: '800' }}>
                 {counts.task1}% risk
               </span>
             </div>
             <h3 style={styles.cardTitle}>Revise Cryptography</h3>
             <div style={styles.cardFooter}>
               <span style={styles.cardDue}>Due today · 10h effort</span>
-              <span className="note-tag" style={{ color: '#D9483B' }}>urgent bottleneck ↗</span>
+              <span style={{ fontSize: '12px', color: '#D9383A', fontWeight: '600' }}>bottleneck ↗</span>
             </div>
           </div>
 
@@ -89,25 +82,25 @@ export default function Hero() {
           <div
             style={{
               ...styles.cleanCard,
-              borderLeft: '4px solid #FFE58A',
+              borderLeft: '4px solid #B45309',
             }}
-            className="digital-card hero-card-item"
+            className="hero-card-item"
           >
             <div style={styles.cardHeader}>
               <div style={styles.categoryWrap}>
                 <span style={styles.categoryLabel}>NETWORKING</span>
-                <span className="hl hl-butter" style={styles.priorityHighlight}>
+                <span style={styles.priorityHighlightWarning}>
                   MEDIUM
                 </span>
               </div>
-              <span className="annotated-circle" style={{ color: '#B45309', fontSize: '13px', fontWeight: '800' }}>
+              <span style={{ color: '#B45309', fontSize: '13px', fontWeight: '800' }}>
                 {counts.task2}% risk
               </span>
             </div>
             <h3 style={styles.cardTitle}>Practice Subnetting</h3>
             <div style={styles.cardFooter}>
               <span style={styles.cardDue}>Due today · 6h effort</span>
-              <span className="note-tag" style={{ color: '#B45309' }}>in progress →</span>
+              <span style={{ fontSize: '12px', color: '#B45309', fontWeight: '600' }}>in progress →</span>
             </div>
           </div>
 
@@ -115,25 +108,25 @@ export default function Hero() {
           <div
             style={{
               ...styles.cleanCard,
-              borderLeft: '4px solid #BFE8D0',
+              borderLeft: '4px solid #2D6A4F',
             }}
-            className="digital-card hero-card-item"
+            className="hero-card-item"
           >
             <div style={styles.cardHeader}>
               <div style={styles.categoryWrap}>
                 <span style={styles.categoryLabel}>ARCHITECTURE</span>
-                <span className="hl hl-mint" style={styles.priorityHighlight}>
+                <span style={styles.priorityHighlightSuccess}>
                   LOW
                 </span>
               </div>
-              <span className="annotated-circle" style={{ color: '#166534', fontSize: '13px', fontWeight: '800' }}>
+              <span style={{ color: '#2D6A4F', fontSize: '13px', fontWeight: '800' }}>
                 {counts.task3}% risk
               </span>
             </div>
             <h3 style={styles.cardTitle}>Study OSI Model</h3>
             <div style={styles.cardFooter}>
               <span style={styles.cardDue}>Due tomorrow · 3.5h effort</span>
-              <span className="note-tag" style={{ color: '#166534' }}>on track ✓</span>
+              <span style={{ fontSize: '12px', color: '#2D6A4F', fontWeight: '600' }}>on track ✓</span>
             </div>
           </div>
         </div>
@@ -144,65 +137,13 @@ export default function Hero() {
 
 const styles = {
   hero: {
-    padding: '72px 0 84px 0',
+    padding: '36px 0 24px 0',
     position: 'relative',
-    transition: 'opacity 0.2s ease',
-  },
-  bgBlobYellow: {
-    position: 'absolute',
-    top: '5%',
-    left: '-60px',
-    width: '340px',
-    height: '340px',
-    backgroundColor: 'rgba(255, 229, 138, 0.45)',
-    borderRadius: '50%',
-    filter: 'blur(90px)',
-    zIndex: -1,
-    pointerEvents: 'none',
-  },
-  bgBlobPeach: {
-    position: 'absolute',
-    top: '35%',
-    right: '-40px',
-    width: '360px',
-    height: '360px',
-    backgroundColor: 'rgba(255, 181, 167, 0.35)',
-    borderRadius: '50%',
-    filter: 'blur(100px)',
-    zIndex: -1,
-    pointerEvents: 'none',
-  },
-  bgBlobMint: {
-    position: 'absolute',
-    bottom: '-10%',
-    left: '30%',
-    width: '280px',
-    height: '280px',
-    backgroundColor: 'rgba(191, 232, 208, 0.4)',
-    borderRadius: '50%',
-    filter: 'blur(90px)',
-    zIndex: -1,
-    pointerEvents: 'none',
-  },
-  heroWipeYellow: {
-    position: 'absolute',
-    bottom: '-80px',
-    right: '-80px',
-    width: '600px',
-    height: '600px',
-    backgroundColor: '#FFF9DB',
-    borderRadius: '50%',
-    zIndex: 2,
-    pointerEvents: 'none',
-    transformOrigin: 'bottom right',
-    opacity: 0,
-    transform: 'scale(0)',
-    visibility: 'hidden',
   },
   grid: {
     display: 'grid',
     gridTemplateColumns: '1.2fr 1fr',
-    gap: '64px',
+    gap: '48px',
     alignItems: 'center',
     position: 'relative',
     zIndex: 1,
@@ -210,74 +151,78 @@ const styles = {
   leftColumn: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '24px',
-    transition: 'transform 0.1s linear',
+    gap: '18px',
   },
   eyebrowPill: {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '8px',
+    gap: '6px',
     backgroundColor: '#FFFFFF',
-    border: '1px solid rgba(37, 36, 42, 0.1)',
-    padding: '6px 14px',
-    borderRadius: '9999px',
+    border: '1px solid rgba(30, 30, 34, 0.08)',
+    padding: '4px 12px',
+    borderRadius: '8px',
     width: 'fit-content',
-    boxShadow: '0 2px 8px rgba(37, 36, 42, 0.04)',
-    color: '#706D73',
+    boxShadow: '0 1px 4px rgba(30, 30, 34, 0.03)',
+  },
+  eyebrowIcon: {
+    color: '#C85A32',
+    fontSize: '11px',
   },
   eyebrowText: {
     fontFamily: "'Plus Jakarta Sans', sans-serif",
     fontSize: '11px',
     fontWeight: '800',
-    letterSpacing: '0.08em',
-    color: '#25242A',
+    letterSpacing: '0.06em',
+    color: '#5E5B66',
   },
   headline: {
     fontFamily: "'Syne', sans-serif",
-    fontSize: 'clamp(48px, 6vw, 82px)',
+    fontSize: 'clamp(32px, 4.5vw, 52px)',
     fontWeight: '800',
-    lineHeight: '0.94',
-    letterSpacing: '-0.04em',
-    color: '#25242A',
+    lineHeight: '1.08',
+    letterSpacing: '-0.03em',
+    color: '#1E1E22',
     margin: 0,
-    animation: 'riseIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.22s both',
   },
   statement: {
-    fontSize: '18px',
-    lineHeight: '1.65',
-    color: '#4A4852',
+    fontSize: '16px',
+    lineHeight: '1.6',
+    color: '#5E5B66',
     maxWidth: '480px',
     margin: 0,
     fontWeight: '500',
-    animation: 'riseIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.38s both',
   },
   ctaRow: {
     display: 'flex',
     alignItems: 'center',
-    gap: '18px',
+    gap: '16px',
     flexWrap: 'wrap',
     marginTop: '6px',
-    animation: 'riseIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.5s both',
   },
   primaryBtn: {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '10px',
-    backgroundColor: '#25242A',
+    gap: '8px',
+    backgroundColor: '#1E1E22',
     color: '#FFFFFF',
     border: 'none',
-    padding: '14px 28px',
-    borderRadius: '9999px',
-    fontSize: '15px',
+    padding: '11px 22px',
+    borderRadius: '10px',
+    fontSize: '14px',
     fontWeight: '700',
     cursor: 'pointer',
-    boxShadow: '0 4px 14px rgba(37, 36, 42, 0.15)',
+    boxShadow: '0 2px 8px rgba(30, 30, 34, 0.12)',
+    transition: 'all 0.15s ease',
+  },
+  noteTag: {
+    fontSize: '13px',
+    color: '#7C7885',
+    fontWeight: '600',
   },
   rightColumn: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '16px',
-    transition: 'transform 0.1s linear',
+    gap: '12px',
   },
   previewHeader: {
     display: 'flex',
@@ -289,8 +234,8 @@ const styles = {
     fontFamily: "'JetBrains Mono', monospace",
     fontSize: '11px',
     fontWeight: '700',
-    color: '#706D73',
-    letterSpacing: '0.06em',
+    color: '#7C7885',
+    letterSpacing: '0.04em',
   },
   previewSub: {
     fontSize: '11px',
@@ -299,14 +244,13 @@ const styles = {
   },
   cleanCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: '16px',
-    padding: '20px 24px',
-    boxShadow: '0 4px 16px rgba(37, 36, 42, 0.05)',
-    border: '1px solid rgba(37, 36, 42, 0.08)',
+    borderRadius: '12px',
+    padding: '16px 20px',
+    boxShadow: '0 2px 8px rgba(30, 30, 34, 0.04)',
+    border: '1px solid rgba(30, 30, 34, 0.08)',
     display: 'flex',
     flexDirection: 'column',
-    gap: '10px',
-    cursor: 'pointer',
+    gap: '8px',
   },
   cardHeader: {
     display: 'flex',
@@ -321,33 +265,51 @@ const styles = {
   categoryLabel: {
     fontSize: '11px',
     fontWeight: '700',
-    color: '#706D73',
+    color: '#7C7885',
     letterSpacing: '0.04em',
   },
-  priorityHighlight: {
+  priorityHighlightRisk: {
     fontSize: '10px',
     fontWeight: '800',
-    letterSpacing: '0.04em',
-    color: '#25242A',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    backgroundColor: '#FDF0ED',
+    color: '#D9383A',
+  },
+  priorityHighlightWarning: {
+    fontSize: '10px',
+    fontWeight: '800',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    backgroundColor: '#FFF8E7',
+    color: '#B45309',
+  },
+  priorityHighlightSuccess: {
+    fontSize: '10px',
+    fontWeight: '800',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    backgroundColor: '#EBF5EE',
+    color: '#2D6A4F',
   },
   cardTitle: {
     fontFamily: "'Syne', sans-serif",
-    fontSize: '20px',
+    fontSize: '17px',
     fontWeight: '700',
-    color: '#25242A',
+    color: '#1E1E22',
     margin: 0,
-    letterSpacing: '-0.02em',
+    letterSpacing: '-0.01em',
   },
   cardFooter: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingTop: '6px',
-    borderTop: '1px solid rgba(37, 36, 42, 0.06)',
+    borderTop: '1px solid rgba(30, 30, 34, 0.06)',
   },
   cardDue: {
     fontSize: '12px',
-    color: '#706D73',
+    color: '#7C7885',
     fontWeight: '500',
   },
 };

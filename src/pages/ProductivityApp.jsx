@@ -1547,12 +1547,7 @@ export default function ProductivityApp({ onNavigate }) {
               onScrollToSection={handleScrollToSection}
             />
 
-            {/* Giant Editorial Typography Ribbon 1 */}
-            <div className="editorial-ribbon-wrap" aria-hidden="true">
-              <span className="editorial-ribbon-word">PLAN</span>
-            </div>
-
-            {/* Section 01: Sprint Pulse (Butter Yellow Panel) */}
+            {/* Section 01: Sprint Pulse */}
             <ProjectOverview
               tasks={tasks}
               predictionsMap={guardedPredictionsMap}
@@ -1603,12 +1598,7 @@ export default function ProductivityApp({ onNavigate }) {
               width: '100%',
             }}
           >
-            {/* Giant Editorial Typography Ribbon 2 */}
-            <div className="editorial-ribbon-wrap" aria-hidden="true">
-              <span className="editorial-ribbon-word">TASKS</span>
-            </div>
-
-            {/* Section 02: Risk Landscape (Lavender Sticky Notes Wall) */}
+            {/* Section 02: Risk Landscape */}
             <TaskList
               tasks={tasks}
               predictionsMap={guardedPredictionsMap}
@@ -1650,12 +1640,7 @@ export default function ProductivityApp({ onNavigate }) {
               width: '100%',
             }}
           >
-            {/* Giant Editorial Typography Ribbon 3 */}
-            <div className="editorial-ribbon-wrap" aria-hidden="true">
-              <span className="editorial-ribbon-word">INSIGHTS</span>
-            </div>
-
-            {/* Section 03: Model Intelligence (Soft Mint Brain Panel) */}
+            {/* Section 03: Model Intelligence */}
             <div ref={mlPanelRef}>
               <MLModelPanel
                 modelStatus={modelStatus}
@@ -1760,8 +1745,8 @@ export default function ProductivityApp({ onNavigate }) {
 const styles = {
   app: {
     minHeight: '100vh',
-    backgroundColor: '#FFF8EF',
-    color: '#25242A',
+    backgroundColor: '#FAFAF7',
+    color: '#1E1E22',
     fontFamily: "'Plus Jakarta Sans', 'Instrument Sans', sans-serif",
     position: 'relative',
     overflowX: 'hidden',
@@ -1774,12 +1759,12 @@ const styles = {
     right: 0,
     height: '3px',
     zIndex: 999,
-    backgroundColor: 'rgba(37, 36, 42, 0.04)',
+    backgroundColor: 'rgba(30, 30, 34, 0.04)',
   },
   progressBarTrack: {
     height: '100%',
-    backgroundColor: '#FF8F82',
-    backgroundImage: 'linear-gradient(90deg, #FF8F82 0%, #FFE58A 50%, #C9B6FF 100%)',
+    backgroundColor: '#C85A32',
+    backgroundImage: 'linear-gradient(90deg, #C85A32 0%, #D97706 100%)',
     transition: 'width 0.1s ease',
   },
   content: {
@@ -1793,10 +1778,10 @@ const styles = {
   },
   todayFocusCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: '20px',
-    border: '1.5px solid rgba(37, 36, 42, 0.08)',
+    borderRadius: '16px',
+    border: '1px solid rgba(30, 30, 34, 0.08)',
     padding: '24px 28px',
-    boxShadow: '0 4px 16px rgba(37, 36, 42, 0.04)',
+    boxShadow: '0 2px 10px rgba(30, 30, 34, 0.03)',
     display: 'flex',
     flexDirection: 'column',
     gap: '16px',
@@ -1812,33 +1797,33 @@ const styles = {
     fontFamily: "'JetBrains Mono', monospace",
     fontSize: '11px',
     fontWeight: '800',
-    color: '#D9483B',
+    color: '#C85A32',
     letterSpacing: '0.08em',
   },
   todayFocusTitle: {
     fontFamily: "'Syne', sans-serif",
     fontSize: '22px',
     fontWeight: '800',
-    color: '#25242A',
+    color: '#1E1E22',
     margin: '4px 0 2px 0',
   },
   todayFocusSubtitle: {
     fontSize: '14px',
-    color: '#706D73',
+    color: '#5E5B66',
     margin: 0,
     fontWeight: '500',
   },
   openTasksWorkspaceBtn: {
-    backgroundColor: '#25242A',
+    backgroundColor: '#1E1E22',
     color: '#FFFFFF',
     border: 'none',
-    padding: '12px 20px',
-    borderRadius: '12px',
+    padding: '11px 20px',
+    borderRadius: '10px',
     fontSize: '14px',
     fontWeight: '700',
     cursor: 'pointer',
     transition: 'all 0.15s ease',
-    boxShadow: '0 4px 12px rgba(37, 36, 42, 0.15)',
+    boxShadow: '0 2px 8px rgba(30, 30, 34, 0.1)',
   },
 };
 
