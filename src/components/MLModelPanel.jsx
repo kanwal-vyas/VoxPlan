@@ -92,7 +92,7 @@ export default function MLModelPanel({
               <span style={styles.badge}>MACHINE LEARNING EVALUATION</span>
             </div>
             <h2 style={styles.title}>
-              THE <span className={`hl hl-mint ${isVisible ? 'hl-sweep' : ''}`}>SMART</span> PART
+              THE <span className={`hl hl-sage ${isVisible ? 'hl-sweep' : ''}`}>SMART</span> PART
             </h2>
             <p style={styles.subtitle}>
               Supervised Random Forest baseline evaluated on synthetic historical task dataset
@@ -338,11 +338,11 @@ const styles = {
     backgroundColor: '#FFFFFF',
     borderRadius: '16px',
     padding: '32px',
-    boxShadow: '0 2px 10px rgba(30, 30, 34, 0.04)',
+    boxShadow: '0 2px 10px rgba(61, 38, 69, 0.04)',
     display: 'flex',
     flexDirection: 'column',
     gap: '28px',
-    border: '1px solid rgba(30, 30, 34, 0.08)',
+    border: '1px solid rgba(61, 38, 69, 0.08)',
   },
   header: {
     display: 'flex',
@@ -377,7 +377,7 @@ const styles = {
     fontFamily: "'Syne', sans-serif",
     fontSize: '28px',
     fontWeight: '800',
-    color: '#1E1E22',
+    color: '#3D2645',
     letterSpacing: '-0.02em',
     margin: 0,
   },
@@ -391,7 +391,7 @@ const styles = {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '8px',
-    backgroundColor: '#1E1E22',
+    backgroundColor: '#C85A32',
     color: '#FFFFFF',
     border: 'none',
     padding: '10px 20px',
@@ -399,7 +399,7 @@ const styles = {
     fontSize: '13px',
     fontWeight: '700',
     cursor: 'pointer',
-    boxShadow: '0 2px 8px rgba(30, 30, 34, 0.1)',
+    boxShadow: '0 2px 8px rgba(200, 90, 50, 0.25)',
   },
   trainBtnDisabled: {
     opacity: 0.5,

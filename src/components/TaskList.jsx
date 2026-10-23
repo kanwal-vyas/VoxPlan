@@ -64,7 +64,7 @@ export default function TaskList({
               <span style={styles.badge}>ANALYTICAL OVERVIEW</span>
             </div>
             <h2 style={styles.title}>
-              THE <span className={`hl hl-peach ${isVisible ? 'hl-sweep' : ''}`}>RISK</span> LANDSCAPE
+              THE <span className={`hl hl-terracotta ${isVisible ? 'hl-sweep' : ''}`}>RISK</span> LANDSCAPE
             </h2>
             <p style={styles.subtitle}>
               Continuous machine learning delay-risk estimates mapped across active initiatives
@@ -254,7 +254,7 @@ const styles = {
     fontFamily: "'Syne', sans-serif",
     fontSize: '28px',
     fontWeight: '800',
-    color: '#1E1E22',
+    color: '#3D2645',
     letterSpacing: '-0.02em',
     margin: 0,
   },
@@ -275,7 +275,7 @@ const styles = {
     alignItems: 'center',
     gap: '6px',
     backgroundColor: '#FAFAF7',
-    border: '1px solid rgba(30, 30, 34, 0.1)',
+    border: '1px solid rgba(61, 38, 69, 0.1)',
     color: '#5E5B66',
     padding: '7px 14px',
     borderRadius: '8px',
@@ -284,10 +284,10 @@ const styles = {
     cursor: 'pointer',
   },
   activeFilterBtn: {
-    backgroundColor: '#1E1E22',
-    borderColor: '#1E1E22',
+    backgroundColor: '#201E23',
+    borderColor: '#201E23',
     color: '#FFFFFF',
-    boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)',
+    boxShadow: '0 2px 6px rgba(32, 30, 35, 0.15)',
   },
   notesGrid: {
     display: 'grid',
@@ -369,14 +369,15 @@ const styles = {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '6px',
-    padding: '8px 18px',
-    borderRadius: '9999px',
-    border: '1px solid rgba(104, 66, 0, 0.2)',
-    backgroundColor: '#FFE58A',
-    color: '#684200',
+    padding: '9px 20px',
+    borderRadius: '10px',
+    border: 'none',
+    backgroundColor: '#C85A32',
+    color: '#FFFFFF',
     fontSize: '13px',
     fontWeight: '700',
     cursor: 'pointer',
     transition: 'all 0.15s ease',
+    boxShadow: '0 2px 8px rgba(200, 90, 50, 0.25)',
   },
 };

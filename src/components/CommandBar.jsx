@@ -639,22 +639,22 @@ export default function CommandBar({
                 ...styles.micBtn,
                 backgroundColor:
                   recognitionState === 'LISTENING' || isListening
-                    ? '#FF8F82'
+                    ? '#D9383A'
                     : recognitionState === 'STARTING'
-                    ? '#FFF0B3'
+                    ? '#E5A83B'
                     : recognitionState === 'PROCESSING'
-                    ? '#E4DAFF'
+                    ? '#3D2645'
                     : recognitionState === 'ERROR'
-                    ? '#FFE8E5'
+                    ? '#FDF0ED'
                     : recognitionState === 'UNSUPPORTED'
                     ? '#EAE8E4'
-                    : '#FFE58A',
+                    : '#C85A32',
                 color:
-                  recognitionState === 'LISTENING' || isListening
-                    ? '#FFFFFF'
-                    : recognitionState === 'ERROR'
+                  recognitionState === 'ERROR'
                     ? '#991B1B'
-                    : '#25242A',
+                    : recognitionState === 'UNSUPPORTED'
+                    ? '#7C7885'
+                    : '#FFFFFF',
                 cursor: recognitionState === 'UNSUPPORTED' ? 'not-allowed' : 'pointer',
                 opacity: recognitionState === 'UNSUPPORTED' ? 0.6 : 1,
               }}
@@ -781,10 +781,10 @@ const styles = {
   },
   expandedDrawer: {
     pointerEvents: 'auto',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(252, 250, 246, 0.98)',
     borderRadius: '16px',
-    border: '1px solid rgba(30, 30, 34, 0.12)',
-    boxShadow: '0 12px 32px rgba(30, 30, 34, 0.12), 0 2px 6px rgba(30, 30, 34, 0.04)',
+    border: '1px solid rgba(61, 38, 69, 0.12)',
+    boxShadow: '0 12px 32px rgba(61, 38, 69, 0.12), 0 2px 6px rgba(61, 38, 69, 0.04)',
     padding: '16px 20px',
     marginBottom: '8px',
     maxHeight: '50vh',
@@ -792,14 +792,14 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     gap: '14px',
-    backdropFilter: 'blur(10px)',
+    backdropFilter: 'blur(12px)',
   },
   drawerHeader: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingBottom: '8px',
-    borderBottom: '1px solid rgba(37, 36, 42, 0.06)',
+    borderBottom: '1px solid rgba(61, 38, 69, 0.08)',
     gap: '10px',
   },
   drawerHeaderLeft: {
@@ -812,17 +812,17 @@ const styles = {
     fontFamily: "'JetBrains Mono', monospace",
     fontSize: '11px',
     fontWeight: '800',
-    color: '#D9483B',
+    color: '#C85A32',
     letterSpacing: '0.08em',
   },
   minimizeBtn: {
     backgroundColor: 'transparent',
-    border: '1px solid rgba(37, 36, 42, 0.15)',
+    border: '1px solid rgba(61, 38, 69, 0.15)',
     borderRadius: '6px',
     padding: '4px 10px',
     fontSize: '12px',
     fontWeight: '700',
-    color: '#706D73',
+    color: '#5E5B66',
     cursor: 'pointer',
     transition: 'all 0.15s ease',
   },
@@ -852,9 +852,9 @@ const styles = {
     minWidth: '38px',
     minHeight: '38px',
     borderRadius: '8px',
-    backgroundColor: '#F3F0EC',
-    color: '#555259',
-    border: '1px solid rgba(37, 36, 42, 0.12)',
+    backgroundColor: '#F4F1EA',
+    color: '#5E5B66',
+    border: '1px solid rgba(61, 38, 69, 0.12)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -952,15 +952,16 @@ const styles = {
   },
   notebookCard: {
     pointerEvents: 'auto',
-    backgroundColor: '#FFFFFF',
-    borderRadius: '14px',
-    border: '1px solid rgba(30, 30, 34, 0.12)',
-    boxShadow: '0 6px 20px rgba(30, 30, 34, 0.08), 0 1px 3px rgba(30, 30, 34, 0.04)',
+    backgroundColor: 'rgba(252, 250, 246, 0.98)',
+    borderRadius: '16px',
+    border: '1px solid rgba(61, 38, 69, 0.12)',
+    boxShadow: '0 8px 24px rgba(61, 38, 69, 0.08), 0 2px 6px rgba(61, 38, 69, 0.04)',
     padding: '10px 16px',
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
     position: 'relative',
+    backdropFilter: 'blur(12px)',
   },
   form: {
     width: '100%',
@@ -979,9 +980,9 @@ const styles = {
     border: 'none',
     outline: 'none',
     fontFamily: "'Plus Jakarta Sans', sans-serif",
-    fontSize: '17px',
+    fontSize: '16px',
     fontWeight: '600',
-    color: '#25242A',
+    color: '#201E23',
   },
   micBtn: {
     width: '42px',
@@ -993,7 +994,7 @@ const styles = {
     justifyContent: 'center',
     cursor: 'pointer',
     flexShrink: 0,
-    boxShadow: '0 2px 8px rgba(37, 36, 42, 0.08)',
+    boxShadow: '0 2px 8px rgba(61, 38, 69, 0.12)',
   },
   waveBars: {
     display: 'flex',
@@ -1011,7 +1012,7 @@ const styles = {
     width: '42px',
     height: '42px',
     borderRadius: '50%',
-    backgroundColor: '#25242A',
+    backgroundColor: '#201E23',
     color: '#FFFFFF',
     border: 'none',
     display: 'flex',
@@ -1019,7 +1020,7 @@ const styles = {
     justifyContent: 'center',
     cursor: 'pointer',
     flexShrink: 0,
-    boxShadow: '0 2px 8px rgba(37, 36, 42, 0.12)',
+    boxShadow: '0 2px 8px rgba(32, 30, 35, 0.16)',
   },
   feedbackBanner: {
     display: 'flex',

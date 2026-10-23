@@ -1536,6 +1536,7 @@ export default function ProductivityApp({ onNavigate }) {
             aria-labelledby="nav-tab-today"
             style={{
               display: currentView === 'today' ? 'flex' : 'none',
+              animation: currentView === 'today' ? 'viewEnter 0.18s ease-out' : 'none',
               flexDirection: 'column',
               gap: '24px',
               width: '100%',
@@ -1593,6 +1594,7 @@ export default function ProductivityApp({ onNavigate }) {
             aria-labelledby="nav-tab-tasks"
             style={{
               display: currentView === 'tasks' ? 'flex' : 'none',
+              animation: currentView === 'tasks' ? 'viewEnter 0.18s ease-out' : 'none',
               flexDirection: 'column',
               gap: '24px',
               width: '100%',
@@ -1635,6 +1637,7 @@ export default function ProductivityApp({ onNavigate }) {
             aria-labelledby="nav-tab-insights"
             style={{
               display: currentView === 'insights' ? 'flex' : 'none',
+              animation: currentView === 'insights' ? 'viewEnter 0.18s ease-out' : 'none',
               flexDirection: 'column',
               gap: '24px',
               width: '100%',
@@ -1745,9 +1748,9 @@ export default function ProductivityApp({ onNavigate }) {
 const styles = {
   app: {
     minHeight: '100vh',
-    backgroundColor: '#FAFAF7',
-    color: '#1E1E22',
-    fontFamily: "'Plus Jakarta Sans', 'Instrument Sans', sans-serif",
+    backgroundColor: '#FBF9F4',
+    color: '#201E23',
+    fontFamily: "'Plus Jakarta Sans', sans-serif",
     position: 'relative',
     overflowX: 'hidden',
     padding: '0 20px 180px 20px',
@@ -1759,12 +1762,12 @@ const styles = {
     right: 0,
     height: '3px',
     zIndex: 999,
-    backgroundColor: 'rgba(30, 30, 34, 0.04)',
+    backgroundColor: 'rgba(61, 38, 69, 0.05)',
   },
   progressBarTrack: {
     height: '100%',
     backgroundColor: '#C85A32',
-    backgroundImage: 'linear-gradient(90deg, #C85A32 0%, #D97706 100%)',
+    backgroundImage: 'linear-gradient(90deg, #C85A32 0%, #E5A83B 100%)',
     transition: 'width 0.1s ease',
   },
   content: {
@@ -1779,9 +1782,9 @@ const styles = {
   todayFocusCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: '16px',
-    border: '1px solid rgba(30, 30, 34, 0.08)',
+    border: '1px solid rgba(61, 38, 69, 0.09)',
     padding: '24px 28px',
-    boxShadow: '0 2px 10px rgba(30, 30, 34, 0.03)',
+    boxShadow: '0 2px 10px rgba(61, 38, 69, 0.03)',
     display: 'flex',
     flexDirection: 'column',
     gap: '16px',
@@ -1804,7 +1807,7 @@ const styles = {
     fontFamily: "'Syne', sans-serif",
     fontSize: '22px',
     fontWeight: '800',
-    color: '#1E1E22',
+    color: '#3D2645',
     margin: '4px 0 2px 0',
   },
   todayFocusSubtitle: {
@@ -1814,7 +1817,7 @@ const styles = {
     fontWeight: '500',
   },
   openTasksWorkspaceBtn: {
-    backgroundColor: '#1E1E22',
+    backgroundColor: '#C85A32',
     color: '#FFFFFF',
     border: 'none',
     padding: '11px 20px',
@@ -1823,7 +1826,7 @@ const styles = {
     fontWeight: '700',
     cursor: 'pointer',
     transition: 'all 0.15s ease',
-    boxShadow: '0 2px 8px rgba(30, 30, 34, 0.1)',
+    boxShadow: '0 2px 8px rgba(200, 90, 50, 0.25)',
   },
 };
 

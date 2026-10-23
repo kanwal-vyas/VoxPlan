@@ -64,7 +64,7 @@ export default function ProjectOverview({
               <span style={styles.badge}>SPRINT PROGRESSION</span>
             </div>
             <h2 style={styles.title}>
-              YOUR WEEK <span className={`hl hl-butter ${isVisible ? 'hl-sweep' : ''}`}>SO FAR</span>
+              YOUR WEEK <span className={`hl hl-marigold ${isVisible ? 'hl-sweep' : ''}`}>SO FAR</span>
             </h2>
           </div>
 
@@ -249,11 +249,11 @@ const styles = {
     backgroundColor: '#FFFFFF',
     borderRadius: '16px',
     padding: '32px',
-    boxShadow: '0 2px 10px rgba(30, 30, 34, 0.04)',
+    boxShadow: '0 2px 10px rgba(61, 38, 69, 0.04)',
     display: 'flex',
     flexDirection: 'column',
     gap: '28px',
-    border: '1px solid rgba(30, 30, 34, 0.08)',
+    border: '1px solid rgba(61, 38, 69, 0.08)',
   },
   header: {
     display: 'flex',
@@ -288,7 +288,7 @@ const styles = {
     fontFamily: "'Syne', sans-serif",
     fontSize: '28px',
     fontWeight: '800',
-    color: '#1E1E22',
+    color: '#3D2645',
     letterSpacing: '-0.02em',
     margin: 0,
   },
@@ -303,9 +303,9 @@ const styles = {
     alignItems: 'center',
     gap: '6px',
     backgroundColor: '#FAFAF7',
-    color: '#1E1E22',
-    border: '1px solid rgba(30, 30, 34, 0.15)',
-    boxShadow: '0 1px 4px rgba(30, 30, 34, 0.04)',
+    color: '#201E23',
+    border: '1px solid rgba(61, 38, 69, 0.15)',
+    boxShadow: '0 1px 4px rgba(61, 38, 69, 0.04)',
     padding: '9px 18px',
     borderRadius: '8px',
     fontSize: '13px',
@@ -326,7 +326,7 @@ const styles = {
     fontSize: '13px',
     fontWeight: '700',
     cursor: 'pointer',
-    boxShadow: '0 2px 8px rgba(200, 90, 50, 0.2)',
+    boxShadow: '0 2px 8px rgba(200, 90, 50, 0.25)',
   },
   analyzeBtnDisabled: {
     opacity: 0.5,
@@ -355,8 +355,8 @@ const styles = {
     flexDirection: 'column',
     justifyContent: 'center',
     gap: '10px',
-    border: '1px solid rgba(37, 36, 42, 0.08)',
-    boxShadow: '0 4px 16px rgba(37, 36, 42, 0.04)',
+    border: '1px solid rgba(61, 38, 69, 0.08)',
+    boxShadow: '0 4px 16px rgba(61, 38, 69, 0.04)',
   },
   progressHeader: {
     display: 'flex',
@@ -366,7 +366,7 @@ const styles = {
   progressLabel: {
     fontSize: '14px',
     fontWeight: '700',
-    color: '#25242A',
+    color: '#201E23',
   },
   numeralRow: {
     display: 'flex',
@@ -378,27 +378,27 @@ const styles = {
     fontFamily: "'Syne', sans-serif",
     fontSize: '56px',
     fontWeight: '800',
-    color: '#25242A',
+    color: '#3D2645',
     letterSpacing: '-0.04em',
     lineHeight: 1,
   },
   percentBadge: {
     fontSize: '12px',
     fontWeight: '700',
-    color: '#166534',
+    color: '#2D6A4F',
   },
   progressBarTrack: {
     width: '100%',
     height: '8px',
-    backgroundColor: 'rgba(37, 36, 42, 0.06)',
+    backgroundColor: 'rgba(61, 38, 69, 0.06)',
     borderRadius: '9999px',
     overflow: 'hidden',
     marginTop: '6px',
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: '#FFE58A',
-    backgroundImage: 'linear-gradient(90deg, #FFE58A 0%, #FF8F82 100%)',
+    backgroundColor: '#E5A83B',
+    backgroundImage: 'linear-gradient(90deg, #E5A83B 0%, #C85A32 100%)',
     borderRadius: '9999px',
     transition: 'width 0.9s cubic-bezier(0.16, 1, 0.3, 1)',
   },
@@ -409,8 +409,8 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     gap: '16px',
-    border: '1px solid rgba(37, 36, 42, 0.08)',
-    boxShadow: '0 4px 16px rgba(37, 36, 42, 0.04)',
+    border: '1px solid rgba(61, 38, 69, 0.08)',
+    boxShadow: '0 4px 16px rgba(61, 38, 69, 0.04)',
   },
   timelineHeader: {
     display: 'flex',

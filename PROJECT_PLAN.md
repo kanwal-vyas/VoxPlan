@@ -5861,3 +5861,62 @@ Real microphone testing surfaced an intermittent acceptance failure where compou
 - **Factory Scheduler Weights**: Immutable canonical values (`urgency: 50.0`, `priority: 100.0`, `unblock: 15.0`, `risk: 25.0`).
 - **Phase 7.4.4B Safety Activation Gate**: Permanently locked (`isAdaptationUnlocked === false`, `productionApplied === false`).
 - **Local-First Privacy**: 100% deterministic local storage; zero cloud LLMs, zero cloud speech APIs, zero audio uploads.
+
+---
+
+### Phase 9: VoxPlan UI Redesign — Stage 3: Restoring Visual Identity Without Reintroducing Layout Bugs Record
+
+**Implementation Date**: October 24, 2026
+**Commit Target**: `style(ui): restore expressive VoxPlan visual identity`
+**Stage Goal**: Restore VoxPlan's distinctive, warm, expressive editorial personality—intentional color, typographic contrast, refined details, and subtle motion—without reintroducing previous layout bugs, GSAP scroll pins, background morphs, or giant watermarks.
+
+#### 1. Architectural & Visual Improvements
+1. **Font Loading & Typographic Hierarchy**:
+   - Linked Google Fonts for `Syne` (display headings & wordmark), `Plus Jakarta Sans` (interface body font), and `JetBrains Mono` (section numbers, metadata, technical badges) in `index.html`.
+   - Replaced generic monochrome headings with expressive `Syne` display typography in deep plum (`#3D2645`) paired with clean `Plus Jakarta Sans` body text in warm charcoal (`#201E23`).
+   - Section numbers (`01`, `02`, `03`) and tags rendered in `JetBrains Mono` with terracotta accenting.
+2. **Intentional Warm Editorial Palette**:
+   - Canvas: Warm parchment ivory (`#FBF9F4`).
+   - Brand Accent: Rich terracotta (`#C85A32`) applied to primary CTA buttons, brand badges, and active progress indicators.
+   - Highlights: Muted marigold (`#E5A83B` / `.hl-marigold`) and terracotta (`#C85A32` / `.hl-terracotta`) highlight blocks behind key heading fragments ("Plan with clarity. Act with focus.", "Your week so far", "The Risk Landscape", "The Smart Part").
+   - Typographic Contrast: Deep plum / aubergine (`#3D2645`) for major headings and brand wordmark.
+   - Semantic States: Sage green (`#2D6A4F`) for completed task checkboxes and healthy states; muted amber (`#B45309`) for medium caution; crimson red (`#D9383A`) reserved strictly for delay risks.
+   - Warm Surfaces: Ivory paper cards (`#FFFFFF`) with warm plum-tinted borders (`rgba(61, 38, 69, 0.08)`) and soft depth shadows (`rgba(61, 38, 69, 0.04)`).
+3. **Safe, Deliberate Motion**:
+   - Added gentle CSS keyframe `@keyframes viewEnter` (`opacity: 0.88 -> 1`, `translateY: 3px -> 0`, 0.18s) when switching between Today, Tasks, and Insights without unmounting component state or timer intervals.
+   - Smooth upward expansion of the command drawer via `@keyframes drawerSlideUp`.
+   - Subtle hover and active tactile press states on interactive buttons.
+   - Full support for `prefers-reduced-motion: reduce`.
+4. **Command Dock Brand Integration**:
+   - Refined floating capsule surface to warm subtly-tinted ivory (`rgba(252, 250, 246, 0.98)`) with plum-tinted borders and gentle depth shadow.
+   - Transformed microphone button to rich terracotta (`#C85A32`) with white icon in idle/ready state, pulsing crimson (`#D9383A`) with waveBars in listening state, marigold (`#E5A83B`) while connecting, and deep plum (`#3D2645`) while processing.
+   - Preserved all voice lifecycles, transcripts, clarification cards, proposals, and zero-audio-upload privacy guarantees.
+
+#### 2. Verification & Regression Evidence
+- **Dedicated Navigation & Command Dock Suite**: `node --test tests/command_dock_navigation.test.js`
+  - **Result**: 14 passed, 0 failed across 5 suites.
+- **Accessibility & Contrast Suite**: `node --test tests/accessibility.test.js`
+  - **Result**: 22 passed, 0 failed across 8 suites.
+- **Complete Frontend Test Suite**: `npm test`
+  - **Result**: 1070 passed, 0 failed across 225 suites.
+- **Backend Test Suite**: `python -m pytest`
+  - **Result**: 29 passed, 0 failed in 5.70s.
+- **Production Build**: `npm run build`
+  - **Result**: `vite build` completed cleanly in 237ms.
+- **Linter**: `npm run lint` (`oxlint`)
+  - **Result**: 0 errors across 100 files.
+- **Secret Scanner**: `node scripts/secretScanner.mjs`
+  - **Result**: 0 secrets matched across 125 files.
+- **Whitespace / Git Diff Check**: `git diff --check`
+  - **Result**: 0 whitespace or formatting errors.
+- **Live Browser Verification (Desktop & Mobile 390x844)**:
+  - Recorded session `visual_identity_verif_1792783424270.webp` via browser subagent.
+  - Verified desktop (1280x800): Warm parchment canvas, deep plum wordmark and headings, terracotta CTA buttons, Syne display headline with highlighter accents, and floating dock with terracotta mic button.
+  - Verified tab switching: Today, Tasks, and Insights switch instantly and smoothly with zero unmount and zero layout shift.
+  - Verified command drawer: Upward expansion opens cleanly with prompt chips and privacy notices.
+  - Verified mobile (390x844): Compact header, clear focus area, and floating dock with safe bottom clearance.
+
+#### 3. Scope & Protected Invariant Preservation
+- **Factory Scheduler Weights**: Immutable canonical values (`urgency: 50.0`, `priority: 100.0`, `unblock: 15.0`, `risk: 25.0`).
+- **Phase 7.4.4B Safety Activation Gate**: Permanently locked (`isAdaptationUnlocked === false`, `productionApplied === false`).
+- **Local-First Privacy**: 100% deterministic local storage; zero cloud LLMs, zero cloud speech APIs, zero audio uploads.

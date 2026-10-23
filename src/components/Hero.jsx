@@ -18,8 +18,8 @@ export default function Hero() {
           </div>
 
           <h1 className="hero-headline" style={styles.headline}>
-            Plan with clarity.<br />
-            Act with focus.
+            Plan with <span className="hl hl-terracotta" style={styles.headingAccentPlum}>clarity.</span><br />
+            Act with <span className="hl hl-marigold" style={styles.headingAccent}>focus.</span>
           </h1>
 
           <p className="hero-statement" style={styles.statement}>
@@ -181,8 +181,14 @@ const styles = {
     fontWeight: '800',
     lineHeight: '1.08',
     letterSpacing: '-0.03em',
-    color: '#1E1E22',
+    color: '#3D2645',
     margin: 0,
+  },
+  headingAccent: {
+    color: '#201E23',
+  },
+  headingAccentPlum: {
+    color: '#3D2645',
   },
   statement: {
     fontSize: '16px',
@@ -203,7 +209,7 @@ const styles = {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '8px',
-    backgroundColor: '#1E1E22',
+    backgroundColor: '#C85A32',
     color: '#FFFFFF',
     border: 'none',
     padding: '11px 22px',
@@ -211,7 +217,7 @@ const styles = {
     fontSize: '14px',
     fontWeight: '700',
     cursor: 'pointer',
-    boxShadow: '0 2px 8px rgba(30, 30, 34, 0.12)',
+    boxShadow: '0 3px 12px rgba(200, 90, 50, 0.28)',
     transition: 'all 0.15s ease',
   },
   noteTag: {

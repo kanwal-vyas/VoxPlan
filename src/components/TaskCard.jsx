@@ -162,56 +162,56 @@ export default function TaskCard({
   const getTheme = () => {
     if (task.completed) {
       return {
-        accent: '#9B98A3',
-        tagClass: 'hl',
-        tagBg: 'rgba(37, 36, 42, 0.08)',
-        textColor: '#706D73',
-        circleBorder: '#9B98A3',
-        riskText: '#706D73',
+        accent: '#2D6A4F',
+        tagClass: 'hl hl-sage',
+        tagBg: 'rgba(45, 106, 79, 0.12)',
+        textColor: '#2D6A4F',
+        circleBorder: '#2D6A4F',
+        riskText: '#2D6A4F',
         noteTag: 'completed ✓',
       };
     }
     if (!prediction) {
       return {
-        accent: '#E2E0E7',
+        accent: '#D4CEBC',
         tagClass: 'hl',
-        tagBg: 'rgba(37, 36, 42, 0.05)',
-        textColor: '#706D73',
-        circleBorder: '#9B98A3',
-        riskText: '#706D73',
+        tagBg: 'rgba(61, 38, 69, 0.05)',
+        textColor: '#5E5B66',
+        circleBorder: '#D4CEBC',
+        riskText: '#5E5B66',
         noteTag: 'awaiting analysis ⏳',
       };
     }
     switch (riskCategory) {
       case 'HIGH':
         return {
-          accent: '#FF8F82',
-          tagClass: 'hl hl-coral',
-          tagBg: 'rgba(255, 143, 130, 0.2)',
-          textColor: '#D9483B',
-          circleBorder: '#D9483B',
-          riskText: '#D9483B',
+          accent: '#D9383A',
+          tagClass: 'hl hl-terracotta',
+          tagBg: 'rgba(200, 90, 50, 0.16)',
+          textColor: '#D9383A',
+          circleBorder: '#D9383A',
+          riskText: '#D9383A',
           noteTag: 'high delay risk ↗',
         };
       case 'MEDIUM':
         return {
-          accent: '#FFE58A',
-          tagClass: 'hl hl-butter',
-          tagBg: 'rgba(255, 229, 138, 0.25)',
+          accent: '#E5A83B',
+          tagClass: 'hl hl-marigold',
+          tagBg: 'rgba(229, 168, 59, 0.22)',
           textColor: '#B45309',
-          circleBorder: '#B45309',
+          circleBorder: '#E5A83B',
           riskText: '#B45309',
           noteTag: 'medium priority ⚡',
         };
       case 'LOW':
       default:
         return {
-          accent: '#BFE8D0',
-          tagClass: 'hl hl-mint',
-          tagBg: 'rgba(191, 232, 208, 0.25)',
-          textColor: '#166534',
-          circleBorder: '#166534',
-          riskText: '#166534',
+          accent: '#2D6A4F',
+          tagClass: 'hl hl-sage',
+          tagBg: 'rgba(45, 106, 79, 0.14)',
+          textColor: '#2D6A4F',
+          circleBorder: '#2D6A4F',
+          riskText: '#2D6A4F',
           noteTag: 'on schedule 🌱',
         };
     }
@@ -289,8 +289,8 @@ export default function TaskCard({
             onClick={handleCheckboxClick}
             style={{
               ...styles.checkbox,
-              backgroundColor: task.completed ? '#25242A' : '#FFFFFF',
-              borderColor: task.completed ? '#25242A' : 'rgba(37, 36, 42, 0.3)',
+              backgroundColor: task.completed ? '#2D6A4F' : '#FFFFFF',
+              borderColor: task.completed ? '#2D6A4F' : 'rgba(61, 38, 69, 0.3)',
             }}
             title={task.completed ? `Mark "${task.title}" uncompleted` : `Mark "${task.title}" completed`}
             aria-label={task.completed ? `Mark "${task.title}" as incomplete` : `Mark "${task.title}" as complete`}
@@ -673,8 +673,8 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     gap: '12px',
-    boxShadow: '0 4px 16px rgba(37, 36, 42, 0.04)',
-    border: '1px solid rgba(37, 36, 42, 0.08)',
+    boxShadow: '0 4px 16px rgba(61, 38, 69, 0.04)',
+    border: '1px solid rgba(61, 38, 69, 0.09)',
     cursor: 'pointer',
     position: 'relative',
   },
@@ -699,7 +699,7 @@ const styles = {
     fontSize: '10px',
     fontWeight: '800',
     letterSpacing: '0.04em',
-    color: '#25242A',
+    color: '#201E23',
     cursor: 'pointer',
   },
   actionButtons: {
@@ -708,7 +708,7 @@ const styles = {
     gap: '6px',
   },
   reorderBtn: {
-    background: 'rgba(37, 36, 42, 0.05)',
+    background: 'rgba(61, 38, 69, 0.05)',
     border: 'none',
     borderRadius: '4px',
     color: '#706D73',
@@ -759,7 +759,7 @@ const styles = {
     fontFamily: "'Syne', sans-serif",
     fontSize: '20px',
     fontWeight: '700',
-    color: '#25242A',
+    color: '#201E23',
     letterSpacing: '-0.02em',
     margin: 0,
     lineHeight: 1.25,
