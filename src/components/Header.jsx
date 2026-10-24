@@ -119,6 +119,18 @@ export default function Header({
                   </button>
                   <button
                     type="button"
+                    id="nav-tab-calendar"
+                    onClick={() => onSelectView('calendar')}
+                    aria-current={currentView === 'calendar' ? 'page' : undefined}
+                    style={{
+                      ...styles.navLink,
+                      ...(currentView === 'calendar' ? styles.activeNavLink : {}),
+                    }}
+                  >
+                    Calendar
+                  </button>
+                  <button
+                    type="button"
                     id="nav-tab-insights"
                     onClick={() => onSelectView('insights')}
                     aria-current={currentView === 'insights' ? 'page' : undefined}
@@ -325,6 +337,18 @@ export default function Header({
                   }}
                 >
                   Tasks
+                </button>
+                <button
+                  type="button"
+                  id="nav-tab-calendar"
+                  onClick={() => onSelectView('calendar')}
+                  aria-current={currentView === 'calendar' ? 'page' : undefined}
+                  style={{
+                    ...styles.navLinkMobile,
+                    ...(currentView === 'calendar' ? styles.activeNavLinkMobile : {}),
+                  }}
+                >
+                  Calendar
                 </button>
                 <button
                   type="button"

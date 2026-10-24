@@ -6193,3 +6193,69 @@ Real microphone testing surfaced an intermittent acceptance failure where compou
 - **Factory Scheduler Weights**: Canonical values strictly preserved (`urgency: 50.0`, `priority: 100.0`, `unblock: 15.0`, `risk: 25.0`).
 - **Phase 7.4.4B Safety Activation Gate**: Permanently locked (`isAdaptationUnlocked === false`).
 - **Local-First Privacy**: 100% deterministic local storage; zero cloud LLMs, zero cloud speech APIs, zero audio uploads.
+
+---
+
+## Phase 6, Stage 5: Interactive Google Calendar-Style Task Calendar
+
+### 1. Architectural Overview & Design Rationales
+To provide users with an intuitive temporal view of their task workloads while preserving VoxPlan's single-source-of-truth task model and local-first privacy, a first-class **Calendar** view was integrated into the primary navigation alongside Today, Tasks, and Insights:
+1. **Zero External Calendar Dependency Overhead**:
+   - Rather than introducing heavy external calendar dependencies (which often clash with React 19 and force custom event models), native, pure calendar math was engineered in `src/utils/calendarUtils.js`.
+   - UTC-safe date manipulation (`parseDateComponents`, `formatDateComponents`, `getMonthGrid`, `getWeekDays`) prevents common off-by-one errors caused by browser timezone shifts on date-only strings (`YYYY-MM-DD`).
+2. **First-Class Navigation & URL Query Sync**:
+   - Integrated as the 4th primary tab (`#nav-tab-calendar`) in both desktop and mobile headers.
+   - Synchronized with `window.history` and `?view=calendar` query params, supporting browser back/forward buttons without losing active view state or in-flight commands.
+3. **Multi-View Google Calendar Interface**:
+   - **Month View**: Standard 7-day grid (Sun–Sat) with leading/trailing month padding, today highlight, compact priority chips, and `+N more` overflow badges.
+   - **Week View**: 7-day weekly layout with day header cards, effort badges, and deadline indicators.
+   - **Day View**: Focused single-day agenda displaying real task metadata, effort estimates, categories, and direct status toggles.
+   - **Unscheduled Drawer**: Isolated collapsible drawer for undated tasks (`dueDate === null`), eliminating arbitrary date placement and providing a 1-click `+ Set to selected date` action.
+4. **Accessible Priority Palette & Color Legend**:
+   - Priority palette directly mapped to VoxPlan's canonical priority semantics:
+     - **Critical / Urgent**: Crimson/terracotta (`#D9383A`, background `rgba(217, 56, 58, 0.12)`, text `#9E1C1E`).
+     - **High**: Amber/marigold (`#E5A83B`, background `rgba(229, 168, 59, 0.16)`, text `#8D4203`).
+     - **Medium**: Dusty lavender/plum (`#8E5FA8`, background `rgba(182, 150, 204, 0.18)`, text `#3D2645`).
+     - **Low**: Sage green (`#2D6A4F`, background `rgba(45, 106, 79, 0.14)`, text `#1E4E39`).
+   - Completed tasks maintain their priority identity while presenting strikethrough styling and a checkmark indicator (`✓`).
+   - A visible priority legend is displayed in the calendar toolbar.
+5. **Interactive Task Management & Creation**:
+   - Clicking any task chip opens the Task Detail Popover, supporting inline renaming, deadline rescheduling, priority cycling, completion toggle, deletion, and ML explainability.
+   - Clicking an empty date cell or `+ Add Task` launches the Quick Add modal with that date prefilled, creating tasks directly through VoxPlan's canonical `handleCreateTask` / `telemetry` pipeline.
+6. **Command Dock & Viewport Safety**:
+   - Command dock remains globally accessible across all calendar views.
+   - Workspace padding enforces 180px safe clearance at the bottom, ensuring the dock never obscures calendar cells or agendas.
+
+### 2. Verification & Regression Evidence
+- **Complete Frontend Test Suite**: `npm test`
+  - **Result**: 1102 passed, 0 failed across 238 suites in 16.4s.
+- **Dedicated Calendar View Test Suite**: `node --test tests/calendar_view.test.js`
+  - **Result**: 17 passed, 0 failed across 9 suites:
+    - Month grid generation & leap year calculation (2024, 2025, 2028).
+    - UTC-safe date parsing without timezone offset corruption.
+    - Overdue task identification and undated task segregation.
+    - Priority palette mapping and high-contrast styling.
+    - Completed task strike-through with preserved priority identity.
+    - Header navigation tab declarations (desktop and mobile).
+    - ProductivityApp calendar tabpanel and URL sync.
+    - TaskCalendar toolbar controls, view switches, and unscheduled drawer.
+    - Bottom clearance (180px) for mobile command dock.
+- **Backend Test Suite**: `python -m pytest backend/tests/`
+  - **Result**: 29 passed, 0 failed in 1.89s.
+- **Production Build**: `npm run build`
+  - **Result**: `vite build` completed cleanly in 291ms.
+- **Linter**: `npm run lint` (`oxlint`)
+  - **Result**: 0 errors across 104 files.
+- **Secret Scanner**: `node scripts/secretScanner.mjs`
+  - **Result**: 0 secrets matched across 130 files scanned.
+- **Whitespace / Git Diff Check**: `git diff --check`
+  - **Result**: Clean; 0 errors.
+- **Live Browser Subagent Verification (`calendar_view_verify`)**:
+  - Recorded session `calendar_view_verify_1792836564011.webp`.
+  - Desktop (1280×800): Verified Month, Week, and Day views, priority color chips, toolbar navigation, quick-add task modal, and task detail popover.
+  - Mobile (375×667 / 390×844): Verified responsive grid layout, navigation bar, selected-day agenda, and command dock bottom clearance.
+
+### 3. Scope & Protected Invariant Preservation
+- **Factory Scheduler Weights**: Canonical values strictly preserved (`urgency: 50.0`, `priority: 100.0`, `unblock: 15.0`, `risk: 25.0`).
+- **Phase 7.4.4B Safety Activation Gate**: Permanently locked (`isAdaptationUnlocked === false`).
+- **Local-First Privacy**: 100% deterministic local storage; zero cloud LLMs, zero cloud speech APIs, zero audio uploads.

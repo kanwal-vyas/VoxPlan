@@ -380,6 +380,18 @@ button:active {
 .editorial-canvas-layer[data-current-view="tasks"] .colour-field-peach {
   opacity: 0.82;
 }
+.editorial-canvas-layer[data-current-view="calendar"] .colour-field-sun {
+  opacity: 0.85;
+}
+.editorial-canvas-layer[data-current-view="calendar"] .colour-field-peach {
+  opacity: 0.90;
+}
+.editorial-canvas-layer[data-current-view="calendar"] .colour-field-lavender {
+  opacity: 0.92;
+}
+.editorial-canvas-layer[data-current-view="calendar"] .colour-field-sage {
+  opacity: 0.88;
+}
 .editorial-canvas-layer[data-current-view="insights"] .colour-field-lavender {
   opacity: 1;
 }
@@ -607,6 +619,7 @@ a:focus-visible {
   #pulse > div,
   #landscape > div,
   #intelligence > div,
+  #calendar-workspace > div,
   #command > div {
     padding: 20px 16px !important;
     border-radius: 18px !important;

@@ -34,6 +34,12 @@ export const EDITORIAL_PALETTES = {
     { pos: 0.50, color: '#F5EEF8' }, // Perceptible dusty lavender tint
     { pos: 1.00, color: '#FDF0ED' }, // Warm peach tint
   ],
+  // Calendar: Clear, atmospheric calendar workspace with subtle warm tint
+  calendar: [
+    { pos: 0.00, color: '#FBF9F4' }, // Warm parchment
+    { pos: 0.50, color: '#FFF8E7' }, // Butter yellow warmth
+    { pos: 1.00, color: '#FDF0ED' }, // Warm peach tint
+  ],
   // Insights: Prediction & Understanding theme (Dusty Lavender -> Muted Sage -> Warm Peach)
   insights: [
     { pos: 0.00, color: '#F5EEF8' }, // Dusty lavender

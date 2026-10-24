@@ -9,6 +9,7 @@ import MLModelPanel from '../components/MLModelPanel';
 import BehavioralHistoryPanel from '../components/BehavioralHistoryPanel';
 import PersonalModelDashboard from '../components/PersonalModelDashboard';
 import TaskList from '../components/TaskList';
+import TaskCalendar from '../components/TaskCalendar';
 import LoadingScreen from '../components/LoadingScreen';
 import FeedbackToast from '../components/FeedbackToast';
 import EditorialBackground from '../components/EditorialBackground';
@@ -122,7 +123,7 @@ const normalizeTask = (t) => {
   const id = typeof t.id === 'string' && t.id.trim() ? t.id : `task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const title = typeof t.title === 'string' && t.title.trim() ? t.title.trim() : 'Untitled Task';
   const description = typeof t.description === 'string' ? t.description : '';
-  const priority = ['high', 'medium', 'low'].includes(String(t.priority).toLowerCase())
+  const priority = ['critical', 'urgent', 'high', 'medium', 'low'].includes(String(t.priority).toLowerCase())
     ? String(t.priority).toLowerCase()
     : 'medium';
   const completed = Boolean(t.completed);
@@ -206,6 +207,28 @@ const UNTRAINED_MODEL_STATUS = {
 
 export default function ProductivityApp({ onNavigate }) {
   const [currentView, setCurrentView] = useState('today'); // 'today' | 'tasks' | 'insights'
+
+  // URL query sync on mount & popstate
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const viewParam = urlParams.get('view');
+      if (viewParam && ['today', 'tasks', 'calendar', 'insights'].includes(viewParam)) {
+        setTimeout(() => {
+          setCurrentView(viewParam);
+        }, 0);
+      }
+      const handlePop = () => {
+        const params = new URLSearchParams(window.location.search);
+        const p = params.get('view');
+        if (p && ['today', 'tasks', 'calendar', 'insights'].includes(p)) {
+          setCurrentView(p);
+        }
+      };
+      window.addEventListener('popstate', handlePop);
+      return () => window.removeEventListener('popstate', handlePop);
+    }
+  }, []);
   const [isLoading, setIsLoading] = useState(true);
   const [scrollProgress, setScrollProgress] = useState(0);
   const [tasks, setTasks] = useState(loadSavedTasks);
@@ -850,6 +873,32 @@ export default function ProductivityApp({ onNavigate }) {
     });
   }, [tasks]);
 
+  const handleCreateTask = useCallback(async ({ title, priority = 'medium', dueDate = null, category = 'General', estimatedEffort = null }) => {
+    const newTask = {
+      id: `task-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      title: (title || '').trim() || 'Untitled Task',
+      description: '',
+      priority: ['critical', 'urgent', 'high', 'medium', 'low'].includes(String(priority).toLowerCase())
+        ? String(priority).toLowerCase()
+        : 'medium',
+      dueDate: dueDate || null,
+      completed: false,
+      category: (category || '').trim() || 'General',
+      estimatedEffort: typeof estimatedEffort === 'number' && !isNaN(estimatedEffort) ? estimatedEffort : null,
+      dependencies: [],
+      createdAt: new Date().toISOString(),
+    };
+    setTasks((prev) => [...prev, newTask]);
+    dialogueManager.setActiveSubject(newTask.id);
+    setActiveSubjectTaskId(newTask.id);
+    await telemetry.recordTaskCreated(newTask.id, newTask.priority);
+    setFeedback({
+      type: 'success',
+      message: `Created task: "${newTask.title}"${newTask.dueDate ? ` (Due: ${newTask.dueDate})` : ''}`,
+    });
+    return newTask;
+  }, []);
+
   const handleQuickAdd = useCallback(() => {
     const input = document.getElementById('command-input');
     const container = document.getElementById('command');
@@ -1440,6 +1489,11 @@ export default function ProductivityApp({ onNavigate }) {
 
   const handleSelectView = useCallback((view) => {
     setCurrentView(view);
+    if (typeof window !== 'undefined' && window.history && window.history.pushState) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', view);
+      window.history.pushState({ view }, '', url.toString());
+    }
     const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (typeof window !== 'undefined' && window.scrollTo) {
       window.scrollTo({ top: 0, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
@@ -1458,6 +1512,10 @@ export default function ProductivityApp({ onNavigate }) {
     }
     if (sectionId === 'tasks' || sectionId === 'landscape') {
       handleSelectView('tasks');
+      return;
+    }
+    if (sectionId === 'calendar') {
+      handleSelectView('calendar');
       return;
     }
     if (sectionId === 'insights' || sectionId === 'intelligence') {
@@ -1630,6 +1688,39 @@ export default function ProductivityApp({ onNavigate }) {
               onClearCompleted={handleClearCompleted}
               completedCount={completedCount}
               onQuickAdd={handleQuickAdd}
+            />
+          </div>
+
+          {/* Destination 4: Calendar View */}
+          <div
+            id="view-calendar"
+            role="tabpanel"
+            aria-labelledby="nav-tab-calendar"
+            style={{
+              display: currentView === 'calendar' ? 'flex' : 'none',
+              animation: currentView === 'calendar' ? 'viewEnter 0.18s ease-out' : 'none',
+              flexDirection: 'column',
+              gap: '24px',
+              width: '100%',
+            }}
+          >
+            <TaskCalendar
+              tasks={tasks}
+              predictionsMap={guardedPredictionsMap}
+              onSelectView={handleSelectView}
+              onCreateTask={handleCreateTask}
+              onToggleComplete={toggleTaskCompletion}
+              onReschedule={handleReschedule}
+              onCyclePriority={cyclePriority}
+              onUpdateTitle={updateTaskTitle}
+              onDeleteTask={deleteTask}
+              onOpenExplanation={(task, pred) =>
+                setSelectedTaskExplanation({
+                  task,
+                  pred: guardedPredictionsMap[task.id] || pred,
+                })
+              }
+              acceptedSchedule={acceptedSchedule}
             />
           </div>
 
