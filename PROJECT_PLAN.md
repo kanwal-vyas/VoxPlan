@@ -6127,3 +6127,69 @@ Real microphone testing surfaced an intermittent acceptance failure where compou
 - **Factory Scheduler Weights**: Canonical values strictly preserved (`urgency: 50.0`, `priority: 100.0`, `unblock: 15.0`, `risk: 25.0`).
 - **Phase 7.4.4B Safety Activation Gate**: Permanently locked (`isAdaptationUnlocked === false`).
 - **Local-First Privacy**: 100% deterministic local storage; zero cloud LLMs, zero cloud speech APIs, zero audio uploads.
+
+---
+
+### Phase 9: VoxPlan UI Redesign — Stage 6: Fine-Tune Ambient Colour Fields for Greater Visual Impact Record
+
+**Implementation Date**: October 24, 2026
+**Commit Target**: `style(ui): strengthen ambient colour and motion`
+**Stage Goal**: Refine the animated colour fields by increasing colour visibility by 20–30% and ambient motion translation/scale variation by 15–20%, making the background distinctly atmospheric while preserving the warm ivory base, high-contrast readable cards, and compact mobile command dock.
+
+#### 1. Architectural & Visual Design Implementation
+1. **Measured Increase in Colour Visibility (~20–30%)**:
+   - Refined radial gradients, alphas, and blur radii in `src/App.css` across all four organic fields:
+     - **Sun Field** (`#colour-field-sun`): Center alpha increased to `0.46` (marigold) and mid-stop to `0.26` (terracotta) with blur reduced to `40px` and base opacity to `0.96`.
+     - **Lavender Field** (`#colour-field-lavender`): Center alpha increased to `0.42` (lavender) and mid-stop to `0.24` (plum) with blur reduced to `42px` and base opacity to `0.94`.
+     - **Sage Field** (`#colour-field-sage`): Center alpha increased to `0.40` (sage) and mid-stop to `0.22` (forest) with blur reduced to `44px` and base opacity to `0.92`.
+     - **Peach Field** (`#colour-field-peach`): Center alpha increased to `0.54` (butter glow) and mid-stop to `0.34` (peach/coral) with blur reduced to `36px` and base opacity to `0.98`.
+   - Colour fields near viewport edges and corners are now immediately perceptible against the warm ivory base without appearing uniformly off-white, and blend naturally toward central content.
+2. **Enhanced Ambient Motion (15–20% Increase in Translation & Scale Variation)**:
+   - Refined keyframe animations `driftSun`, `driftLavender`, `driftSage`, and `driftPeach`:
+     - Scale variation increased from 3–5% to 5–8% (scale `0.93` to `1.08`).
+     - Translation bounds increased by 15–20% (up to ±38px horizontal, +48px vertical).
+     - Gentle rotation bounds increased to ±4°–5°, maintaining slow, organic drift across unsynchronized 20s–32s cycles.
+     - Noticeable ambient movement persists continuously when the user is stationary without scrolling.
+3. **Improved View State Transitions**:
+   - Harmonized view state opacities across `today`, `tasks`, and `insights`:
+     - **Today**: High-warmth canvas with sun and peach fields at full opacity (`1`).
+     - **Tasks**: Calmer workspace with sun dimmed to `0.78` and peach to `0.82`, while lavender (`0.88`) and sage (`0.90`) maintain subtle, perceptible background presence without washing out or obscuring task cards.
+     - **Insights**: Prominent lavender (`1`) and sage (`1`) accents highlighting ML model confidence and behavioral metrics.
+   - Refined `tasks` scroll palette interpolation in `src/animations/scrollStory.js` to transition smoothly through canonical dusty lavender (`#F5EEF8`).
+4. **Mobile & Reduced Motion Optimization**:
+   - Adjusted mobile viewport clamp sizes (`clamp(240px..280px, 58vw..68vw, 380px..440px)`) and blur radii (`24px–26px`) in `@media (max-width: 768px)`, ensuring rich perceptible colour on small screens (390×844) without GPU overhead.
+   - Maintained strict `prefers-reduced-motion` compliance: drift animations disabled (`animation: none !important`), transforms reset to `none`, presenting an attractive, static, high-contrast composition.
+5. **Preservation of Invariants**:
+   - Zero modifications to task cards, badges, status colors, or fonts.
+   - Floating command dock remains isolated at `z-index: 1000`, collapsed pill height (~54–58px) and 180px bottom clearance preserved.
+
+#### 2. Verification & Regression Evidence
+- **Complete Frontend Test Suite**: `npm test`
+  - **Result**: 1085 passed, 0 failed across 232 suites in 19.6s.
+- **Dedicated Editorial Colour Fields & Motion Suite**: `node --test tests/editorial_background_motion.test.js`
+  - **Result**: 15 passed, 0 failed across 7 suites.
+- **Command Discoverability & Navigation Suite**: `node --test tests/command_dock_navigation.test.js`
+  - **Result**: 14 passed, 0 failed across 5 suites.
+- **Accessibility & Contrast Suite**: `node --test tests/accessibility.test.js`
+  - **Result**: 22 passed, 0 failed across 8 suites.
+- **Backend Test Suite**: `python -m pytest backend/tests/`
+  - **Result**: 29 passed, 0 failed in 3.80s.
+- **Production Build**: `npm run build`
+  - **Result**: `vite build` completed cleanly in 460ms.
+- **Linter**: `npm run lint` (`oxlint`)
+  - **Result**: 0 errors across 102 files.
+- **Secret Scanner**: `node scripts/secretScanner.mjs`
+  - **Result**: 0 secrets matched across 127 files.
+- **Whitespace / Git Diff Check**: `git diff --check`
+  - **Result**: Clean; 0 whitespace or formatting errors.
+- **Live Browser Subagent Verification (`colour_fields_tuned`)**:
+  - Recorded session `colour_fields_tuned_1792832161567.webp`.
+  - Confirmed: marigold, lavender, sage, and peach fields are clearly visible near edges and corners against warm ivory base.
+  - Confirmed: ambient movement is clearly noticeable while stationary without feeling fast or distracting.
+  - Confirmed: Today -> Tasks -> Insights transitions are visibly smooth, with Tasks remaining calm and clear.
+  - Confirmed: command dock drawer opens cleanly above the background; mobile layout (390×844) is neat and compact.
+
+#### 3. Scope & Protected Invariant Preservation
+- **Factory Scheduler Weights**: Canonical values strictly preserved (`urgency: 50.0`, `priority: 100.0`, `unblock: 15.0`, `risk: 25.0`).
+- **Phase 7.4.4B Safety Activation Gate**: Permanently locked (`isAdaptationUnlocked === false`).
+- **Local-First Privacy**: 100% deterministic local storage; zero cloud LLMs, zero cloud speech APIs, zero audio uploads.

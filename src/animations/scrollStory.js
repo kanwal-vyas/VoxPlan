@@ -31,8 +31,8 @@ export const EDITORIAL_PALETTES = {
   // Tasks: Focused, clean, high-readability canvas (Warm Parchment -> Subtle Plum Tint -> Warm Peach)
   tasks: [
     { pos: 0.00, color: '#FBF9F4' }, // Warm parchment
-    { pos: 0.50, color: '#F7F3F8' }, // Subtle lavender/plum tint
-    { pos: 1.00, color: '#FDF0ED' }, // Subtle warm peach tint
+    { pos: 0.50, color: '#F5EEF8' }, // Perceptible dusty lavender tint
+    { pos: 1.00, color: '#FDF0ED' }, // Warm peach tint
   ],
   // Insights: Prediction & Understanding theme (Dusty Lavender -> Muted Sage -> Warm Peach)
   insights: [

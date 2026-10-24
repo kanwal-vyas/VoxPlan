@@ -310,9 +310,9 @@ button:active {
   width: clamp(480px, 48vw, 820px);
   height: clamp(480px, 48vw, 820px);
   border-radius: 48% 52% 46% 54% / 44% 48% 52% 56%;
-  background: radial-gradient(circle at 55% 45%, rgba(229, 168, 59, 0.34) 0%, rgba(200, 90, 50, 0.18) 50%, rgba(200, 90, 50, 0) 74%);
-  filter: blur(44px);
-  opacity: 0.92;
+  background: radial-gradient(circle at 55% 45%, rgba(229, 168, 59, 0.46) 0%, rgba(200, 90, 50, 0.26) 54%, rgba(200, 90, 50, 0) 76%);
+  filter: blur(40px);
+  opacity: 0.96;
   animation: driftSun 24s ease-in-out infinite alternate;
 }
 
@@ -323,9 +323,9 @@ button:active {
   width: clamp(420px, 44vw, 750px);
   height: clamp(420px, 44vw, 750px);
   border-radius: 56% 44% 52% 48% / 48% 54% 46% 52%;
-  background: radial-gradient(ellipse at 40% 50%, rgba(182, 150, 204, 0.30) 0%, rgba(61, 38, 69, 0.16) 52%, rgba(61, 38, 69, 0) 76%);
-  filter: blur(48px);
-  opacity: 0.88;
+  background: radial-gradient(ellipse at 40% 50%, rgba(182, 150, 204, 0.42) 0%, rgba(61, 38, 69, 0.24) 54%, rgba(61, 38, 69, 0) 78%);
+  filter: blur(42px);
+  opacity: 0.94;
   animation: driftLavender 28s ease-in-out infinite alternate;
 }
 
@@ -336,9 +336,9 @@ button:active {
   width: clamp(460px, 46vw, 780px);
   height: clamp(460px, 46vw, 780px);
   border-radius: 46% 54% 48% 52% / 52% 46% 54% 48%;
-  background: radial-gradient(circle at 50% 50%, rgba(74, 138, 102, 0.28) 0%, rgba(45, 106, 79, 0.14) 54%, rgba(45, 106, 79, 0) 74%);
-  filter: blur(52px);
-  opacity: 0.85;
+  background: radial-gradient(circle at 50% 50%, rgba(74, 138, 102, 0.40) 0%, rgba(45, 106, 79, 0.22) 56%, rgba(45, 106, 79, 0) 78%);
+  filter: blur(44px);
+  opacity: 0.92;
   animation: driftSage 32s ease-in-out infinite alternate;
 }
 
@@ -349,48 +349,60 @@ button:active {
   width: clamp(380px, 38vw, 660px);
   height: clamp(380px, 38vw, 660px);
   border-radius: 52% 48% 54% 46% / 46% 52% 48% 54%;
-  background: radial-gradient(circle at 45% 45%, rgba(254, 235, 180, 0.42) 0%, rgba(253, 218, 196, 0.24) 48%, rgba(253, 218, 196, 0) 72%);
-  filter: blur(40px);
-  opacity: 0.95;
+  background: radial-gradient(circle at 45% 45%, rgba(254, 224, 160, 0.54) 0%, rgba(253, 208, 185, 0.34) 52%, rgba(253, 208, 185, 0) 76%);
+  filter: blur(36px);
+  opacity: 0.98;
   animation: driftPeach 20s ease-in-out infinite alternate;
 }
 
 /* Coordinated View States (Subtle shifts in prominence across Today / Tasks / Insights) */
 .editorial-canvas-layer[data-current-view="today"] .colour-field-sun {
-  opacity: 0.95;
+  opacity: 1;
 }
 .editorial-canvas-layer[data-current-view="today"] .colour-field-peach {
-  opacity: 0.98;
+  opacity: 1;
+}
+.editorial-canvas-layer[data-current-view="today"] .colour-field-lavender {
+  opacity: 0.92;
+}
+.editorial-canvas-layer[data-current-view="today"] .colour-field-sage {
+  opacity: 0.90;
 }
 .editorial-canvas-layer[data-current-view="tasks"] .colour-field-sun {
-  opacity: 0.72;
+  opacity: 0.78;
 }
 .editorial-canvas-layer[data-current-view="tasks"] .colour-field-lavender {
-  opacity: 0.85;
-}
-.editorial-canvas-layer[data-current-view="tasks"] .colour-field-sage {
   opacity: 0.88;
 }
+.editorial-canvas-layer[data-current-view="tasks"] .colour-field-sage {
+  opacity: 0.90;
+}
+.editorial-canvas-layer[data-current-view="tasks"] .colour-field-peach {
+  opacity: 0.82;
+}
 .editorial-canvas-layer[data-current-view="insights"] .colour-field-lavender {
-  opacity: 0.98;
+  opacity: 1;
 }
 .editorial-canvas-layer[data-current-view="insights"] .colour-field-sage {
-  opacity: 0.95;
+  opacity: 1;
 }
 .editorial-canvas-layer[data-current-view="insights"] .colour-field-sun {
-  opacity: 0.68;
+  opacity: 0.72;
+}
+.editorial-canvas-layer[data-current-view="insights"] .colour-field-peach {
+  opacity: 0.88;
 }
 
-/* Visible, Calm Ambient Drift Animations */
+/* Visible, Calm Ambient Drift Animations — Refined for Enhanced Movement (~15-20% boost) */
 @keyframes driftSun {
   0% {
     transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
   }
   50% {
-    transform: translate3d(-32px, 24px, 0) scale(1.05) rotate(4deg);
+    transform: translate3d(-38px, 28px, 0) scale(1.07) rotate(5deg);
   }
   100% {
-    transform: translate3d(24px, 40px, 0) scale(0.97) rotate(-3deg);
+    transform: translate3d(28px, 48px, 0) scale(0.95) rotate(-4deg);
   }
 }
 
@@ -399,10 +411,10 @@ button:active {
     transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
   }
   50% {
-    transform: translate3d(28px, -22px, 0) scale(1.04) rotate(-4deg);
+    transform: translate3d(34px, -26px, 0) scale(1.06) rotate(-5deg);
   }
   100% {
-    transform: translate3d(-18px, 26px, 0) scale(0.96) rotate(3deg);
+    transform: translate3d(-22px, 32px, 0) scale(0.94) rotate(4deg);
   }
 }
 
@@ -411,10 +423,10 @@ button:active {
     transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
   }
   50% {
-    transform: translate3d(-24px, -28px, 0) scale(1.06) rotate(3deg);
+    transform: translate3d(-30px, -34px, 0) scale(1.08) rotate(4deg);
   }
   100% {
-    transform: translate3d(20px, -14px, 0) scale(0.95) rotate(-3deg);
+    transform: translate3d(25px, -18px, 0) scale(0.93) rotate(-4deg);
   }
 }
 
@@ -423,10 +435,10 @@ button:active {
     transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
   }
   50% {
-    transform: translate3d(24px, 26px, 0) scale(1.06) rotate(-3deg);
+    transform: translate3d(30px, 32px, 0) scale(1.08) rotate(-4deg);
   }
   100% {
-    transform: translate3d(-18px, 16px, 0) scale(0.97) rotate(4deg);
+    transform: translate3d(-22px, 20px, 0) scale(0.95) rotate(5deg);
   }
 }
 
@@ -553,32 +565,32 @@ a:focus-visible {
     inset: -6vw;
   }
   .colour-field-sun {
-    width: clamp(260px, 66vw, 420px);
-    height: clamp(260px, 66vw, 420px);
-    filter: blur(28px);
+    width: clamp(280px, 68vw, 440px);
+    height: clamp(280px, 68vw, 440px);
+    filter: blur(24px);
     top: -5%;
-    right: -10%;
+    right: -8%;
   }
   .colour-field-lavender {
-    width: clamp(240px, 60vw, 380px);
-    height: clamp(240px, 60vw, 380px);
-    filter: blur(30px);
+    width: clamp(260px, 64vw, 400px);
+    height: clamp(260px, 64vw, 400px);
+    filter: blur(26px);
     top: 30%;
-    left: -12%;
+    left: -10%;
   }
   .colour-field-sage {
-    width: clamp(250px, 64vw, 400px);
-    height: clamp(250px, 64vw, 400px);
-    filter: blur(32px);
+    width: clamp(270px, 66vw, 420px);
+    height: clamp(270px, 66vw, 420px);
+    filter: blur(26px);
     bottom: -8%;
-    right: -10%;
+    right: -8%;
   }
   .colour-field-peach {
-    width: clamp(220px, 56vw, 360px);
-    height: clamp(220px, 56vw, 360px);
-    filter: blur(28px);
+    width: clamp(240px, 58vw, 380px);
+    height: clamp(240px, 58vw, 380px);
+    filter: blur(24px);
     top: -4%;
-    left: -8%;
+    left: -6%;
   }
 
   /* Compact content wrapper */
