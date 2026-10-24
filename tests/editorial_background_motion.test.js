@@ -5,7 +5,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   EDITORIAL_PALETTES,
-  EDITORIAL_WORDS_CONFIG,
   hexToRgb,
   lerpColor,
   getMultiStopColor,
@@ -15,7 +14,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 
-describe('Cinematic Editorial Background Motion & Visual Safety Test Suite', () => {
+describe('Animated Colour Fields Canvas & Visual Safety Test Suite', () => {
   describe('1. Architectural Safety: Presentation-Only Layer & Layout Isolation', () => {
     it('1.1 EditorialBackground component exists and declares presentation-only semantics', () => {
       const compPath = path.join(rootDir, 'src', 'components', 'EditorialBackground.jsx');
@@ -24,7 +23,7 @@ describe('Cinematic Editorial Background Motion & Visual Safety Test Suite', () 
       assert.ok(content.includes('id="voxplan-editorial-canvas"'), 'Must have canvas element id');
       assert.ok(content.includes('className="editorial-canvas-layer"'), 'Must have layer class');
       assert.ok(content.includes('aria-hidden="true"'), 'Must be hidden from assistive technologies');
-      assert.ok(content.includes('editorial-words-layer'), 'Must contain words layer');
+      assert.ok(content.includes('colour-fields-layer'), 'Must contain colour fields layer');
     });
 
     it('1.2 App.css enforces pointer-events: none and fixed non-disruptive stacking order', () => {
@@ -35,7 +34,7 @@ describe('Cinematic Editorial Background Motion & Visual Safety Test Suite', () 
       assert.ok(content.includes('pointer-events: none;'), 'Must have pointer-events none');
       assert.ok(content.includes('position: fixed;'), 'Must be fixed to viewport so document flow is untouched');
       assert.ok(content.includes('z-index: 0;'), 'Must sit at z-index 0 behind application content');
-      assert.ok(content.includes('overflow: hidden;'), 'Must prevent giant letters from inducing horizontal or vertical scrollbars');
+      assert.ok(content.includes('overflow: hidden;'), 'Must prevent giant shapes from inducing horizontal or vertical scrollbars');
     });
 
     it('1.3 ProductivityApp nests canvas behind real content without altering document layout flow', () => {
@@ -54,36 +53,52 @@ describe('Cinematic Editorial Background Motion & Visual Safety Test Suite', () 
     });
   });
 
-  describe('2. Oversized Editorial Words Sequence & Composition', () => {
-    it('2.1 Exactly restores the original word sequence: PLAN, PREDICT, UNDERSTAND, ACT', () => {
+  describe('2. Oversized Abstract Colour Fields & Elimination of Faint Words', () => {
+    it('2.1 Replaces faint words with curated oversized colour fields', () => {
       const compPath = path.join(rootDir, 'src', 'components', 'EditorialBackground.jsx');
       const content = fs.readFileSync(compPath, 'utf-8');
 
-      assert.ok(content.includes('data-word="PLAN"'), 'Must include PLAN');
-      assert.ok(content.includes('data-word="PREDICT"'), 'Must include PREDICT');
-      assert.ok(content.includes('data-word="UNDERSTAND"'), 'Must include UNDERSTAND');
-      assert.ok(content.includes('data-word="ACT"'), 'Must include ACT');
+      // Faint words must be removed from canvas
+      assert.ok(!content.includes('data-word="PLAN"'), 'Must not render faint word PLAN');
+      assert.ok(!content.includes('data-word="PREDICT"'), 'Must not render faint word PREDICT');
+      assert.ok(!content.includes('data-word="UNDERSTAND"'), 'Must not render faint word UNDERSTAND');
+      assert.ok(!content.includes('data-word="ACT"'), 'Must not render faint word ACT');
 
-      const planIdx = content.indexOf('data-word="PLAN"');
-      const predictIdx = content.indexOf('data-word="PREDICT"');
-      const understandIdx = content.indexOf('data-word="UNDERSTAND"');
-      const actIdx = content.indexOf('data-word="ACT"');
-
-      assert.ok(planIdx < predictIdx && predictIdx < understandIdx && understandIdx < actIdx, 'Must render in exact sequence: PLAN -> PREDICT -> UNDERSTAND -> ACT');
+      // Curated colour fields must be present
+      assert.ok(content.includes('id="colour-field-sun"'), 'Must render sun / marigold field');
+      assert.ok(content.includes('id="colour-field-lavender"'), 'Must render lavender field');
+      assert.ok(content.includes('id="colour-field-sage"'), 'Must render sage field');
+      assert.ok(content.includes('id="colour-field-peach"'), 'Must render peach field');
     });
 
-    it('2.2 Uses brand display typography with intentional viewport edge crops', () => {
+    it('2.2 Shapes use soft gradients, organic curvature, and deliberate negative space', () => {
       const cssPath = path.join(rootDir, 'src', 'App.css');
       const content = fs.readFileSync(cssPath, 'utf-8');
 
-      assert.ok(content.includes("font-family: var(--font-display, 'Syne', sans-serif);"), 'Must use brand Syne display font');
-      assert.ok(content.includes('.editorial-word-plan'), 'Must style plan');
-      assert.ok(content.includes('.editorial-word-predict'), 'Must style predict');
-      assert.ok(content.includes('.editorial-word-understand'), 'Must style understand');
-      assert.ok(content.includes('.editorial-word-act'), 'Must style act');
+      assert.ok(content.includes('.colour-field-sun'), 'Must style sun field');
+      assert.ok(content.includes('.colour-field-lavender'), 'Must style lavender field');
+      assert.ok(content.includes('.colour-field-sage'), 'Must style sage field');
+      assert.ok(content.includes('.colour-field-peach'), 'Must style peach field');
 
-      // Intentional edge crops using negative positions or clamp sizes
-      assert.ok(content.includes('clamp(90px'), 'Must use oversized clamp typography');
+      // Radial gradients and organic curvature
+      assert.ok(content.includes('radial-gradient'), 'Must use soft radial gradients');
+      assert.ok(content.includes('border-radius'), 'Must declare curved border radius');
+      assert.ok(content.includes('filter: blur('), 'Must blend softly with diffuse gaussian blur');
+    });
+
+    it('2.3 Declares calm, continuous ambient drift animations that work without scrolling', () => {
+      const cssPath = path.join(rootDir, 'src', 'App.css');
+      const content = fs.readFileSync(cssPath, 'utf-8');
+
+      assert.ok(content.includes('@keyframes driftSun'), 'Must declare ambient drift for sun field');
+      assert.ok(content.includes('@keyframes driftLavender'), 'Must declare ambient drift for lavender field');
+      assert.ok(content.includes('@keyframes driftSage'), 'Must declare ambient drift for sage field');
+      assert.ok(content.includes('@keyframes driftPeach'), 'Must declare ambient drift for peach field');
+
+      assert.ok(content.includes('animation: driftSun'), 'Sun field must apply drift animation');
+      assert.ok(content.includes('animation: driftLavender'), 'Lavender field must apply drift animation');
+      assert.ok(content.includes('animation: driftSage'), 'Sage field must apply drift animation');
+      assert.ok(content.includes('animation: driftPeach'), 'Peach field must apply drift animation');
     });
   });
 
@@ -131,21 +146,13 @@ describe('Cinematic Editorial Background Motion & Visual Safety Test Suite', () 
   });
 
   describe('4. Three-Destination Navigation Coordination (Today / Tasks / Insights)', () => {
-    it('4.1 Word configurations adapt specifically to Today, Tasks, and Insights views', () => {
-      // Today includes full journey
-      assert.ok(EDITORIAL_WORDS_CONFIG.today.some((w) => w.text === 'PLAN'));
-      assert.ok(EDITORIAL_WORDS_CONFIG.today.some((w) => w.text === 'PREDICT'));
-      assert.ok(EDITORIAL_WORDS_CONFIG.today.some((w) => w.text === 'UNDERSTAND'));
-      assert.ok(EDITORIAL_WORDS_CONFIG.today.some((w) => w.text === 'ACT'));
+    it('4.1 Canvas coordinates colour field prominence per view tab', () => {
+      const cssPath = path.join(rootDir, 'src', 'App.css');
+      const content = fs.readFileSync(cssPath, 'utf-8');
 
-      // Tasks keeps tasks focused and readable: restrained opacity <= 0.05
-      const taskWords = EDITORIAL_WORDS_CONFIG.tasks;
-      assert.ok(taskWords.every((w) => w.maxOpacity <= 0.05), 'Tasks view words must keep restrained opacity <= 0.05');
-
-      // Insights highlights PREDICT and UNDERSTAND
-      const insightWords = EDITORIAL_WORDS_CONFIG.insights;
-      assert.ok(insightWords.some((w) => w.text === 'PREDICT'));
-      assert.ok(insightWords.some((w) => w.text === 'UNDERSTAND'));
+      assert.ok(content.includes('.editorial-canvas-layer[data-current-view="today"]'), 'Must coordinate today view');
+      assert.ok(content.includes('.editorial-canvas-layer[data-current-view="tasks"]'), 'Must coordinate tasks view');
+      assert.ok(content.includes('.editorial-canvas-layer[data-current-view="insights"]'), 'Must coordinate insights view');
     });
 
     it('4.2 ProductivityApp updates scroll story controller when currentView changes', () => {
@@ -158,20 +165,21 @@ describe('Cinematic Editorial Background Motion & Visual Safety Test Suite', () 
   });
 
   describe('5. Mobile Optimization & Reduced Motion Compliance', () => {
-    it('5.1 Mobile media query scales down typography and maintains compact dimensions', () => {
+    it('5.1 Mobile media query scales down colour fields for compact mobile screens', () => {
       const cssPath = path.join(rootDir, 'src', 'App.css');
       const content = fs.readFileSync(cssPath, 'utf-8');
 
       assert.ok(content.includes('@media (max-width: 768px)'), 'Must declare mobile breakpoint');
-      assert.ok(content.includes('.editorial-word-plan'), 'Must adapt word plan for mobile');
+      assert.ok(content.includes('.colour-field-sun'), 'Must adapt sun field for mobile');
+      assert.ok(content.includes('.colour-field-lavender'), 'Must adapt lavender field for mobile');
     });
 
-    it('5.2 Reduced motion query disables sweeping motion and preserves static low opacity', () => {
+    it('5.2 Reduced motion query disables continuous ambient animations and preserves static composition', () => {
       const cssPath = path.join(rootDir, 'src', 'App.css');
       const content = fs.readFileSync(cssPath, 'utf-8');
 
       assert.ok(content.includes('@media (prefers-reduced-motion: reduce)'), 'Must declare reduced motion breakpoint');
-      assert.ok(content.includes('.editorial-word-item {\n    transform: none !important;'), 'Must disable transforms under reduced motion');
+      assert.ok(content.includes('.colour-field-item {\n    animation: none !important;'), 'Must disable continuous animations under reduced motion');
       assert.ok(content.includes('background-color: #FBF9F4 !important;'), 'Must preserve stable background under reduced motion');
     });
   });

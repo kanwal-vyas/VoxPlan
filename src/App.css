@@ -266,7 +266,7 @@ button:active {
 }
 
 /* --------------------------------------------------------------------------
-   Presentation-Only Cinematic Editorial Canvas & Typography Layer
+   Presentation-Only Animated Colour Fields & Abstract Forms Canvas
    -------------------------------------------------------------------------- */
 
 .editorial-canvas-layer {
@@ -284,58 +284,150 @@ button:active {
   contain: strict;
 }
 
-.editorial-words-layer {
+.colour-fields-layer {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  inset: -10vw;
+  width: calc(100% + 20vw);
+  height: calc(100% + 20vh);
   pointer-events: none;
   user-select: none;
+  will-change: transform;
+  transition: transform 0.25s ease-out;
 }
 
-.editorial-word-item {
+.colour-field-item {
   position: absolute;
-  font-family: var(--font-display, 'Syne', sans-serif);
-  font-weight: 800;
-  letter-spacing: -0.05em;
-  line-height: 0.78;
-  text-transform: uppercase;
-  white-space: nowrap;
   pointer-events: none;
   user-select: none;
   will-change: transform, opacity;
-  opacity: 0;
-  transform: translate3d(0, 0, 0);
-  transition: opacity 0.22s ease-out;
+  transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Individual word desktop placements (intentional viewport edge crop) */
-.editorial-word-plan {
-  top: 10%;
-  right: -5%;
-  font-size: clamp(90px, 16vw, 240px);
-  color: #3D2645; /* Deep plum */
+/* 1. Oversized Warm Marigold / Terracotta Sun Arc (Top-Right) */
+.colour-field-sun {
+  top: -8%;
+  right: -6%;
+  width: clamp(480px, 48vw, 820px);
+  height: clamp(480px, 48vw, 820px);
+  border-radius: 48% 52% 46% 54% / 44% 48% 52% 56%;
+  background: radial-gradient(circle at 55% 45%, rgba(229, 168, 59, 0.34) 0%, rgba(200, 90, 50, 0.18) 50%, rgba(200, 90, 50, 0) 74%);
+  filter: blur(44px);
+  opacity: 0.92;
+  animation: driftSun 24s ease-in-out infinite alternate;
 }
 
-.editorial-word-predict {
-  top: 32%;
-  left: -6%;
-  font-size: clamp(80px, 15vw, 220px);
-  color: #C85A32; /* Terracotta / Amber */
+/* 2. Dusty Lavender / Soft Plum Wave (Mid-Left) */
+.colour-field-lavender {
+  top: 26%;
+  left: -8%;
+  width: clamp(420px, 44vw, 750px);
+  height: clamp(420px, 44vw, 750px);
+  border-radius: 56% 44% 52% 48% / 48% 54% 46% 52%;
+  background: radial-gradient(ellipse at 40% 50%, rgba(182, 150, 204, 0.30) 0%, rgba(61, 38, 69, 0.16) 52%, rgba(61, 38, 69, 0) 76%);
+  filter: blur(48px);
+  opacity: 0.88;
+  animation: driftLavender 28s ease-in-out infinite alternate;
 }
 
-.editorial-word-understand {
-  top: 54%;
+/* 3. Muted Sage / Mint Meadow Arc (Bottom-Right) */
+.colour-field-sage {
+  bottom: -10%;
   right: -8%;
-  font-size: clamp(75px, 13vw, 200px);
-  color: #2D6A4F; /* Muted sage */
+  width: clamp(460px, 46vw, 780px);
+  height: clamp(460px, 46vw, 780px);
+  border-radius: 46% 54% 48% 52% / 52% 46% 54% 48%;
+  background: radial-gradient(circle at 50% 50%, rgba(74, 138, 102, 0.28) 0%, rgba(45, 106, 79, 0.14) 54%, rgba(45, 106, 79, 0) 74%);
+  filter: blur(52px);
+  opacity: 0.85;
+  animation: driftSage 32s ease-in-out infinite alternate;
 }
 
-.editorial-word-act {
-  top: 76%;
+/* 4. Warm Peach / Butter Glow Ambient Well (Top-Left) */
+.colour-field-peach {
+  top: -6%;
   left: -4%;
-  font-size: clamp(90px, 16vw, 240px);
-  color: #C85A32; /* Terracotta */
+  width: clamp(380px, 38vw, 660px);
+  height: clamp(380px, 38vw, 660px);
+  border-radius: 52% 48% 54% 46% / 46% 52% 48% 54%;
+  background: radial-gradient(circle at 45% 45%, rgba(254, 235, 180, 0.42) 0%, rgba(253, 218, 196, 0.24) 48%, rgba(253, 218, 196, 0) 72%);
+  filter: blur(40px);
+  opacity: 0.95;
+  animation: driftPeach 20s ease-in-out infinite alternate;
+}
+
+/* Coordinated View States (Subtle shifts in prominence across Today / Tasks / Insights) */
+.editorial-canvas-layer[data-current-view="today"] .colour-field-sun {
+  opacity: 0.95;
+}
+.editorial-canvas-layer[data-current-view="today"] .colour-field-peach {
+  opacity: 0.98;
+}
+.editorial-canvas-layer[data-current-view="tasks"] .colour-field-sun {
+  opacity: 0.72;
+}
+.editorial-canvas-layer[data-current-view="tasks"] .colour-field-lavender {
+  opacity: 0.85;
+}
+.editorial-canvas-layer[data-current-view="tasks"] .colour-field-sage {
+  opacity: 0.88;
+}
+.editorial-canvas-layer[data-current-view="insights"] .colour-field-lavender {
+  opacity: 0.98;
+}
+.editorial-canvas-layer[data-current-view="insights"] .colour-field-sage {
+  opacity: 0.95;
+}
+.editorial-canvas-layer[data-current-view="insights"] .colour-field-sun {
+  opacity: 0.68;
+}
+
+/* Visible, Calm Ambient Drift Animations */
+@keyframes driftSun {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(-32px, 24px, 0) scale(1.05) rotate(4deg);
+  }
+  100% {
+    transform: translate3d(24px, 40px, 0) scale(0.97) rotate(-3deg);
+  }
+}
+
+@keyframes driftLavender {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(28px, -22px, 0) scale(1.04) rotate(-4deg);
+  }
+  100% {
+    transform: translate3d(-18px, 26px, 0) scale(0.96) rotate(3deg);
+  }
+}
+
+@keyframes driftSage {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(-24px, -28px, 0) scale(1.06) rotate(3deg);
+  }
+  100% {
+    transform: translate3d(20px, -14px, 0) scale(0.95) rotate(-3deg);
+  }
+}
+
+@keyframes driftPeach {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(24px, 26px, 0) scale(1.06) rotate(-3deg);
+  }
+  100% {
+    transform: translate3d(-18px, 16px, 0) scale(0.97) rotate(4deg);
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -456,30 +548,37 @@ a:focus-visible {
     display: none !important;
   }
 
-  /* Editorial words on mobile viewports: scaled down, subtle contrast */
-  .editorial-word-item {
-    letter-spacing: -0.04em;
-    line-height: 0.82;
+  /* Scaled colour fields for mobile viewports */
+  .colour-fields-layer {
+    inset: -6vw;
   }
-  .editorial-word-plan {
-    top: 8%;
-    right: -2%;
-    font-size: clamp(52px, 13vw, 110px);
+  .colour-field-sun {
+    width: clamp(260px, 66vw, 420px);
+    height: clamp(260px, 66vw, 420px);
+    filter: blur(28px);
+    top: -5%;
+    right: -10%;
   }
-  .editorial-word-predict {
+  .colour-field-lavender {
+    width: clamp(240px, 60vw, 380px);
+    height: clamp(240px, 60vw, 380px);
+    filter: blur(30px);
     top: 30%;
-    left: -3%;
-    font-size: clamp(48px, 12vw, 100px);
+    left: -12%;
   }
-  .editorial-word-understand {
-    top: 52%;
-    right: -4%;
-    font-size: clamp(42px, 10.5vw, 90px);
+  .colour-field-sage {
+    width: clamp(250px, 64vw, 400px);
+    height: clamp(250px, 64vw, 400px);
+    filter: blur(32px);
+    bottom: -8%;
+    right: -10%;
   }
-  .editorial-word-act {
-    top: 72%;
-    left: -2%;
-    font-size: clamp(52px, 13vw, 110px);
+  .colour-field-peach {
+    width: clamp(220px, 56vw, 360px);
+    height: clamp(220px, 56vw, 360px);
+    filter: blur(28px);
+    top: -4%;
+    left: -8%;
   }
 
   /* Compact content wrapper */
@@ -643,10 +742,13 @@ a:focus-visible {
     transform: none !important;
     opacity: 0.08 !important;
   }
-  .editorial-word-item {
+  .colour-field-item {
+    animation: none !important;
     transform: none !important;
     transition: none !important;
-    opacity: 0.04 !important;
+  }
+  .colour-fields-layer {
+    transform: none !important;
   }
   .voxplan-app {
     background-color: #FBF9F4 !important;

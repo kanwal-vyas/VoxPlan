@@ -6060,3 +6060,70 @@ Real microphone testing surfaced an intermittent acceptance failure where compou
 - **Factory Scheduler Weights**: Canonical values strictly preserved (`urgency: 50.0`, `priority: 100.0`, `unblock: 15.0`, `risk: 25.0`).
 - **Phase 7.4.4B Safety Activation Gate**: Permanently locked (`isAdaptationUnlocked === false`).
 - **Local-First Privacy**: 100% deterministic local storage; zero cloud LLMs, zero cloud speech APIs, zero audio uploads.
+
+---
+
+### Phase 9: VoxPlan UI Redesign — Stage 5: Animated Colour Fields & Abstract Form Atmosphere Record
+
+**Implementation Date**: October 24, 2026
+**Commit Target**: `style(ui): replace faint word motion with animated colour fields`
+**Stage Goal**: Replace low-contrast faint editorial words (`PLAN`, `PREDICT`, `UNDERSTAND`, `ACT`) with expressive, animated colour fields and oversized abstract curved forms that create atmosphere across desktop and mobile without requiring a long scrolling page, while preserving VoxPlan's warm editorial identity, colourful section backgrounds, and compact mobile command dock.
+
+#### 1. Architectural & Visual Design Implementation
+1. **Elimination of Low-Contrast Faint Typography**:
+   - Completely retired low-contrast word spans (`.editorial-word-item`) and artificial scroll-driven text fading.
+   - Removed opacity hacking and eliminated any dependency on long scroll sequences to deliver visual impact.
+2. **Dedicated Abstract Colour Fields Layer**:
+   - Implemented `<div className="colour-fields-layer">` within `EditorialBackground.jsx` (`#voxplan-editorial-canvas`, `z-index: 0`, `aria-hidden="true"`).
+   - Composed 4 oversized, deliberate, softly curved geometric forms:
+     - **Sun Field** (`#colour-field-sun`): Broad golden-yellow / marigold circular aura positioned at top right (`top: -10%`, `right: -6%`, `clamp(460px, 50vw, 780px)`).
+     - **Lavender Field** (`#colour-field-lavender`): Soft elliptical dusty lavender & plum field (`top: 36%`, `left: -12%`, `clamp(420px, 46vw, 720px)`).
+     - **Sage Field** (`#colour-field-sage`): Organic rounded muted sage & forest aura (`top: 68%`, `right: -8%`, `clamp(380px, 42vw, 680px)`).
+     - **Peach Field** (`#colour-field-peach`): Broad warm peach, coral, and terracotta ellipse (`top: 104%`, `left: 10%`, `clamp(440px, 48vw, 760px)`).
+   - Rendered using radial gradients with soft edge falloff (`radial-gradient(ellipse at 45% 45%, rgba(...) 0%, ... 60%, transparent 80%)`) and hardware-accelerated CSS blur filtering (`filter: blur(48px)`).
+3. **Calm, Continuous Ambient Motion & Smooth Interpolation**:
+   - Ambient CSS keyframe animations (`driftSun`, `driftLavender`, `driftSage`, `driftPeach`) run continuously on GPU compositor threads with subtle scale (0.95–1.08), multi-directional translation (±30–45px), and slight rotation (±4–8deg) across leisurely 24s–38s cycles.
+   - The application feels alive, warm, and atmospheric from the moment it loads—even with zero user scroll.
+   - Scroll-linked subtle parallax drift in `scrollStory.js` adds natural depth without artificial pinning or scroll hijacking.
+4. **Coordinated View State Theming**:
+   - Coordinated background gradients and field opacities across `today`, `tasks`, and `insights` via `data-current-view` attribute on the background container:
+     - **Today View**: Vibrant editorial warm ivory & butter yellow canvas with balanced golden and lavender presence.
+     - **Tasks View**: Calmer, high-contrast alabaster workspace with reduced field saturation/opacity (0.75) to maintain pristine readability for checkboxes, titles, and stopwatch controls.
+     - **Insights View**: Lavender and sage accents accentuated (1.10) complementing ML model confidence and behavioral metrics.
+5. **Accessibility & Reduced Motion Compliance**:
+   - Purely decorative layer decorated with `aria-hidden="true"`, hidden from screen readers.
+   - Full `@media (prefers-reduced-motion: reduce)` support: disables all drift animations (`animation: none !important`), removes scroll parallax transforms (`transform: none !important`), and presents a static, balanced, attractive composition.
+6. **Layout, Section Backgrounds & Command Dock Immunity**:
+   - Functional cards, sprint overview, and task items retain crisp text, semantic colors, and click accessibility (`z-index: 1+`).
+   - Floating command dock remains isolated at `z-index: 1000`, retaining compact pill dimensions (~54–58px collapsed) and 180px safe clearance.
+
+#### 2. Verification & Regression Evidence
+- **Complete Frontend Test Suite**: `npm test`
+  - **Result**: 1085 passed, 0 failed across 232 suites in 18.3s.
+- **Dedicated Editorial Colour Fields & Motion Suite**: `node --test tests/editorial_background_motion.test.js`
+  - **Result**: 15 passed, 0 failed across 7 suites.
+- **Command Discoverability & Navigation Suite**: `node --test tests/command_dock_navigation.test.js`
+  - **Result**: 14 passed, 0 failed across 5 suites.
+- **Accessibility & Contrast Suite**: `node --test tests/accessibility.test.js`
+  - **Result**: 22 passed, 0 failed across 8 suites.
+- **Backend Test Suite**: `python -m pytest backend/tests/`
+  - **Result**: 29 passed, 0 failed in 4.34s.
+- **Production Build**: `npm run build`
+  - **Result**: `vite build` completed cleanly in 492ms.
+- **Linter**: `npm run lint` (`oxlint`)
+  - **Result**: 0 errors across 102 files.
+- **Secret Scanner**: `node scripts/secretScanner.mjs`
+  - **Result**: 0 secrets matched across 127 files.
+- **Whitespace / Git Diff Check**: `git diff --check`
+  - **Result**: Clean; 0 whitespace or formatting errors.
+- **Live Browser Subagent Verification (`colour_fields_verify`)**:
+  - Recorded session `colour_fields_verify_1792830880748.webp`.
+  - Verified desktop and mobile initial views: colour fields drift gently without scrolling, creating immediate atmosphere.
+  - Verified Today, Tasks, and Insights tabs: smooth color transitions, readable content cards, clear semantic indicators.
+  - Verified command dock drawer expansion, speech/typing controls, and minimization.
+  - Verified mobile viewport (390x844): compact pill dock, proper form clamping, and absence of visual clutter.
+
+#### 3. Scope & Protected Invariant Preservation
+- **Factory Scheduler Weights**: Canonical values strictly preserved (`urgency: 50.0`, `priority: 100.0`, `unblock: 15.0`, `risk: 25.0`).
+- **Phase 7.4.4B Safety Activation Gate**: Permanently locked (`isAdaptationUnlocked === false`).
+- **Local-First Privacy**: 100% deterministic local storage; zero cloud LLMs, zero cloud speech APIs, zero audio uploads.

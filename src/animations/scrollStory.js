@@ -1,35 +1,34 @@
 /**
- * VoxPlan — Presentation-Only Cinematic Editorial Motion System
+ * VoxPlan — Presentation-Only Animated Colour Fields & Atmosphere System
  *
  * Responsibilities:
- * 1. Smooth background colour transitions across the warm editorial palette:
- *    - Warm parchment / ivory (#FBF9F4 / #FFF8EF)
- *    - Butter yellow / marigold (#FFF8E7 / #FFF9DB)
- *    - Dusty lavender / soft plum (#F5EEF8 / #F3EEFF)
- *    - Muted sage (#EBF5EE / #EBF8F1)
- *    - Warm peach / terracotta (#FDF0ED / #FFEFEA)
- * 2. Oversized editorial typography motion:
- *    - Sequence: PLAN, PREDICT, UNDERSTAND, ACT
- *    - Directional sweeps, gentle entry and exit, controlled contrast
- *    - Intentional viewport edge cropping for magazine layout composition
+ * 1. Expressive animated colour fields and oversized abstract forms:
+ *    - Butter yellow & marigold sun arcs (#FFF8E7 / #E5A83B)
+ *    - Dusty lavender & soft plum waves (#F5EEF8 / #3D2645)
+ *    - Muted sage meadow arcs (#EBF5EE / #2D6A4F)
+ *    - Warm peach & terracotta ambient wells (#FDF0ED / #C85A32)
+ * 2. Visible, calm continuous motion:
+ *    - Ambient drifting via GPU-accelerated CSS animations
+ *    - Alive and atmospheric even without scrolling
+ *    - Subtle scroll-linked palette interpolation and spatial depth
  * 3. Architecture & Safety Invariants:
  *    - PRESENTATION-ONLY: Never pins sections, never mutates layout containers,
  *      never modifies document height, never reduces content card opacity.
  *    - Accessible: pointer-events: none, aria-hidden: true, reduced-motion compliant.
- *    - Coordinates with Today / Tasks / Insights tabbed navigation.
- *    - Preserves mobile command dock and modal stacking contexts.
+ *    - Coordinates seamlessly with Today / Tasks / Insights navigation.
+ *    - Preserves mobile command dock (~54-58px) and modal stacking contexts.
  */
 
 // Brand color palette stops for smooth scroll interpolation
 export const EDITORIAL_PALETTES = {
-  // Today: Full editorial journey (Warm Parchment -> Butter Yellow -> Dusty Lavender -> Warm Peach)
+  // Today: Full warm editorial journey (Warm Parchment -> Butter Yellow -> Dusty Lavender -> Warm Peach)
   today: [
     { pos: 0.00, color: '#FBF9F4' }, // Warm parchment / ivory
     { pos: 0.32, color: '#FFF8E7' }, // Butter yellow / marigold
     { pos: 0.68, color: '#F5EEF8' }, // Dusty lavender / soft plum
     { pos: 1.00, color: '#FDF0ED' }, // Warm peach / terracotta
   ],
-  // Tasks: Focused, quiet, high-readability canvas (Warm Parchment -> Subtle Plum Tint -> Warm Peach)
+  // Tasks: Focused, clean, high-readability canvas (Warm Parchment -> Subtle Plum Tint -> Warm Peach)
   tasks: [
     { pos: 0.00, color: '#FBF9F4' }, // Warm parchment
     { pos: 0.50, color: '#F7F3F8' }, // Subtle lavender/plum tint
@@ -40,124 +39,6 @@ export const EDITORIAL_PALETTES = {
     { pos: 0.00, color: '#F5EEF8' }, // Dusty lavender
     { pos: 0.50, color: '#EBF5EE' }, // Muted sage
     { pos: 1.00, color: '#FDF0ED' }, // Warm peach / terracotta
-  ],
-};
-
-// Word configurations per view
-export const EDITORIAL_WORDS_CONFIG = {
-  today: [
-    {
-      id: 'editorial-word-plan',
-      text: 'PLAN',
-      range: [0.00, 0.35],
-      peak: 0.15,
-      startX: 70,
-      endX: -55,
-      startY: -10,
-      endY: 15,
-      maxOpacity: 0.11,
-      color: '#3D2645', // Deep plum
-    },
-    {
-      id: 'editorial-word-predict',
-      text: 'PREDICT',
-      range: [0.22, 0.60],
-      peak: 0.38,
-      startX: -65,
-      endX: 50,
-      startY: -12,
-      endY: 18,
-      maxOpacity: 0.10,
-      color: '#C85A32', // Terracotta / amber
-    },
-    {
-      id: 'editorial-word-understand',
-      text: 'UNDERSTAND',
-      range: [0.48, 0.82],
-      peak: 0.65,
-      startX: 75,
-      endX: -45,
-      startY: -10,
-      endY: 15,
-      maxOpacity: 0.09,
-      color: '#2D6A4F', // Muted sage
-    },
-    {
-      id: 'editorial-word-act',
-      text: 'ACT',
-      range: [0.70, 1.00],
-      peak: 0.88,
-      startX: -50,
-      endX: 55,
-      startY: -8,
-      endY: 12,
-      maxOpacity: 0.11,
-      color: '#C85A32', // Terracotta
-    },
-  ],
-  tasks: [
-    {
-      id: 'editorial-word-plan',
-      text: 'PLAN',
-      range: [0.00, 0.45],
-      peak: 0.20,
-      startX: 35,
-      endX: -30,
-      startY: -5,
-      endY: 10,
-      maxOpacity: 0.05, // Restrained for maximum task reading clarity
-      color: '#3D2645',
-    },
-    {
-      id: 'editorial-word-act',
-      text: 'ACT',
-      range: [0.55, 1.00],
-      peak: 0.80,
-      startX: -30,
-      endX: 35,
-      startY: -5,
-      endY: 10,
-      maxOpacity: 0.05,
-      color: '#C85A32',
-    },
-  ],
-  insights: [
-    {
-      id: 'editorial-word-predict',
-      text: 'PREDICT',
-      range: [0.00, 0.50],
-      peak: 0.22,
-      startX: -60,
-      endX: 45,
-      startY: -10,
-      endY: 15,
-      maxOpacity: 0.10,
-      color: '#3D2645', // Deep plum
-    },
-    {
-      id: 'editorial-word-understand',
-      text: 'UNDERSTAND',
-      range: [0.35, 0.85],
-      peak: 0.60,
-      startX: 65,
-      endX: -40,
-      startY: -10,
-      endY: 15,
-      maxOpacity: 0.09,
-      color: '#2D6A4F', // Muted sage
-    },
-    {
-      id: 'editorial-word-act',
-      text: 'ACT',
-      range: [0.75, 1.00],
-      peak: 0.90,
-      startX: -40,
-      endX: 45,
-      startY: -6,
-      endY: 10,
-      maxOpacity: 0.08,
-      color: '#C85A32', // Terracotta
-    },
   ],
 };
 
@@ -202,7 +83,7 @@ export function getMultiStopColor(stops, progress) {
 }
 
 /**
- * Initializes the presentation-only cinematic scroll storytelling experience for VoxPlan.
+ * Initializes the presentation-only animated colour fields experience for VoxPlan.
  *
  * @param {Object} options
  * @param {string} [options.currentView='today'] - Active navigation view ('today', 'tasks', 'insights')
@@ -218,35 +99,23 @@ export function initCinematicScrollStory({ currentView = 'today' } = {}) {
   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const appEl = document.querySelector('.voxplan-app');
+  const canvasEl = document.getElementById('voxplan-editorial-canvas');
+  const fieldsLayer = document.querySelector('.colour-fields-layer');
   const palette = EDITORIAL_PALETTES[currentView] || EDITORIAL_PALETTES.today;
-  const wordConfigs = EDITORIAL_WORDS_CONFIG[currentView] || EDITORIAL_WORDS_CONFIG.today;
-  const activeWordIds = new Set(wordConfigs.map((w) => w.id));
 
-  // Collect word elements
-  const allWordElements = {
-    'editorial-word-plan': document.getElementById('editorial-word-plan'),
-    'editorial-word-predict': document.getElementById('editorial-word-predict'),
-    'editorial-word-understand': document.getElementById('editorial-word-understand'),
-    'editorial-word-act': document.getElementById('editorial-word-act'),
-  };
+  if (canvasEl) {
+    canvasEl.setAttribute('data-current-view', currentView);
+  }
 
-  // If user prefers reduced motion: present calm static atmosphere without sweeps or color shifts
+  // If user prefers reduced motion: present calm static atmosphere without sweeps or parallax
   if (prefersReducedMotion) {
     if (appEl) {
       appEl.style.setProperty('--voxplan-canvas-bg', '#FBF9F4');
       appEl.style.backgroundColor = '#FBF9F4';
     }
-    Object.entries(allWordElements).forEach(([id, el]) => {
-      if (!el) return;
-      if (activeWordIds.has(id)) {
-        el.style.transform = 'none';
-        el.style.opacity = '0.04';
-        el.style.visibility = 'visible';
-      } else {
-        el.style.opacity = '0';
-        el.style.visibility = 'hidden';
-      }
-    });
+    if (fieldsLayer) {
+      fieldsLayer.style.transform = 'none';
+    }
     return () => {};
   }
 
@@ -257,7 +126,6 @@ export function initCinematicScrollStory({ currentView = 'today' } = {}) {
   const updateVisualState = () => {
     isTicking = false;
 
-    const isMobile = window.innerWidth <= 768;
     const scrollY = window.scrollY || window.pageYOffset || 0;
     const docHeight = document.documentElement.scrollHeight || document.body.scrollHeight || 0;
     const viewHeight = window.innerHeight || 1;
@@ -273,71 +141,11 @@ export function initCinematicScrollStory({ currentView = 'today' } = {}) {
       appEl.style.backgroundColor = currentColor;
     }
 
-    // 2. Oversized Editorial Typography Movement & Opacity
-    // Handle short pages where user cannot scroll far (e.g. large display)
-    const isShortScroll = maxScroll < 60;
-
-    // First hide words that are not part of the active view
-    Object.entries(allWordElements).forEach(([id, el]) => {
-      if (!el) return;
-      if (!activeWordIds.has(id)) {
-        el.style.opacity = '0';
-        el.style.visibility = 'hidden';
-        el.style.transform = 'translate3d(0, 0, 0)';
-      }
-    });
-
-    // Animate active words
-    wordConfigs.forEach((config) => {
-      const el = allWordElements[config.id];
-      if (!el) return;
-
-      // When page has negligible scroll, display first word softly at rest
-      if (isShortScroll) {
-        if (config === wordConfigs[0]) {
-          const restingOpacity = (isMobile ? config.maxOpacity * 0.6 : config.maxOpacity * 0.75).toFixed(3);
-          el.style.visibility = 'visible';
-          el.style.opacity = restingOpacity;
-          el.style.transform = 'translate3d(0, 0, 0)';
-          if (config.color) el.style.color = config.color;
-        } else {
-          el.style.opacity = '0';
-          el.style.visibility = 'hidden';
-        }
-        return;
-      }
-
-      const [start, end] = config.range;
-      if (progress < start || progress > end) {
-        el.style.opacity = '0';
-        el.style.visibility = 'hidden';
-        return;
-      }
-
-      // Normalized progress within word's active window [0..1]
-      const span = end - start;
-      const t = span > 0 ? (progress - start) / span : 0;
-
-      // Bell curve opacity: gentle entry -> peak -> gentle exit (sin curve)
-      const curve = Math.sin(t * Math.PI);
-      const effectiveMaxOpacity = isMobile ? config.maxOpacity * 0.55 : config.maxOpacity;
-      const opacity = (curve * effectiveMaxOpacity).toFixed(3);
-
-      // Directional movement: lerp startX -> endX, startY -> endY
-      const moveScale = isMobile ? 0.35 : 1.0;
-      const x = (config.startX + (config.endX - config.startX) * t) * moveScale;
-      const y = (config.startY + (config.endY - config.startY) * t) * moveScale;
-      const scale = isMobile ? 1.0 : (0.97 + 0.06 * curve).toFixed(3);
-
-      el.style.visibility = 'visible';
-      el.style.opacity = opacity;
-      el.style.transform = isMobile
-        ? `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`
-        : `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) scale(${scale})`;
-      if (config.color) {
-        el.style.color = config.color;
-      }
-    });
+    // 2. Subtle, restrained spatial depth on the colour fields layer (no layout disruption)
+    if (fieldsLayer) {
+      const parallaxY = -(scrollY * 0.04);
+      fieldsLayer.style.transform = `translate3d(0, ${parallaxY.toFixed(1)}px, 0)`;
+    }
   };
 
   const onScroll = () => {

@@ -1,10 +1,11 @@
 import React from 'react';
 
 /**
- * EditorialBackground — Presentation-Only Cinematic Background Canvas
+ * EditorialBackground — Presentation-Only Animated Colour Fields Canvas
  *
- * Renders oversized editorial typography (PLAN, PREDICT, UNDERSTAND, ACT)
- * and atmospheric background motion for VoxPlan.
+ * Replaces the faint word typography with expressive, oversized abstract forms
+ * and animated colour fields that create atmosphere across VoxPlan even without
+ * scrolling.
  *
  * CRITICAL ARCHITECTURAL RULES:
  * 1. Presentation-only: pointer-events: none, user-select: none, aria-hidden: true.
@@ -20,35 +21,34 @@ export default function EditorialBackground({ currentView = 'today' }) {
       aria-hidden="true"
       data-current-view={currentView}
     >
-      <div className="editorial-words-layer">
-        <span
-          id="editorial-word-plan"
-          className="editorial-word-item editorial-word-plan"
-          data-word="PLAN"
-        >
-          PLAN
-        </span>
-        <span
-          id="editorial-word-predict"
-          className="editorial-word-item editorial-word-predict"
-          data-word="PREDICT"
-        >
-          PREDICT
-        </span>
-        <span
-          id="editorial-word-understand"
-          className="editorial-word-item editorial-word-understand"
-          data-word="UNDERSTAND"
-        >
-          UNDERSTAND
-        </span>
-        <span
-          id="editorial-word-act"
-          className="editorial-word-item editorial-word-act"
-          data-word="ACT"
-        >
-          ACT
-        </span>
+      <div className="colour-fields-layer">
+        {/* Warm Marigold / Terracotta Sun Arc (Top-Right) */}
+        <div
+          id="colour-field-sun"
+          className="colour-field-item colour-field-sun"
+          data-field="sun"
+        />
+
+        {/* Dusty Lavender / Soft Plum Wave (Mid-Left) */}
+        <div
+          id="colour-field-lavender"
+          className="colour-field-item colour-field-lavender"
+          data-field="lavender"
+        />
+
+        {/* Muted Sage / Mint Meadow Arc (Bottom-Right) */}
+        <div
+          id="colour-field-sage"
+          className="colour-field-item colour-field-sage"
+          data-field="sage"
+        />
+
+        {/* Warm Peach / Butter Glow Ambient Well (Top-Left) */}
+        <div
+          id="colour-field-peach"
+          className="colour-field-item colour-field-peach"
+          data-field="peach"
+        />
       </div>
     </div>
   );
