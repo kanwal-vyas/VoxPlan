@@ -24,6 +24,7 @@ const rootDir = path.resolve(__dirname, '..');
 describe('TaskCalendar — Interactive Task Calendar Test Suite', () => {
   describe('1. Calendar Date Math, Month Boundaries & Leap Years', () => {
     it('1.1 Computes correct days in month for regular and leap years', () => {
+      assert.match(getTodayDateString(), /^\d{4}-\d{2}-\d{2}$/, 'getTodayDateString returns YYYY-MM-DD');
       // February in non-leap years (2025: 28 days)
       assert.equal(getDaysInMonth(2025, 1), 28);
       // February in leap year (2024: 29 days)

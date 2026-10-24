@@ -252,9 +252,23 @@
 }
 
 .digital-card:hover {
-  transform: translateY(-5px);
+  transform: translateY(-4px);
   box-shadow: 0 16px 36px rgba(37, 36, 42, 0.09) !important;
 }
+
+/* Stabilize large layout containers against floaty hover translation */
+.hero-container-card.digital-card:hover,
+.command-notebook-card.digital-card:hover,
+#calendar-month-grid.digital-card:hover,
+#calendar-week-grid.digital-card:hover,
+#calendar-day-grid.digital-card:hover,
+.calendar-control-hub.digital-card:hover,
+#today-focus-card.digital-card:hover,
+.pulse-layout .digital-card:hover {
+  transform: none;
+  box-shadow: 0 4px 18px rgba(61, 38, 69, 0.05) !important;
+}
+
 
 /* Interactive elements */
 button, input, a {

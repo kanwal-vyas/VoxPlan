@@ -6259,3 +6259,62 @@ To provide users with an intuitive temporal view of their task workloads while p
 - **Factory Scheduler Weights**: Canonical values strictly preserved (`urgency: 50.0`, `priority: 100.0`, `unblock: 15.0`, `risk: 25.0`).
 - **Phase 7.4.4B Safety Activation Gate**: Permanently locked (`isAdaptationUnlocked === false`).
 - **Local-First Privacy**: 100% deterministic local storage; zero cloud LLMs, zero cloud speech APIs, zero audio uploads.
+
+---
+
+## Phase 8.6: Desktop-First UI Stabilization and Refinement
+
+### 1. Strategy & Scope Realignment
+To establish a rock-solid, production-quality visual and functional foundation, immediate UI development shifted exclusively to the **desktop experience (1440×900 and 1280×800)**:
+1. **Freeze Mobile Redesign Work**:
+   - Mobile-specific UI redesigns and isolated mobile CSS overrides are frozen for this phase.
+   - All existing mobile responsive rules and media queries are strictly preserved without deletion or degradation.
+   - A single, coordinated application-wide mobile adaptation pass will follow once the desktop experience is approved.
+2. **Eliminate Container Hover Jumps**:
+   - In `src/App.css`, generic `.digital-card:hover { transform: translateY(-5px); }` previously caused massive structural containers (`.hero-container-card`, `.command-notebook-card`, `#calendar-month-grid`, `#calendar-week-grid`, `#calendar-day-grid`, `.calendar-control-hub`, `#today-focus-card`) to shift jarringly when moving the cursor across the screen.
+   - Container cards are now explicitly exempted, remaining rock-solid while interactive child items (buttons, individual task chips, small cards) continue to lift smoothly.
+3. **Consolidate Calendar Control Hub**:
+   - The calendar toolbar previously spanned three separate stacked cards (`toolbarCard`, `filterBar`, `legendBar`), occupying ~90px of unnecessary vertical height and fracturing the layout.
+   - Consolidated into a unified `.calendar-control-hub` featuring month/week/day view toggles, period navigation (`‹` / `›`), Today shortcut, Back to Tasks link, priority/status filter pills, and a priority legend in one elegant card.
+   - Month view cell minimum height standardized to 122px with distinct visual badges for Today (solid amber badge) and Selected Date (terracotta badge with ring outline).
+4. **Refine Today View Hierarchy & Live Task Integration**:
+   - Replaced static dummy demonstration initiatives in `Hero.jsx` with dynamic live task integration from the user's sprint backlog, showing actual task titles, categories, deadlines, and real ML risk assessments.
+   - Rebuilt `#today-focus-card` from an empty backlog count into a functional focus center rendering top active sprint tasks with direct completion checkboxes, priority badges, deadline tags, effort chips, risk warnings, and one-click stopwatch timers (`▶ Track`), plus quick-add task shortcuts.
+5. **Harmonize Shared Design Tokens**:
+   - In `src/index.css`, established canonical CSS custom properties for priority levels (`--priority-critical`, `--priority-high`, `--priority-medium`, `--priority-low`) and their corresponding translucent backgrounds and high-contrast text shades.
+
+### 2. View-by-View Refinements
+- **Today View**:
+  - Hero card: Rebalanced responsive typography clamp (`clamp(28px, 3.8vw, 46px)`), eliminated oversized padding, and integrated live task risk data.
+  - Sprint Focus Card (`#today-focus-card`): Displays top active sprint tasks with interactive checkboxes, priority tags, and stopwatch timer triggers. Retains secondary action to jump to the full Tasks list.
+- **Tasks View**:
+  - Stable card containers without hover jumps.
+  - Clear priority chips, quick-effort selectors, and risk landscape telemetry panels.
+- **Calendar View**:
+  - Unified `#calendar-control-hub` combining navigation, view mode selection, filter pills, and priority legend.
+  - Month grid: 7-column calendar grid with 122px cell height, smooth hover states, and clear differentiation between Today (current real date) and Selected Date.
+  - Interactive agenda: Renders selected date tasks with full edit, complete, reschedule, and delete actions.
+- **Insights View**:
+  - Consistent border radii, shadows, and contrast across ML performance metrics, confusion matrices, and feature importance rankings.
+  - Ambient color fields provide cohesive atmosphere without obscuring data readability.
+- **Command Dock & Console**:
+  - Centered floating dock with 180px safe bottom workspace clearance.
+  - Smooth expansion into conversational console with prompt history, clarification cards, and action previews.
+
+### 3. Quality Gates & Verification Results
+- **Frontend Test Suite (`npm test`)**:
+  - 1102 tests passed across 238 suites in 15.3s (0 failed).
+- **Backend Test Suite (`python -m pytest backend/tests/`)**:
+  - 29 tests passed in 2.37s (0 failed).
+- **Production Build (`npm run build`)**:
+  - `vite build` completed cleanly in 2.59s.
+- **Linter (`npm run lint` / `oxlint`)**:
+  - 0 errors across 105 files.
+- **Secret Scanner (`node scripts/secretScanner.mjs`)**:
+  - 0 secrets matched across 130 scanned files.
+- **Git Diff Whitespace Check (`git diff --check`)**:
+  - Clean with 0 whitespace errors.
+- **Browser Subagent Desktop Verification (`desktop_refine_verify`)**:
+  - Tested at both 1440×900 and 1280×800 desktop viewports.
+  - Verified Today, Tasks, Calendar, Insights, and Command Dock views with zero container jumps, clean typography hierarchy, and full interactivity.
+  - Confirmed mobile redesign was frozen and responsive rules preserved.

@@ -216,206 +216,215 @@ export default function TaskCalendar({
   return (
     <section id="calendar-workspace" style={styles.section} aria-label="Task Calendar Workspace">
       <div style={styles.container}>
-        {/* Top Control Bar: Heading, Nav buttons, View Switcher, Filters */}
-        <div style={styles.topBar}>
-          <div style={styles.headingGroup}>
-            <span style={styles.badge}>WORKSPACE CALENDAR</span>
-            <div style={styles.titleRow}>
-              <h2 style={styles.mainHeading} id="calendar-view-heading">
-                {calendarView === 'month' && formatMonthYearHeading(viewYear, viewMonth)}
-                {calendarView === 'week' && `Week of ${formatMonthYearHeading(viewYear, viewMonth)}`}
-                {calendarView === 'day' && formatFullDateHeading(selectedDate)}
-              </h2>
-              {selectedDate === todayStr && (
-                <span style={styles.todayPill}>TODAY</span>
+        {/* Consolidated Desktop Calendar Control Hub */}
+        <div style={styles.controlHub} className="digital-card calendar-control-hub">
+          {/* Top Row: Heading, Period Nav, View Switcher, Tasks shortcut */}
+          <div style={styles.topBar}>
+            <div style={styles.headingGroup}>
+              <span style={styles.badge}>WORKSPACE CALENDAR</span>
+              <div style={styles.titleRow}>
+                <h2 style={styles.mainHeading} id="calendar-view-heading">
+                  {calendarView === 'month' && formatMonthYearHeading(viewYear, viewMonth)}
+                  {calendarView === 'week' && `Week of ${formatMonthYearHeading(viewYear, viewMonth)}`}
+                  {calendarView === 'day' && formatFullDateHeading(selectedDate)}
+                </h2>
+                {selectedDate === todayStr && (
+                  <span style={styles.todayPill}>TODAY</span>
+                )}
+              </div>
+              <p style={styles.subHeading}>
+                {overdueCount > 0 && (
+                  <span style={styles.overdueNotice}>
+                    ⚠️ {overdueCount} overdue task{overdueCount === 1 ? '' : 's'} ·{' '}
+                  </span>
+                )}
+                {dueTodayCount > 0
+                  ? `${dueTodayCount} task${dueTodayCount === 1 ? '' : 's'} scheduled for today.`
+                  : 'Plan and track sprint deadlines across months, weeks, and days.'}
+              </p>
+            </div>
+
+            {/* Right Toolbar Controls */}
+            <div style={styles.toolbarControls}>
+              {/* Navigation buttons */}
+              <div style={styles.navButtonGroup} role="group" aria-label="Calendar navigation">
+                <button
+                  type="button"
+                  id="calendar-today-btn"
+                  onClick={handleToday}
+                  style={styles.todayBtn}
+                  title="Jump to today's date"
+                  aria-label="Jump to today"
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
+                  id="calendar-prev-btn"
+                  onClick={handlePrev}
+                  style={styles.navArrowBtn}
+                  title="Previous period"
+                  aria-label="Previous period"
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  id="calendar-next-btn"
+                  onClick={handleNext}
+                  style={styles.navArrowBtn}
+                  title="Next period"
+                  aria-label="Next period"
+                >
+                  ›
+                </button>
+              </div>
+
+              {/* View Switcher: Month / Week / Day */}
+              <div style={styles.viewSwitcherGroup} role="group" aria-label="Calendar view switcher">
+                <button
+                  type="button"
+                  id="calendar-view-month-btn"
+                  onClick={() => setCalendarView('month')}
+                  style={{
+                    ...styles.viewBtn,
+                    ...(calendarView === 'month' ? styles.activeViewBtn : {}),
+                  }}
+                  aria-pressed={calendarView === 'month'}
+                >
+                  Month
+                </button>
+                <button
+                  type="button"
+                  id="calendar-view-week-btn"
+                  onClick={() => setCalendarView('week')}
+                  style={{
+                    ...styles.viewBtn,
+                    ...(calendarView === 'week' ? styles.activeViewBtn : {}),
+                  }}
+                  aria-pressed={calendarView === 'week'}
+                >
+                  Week
+                </button>
+                <button
+                  type="button"
+                  id="calendar-view-day-btn"
+                  onClick={() => setCalendarView('day')}
+                  style={{
+                    ...styles.viewBtn,
+                    ...(calendarView === 'day' ? styles.activeViewBtn : {}),
+                  }}
+                  aria-pressed={calendarView === 'day'}
+                >
+                  Day
+                </button>
+              </div>
+
+              {/* Shortcut back to Tasks workspace */}
+              {onSelectView && (
+                <button
+                  type="button"
+                  id="calendar-back-to-tasks-btn"
+                  onClick={() => onSelectView('tasks')}
+                  style={styles.backTasksBtn}
+                  title="Return to Tasks list"
+                  aria-label="Return to Tasks list view"
+                >
+                  ← Tasks List
+                </button>
               )}
             </div>
-            <p style={styles.subHeading}>
-              {overdueCount > 0 && (
-                <span style={styles.overdueNotice}>
-                  ⚠️ {overdueCount} overdue task{overdueCount === 1 ? '' : 's'} ·{' '}
-                </span>
-              )}
-              {dueTodayCount > 0
-                ? `${dueTodayCount} task${dueTodayCount === 1 ? '' : 's'} scheduled for today.`
-                : 'Plan and track sprint deadlines across months, weeks, and days.'}
-            </p>
           </div>
 
-          {/* Right Toolbar Controls */}
-          <div style={styles.toolbarControls}>
-            {/* Navigation buttons */}
-            <div style={styles.navButtonGroup} role="group" aria-label="Calendar navigation">
+          {/* Integrated Divider */}
+          <div style={styles.hubDivider} />
+
+          {/* Bottom Row: Filter Pills & Priority Legend */}
+          <div style={styles.filterAndLegendRow}>
+            <div style={styles.filterPillsArea}>
+              {/* Priority Filters */}
+              <div style={styles.filterGroup}>
+                <span style={styles.filterLabel}>Priority:</span>
+                {['all', 'critical', 'high', 'medium', 'low'].map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    id={`calendar-filter-priority-${p}`}
+                    onClick={() => setPriorityFilter(p)}
+                    style={{
+                      ...styles.filterPill,
+                      ...(priorityFilter === p ? styles.activeFilterPill : {}),
+                    }}
+                    aria-pressed={priorityFilter === p}
+                  >
+                    {p === 'all' ? 'All' : p.charAt(0).toUpperCase() + p.slice(1)}
+                  </button>
+                ))}
+              </div>
+
+              {/* Status Filter */}
+              <div style={styles.filterGroup}>
+                <span style={styles.filterLabel}>Status:</span>
+                {['all', 'incomplete', 'completed'].map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    id={`calendar-filter-status-${s}`}
+                    onClick={() => setStatusFilter(s)}
+                    style={{
+                      ...styles.filterPill,
+                      ...(statusFilter === s ? styles.activeFilterPill : {}),
+                    }}
+                    aria-pressed={statusFilter === s}
+                  >
+                    {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
+                  </button>
+                ))}
+              </div>
+
+              {/* Unscheduled Drawer Toggle */}
               <button
                 type="button"
-                id="calendar-today-btn"
-                onClick={handleToday}
-                style={styles.todayBtn}
-                title="Jump to today's date"
-                aria-label="Jump to today"
+                id="calendar-toggle-unscheduled-btn"
+                onClick={() => setShowUnscheduled(!showUnscheduled)}
+                style={{
+                  ...styles.unscheduledBtn,
+                  ...(showUnscheduled ? styles.activeUnscheduledBtn : {}),
+                }}
+                title="View tasks without scheduled deadlines"
+                aria-expanded={showUnscheduled}
               >
-                Today
-              </button>
-              <button
-                type="button"
-                id="calendar-prev-btn"
-                onClick={handlePrev}
-                style={styles.navArrowBtn}
-                title="Previous period"
-                aria-label="Previous period"
-              >
-                ‹
-              </button>
-              <button
-                type="button"
-                id="calendar-next-btn"
-                onClick={handleNext}
-                style={styles.navArrowBtn}
-                title="Next period"
-                aria-label="Next period"
-              >
-                ›
+                <span>📋 Unscheduled ({unscheduled.length})</span>
               </button>
             </div>
 
-            {/* View Switcher: Month / Week / Day */}
-            <div style={styles.viewSwitcherGroup} role="group" aria-label="Calendar view switcher">
-              <button
-                type="button"
-                id="calendar-view-month-btn"
-                onClick={() => setCalendarView('month')}
-                style={{
-                  ...styles.viewBtn,
-                  ...(calendarView === 'month' ? styles.activeViewBtn : {}),
-                }}
-                aria-pressed={calendarView === 'month'}
-              >
-                Month
-              </button>
-              <button
-                type="button"
-                id="calendar-view-week-btn"
-                onClick={() => setCalendarView('week')}
-                style={{
-                  ...styles.viewBtn,
-                  ...(calendarView === 'week' ? styles.activeViewBtn : {}),
-                }}
-                aria-pressed={calendarView === 'week'}
-              >
-                Week
-              </button>
-              <button
-                type="button"
-                id="calendar-view-day-btn"
-                onClick={() => setCalendarView('day')}
-                style={{
-                  ...styles.viewBtn,
-                  ...(calendarView === 'day' ? styles.activeViewBtn : {}),
-                }}
-                aria-pressed={calendarView === 'day'}
-              >
-                Day
-              </button>
+            {/* Priority Legend */}
+            <div style={styles.legendBar} aria-label="Task priority color legend">
+              <span style={styles.legendLabel}>Legend:</span>
+              <span style={styles.legendItem}>
+                <span style={{ ...styles.legendDot, backgroundColor: '#D9383A' }} />
+                Critical / Urgent
+              </span>
+              <span style={styles.legendItem}>
+                <span style={{ ...styles.legendDot, backgroundColor: '#E5A83B' }} />
+                High
+              </span>
+              <span style={styles.legendItem}>
+                <span style={{ ...styles.legendDot, backgroundColor: '#8E5FA8' }} />
+                Medium
+              </span>
+              <span style={styles.legendItem}>
+                <span style={{ ...styles.legendDot, backgroundColor: '#2D6A4F' }} />
+                Low
+              </span>
+              <span style={styles.legendItem}>
+                <span style={{ ...styles.legendDot, backgroundColor: '#706D73' }} />
+                Completed ✓
+              </span>
             </div>
-
-            {/* Shortcut back to Tasks workspace */}
-            {onSelectView && (
-              <button
-                type="button"
-                id="calendar-back-to-tasks-btn"
-                onClick={() => onSelectView('tasks')}
-                style={styles.backTasksBtn}
-                title="Return to Tasks list"
-                aria-label="Return to Tasks list view"
-              >
-                ← Tasks List
-              </button>
-            )}
           </div>
         </div>
 
-        {/* Secondary Filter & Priority Legend Bar */}
-        <div style={styles.filterBar}>
-          {/* Priority Filters */}
-          <div style={styles.filterGroup}>
-            <span style={styles.filterLabel}>Priority:</span>
-            {['all', 'critical', 'high', 'medium', 'low'].map((p) => (
-              <button
-                key={p}
-                type="button"
-                id={`calendar-filter-priority-${p}`}
-                onClick={() => setPriorityFilter(p)}
-                style={{
-                  ...styles.filterPill,
-                  ...(priorityFilter === p ? styles.activeFilterPill : {}),
-                }}
-                aria-pressed={priorityFilter === p}
-              >
-                {p === 'all' ? 'All' : p.charAt(0).toUpperCase() + p.slice(1)}
-              </button>
-            ))}
-          </div>
-
-          {/* Status Filter */}
-          <div style={styles.filterGroup}>
-            <span style={styles.filterLabel}>Status:</span>
-            {['all', 'incomplete', 'completed'].map((s) => (
-              <button
-                key={s}
-                type="button"
-                id={`calendar-filter-status-${s}`}
-                onClick={() => setStatusFilter(s)}
-                style={{
-                  ...styles.filterPill,
-                  ...(statusFilter === s ? styles.activeFilterPill : {}),
-                }}
-                aria-pressed={statusFilter === s}
-              >
-                {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
-              </button>
-            ))}
-          </div>
-
-          {/* Unscheduled Drawer Toggle */}
-          <button
-            type="button"
-            id="calendar-toggle-unscheduled-btn"
-            onClick={() => setShowUnscheduled(!showUnscheduled)}
-            style={{
-              ...styles.unscheduledBtn,
-              ...(showUnscheduled ? styles.activeUnscheduledBtn : {}),
-            }}
-            title="View tasks without scheduled deadlines"
-            aria-expanded={showUnscheduled}
-          >
-            <span>📋 Unscheduled ({unscheduled.length})</span>
-          </button>
-        </div>
-
-        {/* Priority Legend */}
-        <div style={styles.legendBar} aria-label="Task priority color legend">
-          <span style={styles.legendLabel}>Legend:</span>
-          <span style={styles.legendItem}>
-            <span style={{ ...styles.legendDot, backgroundColor: '#D9383A' }} />
-            Critical / Urgent
-          </span>
-          <span style={styles.legendItem}>
-            <span style={{ ...styles.legendDot, backgroundColor: '#E5A83B' }} />
-            High
-          </span>
-          <span style={styles.legendItem}>
-            <span style={{ ...styles.legendDot, backgroundColor: '#8E5FA8' }} />
-            Medium
-          </span>
-          <span style={styles.legendItem}>
-            <span style={{ ...styles.legendDot, backgroundColor: '#2D6A4F' }} />
-            Low
-          </span>
-          <span style={styles.legendItem}>
-            <span style={{ ...styles.legendDot, backgroundColor: '#706D73' }} />
-            Completed ✓
-          </span>
-        </div>
 
         {/* Unscheduled Tasks Panel (Collapsible) */}
         {showUnscheduled && (
@@ -498,8 +507,8 @@ export default function TaskCalendar({
                     style={{
                       ...styles.gridCell,
                       ...(cell.isCurrentMonth ? {} : styles.gridCellOutside),
-                      ...(isSelected ? styles.gridCellSelected : {}),
                       ...(cell.isToday ? styles.gridCellToday : {}),
+                      ...(isSelected ? styles.gridCellSelected : {}),
                     }}
                     role="gridcell"
                     aria-label={`${cell.dateStr}, ${cellTasks.length} task${cellTasks.length === 1 ? '' : 's'}`}
@@ -510,11 +519,14 @@ export default function TaskCalendar({
                         style={{
                           ...styles.cellDayNumber,
                           ...(cell.isToday ? styles.cellDayTodayBadge : {}),
+                          ...(isSelected && !cell.isToday ? styles.cellDaySelectedBadge : {}),
+                          ...(isSelected && cell.isToday ? styles.cellDayTodaySelectedBadge : {}),
                           ...(!cell.isCurrentMonth ? styles.cellDayMuted : {}),
                         }}
                       >
                         {cell.day}
                       </span>
+
                       {cell.isCurrentMonth && (
                         <button
                           type="button"
@@ -1121,17 +1133,40 @@ const styles = {
     flexDirection: 'column',
     gap: '20px',
   },
+  controlHub: {
+    padding: '20px 24px',
+    backgroundColor: '#FFFFFF',
+    borderRadius: '20px',
+    border: '1px solid rgba(61, 38, 69, 0.09)',
+    boxShadow: '0 4px 18px rgba(61, 38, 69, 0.04)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '14px',
+  },
   topBar: {
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     flexWrap: 'wrap',
     gap: '16px',
-    padding: '24px',
-    backgroundColor: '#FFFFFF',
-    borderRadius: '20px',
-    border: '1px solid rgba(61, 38, 69, 0.08)',
-    boxShadow: '0 4px 16px rgba(61, 38, 69, 0.03)',
+  },
+  hubDivider: {
+    height: '1px',
+    backgroundColor: 'rgba(61, 38, 69, 0.08)',
+    margin: '2px 0',
+  },
+  filterAndLegendRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: '12px',
+  },
+  filterPillsArea: {
+    display: 'flex',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '16px',
   },
   headingGroup: {
     display: 'flex',
@@ -1151,7 +1186,7 @@ const styles = {
   },
   mainHeading: {
     fontFamily: "'Syne', sans-serif",
-    fontSize: 'clamp(24px, 3.2vw, 36px)',
+    fontSize: 'clamp(22px, 2.8vw, 32px)',
     fontWeight: '800',
     color: '#201E23',
     margin: 0,
@@ -1168,7 +1203,7 @@ const styles = {
     letterSpacing: '0.05em',
   },
   subHeading: {
-    fontSize: '14px',
+    fontSize: '13px',
     color: '#706D73',
     margin: 0,
     lineHeight: '1.4',
@@ -1306,7 +1341,7 @@ const styles = {
     flexWrap: 'wrap',
     fontSize: '12px',
     color: '#706D73',
-    padding: '0 8px',
+    padding: '0 4px',
   },
   legendLabel: {
     fontWeight: '700',
@@ -1422,7 +1457,7 @@ const styles = {
   },
   gridCell: {
     backgroundColor: '#FFFFFF',
-    minHeight: '110px',
+    minHeight: '122px',
     padding: '8px',
     display: 'flex',
     flexDirection: 'column',
@@ -1450,8 +1485,8 @@ const styles = {
     fontSize: '13px',
     fontWeight: '700',
     color: '#201E23',
-    width: '24px',
-    height: '24px',
+    width: '26px',
+    height: '26px',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1461,6 +1496,19 @@ const styles = {
     backgroundColor: '#E5A83B',
     color: '#FFFFFF',
     fontWeight: '800',
+    boxShadow: '0 2px 6px rgba(229, 168, 59, 0.35)',
+  },
+  cellDaySelectedBadge: {
+    backgroundColor: '#C85A32',
+    color: '#FFFFFF',
+    fontWeight: '800',
+    boxShadow: '0 2px 6px rgba(200, 90, 50, 0.35)',
+  },
+  cellDayTodaySelectedBadge: {
+    backgroundColor: '#C85A32',
+    color: '#FFFFFF',
+    fontWeight: '800',
+    boxShadow: '0 0 0 2px #E5A83B, 0 2px 8px rgba(200, 90, 50, 0.4)',
   },
   cellDayMuted: {
     color: '#A09D98',

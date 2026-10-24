@@ -20,6 +20,21 @@
   --accent-risk: #D9383A;
   --accent-risk-light: #FDF0ED;
 
+  /* Canonical Task Priority Tokens */
+  --priority-critical: #D9383A;
+  --priority-critical-bg: rgba(217, 56, 58, 0.12);
+  --priority-critical-text: #9E1C1E;
+  --priority-high: #E5A83B;
+  --priority-high-bg: rgba(229, 168, 59, 0.16);
+  --priority-high-text: #8D4203;
+  --priority-medium: #8E5FA8;
+  --priority-medium-bg: rgba(182, 150, 204, 0.18);
+  --priority-medium-text: #3D2645;
+  --priority-low: #2D6A4F;
+  --priority-low-bg: rgba(45, 106, 79, 0.14);
+  --priority-low-text: #1E4E39;
+
+
   /* Typography Colors */
   --text-dark: #201E23;
   --text-plum: #3D2645;

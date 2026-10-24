@@ -41,7 +41,8 @@ import {
   generateSpokenSummary,
   RECOGNITION_STATES,
 } from '../conversation/speechEngine';
-import { formatISODate } from '../conversation/compoundCommandParser';
+import { formatISODate, formatTaskDueDate } from '../conversation/compoundCommandParser';
+import { getPriorityPalette } from '../utils/calendarUtils';
 import {
   saveAcceptedSchedule,
   loadAcceptedSchedule,
@@ -1606,7 +1607,13 @@ export default function ProductivityApp({ onNavigate }) {
             {/* Playful Hero */}
             <Hero
               modelMetadata={modelStatus}
+              tasks={tasks}
+              predictionsMap={guardedPredictionsMap}
+              completedCount={completedCount}
+              totalCount={totalCount}
+              progressPercent={progressPercent}
               onScrollToSection={handleScrollToSection}
+              onSelectView={handleSelectView}
             />
 
             {/* Section 01: Sprint Pulse */}
@@ -1635,18 +1642,137 @@ export default function ProductivityApp({ onNavigate }) {
                       : `${tasks.filter((t) => !t.completed).length} active tasks in your sprint backlog.`}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  id="today-view-all-tasks-btn"
-                  onClick={() => handleSelectView('tasks')}
-                  style={styles.openTasksWorkspaceBtn}
-                  aria-label="Open Tasks workspace"
-                >
-                  Manage All Tasks →
-                </button>
+                <div style={styles.todayFocusActions}>
+                  <button
+                    type="button"
+                    id="today-quick-add-btn"
+                    onClick={() => handleQuickAdd && handleQuickAdd()}
+                    style={styles.todayQuickAddBtn}
+                    aria-label="Add new task"
+                  >
+                    + New Task
+                  </button>
+                  <button
+                    type="button"
+                    id="today-view-all-tasks-btn"
+                    onClick={() => handleSelectView('tasks')}
+                    style={styles.openTasksWorkspaceBtn}
+                    aria-label="Open Tasks workspace"
+                  >
+                    Manage All Tasks →
+                  </button>
+                </div>
               </div>
+
+              {/* Active Task Focus Items */}
+              {tasks.filter((t) => !t.completed).length > 0 ? (
+                <div style={styles.todayTasksList}>
+                  {tasks
+                    .filter((t) => !t.completed)
+                    .slice(0, 4)
+                    .map((task) => {
+                      const palette = getPriorityPalette(task.priority, task.completed);
+                      const pred = guardedPredictionsMap[task.id];
+                      const isTimerRunning = Boolean(
+                        activeTimerState && activeTimerState.taskId === task.id && activeTimerState.isRunning
+                      );
+                      const formattedDue = task.dueDate ? formatTaskDueDate(task.dueDate) : 'No deadline';
+
+                      return (
+                        <div
+                          key={task.id}
+                          style={{
+                            ...styles.todayTaskRow,
+                            borderLeft: `4px solid ${palette.border}`,
+                          }}
+                          className="today-task-card-item digital-card"
+                        >
+                          <div style={styles.todayTaskRowLeft}>
+                            <button
+                              type="button"
+                              onClick={() => toggleTaskCompletion(task.id)}
+                              style={{
+                                ...styles.todayCheckbox,
+                                borderColor: palette.border,
+                              }}
+                              title="Mark task complete"
+                              aria-label={`Mark "${task.title}" complete`}
+                            />
+                            <div style={styles.todayTaskDetails}>
+                              <div style={styles.todayTaskMeta}>
+                                <span
+                                  style={{
+                                    ...styles.todayPriorityTag,
+                                    color: palette.text,
+                                    backgroundColor: palette.bg,
+                                  }}
+                                >
+                                  {palette.icon} {task.priority.toUpperCase()}
+                                </span>
+                                <span style={styles.todayDueTag}>📅 {formattedDue}</span>
+                                {task.estimatedEffort && (
+                                  <span style={styles.todayEffortTag}>⏱ {task.estimatedEffort}h</span>
+                                )}
+                              </div>
+                              <h4 style={styles.todayTaskTitle}>{task.title}</h4>
+                            </div>
+                          </div>
+
+                          <div style={styles.todayTaskRowRight}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                isTimerRunning
+                                  ? handlePauseTimer(task.id)
+                                  : handleStartTimer(task.id)
+                              }
+                              style={{
+                                ...styles.todayTimerBtn,
+                                backgroundColor: isTimerRunning ? '#FFEFEA' : '#FFFFFF',
+                                borderColor: isTimerRunning ? '#FF8F82' : 'rgba(61, 38, 69, 0.15)',
+                                color: isTimerRunning ? '#D9383A' : '#5E5B66',
+                              }}
+                              title={isTimerRunning ? 'Pause tracking timer' : 'Start stopwatch timer'}
+                            >
+                              {isTimerRunning ? '⏸ Active' : '▶ Track'}
+                            </button>
+
+                            {pred ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setSelectedTaskExplanation({
+                                    task,
+                                    pred,
+                                  })
+                                }
+                                style={styles.todayRiskTag}
+                                title="Inspect delay risk explanation"
+                              >
+                                {Math.round((pred.delay_probability ?? pred.probability) * 100)}% risk ↗
+                              </button>
+                            ) : (
+                              <span style={styles.todayAwaitingTag}>Awaiting scan</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              ) : (
+                <div style={styles.todayEmptyState}>
+                  <span style={{ fontSize: '24px' }}>✨</span>
+                  <div>
+                    <h4 style={styles.todayEmptyTitle}>All tasks completed or no tasks yet!</h4>
+                    <p style={styles.todayEmptySub}>
+                      Use the command dock below or click <strong>+ New Task</strong> to schedule your next sprint initiative.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
+
 
           {/* Destination 2: Tasks View */}
           <div
@@ -1921,6 +2047,161 @@ const styles = {
     cursor: 'pointer',
     transition: 'all 0.15s ease',
     boxShadow: '0 2px 8px rgba(200, 90, 50, 0.25)',
+  },
+  todayFocusActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    flexWrap: 'wrap',
+  },
+  todayQuickAddBtn: {
+    backgroundColor: '#FFFFFF',
+    color: '#3D2645',
+    border: '1.5px solid rgba(61, 38, 69, 0.15)',
+    padding: '10px 16px',
+    borderRadius: '10px',
+    fontSize: '13px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+  },
+  todayTasksList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    marginTop: '6px',
+  },
+  todayTaskRow: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: '12px',
+    padding: '14px 18px',
+    border: '1px solid rgba(61, 38, 69, 0.08)',
+    boxShadow: '0 2px 6px rgba(61, 38, 69, 0.03)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '16px',
+    flexWrap: 'wrap',
+    transition: 'all 0.18s ease',
+  },
+  todayTaskRowLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '14px',
+    flex: '1 1 320px',
+  },
+  todayCheckbox: {
+    width: '22px',
+    height: '22px',
+    borderRadius: '6px',
+    border: '2px solid',
+    backgroundColor: '#FFFFFF',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '12px',
+    fontWeight: '800',
+    flexShrink: 0,
+    transition: 'all 0.15s ease',
+  },
+  todayTaskDetails: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '3px',
+    flex: 1,
+    minWidth: 0,
+  },
+  todayTaskMeta: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexWrap: 'wrap',
+  },
+  todayPriorityTag: {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '10px',
+    fontWeight: '800',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    letterSpacing: '0.04em',
+  },
+  todayDueTag: {
+    fontSize: '12px',
+    color: '#706D73',
+    fontWeight: '600',
+  },
+  todayEffortTag: {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '11px',
+    color: '#5E5B66',
+    backgroundColor: 'rgba(61, 38, 69, 0.05)',
+    padding: '1px 5px',
+    borderRadius: '4px',
+    fontWeight: '600',
+  },
+  todayTaskTitle: {
+    fontFamily: "'Plus Jakarta Sans', sans-serif",
+    fontSize: '15px',
+    fontWeight: '700',
+    color: '#201E23',
+    margin: 0,
+  },
+  todayTaskRowRight: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    flexShrink: 0,
+  },
+  todayTimerBtn: {
+    border: '1px solid',
+    borderRadius: '9999px',
+    padding: '5px 12px',
+    fontSize: '12px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    transition: 'all 0.15s ease',
+  },
+  todayRiskTag: {
+    background: '#FFEFEA',
+    border: '1px solid #FF8F82',
+    color: '#D9383A',
+    borderRadius: '6px',
+    padding: '4px 8px',
+    fontSize: '11px',
+    fontWeight: '700',
+    cursor: 'pointer',
+  },
+  todayAwaitingTag: {
+    background: 'rgba(61, 38, 69, 0.04)',
+    color: '#706D73',
+    borderRadius: '6px',
+    padding: '4px 8px',
+    fontSize: '11px',
+    fontWeight: '600',
+  },
+  todayEmptyState: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '14px',
+    padding: '20px 16px',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderRadius: '12px',
+    border: '1px dashed rgba(200, 90, 50, 0.25)',
+  },
+  todayEmptyTitle: {
+    fontSize: '14px',
+    fontWeight: '700',
+    color: '#3D2645',
+    margin: 0,
+  },
+  todayEmptySub: {
+    fontSize: '13px',
+    color: '#5E5B66',
+    margin: '2px 0 0 0',
   },
 };
 

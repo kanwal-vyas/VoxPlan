@@ -1,7 +1,59 @@
 import React from 'react';
+import { formatTaskDueDate } from '../conversation/compoundCommandParser';
 
-export default function Hero() {
-  const counts = { task1: 96.4, task2: 54.2, task3: 18.7 };
+export default function Hero({
+  tasks = [],
+  predictionsMap = {},
+  modelMetadata: _modelMetadata,
+  onScrollToSection: _onScrollToSection,
+  onSelectView,
+}) {
+  const pendingTasks = (tasks || []).filter((t) => !t.completed);
+  const hasRealTasks = pendingTasks.length > 0;
+
+  // If real tasks exist, pick top 3 prioritizing high risk and high priority
+  const displaySpotlight = hasRealTasks
+    ? [...pendingTasks]
+        .sort((a, b) => {
+          const probA = predictionsMap[a.id]?.delay_probability ?? predictionsMap[a.id]?.probability ?? 0;
+          const probB = predictionsMap[b.id]?.delay_probability ?? predictionsMap[b.id]?.probability ?? 0;
+          if (probB !== probA) return probB - probA;
+          const prioWeight = { critical: 4, high: 3, medium: 2, low: 1 };
+          return (prioWeight[b.priority] || 2) - (prioWeight[a.priority] || 2);
+        })
+        .slice(0, 3)
+    : [
+        {
+          id: 'demo-1',
+          title: 'Revise Cryptography',
+          category: 'SECURITY',
+          priority: 'high',
+          dueDate: 'today',
+          estimatedEffort: 10,
+          demoRisk: 96.4,
+          demoTag: 'bottleneck ↗',
+        },
+        {
+          id: 'demo-2',
+          title: 'Practice Subnetting',
+          category: 'NETWORKING',
+          priority: 'medium',
+          dueDate: 'today',
+          estimatedEffort: 6,
+          demoRisk: 54.2,
+          demoTag: 'in progress →',
+        },
+        {
+          id: 'demo-3',
+          title: 'Study OSI Model',
+          category: 'ARCHITECTURE',
+          priority: 'low',
+          dueDate: 'tomorrow',
+          estimatedEffort: 3.5,
+          demoRisk: 18.7,
+          demoTag: 'on track ✓',
+        },
+      ];
 
   return (
     <section
@@ -9,133 +61,125 @@ export default function Hero() {
       style={styles.hero}
       aria-label="Hero"
     >
-      <div style={styles.heroContainer} className="hero-container-card">
+      <div style={styles.heroContainer} className="hero-container-card digital-card">
         <div style={styles.grid} className="hero-composition">
-        {/* Left: Editorial Typography & Intent */}
-        <div style={styles.leftColumn}>
-          <div style={styles.eyebrowPill}>
-            <span style={styles.eyebrowIcon}>✦</span>
-            <span style={styles.eyebrowText}>PREDICTIVE TASK INTELLIGENCE</span>
-          </div>
+          {/* Left: Editorial Typography & Intent */}
+          <div style={styles.leftColumn}>
+            <div style={styles.eyebrowPill}>
+              <span style={styles.eyebrowIcon}>✦</span>
+              <span style={styles.eyebrowText}>PREDICTIVE TASK INTELLIGENCE</span>
+            </div>
 
-          <h1 className="hero-headline" style={styles.headline}>
-            Plan with <span className="hl hl-terracotta" style={styles.headingAccentPlum}>clarity.</span><br />
-            Act with <span className="hl hl-marigold" style={styles.headingAccent}>focus.</span>
-          </h1>
+            <h1 className="hero-headline" style={styles.headline}>
+              Plan with <span className="hl hl-terracotta" style={styles.headingAccentPlum}>clarity.</span><br />
+              Act with <span className="hl hl-marigold" style={styles.headingAccent}>focus.</span>
+            </h1>
 
-          <p className="hero-statement" style={styles.statement}>
-            VoxPlan turns daily tasks into structured timelines, using private local intelligence to highlight which initiatives are at risk before deadlines slip.
-          </p>
+            <p className="hero-statement" style={styles.statement}>
+              VoxPlan turns daily tasks into structured timelines, using private local intelligence to highlight which initiatives are at risk before deadlines slip.
+            </p>
 
-          <div style={styles.ctaRow} className="ctaRow">
-            <button
-              type="button"
-              onClick={() => {
-                const el = document.getElementById('pulse') || document.getElementById('today-focus-card');
-                if (el) el.scrollIntoView({ behavior: 'smooth' });
-              }}
-              style={styles.primaryBtn}
-            >
-              <span>Explore Today's Workspace</span>
-              <span>↓</span>
-            </button>
+            <div style={styles.ctaRow} className="ctaRow">
+              <button
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById('today-focus-card') || document.getElementById('pulse');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }}
+                style={styles.primaryBtn}
+              >
+                <span>Today's Focus & Workload</span>
+                <span>↓</span>
+              </button>
 
-            <span style={styles.noteTag}>
-              Local-first · Offline reliable
-            </span>
-          </div>
-        </div>
+              {onSelectView && (
+                <button
+                  type="button"
+                  onClick={() => onSelectView('tasks')}
+                  style={styles.secondaryBtn}
+                >
+                  Manage Backlog →
+                </button>
+              )}
 
-        {/* Right: Layered Preview Cards (Desktop only) */}
-        <div style={styles.rightColumn} className="hero-preview-cards">
-          <div style={styles.previewHeader}>
-            <span style={styles.previewTag}>✦ ILLUSTRATIVE PREVIEW</span>
-            <span style={styles.previewSub}>Design demonstration</span>
-          </div>
-
-          {/* Card 1: High Risk */}
-          <div
-            style={{
-              ...styles.cleanCard,
-              borderLeft: '4px solid #D9383A',
-            }}
-            className="hero-card-item"
-          >
-            <div style={styles.cardHeader}>
-              <div style={styles.categoryWrap}>
-                <span style={styles.categoryLabel}>SECURITY</span>
-                <span style={styles.priorityHighlightRisk}>
-                  HIGH RISK
-                </span>
-              </div>
-              <span style={{ color: '#D9383A', fontSize: '13px', fontWeight: '800' }}>
-                {counts.task1}% risk
+              <span style={styles.noteTag}>
+                Local-first · Offline reliable
               </span>
             </div>
-            <h3 style={styles.cardTitle}>Revise Cryptography</h3>
-            <div style={styles.cardFooter}>
-              <span style={styles.cardDue}>Due today · 10h effort</span>
-              <span style={{ fontSize: '12px', color: '#D9383A', fontWeight: '600' }}>bottleneck ↗</span>
-            </div>
           </div>
 
-          {/* Card 2: Medium Risk */}
-          <div
-            style={{
-              ...styles.cleanCard,
-              borderLeft: '4px solid #B45309',
-            }}
-            className="hero-card-item"
-          >
-            <div style={styles.cardHeader}>
-              <div style={styles.categoryWrap}>
-                <span style={styles.categoryLabel}>NETWORKING</span>
-                <span style={styles.priorityHighlightWarning}>
-                  MEDIUM
-                </span>
-              </div>
-              <span style={{ color: '#B45309', fontSize: '13px', fontWeight: '800' }}>
-                {counts.task2}% risk
+          {/* Right: Layered Preview / Live Focus Cards */}
+          <div style={styles.rightColumn} className="hero-preview-cards">
+            <div style={styles.previewHeader}>
+              <span style={styles.previewTag}>
+                {hasRealTasks ? '✦ SPRINT RISK SPOTLIGHT' : '✦ ILLUSTRATIVE PREVIEW'}
+              </span>
+              <span style={styles.previewSub}>
+                {hasRealTasks ? 'Active initiatives' : 'Design demonstration'}
               </span>
             </div>
-            <h3 style={styles.cardTitle}>Practice Subnetting</h3>
-            <div style={styles.cardFooter}>
-              <span style={styles.cardDue}>Due today · 6h effort</span>
-              <span style={{ fontSize: '12px', color: '#B45309', fontWeight: '600' }}>in progress →</span>
-            </div>
-          </div>
 
-          {/* Card 3: Low Risk */}
-          <div
-            style={{
-              ...styles.cleanCard,
-              borderLeft: '4px solid #2D6A4F',
-            }}
-            className="hero-card-item"
-          >
-            <div style={styles.cardHeader}>
-              <div style={styles.categoryWrap}>
-                <span style={styles.categoryLabel}>ARCHITECTURE</span>
-                <span style={styles.priorityHighlightSuccess}>
-                  LOW
-                </span>
-              </div>
-              <span style={{ color: '#2D6A4F', fontSize: '13px', fontWeight: '800' }}>
-                {counts.task3}% risk
-              </span>
-            </div>
-            <h3 style={styles.cardTitle}>Study OSI Model</h3>
-            <div style={styles.cardFooter}>
-              <span style={styles.cardDue}>Due tomorrow · 3.5h effort</span>
-              <span style={{ fontSize: '12px', color: '#2D6A4F', fontWeight: '600' }}>on track ✓</span>
-            </div>
+            {displaySpotlight.map((task) => {
+              const pred = predictionsMap[task.id];
+              const prob = pred ? (pred.delay_probability ?? pred.probability) : null;
+              const riskPercent = prob !== null ? Math.round(prob * 100) : task.demoRisk;
+              const isHigh = pred?.risk === 'HIGH' || (!pred && (riskPercent >= 70 || task.priority === 'critical' || task.priority === 'high'));
+              const isMedium = pred?.risk === 'MEDIUM' || (!pred && riskPercent >= 40 && riskPercent < 70);
+
+              const borderAccent = isHigh ? '#D9383A' : isMedium ? '#E5A83B' : '#2D6A4F';
+              const textAccent = isHigh ? '#D9383A' : isMedium ? '#B45309' : '#2D6A4F';
+              const formattedDue = task.dueDate ? formatTaskDueDate(task.dueDate) : 'No deadline';
+
+              return (
+                <div
+                  key={task.id}
+                  style={{
+                    ...styles.cleanCard,
+                    borderLeft: `4px solid ${borderAccent}`,
+                  }}
+                  className="hero-card-item digital-card"
+                >
+                  <div style={styles.cardHeader}>
+                    <div style={styles.categoryWrap}>
+                      <span style={styles.categoryLabel}>
+                        {task.category ? task.category.toUpperCase() : 'GENERAL'}
+                      </span>
+                      <span
+                        style={
+                          isHigh
+                            ? styles.priorityHighlightRisk
+                            : isMedium
+                            ? styles.priorityHighlightWarning
+                            : styles.priorityHighlightSuccess
+                        }
+                      >
+                        {task.priority ? task.priority.toUpperCase() : 'MEDIUM'}
+                      </span>
+                    </div>
+                    <span style={{ color: textAccent, fontSize: '13px', fontWeight: '800' }}>
+                      {riskPercent !== undefined && riskPercent !== null ? `${riskPercent}% risk` : 'Awaiting ML'}
+                    </span>
+                  </div>
+                  <h3 style={styles.cardTitle}>{task.title}</h3>
+                  <div style={styles.cardFooter}>
+                    <span style={styles.cardDue}>
+                      {formattedDue}
+                      {task.estimatedEffort ? ` · ${task.estimatedEffort}h effort` : ''}
+                    </span>
+                    <span style={{ fontSize: '12px', color: textAccent, fontWeight: '600' }}>
+                      {task.demoTag || (isHigh ? 'bottleneck ↗' : isMedium ? 'in progress →' : 'on track ✓')}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
-    </div>
-  </section>
-);
+    </section>
+  );
 }
+
 
 const styles = {
   hero: {
@@ -231,7 +275,22 @@ const styles = {
     boxShadow: '0 3px 12px rgba(200, 90, 50, 0.28)',
     transition: 'all 0.15s ease',
   },
+  secondaryBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    backgroundColor: '#FFFFFF',
+    color: '#3D2645',
+    border: '1.5px solid rgba(61, 38, 69, 0.15)',
+    padding: '10px 18px',
+    borderRadius: '10px',
+    fontSize: '14px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+  },
   noteTag: {
+
     fontSize: '13px',
     color: '#7C7885',
     fontWeight: '600',
