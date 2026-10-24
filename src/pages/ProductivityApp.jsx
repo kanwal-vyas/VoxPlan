@@ -11,6 +11,7 @@ import PersonalModelDashboard from '../components/PersonalModelDashboard';
 import TaskList from '../components/TaskList';
 import LoadingScreen from '../components/LoadingScreen';
 import FeedbackToast from '../components/FeedbackToast';
+import EditorialBackground from '../components/EditorialBackground';
 
 // Lazy-loaded on-demand heavy modals (Phase 8, Stage 8.3)
 const TaskExplanationModal = lazy(() => import('../components/TaskExplanationModal'));
@@ -1473,10 +1474,9 @@ export default function ProductivityApp({ onNavigate }) {
     }
   }, [handleSelectView, handleQuickAdd]);
 
-  // Initialize GSAP Cinematic Scroll Storytelling on mount so all pin spacers and layouts are ready
+  // Initialize Presentation-Only Cinematic Editorial Motion System
   useEffect(() => {
-    // Immediate initialization so DOM pin-spacers are in place before loader lifts
-    const cleanup = initCinematicScrollStory();
+    const cleanup = initCinematicScrollStory({ currentView });
     gsapCleanupRef.current = cleanup;
 
     return () => {
@@ -1485,7 +1485,7 @@ export default function ProductivityApp({ onNavigate }) {
         gsapCleanupRef.current = null;
       }
     };
-  }, []);
+  }, [currentView]);
 
   // Debounced ScrollTrigger refresh when layout height changes (without recreating timelines)
   useEffect(() => {
@@ -1505,6 +1505,9 @@ export default function ProductivityApp({ onNavigate }) {
 
   return (
     <div className="voxplan-app" style={styles.app}>
+      {/* Presentation-Only Cinematic Editorial Background Motion Canvas */}
+      <EditorialBackground currentView={currentView} />
+
       {/* Initial Branded Loading Sequence */}
       {isLoading && <LoadingScreen onComplete={handleLoadingComplete} />}
 
@@ -1748,7 +1751,7 @@ export default function ProductivityApp({ onNavigate }) {
 const styles = {
   app: {
     minHeight: '100vh',
-    backgroundColor: '#FBF9F4',
+    backgroundColor: 'var(--voxplan-canvas-bg, #FBF9F4)',
     color: '#201E23',
     fontFamily: "'Plus Jakarta Sans', sans-serif",
     position: 'relative',

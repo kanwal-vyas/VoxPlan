@@ -5981,3 +5981,82 @@ Real microphone testing surfaced an intermittent acceptance failure where compou
 - **Factory Scheduler Weights**: Canonical values unchanged (`urgency: 50.0`, `priority: 100.0`, `unblock: 15.0`, `risk: 25.0`).
 - **Phase 7.4.4B Safety Activation Gate**: Permanently locked (`isAdaptationUnlocked === false`).
 - **Local-First Privacy**: 100% deterministic local storage; zero cloud LLMs, zero audio uploads.
+
+---
+
+### Phase 9: VoxPlan UI Redesign — Stage 4: Cinematic Editorial Background Motion & Visual Experience Restoration Record
+
+**Implementation Date**: October 24, 2026
+**Commit Target**: `feat(ui): restore cinematic editorial background motion`
+**Stage Goal**: Restore VoxPlan's distinctive cinematic visual identity—smooth background colour transitions and oversized editorial typography sweeping through the background as the user scrolls—rebuilt as a presentation-only layer that cannot alter document flow, hide content, or interfere with the tabbed interface.
+
+#### 1. Architectural & Motion System Implementation
+1. **Presentation-Only Dedicated Background Layer**:
+   - Implemented `EditorialBackground.jsx` rendering `<div id="voxplan-editorial-canvas" className="editorial-canvas-layer" aria-hidden="true">`.
+   - Stacking order strictly controlled: Canvas sits at `z-index: 0` fixed to the viewport behind application content (`style.content` at `z-index: 1+`).
+   - `pointer-events: none` and `user-select: none` ensure mouse clicks, taps, focus, and keyboard navigation pass through to cards and buttons.
+   - Zero layout mutations: Eliminated all legacy ScrollTrigger section pinning, pin-spacers, parent container opacity reductions, and document height alterations.
+2. **Oversized Editorial Typography Motion**:
+   - Reintroduced the exact original editorial sequence: **PLAN**, **PREDICT**, **UNDERSTAND**, **ACT**.
+   - Typography: Bold display font `'Syne', sans-serif` (`font-weight: 800`, `letter-spacing: -0.05em`, `line-height: 0.78`) with desktop size `clamp(90px, 16vw, 240px)` and mobile size `clamp(52px, 13vw, 110px)`.
+   - Coordinated brand ink colors: Deep plum (`#3D2645`), terracotta (`#C85A32`), and muted sage (`#2D6A4F`).
+   - Intentional viewport edge cropping creates a polished magazine spread composition.
+   - Refined motion physics: Directional horizontal sweeps and subtle vertical drift executed inside a `requestAnimationFrame` loop on a passive scroll listener; bell-curve opacity via `Math.sin(t * Math.PI)` for gentle entry and exit without sudden pops or flashing.
+   - Zero React state re-renders on scroll; GPU-accelerated compositing on `transform: translate3d(...)` and `opacity`.
+3. **Smooth Background Colour Transitions Across Established Palette**:
+   - Implemented multi-stop continuous color interpolation (`getMultiStopColor`, `lerpColor`, `hexToRgb`) across the established brand palette:
+     - Warm parchment / ivory (`#FBF9F4`)
+     - Butter yellow / marigold (`#FFF8E7`)
+     - Dusty lavender / soft plum (`#F5EEF8`)
+     - Muted sage (`#EBF5EE`)
+     - Warm peach / terracotta (`#FDF0ED`)
+   - Applied via CSS custom property `--voxplan-canvas-bg` and direct background color update with smooth CSS transition (`transition: background-color 0.4s cubic-bezier(0.16, 1, 0.3, 1)`), avoiding abrupt color flashing.
+4. **Three-Destination Navigation Coordination (Today / Tasks / Insights)**:
+   - **Today View**: Full editorial journey (`PLAN` -> `PREDICT` -> `UNDERSTAND` -> `ACT`) sweeping across overview and planning content.
+   - **Tasks View**: Prioritizes focused, high-readability task management; `PLAN` and `ACT` drift with restrained opacity ($\le 0.05$) in the background without obscuring task titles, checkboxes, priorities, or stopwatch controls.
+   - **Insights View**: Coordinated with prediction and understanding theme; `PREDICT` sweeps over ML Model panel, `UNDERSTAND` sweeps across habit telemetry & personal duration dashboard, and `ACT` rests at the base.
+   - View switching: Predictably crossfades to target view's initial theme without forced scrolling or giant animation spikes.
+5. **Accessibility & Reduced Motion Compliance**:
+   - Decorated with `aria-hidden="true"`; hidden from screen readers.
+   - Under `prefers-reduced-motion: reduce`, sweeps and transforms are disabled (`transform: none !important`), background remains static warm parchment (`#FBF9F4`), and words remain at static minimal opacity (`0.04`).
+6. **Mobile Command Dock Preservation**:
+   - Floating command dock remains at `z-index: 1000`, strictly above the presentation canvas (`z-index: 0`).
+   - Compact collapsed pill height (~54–58px) and safe area insets preserved.
+   - Safe bottom clearance (`180px`) in `ProductivityApp.jsx` prevents any dock/content collision.
+   - Microphone, Web Speech dictation, typed input, suggestion chips, and clarification flows fully preserved.
+
+#### 2. Verification & Regression Evidence
+- **Complete Frontend Test Suite**: `npm test`
+  - **Result**: 1084 passed, 0 failed across 232 suites in 19.3s.
+- **Dedicated Editorial Motion & Visual Safety Suite**: `node --test tests/editorial_background_motion.test.js`
+  - **Result**: 14 passed, 0 failed across 7 suites.
+- **Command Discoverability & Navigation Suite**: `node --test tests/command_dock_navigation.test.js`
+  - **Result**: 14 passed, 0 failed across 5 suites.
+- **Accessibility & Contrast Suite**: `node --test tests/accessibility.test.js`
+  - **Result**: 22 passed, 0 failed across 8 suites.
+- **Backend Test Suite**: `python -m pytest backend/tests/`
+  - **Result**: 29 passed, 0 failed in 2.24s.
+- **Production Build**: `npm run build`
+  - **Result**: `vite build` completed cleanly in 391ms.
+- **Linter**: `npm run lint` (`oxlint`)
+  - **Result**: 0 errors across 102 files.
+- **Secret Scanner**: `node scripts/secretScanner.mjs`
+  - **Result**: 0 secrets matched across 127 files.
+- **Whitespace / Git Diff Check**: `git diff --check`
+  - **Result**: Clean; 0 whitespace or formatting errors.
+- **Live Browser Subagent Verification (`editorial_motion_test`)**:
+  - Verified initial load and Today view: clean load, loading screen finishes, Today view visible.
+  - Verified presentation canvas `#voxplan-editorial-canvas` present with `aria-hidden="true"` and `pointer-events: none`.
+  - Verified smooth background transitions from warm parchment through butter yellow, dusty lavender, and warm peach.
+  - Verified editorial words `PLAN`, `PREDICT`, `UNDERSTAND`, and `ACT` visibly sweep across behind content cards.
+  - Verified all content cards remain fully opaque and interactive with no overlapping or layout jumping.
+  - Verified Tasks tab: crisp task cards, subtle background words without obscuring checkboxes, titles, or deadlines.
+  - Verified Insights tab: smooth transitions under prediction and understanding theme (`PREDICT`, `UNDERSTAND`).
+  - Verified command dock drawer: opens and closes smoothly while floating securely above background (`z-index: 1000`).
+  - Verified typed input into command bar during scroll motion.
+  - Verified responsive mobile presentation and compact pill dock behavior (~54–58px height).
+
+#### 3. Scope & Protected Invariant Preservation
+- **Factory Scheduler Weights**: Canonical values strictly preserved (`urgency: 50.0`, `priority: 100.0`, `unblock: 15.0`, `risk: 25.0`).
+- **Phase 7.4.4B Safety Activation Gate**: Permanently locked (`isAdaptationUnlocked === false`).
+- **Local-First Privacy**: 100% deterministic local storage; zero cloud LLMs, zero cloud speech APIs, zero audio uploads.

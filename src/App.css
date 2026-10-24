@@ -266,6 +266,79 @@ button:active {
 }
 
 /* --------------------------------------------------------------------------
+   Presentation-Only Cinematic Editorial Canvas & Typography Layer
+   -------------------------------------------------------------------------- */
+
+.editorial-canvas-layer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  user-select: none;
+  z-index: 0;
+  overflow: hidden;
+  contain: strict;
+}
+
+.editorial-words-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+}
+
+.editorial-word-item {
+  position: absolute;
+  font-family: var(--font-display, 'Syne', sans-serif);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 0.78;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+  will-change: transform, opacity;
+  opacity: 0;
+  transform: translate3d(0, 0, 0);
+  transition: opacity 0.22s ease-out;
+}
+
+/* Individual word desktop placements (intentional viewport edge crop) */
+.editorial-word-plan {
+  top: 10%;
+  right: -5%;
+  font-size: clamp(90px, 16vw, 240px);
+  color: #3D2645; /* Deep plum */
+}
+
+.editorial-word-predict {
+  top: 32%;
+  left: -6%;
+  font-size: clamp(80px, 15vw, 220px);
+  color: #C85A32; /* Terracotta / Amber */
+}
+
+.editorial-word-understand {
+  top: 54%;
+  right: -8%;
+  font-size: clamp(75px, 13vw, 200px);
+  color: #2D6A4F; /* Muted sage */
+}
+
+.editorial-word-act {
+  top: 76%;
+  left: -4%;
+  font-size: clamp(90px, 16vw, 240px);
+  color: #C85A32; /* Terracotta */
+}
+
+/* --------------------------------------------------------------------------
    Giant Editorial Typography Ribbons (Scene Dividers)
    -------------------------------------------------------------------------- */
 
@@ -297,7 +370,8 @@ button:active {
    -------------------------------------------------------------------------- */
 
 .voxplan-app {
-  transition: background-color 0.3s ease;
+  background-color: var(--voxplan-canvas-bg, #FBF9F4);
+  transition: background-color 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   will-change: background-color;
 }
 
@@ -380,6 +454,32 @@ a:focus-visible {
   /* Eliminate giant decorative ribbons to remove 800px+ of scrolling */
   .editorial-ribbon-wrap {
     display: none !important;
+  }
+
+  /* Editorial words on mobile viewports: scaled down, subtle contrast */
+  .editorial-word-item {
+    letter-spacing: -0.04em;
+    line-height: 0.82;
+  }
+  .editorial-word-plan {
+    top: 8%;
+    right: -2%;
+    font-size: clamp(52px, 13vw, 110px);
+  }
+  .editorial-word-predict {
+    top: 30%;
+    left: -3%;
+    font-size: clamp(48px, 12vw, 100px);
+  }
+  .editorial-word-understand {
+    top: 52%;
+    right: -4%;
+    font-size: clamp(42px, 10.5vw, 90px);
+  }
+  .editorial-word-act {
+    top: 72%;
+    left: -2%;
+    font-size: clamp(52px, 13vw, 110px);
   }
 
   /* Compact content wrapper */
@@ -542,6 +642,15 @@ a:focus-visible {
   .editorial-ribbon-word {
     transform: none !important;
     opacity: 0.08 !important;
+  }
+  .editorial-word-item {
+    transform: none !important;
+    transition: none !important;
+    opacity: 0.04 !important;
+  }
+  .voxplan-app {
+    background-color: #FBF9F4 !important;
+    transition: none !important;
   }
 }
 
