@@ -34,6 +34,8 @@ This document tracks the phased evolution of VoxPlan from a static task tracker 
 | **Phase 8.15** | Complete Notification System Audit & Implementation | **COMPLETED** | Comprehensive local-first notification architecture: event detection (deadlines, overdue, schedule, dependencies, system), persistent in-app notification center, unread badge, browser notifications with pre-permission explainer, user preferences & quiet hours, bounded storage ($N=100$), deduplication throttling, and removal of Overview hero motto phrase. |
 | **Phase 8.16** | Notification Reliability Hardening & Voice Recognition Repair | **COMPLETED** | Audited and hardened notification system (dedup persistence across dismissals, auto-resolution of completed/deleted tasks, distinct lead-time keys, quiet-hours critical overrides, deleted task action safety); diagnosed and repaired voice recognition pipeline (repositioned obstructing update banner, configured continuous:false single-turn Web Speech lifecycle with immediate final dispatch, live transcript echoing, echoed unrecognized command feedback, telemetry signature fix); 1,230 frontend tests, 29 backend tests, 0 secrets, clean build. |
 | **Phase 8.17** | Fully Isolated Interactive Product Tour | **COMPLETED** | Comprehensive guided product tour covering all VoxPlan capabilities (Overview vs Workspace, task management, adaptive scheduling, voice & typed command dock, stationery sticky notes, notification center, ML risk & duration intelligence, encrypted backups, local-first privacy), Mode A observation tour vs Mode B disposable in-memory hands-on demo, scoped CSS & spotlight cutout, keyboard navigation, reversible launchers, 30 automated unit tests (1,260 frontend tests total). |
+| **Phase 8.18** | Product Tour Spotlight Visibility & Target Highlighting Overhaul | **COMPLETED** | SVG mask clear-window cutout exempting active targets from 8px backdrop blur and dimming; 2.5px solid warm terracotta spotlight border with hairline accents and beacon tag; visibility-aware DOM querying bypassing hidden inactive tabs; semantic ID tagging on critical workflow targets; 52 tour tests passing. |
+| **Phase 8.19** | App Icon and Browser Favicon Unification | **COMPLETED** | Reused exact canonical Overview brand symbol (`✦` inside `#FFE58A` rounded square with `#25242A` shadow and border) across `/` and `/app` via shared `BrandBadge.jsx`; replaced Vite starter purple lightning bolt with canonical `favicon.svg` using exact extracted vector path; generated multi-size `favicon.ico`, `favicon-32x32.png`, and PWA raster icons; 0 errors across 1,282 tests. |
 
 
 ---
@@ -7713,4 +7715,53 @@ Conducted full browser verification across all 20 steps on `http://localhost:517
 - `npm run lint` (`oxlint`): **0 errors, 1 pre-existing warning**.
 - `npm run build` (`vite build`): Built production bundle in 664ms with 0 errors.
 - `node scripts/secretScanner.mjs`: **0 secrets** detected across 163 files.
+- `git diff --check`: **Clean** (zero conflict markers or whitespace errors).
+
+---
+
+### 8. App Icon and Browser Favicon Unification (Phase 8.19)
+
+#### Root Cause Analysis:
+1. **Divergent Branding Implementations**:
+   - The Overview page (`LandingPage.jsx`) displayed the authentic VoxPlan brand symbol: a dark four-pointed sparkle (`✦`, U+2726, `#25242A`) on a warm yellow rounded square (`#FFE58A`, `border: 1px solid rgba(37, 36, 42, 0.12)`, `boxShadow: 0 2px 0 rgba(37, 36, 42, 0.8)`).
+   - In contrast, the application workspace header (`Header.jsx` on `/app`) had a locally defined `brandBadge` style with terracotta background (`#C85A32`) and white text (`#FFFFFF`), producing an inconsistent brand identity across routes.
+   - The initial loading screen (`LoadingScreen.jsx`) rendered a generic emoji (`✨`).
+2. **Default Starter Favicon Assets**:
+   - `public/favicon.svg`, `public/pwa-192x192.png`, `public/pwa-512x512.png`, and `public/maskable-icon-512x512.png` still contained the default Vite starter template purple lightning bolt graphic.
+   - `index.html` lacked `<link rel="alternate icon">` and `<link rel="icon" type="image/png">` fallbacks for browser tabs or operating systems with legacy favicon resolution.
+
+#### Implementation & Architecture:
+1. **Shared Canonical Brand Component (`src/components/BrandBadge.jsx`)**:
+   - Extracted the exact visual treatment from `LandingPage.jsx` into a parameterized, reusable component `BrandBadge`.
+   - Props: `size` (default `32`), `ariaLabel` (default `"VoxPlan"`), `className`, `style`.
+   - Proportional mathematics:
+     - Border radius: `Math.round(size * 10 / 32)`
+     - Font size: `Math.round(size * 16 / 32)`
+     - Border: `1px solid rgba(37, 36, 42, 0.12)`
+     - Drop shadow: `0 2px 0 rgba(37, 36, 42, 0.8)`
+     - Background: `#FFE58A` (warm yellow)
+     - Glyph: `✦` (U+2726, `#25242A`)
+2. **Workspace & Overview Convergence**:
+   - `Header.jsx`: Replaced the hardcoded terracotta square with `<BrandBadge size={28} />`, preserving existing navigation links, notification bell, and responsive layouts.
+   - `LandingPage.jsx`: Replaced both top navigation header and footer brand badges with `<BrandBadge size={32} />`.
+   - `LoadingScreen.jsx`: Replaced placeholder emoji with `<BrandBadge size={44} />`.
+3. **Browser Favicon Vector & Raster Assets**:
+   - `public/favicon.svg`: Replaced the Vite lightning bolt with a clean 64x64 SVG using the exact mathematical outline of `✦` (extracted from Segoe UI Symbol via `fontTools` quadratic bezier curves) over the `#FFE58A` rounded rect with `#25242A` bottom shadow.
+   - `public/favicon.ico`: Generated multi-size ICO asset (16x16, 32x32, 48x48) using high-resolution super-sampled rendering with Lanczos filtering.
+   - `public/favicon-32x32.png`: Generated 32x32 PNG fallback.
+   - `public/pwa-192x192.png`, `public/pwa-512x512.png`, and `public/maskable-icon-512x512.png`: Regenerated with canonical brand icon and standard PWA safe zones.
+   - `index.html`: Added `<link rel="alternate icon" href="/favicon.ico" />` and `<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />`.
+   - `scripts/generateBrandFavicons.py`: Dedicated script preserving exact asset generation parameters for future reproducible maintenance.
+
+#### Verification & Visual Evidence:
+- Verified `/` (Overview) and `/app` (Workspace) via browser automation in both desktop (1280x800) and mobile (375x812) viewports. Both routes display the identical brand icon alongside the brand wordmark.
+- Inspected `document.querySelector('link[rel="icon"]').href` and verified that `/favicon.svg` loads with HTTP 200 and matches the brand symbol.
+- Confirmed zero regressions across all application functionality, responsive navigation, and modal dialogues.
+
+#### Quality Gates & Regression Summary:
+- `npm test`: **1,282 passed, 0 failed** across 280 suites (15.4s).
+- `python -m pytest backend/tests/`: **29 passed, 0 failed** (1.92s).
+- `npm run lint` (`oxlint`): **0 errors, 1 pre-existing warning**.
+- `npm run build` (`vite build`): Built production bundle in 423ms with 0 errors.
+- `node scripts/secretScanner.mjs`: **0 secrets** detected across 165 files.
 - `git diff --check`: **Clean** (zero conflict markers or whitespace errors).
