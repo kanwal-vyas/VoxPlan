@@ -25,6 +25,9 @@ import {
   restoreStickyNotesForTask,
 } from '../utils/stickyNotesStorage';
 
+// Interactive Product Tour Feature Boundary
+import { useProductTour, TourOverlay } from '../productTour';
+
 // Lazy-loaded on-demand heavy modals (Phase 8, Stage 8.3)
 const TaskExplanationModal = lazy(() => import('../components/TaskExplanationModal'));
 const AdaptiveScheduleModal = lazy(() => import('../components/AdaptiveScheduleModal'));
@@ -221,6 +224,24 @@ const UNTRAINED_MODEL_STATUS = {
 export default function ProductivityApp({ onNavigate }) {
   const [currentView, setCurrentView] = useState('today'); // 'today' | 'tasks' | 'insights'
 
+  const handleSelectView = useCallback((view) => {
+    setCurrentView(view);
+    if (typeof window !== 'undefined' && window.history && window.history.pushState) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', view);
+      window.history.pushState({ view }, '', url.toString());
+    }
+    const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (typeof window !== 'undefined' && window.scrollTo) {
+      window.scrollTo({ top: 0, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
+    }
+    setTimeout(() => {
+      if (typeof ScrollTrigger !== 'undefined' && ScrollTrigger.refresh) {
+        ScrollTrigger.refresh();
+      }
+    }, 50);
+  }, []);
+
   // URL query sync on mount & popstate
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -266,6 +287,29 @@ export default function ProductivityApp({ onNavigate }) {
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   const [stickyNotesMap, setStickyNotesMap] = useState(() => loadAllStickyNotes());
   const [stickyNotesModalTask, setStickyNotesModalTask] = useState(null);
+
+  // Interactive Product Tour Hook
+  const productTour = useProductTour({
+    currentView,
+    onSelectView: handleSelectView,
+    autoStartFromUrl: true,
+  });
+
+  const isDemoMode = productTour.isActive && productTour.mode === 'demo';
+
+  const effectiveTasks = useMemo(() => {
+    if (isDemoMode) {
+      return productTour.demoTasks;
+    }
+    return tasks;
+  }, [isDemoMode, productTour.demoTasks, tasks]);
+
+  const effectiveStickyNotesMap = useMemo(() => {
+    if (isDemoMode) {
+      return productTour.demoNotes;
+    }
+    return stickyNotesMap;
+  }, [isDemoMode, productTour.demoNotes, stickyNotesMap]);
 
   const handleOpenStickyNotes = useCallback((targetTask) => {
     setStickyNotesModalTask(targetTask);
@@ -843,6 +887,10 @@ export default function ProductivityApp({ onNavigate }) {
   };
 
   const toggleTaskCompletion = async (taskId, durationInfo = {}) => {
+    if (isDemoMode) {
+      productTour.toggleDemoTask(taskId);
+      return;
+    }
     const target = tasks.find((t) => t.id === taskId);
     if (!target) return;
     if (target.completed) {
@@ -852,6 +900,10 @@ export default function ProductivityApp({ onNavigate }) {
   };
 
   const deleteTask = (taskId, fallbackTarget = null) => {
+    if (isDemoMode) {
+      productTour.deleteDemoTask(taskId);
+      return;
+    }
     dialogueManager.invalidateTask(taskId);
     if (activeSubjectTaskId === taskId) {
       setActiveSubjectTaskId(null);
@@ -1574,24 +1626,6 @@ export default function ProductivityApp({ onNavigate }) {
     }
   };
 
-  const handleSelectView = useCallback((view) => {
-    setCurrentView(view);
-    if (typeof window !== 'undefined' && window.history && window.history.pushState) {
-      const url = new URL(window.location.href);
-      url.searchParams.set('view', view);
-      window.history.pushState({ view }, '', url.toString());
-    }
-    const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (typeof window !== 'undefined' && window.scrollTo) {
-      window.scrollTo({ top: 0, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
-    }
-    setTimeout(() => {
-      if (typeof ScrollTrigger !== 'undefined' && ScrollTrigger.refresh) {
-        ScrollTrigger.refresh();
-      }
-    }, 50);
-  }, []);
-
   const handleScrollToSection = useCallback((sectionId) => {
     if (sectionId === 'today' || sectionId === 'pulse') {
       handleSelectView('today');
@@ -1696,8 +1730,8 @@ export default function ProductivityApp({ onNavigate }) {
     setIsLoading(false);
   }, []);
 
-  const completedCount = tasks.filter((t) => t.completed).length;
-  const totalCount = tasks.length;
+  const completedCount = effectiveTasks.filter((t) => t.completed).length;
+  const totalCount = effectiveTasks.length;
   const progressPercent = totalCount === 0 ? 0 : Math.round((completedCount / totalCount) * 100);
 
   return (
@@ -1726,6 +1760,7 @@ export default function ProductivityApp({ onNavigate }) {
           onNavigate={onNavigate}
           onOpenBackup={() => setIsBackupModalOpen(true)}
           onNotificationAction={handleNotificationAction}
+          onStartTour={() => productTour.startTour()}
         />
 
         {/* Main Landmark for Accessibility (WCAG 2.2 1.3.1 Info and Relationships & 2.4.1 Bypass Blocks) */}
@@ -1746,7 +1781,7 @@ export default function ProductivityApp({ onNavigate }) {
             {/* Playful Hero */}
             <Hero
               modelMetadata={modelStatus}
-              tasks={tasks}
+              tasks={effectiveTasks}
               predictionsMap={guardedPredictionsMap}
               completedCount={completedCount}
               totalCount={totalCount}
@@ -1757,7 +1792,7 @@ export default function ProductivityApp({ onNavigate }) {
 
             {/* Section 01: Sprint Pulse */}
             <ProjectOverview
-              tasks={tasks}
+              tasks={effectiveTasks}
               predictionsMap={guardedPredictionsMap}
               totalCount={totalCount}
               completedCount={completedCount}
@@ -1776,9 +1811,9 @@ export default function ProductivityApp({ onNavigate }) {
                   <span style={styles.todayFocusBadge}>TODAY'S WORKSPACE</span>
                   <h3 style={styles.todayFocusTitle}>Active Sprint Focus</h3>
                   <p style={styles.todayFocusSubtitle}>
-                    {tasks.length === 0
+                    {effectiveTasks.length === 0
                       ? 'No tasks created yet. Speak or type a command in the dock below to get started!'
-                      : `${tasks.filter((t) => !t.completed).length} active tasks in your sprint backlog.`}
+                      : `${effectiveTasks.filter((t) => !t.completed).length} active tasks in your sprint backlog.`}
                   </p>
                 </div>
                 <div style={styles.todayFocusActions}>
@@ -1804,9 +1839,9 @@ export default function ProductivityApp({ onNavigate }) {
               </div>
 
               {/* Active Task Focus Items */}
-              {tasks.filter((t) => !t.completed).length > 0 ? (
+              {effectiveTasks.filter((t) => !t.completed).length > 0 ? (
                 <div style={styles.todayTasksList}>
-                  {tasks
+                  {effectiveTasks
                     .filter((t) => !t.completed)
                     .slice(0, 4)
                     .map((task) => {
@@ -1934,7 +1969,7 @@ export default function ProductivityApp({ onNavigate }) {
           >
             {/* Section 02: Risk Landscape */}
             <TaskList
-              tasks={tasks}
+              tasks={effectiveTasks}
               predictionsMap={guardedPredictionsMap}
               personalDurationModel={personalDurationModel}
               activeFilter={activeFilter}
@@ -1959,7 +1994,7 @@ export default function ProductivityApp({ onNavigate }) {
               onClearCompleted={handleClearCompleted}
               completedCount={completedCount}
               onQuickAdd={handleQuickAdd}
-              stickyNotesMap={stickyNotesMap}
+              stickyNotesMap={effectiveStickyNotesMap}
               onOpenStickyNotes={handleOpenStickyNotes}
             />
           </div>
@@ -1978,7 +2013,7 @@ export default function ProductivityApp({ onNavigate }) {
             }}
           >
             <TaskCalendar
-              tasks={tasks}
+              tasks={effectiveTasks}
               predictionsMap={guardedPredictionsMap}
               onSelectView={handleSelectView}
               onCreateTask={handleCreateTask}
@@ -1994,8 +2029,9 @@ export default function ProductivityApp({ onNavigate }) {
                 })
               }
               acceptedSchedule={acceptedSchedule}
-              stickyNotesMap={stickyNotesMap}
+              stickyNotesMap={effectiveStickyNotesMap}
               onOpenStickyNotes={handleOpenStickyNotes}
+              onExportCalendar={() => handleExportCalendar()}
             />
           </div>
 
@@ -2121,6 +2157,22 @@ export default function ProductivityApp({ onNavigate }) {
       <FeedbackToast
         feedback={feedback}
         onDismiss={() => setFeedback(null)}
+      />
+
+      {/* Isolated Interactive Product Tour */}
+      <TourOverlay
+        isActive={productTour.isActive}
+        currentStepIndex={productTour.currentStepIndex}
+        activeStep={productTour.activeStep}
+        totalSteps={productTour.totalSteps}
+        mode={productTour.mode}
+        targetRect={productTour.targetRect}
+        isTargetFound={productTour.isTargetFound}
+        onNext={productTour.nextStep}
+        onPrev={productTour.prevStep}
+        onSkip={productTour.skipTour}
+        onExit={productTour.exitTour}
+        onSwitchMode={productTour.switchMode}
       />
     </div>
   );

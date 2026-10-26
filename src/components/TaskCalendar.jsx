@@ -34,6 +34,7 @@ export default function TaskCalendar({
   _acceptedSchedule = null,
   stickyNotesMap = {},
   onOpenStickyNotes,
+  onExportCalendar,
 }) {
   const todayStr = useMemo(() => getTodayDateString(), []);
   const todayComp = useMemo(() => parseDateComponents(todayStr) || { year: 2026, month: 9, day: 24 }, [todayStr]);
@@ -322,6 +323,22 @@ export default function TaskCalendar({
                   Day
                 </button>
               </div>
+
+              {/* RFC 5545 iCalendar (.ics) Export Button */}
+              {onExportCalendar && (
+                <button
+                  type="button"
+                  id="calendar-export-btn"
+                  data-action="export-calendar"
+                  onClick={() => onExportCalendar()}
+                  style={styles.exportBtn}
+                  title="Export scheduled tasks to RFC 5545 .ics calendar"
+                  aria-label="Export scheduled tasks to RFC 5545 .ics calendar"
+                >
+                  <span aria-hidden="true">📅</span>
+                  <span>Export .ics</span>
+                </button>
+              )}
 
               {/* Shortcut back to Tasks workspace */}
               {onSelectView && (
@@ -1324,6 +1341,20 @@ const styles = {
     fontWeight: '700',
     color: '#C85A32',
     cursor: 'pointer',
+  },
+  exportBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    background: '#FFFFFF',
+    border: '1px solid rgba(61, 38, 69, 0.2)',
+    borderRadius: '10px',
+    padding: '7px 12px',
+    fontSize: '13px',
+    fontWeight: '700',
+    color: '#3D2645',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
   },
   filterBar: {
     display: 'flex',

@@ -72,6 +72,8 @@ export default function ProjectOverview({
             {onOpenScheduleModal && (
               <button
                 type="button"
+                id="btn-open-schedule-modal"
+                data-action="optimize-schedule"
                 onClick={onOpenScheduleModal}
                 style={styles.scheduleBtn}
                 title="Open Adaptive Sprint Scheduler"

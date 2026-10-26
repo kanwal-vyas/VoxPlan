@@ -179,6 +179,14 @@ export default function LandingPage({ onNavigate }) {
     }
   };
 
+  const handleOpenTour = () => {
+    if (onNavigate) {
+      onNavigate('/app?tour=1');
+    } else {
+      window.location.href = '/app?tour=1';
+    }
+  };
+
   return (
     <div ref={pageRef} className="overview-page" style={styles.page}>
       {/* 1. Header / Navigation */}
@@ -267,6 +275,22 @@ export default function LandingPage({ onNavigate }) {
             >
               Launch App →
             </button>
+            <button
+              type="button"
+              id="mobile-nav-tour-btn"
+              onClick={handleOpenTour}
+              style={{
+                ...styles.openAppBtn,
+                width: '100%',
+                justifyContent: 'center',
+                marginTop: '8px',
+                backgroundColor: 'transparent',
+                border: '1px solid var(--accent-terracotta, #C85A32)',
+                color: 'var(--accent-terracotta, #C85A32)',
+              }}
+            >
+              ✦ Guided Product Tour
+            </button>
           </div>
         )}
       </header>
@@ -307,6 +331,20 @@ export default function LandingPage({ onNavigate }) {
             >
               <span>Launch VoxPlan App</span>
               <span style={styles.primaryBtnArrow}>→</span>
+            </button>
+            <button
+              type="button"
+              id="hero-tour-btn"
+              onClick={handleOpenTour}
+              style={{
+                ...styles.heroSecondaryBtn,
+                borderColor: 'var(--accent-terracotta, #C85A32)',
+                color: 'var(--accent-terracotta, #C85A32)',
+                fontWeight: '700',
+              }}
+              title="Launch the interactive guided product tour"
+            >
+              <span>✦ Product Tour</span>
             </button>
             <button
               type="button"

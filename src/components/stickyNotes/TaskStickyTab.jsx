@@ -15,6 +15,7 @@ import { getStationeryById } from './stationeryCatalog.js';
  * @param {boolean} [props.showAddPrompt=true] When notes is empty, show discreet + Note trigger
  */
 export default function TaskStickyTab({
+  id,
   notes = [],
   taskTitle = '',
   onOpen,
@@ -32,7 +33,9 @@ export default function TaskStickyTab({
     return (
       <button
         type="button"
-        className={`task-sticky-empty-trigger ${compact ? 'task-sticky-empty-compact' : ''}`}
+        id={id}
+        data-action="open-sticky-notes"
+        className={`task-sticky-empty-trigger task-sticky-affordance ${compact ? 'task-sticky-empty-compact' : ''}`}
         onClick={(e) => {
           e.stopPropagation();
           if (onOpen) onOpen();
@@ -60,7 +63,9 @@ export default function TaskStickyTab({
   return (
     <button
       type="button"
-      className={`task-sticky-tab ${compact ? 'task-sticky-tab-compact' : ''}`}
+      id={id}
+      data-action="open-sticky-notes"
+      className={`task-sticky-tab task-sticky-affordance ${compact ? 'task-sticky-tab-compact' : ''}`}
       style={{
         backgroundColor: stationery.tabBg,
         borderColor: stationery.tabBorder,

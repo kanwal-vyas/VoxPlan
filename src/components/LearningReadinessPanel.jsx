@@ -69,7 +69,12 @@ export default function LearningReadinessPanel({ events = [], tasks = [] }) {
   ].filter(Boolean).length;
 
   return (
-    <div style={styles.container} className="digital-card" aria-label="Schedule Adaptation Readiness Diagnostics">
+    <div
+      id="adaptation-gate-status"
+      style={styles.container}
+      className="digital-card"
+      aria-label="Schedule Adaptation Readiness Diagnostics"
+    >
       {/* Panel Top Header */}
       <div style={styles.panelHeader}>
         <div style={styles.titleGroup}>

@@ -66,6 +66,7 @@ export default function PersonalModelDashboard({ events = [], tasks = [] }) {
   return (
     <section
       id="personal-model"
+      className="personal-model-card"
       ref={sectionRef}
       style={styles.section}
       aria-label="Personal Duration Estimator & Evaluation"

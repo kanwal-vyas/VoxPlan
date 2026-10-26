@@ -75,7 +75,12 @@ export default function TaskList({
 
           {/* Filter Pills and Action Row */}
           <div style={styles.headerActionsWrap}>
-            <div style={styles.filterNav} role="group" aria-label="Task status filters">
+            <div
+              id="task-filter-bar"
+              className="task-filter-pills"
+              style={styles.filterNav}
+              role="group" aria-label="Task status filters"
+            >
               {[
                 { id: 'all', label: 'All Tasks', emoji: '📝' },
                 { id: 'pending', label: 'Pending', emoji: '⏳' },
@@ -84,6 +89,8 @@ export default function TaskList({
               ].map((f) => (
                 <button
                   key={f.id}
+                  id={`task-filter-${f.id}`}
+                  data-filter={f.id}
                   type="button"
                   onClick={() => onChangeFilter(f.id)}
                   aria-pressed={activeFilter === f.id}

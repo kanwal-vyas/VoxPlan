@@ -15,6 +15,7 @@ export default function Header({
   onNavigate,
   onOpenBackup,
   onNotificationAction,
+  onStartTour,
 }) {
   const [scrolled, setScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -226,6 +227,20 @@ export default function Header({
             {/* Desktop Actions */}
             {!isMobile && (
               <div style={styles.actionControls}>
+                {onStartTour && (
+                  <button
+                    type="button"
+                    id="header-tour-btn"
+                    onClick={onStartTour}
+                    title="Launch interactive guided product tour"
+                    style={styles.tourBtn}
+                    aria-label="Launch interactive VoxPlan product tour"
+                  >
+                    <span style={{ color: '#E5A83B' }}>✦</span>
+                    <span>Tour</span>
+                  </button>
+                )}
+
                 {onOpenBackup && (
                   <button
                     type="button"
@@ -286,6 +301,20 @@ export default function Header({
                 {/* Mobile Dropdown Menu */}
                 {isMenuOpen && (
                   <div id="header-overflow-menu" style={styles.dropdownMenu}>
+                    {onStartTour && (
+                      <button
+                        type="button"
+                        id="header-mobile-tour-btn"
+                        onClick={() => {
+                          setIsMenuOpen(false);
+                          onStartTour();
+                        }}
+                        style={styles.menuItem}
+                      >
+                        <span style={{ color: '#E5A83B', marginRight: '6px' }}>✦</span>
+                        <span>Product Tour</span>
+                      </button>
+                    )}
                     {onNavigate && (
                       <button
                         type="button"
@@ -729,5 +758,19 @@ const styles = {
     textAlign: 'left',
     width: '100%',
     transition: 'background 0.15s ease',
+  },
+  tourBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    backgroundColor: '#FFFFFF',
+    border: '1px solid rgba(61, 38, 69, 0.16)',
+    borderRadius: '9999px',
+    padding: '6px 14px',
+    fontSize: '12px',
+    fontWeight: '700',
+    color: '#C85A32',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
   },
 };

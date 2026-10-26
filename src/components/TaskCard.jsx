@@ -224,12 +224,14 @@ export default function TaskCard({
 
   return (
     <article
+      id={index === 0 ? 'first-task-card' : undefined}
+      data-task-id={task.id}
       data-risk={riskCategory || 'UNRATED'}
       style={{
         ...styles.card,
         borderTop: `4px solid ${theme.accent}`,
       }}
-      className="digital-card task-card-item"
+      className="digital-card task-card-item task-card"
       onClick={() => {
         if (!isEditing && onOpenExplanation && prediction) {
           onOpenExplanation(task, prediction);
@@ -254,6 +256,7 @@ export default function TaskCard({
             {task.priority ? `${task.priority.toUpperCase()} PRIORITY` : 'MEDIUM PRIORITY'}
           </button>
           <TaskStickyTab
+            id={index === 0 ? 'first-task-sticky-trigger' : undefined}
             notes={stickyNotes}
             taskTitle={task.title}
             onOpen={() => onOpenStickyNotes && onOpenStickyNotes(task)}
@@ -313,6 +316,9 @@ export default function TaskCard({
           {/* Delete button */}
           <button
             type="button"
+            id={index === 0 ? 'first-task-delete-btn' : undefined}
+            className="task-delete-btn"
+            data-action="delete-task"
             onClick={(e) => {
               e.stopPropagation();
               onDelete(task.id);
