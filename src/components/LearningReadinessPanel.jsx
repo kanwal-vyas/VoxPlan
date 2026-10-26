@@ -408,11 +408,11 @@ const styles = {
     border: '1px solid transparent',
   },
   title: {
-    fontFamily: "'Syne', sans-serif",
+    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, serif)",
     fontSize: '22px',
-    fontWeight: '800',
+    fontWeight: '700',
     color: '#25242A',
-    letterSpacing: '-0.02em',
+    letterSpacing: '-0.01em',
     margin: '4px 0 0 0',
   },
   subtitle: {
@@ -444,7 +444,7 @@ const styles = {
     letterSpacing: '0.04em',
   },
   gaugeScore: {
-    fontFamily: "'Syne', sans-serif",
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
     fontSize: '16px',
     fontWeight: '800',
     color: '#25242A',
@@ -502,7 +502,7 @@ const styles = {
     alignItems: 'center',
   },
   gateName: {
-    fontFamily: "'Plus Jakarta Sans', sans-serif",
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
     fontSize: '13px',
     fontWeight: '800',
     color: '#25242A',
@@ -520,7 +520,7 @@ const styles = {
     gap: '6px',
   },
   metricBig: {
-    fontFamily: "'Syne', sans-serif",
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
     fontSize: '28px',
     fontWeight: '800',
     color: '#25242A',

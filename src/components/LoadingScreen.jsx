@@ -129,10 +129,10 @@ const styles = {
     fontSize: '24px',
   },
   logo: {
-    fontFamily: "'Syne', sans-serif",
+    fontFamily: "var(--font-wordmark, 'Trade Winds', cursive)",
     fontSize: '44px',
-    fontWeight: '800',
-    letterSpacing: '-0.03em',
+    fontWeight: '400',
+    letterSpacing: '0.04em',
     color: '#25242A',
     margin: 0,
   },

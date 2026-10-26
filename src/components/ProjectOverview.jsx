@@ -212,6 +212,11 @@ export default function ProjectOverview({
                       ? 'No tasks yet. Create an initiative to visualize sprint risk.'
                       : 'All tasks completed for this sprint!'}
                   </span>
+                  {totalCount > 0 && (
+                    <span style={{ fontFamily: "var(--font-accent, 'Bigelow Rules', cursive)", fontSize: '22px', color: '#C85A32', letterSpacing: '0.04em' }}>
+                      ✦ Sprint Milestone Achieved
+                    </span>
+                  )}
                 </div>
               )}
             </div>
@@ -279,17 +284,18 @@ const styles = {
     color: '#C85A32',
   },
   badge: {
-    fontSize: '11px',
-    fontWeight: '800',
+    fontFamily: "var(--font-subheading, 'Unica One', cursive, sans-serif)",
+    fontSize: '12px',
+    fontWeight: '700',
     letterSpacing: '0.08em',
     color: '#5E5B66',
   },
   title: {
-    fontFamily: "'Syne', sans-serif",
-    fontSize: '28px',
-    fontWeight: '800',
+    fontFamily: "var(--font-display, 'Eagle Lake', cursive, Georgia, serif)",
+    fontSize: '26px',
+    fontWeight: '400',
     color: '#3D2645',
-    letterSpacing: '-0.02em',
+    letterSpacing: '0.01em',
     margin: 0,
   },
   actionGroup: {
@@ -375,8 +381,8 @@ const styles = {
     flexWrap: 'wrap',
   },
   hugePercent: {
-    fontFamily: "'Syne', sans-serif",
-    fontSize: '56px',
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
+    fontSize: '52px',
     fontWeight: '800',
     color: '#3D2645',
     letterSpacing: '-0.04em',
@@ -418,9 +424,9 @@ const styles = {
     justifyContent: 'space-between',
   },
   timelineHeading: {
-    fontFamily: "'Plus Jakarta Sans', sans-serif",
+    fontFamily: "var(--font-compact, 'Unica One', sans-serif)",
     fontSize: '11px',
-    fontWeight: '800',
+    fontWeight: '700',
     letterSpacing: '0.08em',
     color: '#706D73',
   },

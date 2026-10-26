@@ -13,8 +13,8 @@ const ProductivityApp = lazy(() => import('./pages/ProductivityApp'));
  * VoxPlan Top-Level Router & Experience Orchestrator
  *
  * Routes:
- * - /      : Polished product landing page with features, preview, and how-it-works (lazy loaded)
- * - /app   : Existing functional VoxPlan productivity intelligence application (lazy loaded)
+ * - /    : Polished product landing & overview page with features, preview, and how-it-works (lazy loaded)
+ * - /app : Existing functional VoxPlan productivity intelligence application (lazy loaded)
  */
 export default function App() {
   const [currentPath, setCurrentPath] = useState(() => {
@@ -149,7 +149,7 @@ const styles = {
     color: '#B45309',
     padding: '10px 16px',
     fontSize: '13px',
-    fontFamily: "var(--font-sans, 'Plus Jakarta Sans', sans-serif)",
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
     position: 'sticky',
     top: 0,
     zIndex: 1000,

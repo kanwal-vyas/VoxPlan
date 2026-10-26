@@ -483,7 +483,7 @@ button:active {
 }
 
 .editorial-ribbon-word {
-  font-family: 'Syne', sans-serif;
+  font-family: var(--font-display, 'Eagle Lake', cursive, serif);
   font-size: clamp(64px, 11vw, 150px);
   font-weight: 800;
   letter-spacing: -0.05em;

@@ -286,20 +286,20 @@ const styles = {
     gap: '8px',
   },
   eyebrow: {
-    fontFamily: "'Plus Jakarta Sans', sans-serif",
+    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
     fontSize: '11px',
     fontWeight: '800',
     letterSpacing: '0.08em',
     color: '#706D73',
   },
   taskTitle: {
-    fontFamily: "'Syne', sans-serif",
-    fontSize: '26px',
-    fontWeight: '800',
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
+    fontSize: '24px',
+    fontWeight: '700',
     color: '#25242A',
-    letterSpacing: '-0.02em',
+    letterSpacing: '-0.01em',
     margin: 0,
-    lineHeight: 1.2,
+    lineHeight: 1.25,
   },
   riskHighlightBox: {
     display: 'flex',
@@ -314,7 +314,7 @@ const styles = {
     flexDirection: 'column',
   },
   riskStatus: {
-    fontFamily: "'Plus Jakarta Sans', sans-serif",
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
     fontSize: '13px',
     fontWeight: '800',
   },
@@ -342,7 +342,7 @@ const styles = {
     justifyContent: 'space-between',
   },
   personalizationTitle: {
-    fontFamily: "'Plus Jakarta Sans', sans-serif",
+    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
     fontSize: '11px',
     fontWeight: '800',
     letterSpacing: '0.06em',
@@ -448,7 +448,7 @@ const styles = {
     fontWeight: '500',
   },
   factorsHeading: {
-    fontFamily: "'Plus Jakarta Sans', sans-serif",
+    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
     fontSize: '11px',
     fontWeight: '800',
     letterSpacing: '0.06em',

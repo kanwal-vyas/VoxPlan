@@ -313,9 +313,9 @@ const styles = {
     border: '1px solid transparent',
   },
   title: {
-    fontFamily: "'Syne', sans-serif",
+    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, serif)",
     fontSize: '18px',
-    fontWeight: '800',
+    fontWeight: '700',
     color: '#25242A',
     margin: '2px 0 0 0',
     letterSpacing: '-0.01em',
@@ -366,7 +366,7 @@ const styles = {
     gap: '6px',
   },
   itemValue: {
-    fontFamily: "'Syne', sans-serif",
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
     fontSize: '24px',
     fontWeight: '800',
     color: '#25242A',
@@ -392,7 +392,7 @@ const styles = {
     alignItems: 'center',
   },
   sectionHeading: {
-    fontFamily: "'Plus Jakarta Sans', sans-serif",
+    fontFamily: "var(--font-subheading, 'Unica One', cursive, sans-serif)",
     fontSize: '12px',
     fontWeight: '800',
     color: '#25242A',
@@ -433,7 +433,7 @@ const styles = {
     flexWrap: 'wrap',
   },
   signalName: {
-    fontFamily: "'Plus Jakarta Sans', sans-serif",
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
     fontSize: '13px',
     fontWeight: '800',
     color: '#25242A',

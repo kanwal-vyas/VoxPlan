@@ -92,7 +92,7 @@ const styles = {
   },
   description: {
     margin: 0,
-    fontFamily: "var(--font-sans, 'Plus Jakarta Sans', sans-serif)",
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
     fontSize: '0.95rem',
     lineHeight: 1.6,
     color: 'var(--text-body, #4A4852)',
@@ -108,7 +108,7 @@ const styles = {
     backgroundColor: 'var(--text-dark, #25242A)',
     color: '#FFFFFF',
     border: 'none',
-    fontFamily: "var(--font-sans, 'Plus Jakarta Sans', sans-serif)",
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
     fontSize: '0.95rem',
     fontWeight: 600,
     cursor: 'pointer',

@@ -11,6 +11,7 @@ import {
   getPriorityPalette,
   groupTasksForCalendar,
 } from '../utils/calendarUtils.js';
+import TaskStickyTab from './stickyNotes/TaskStickyTab';
 
 /**
  * TaskCalendar Component
@@ -31,6 +32,8 @@ export default function TaskCalendar({
   onDeleteTask,
   onOpenExplanation,
   _acceptedSchedule = null,
+  stickyNotesMap = {},
+  onOpenStickyNotes,
 }) {
   const todayStr = useMemo(() => getTodayDateString(), []);
   const todayComp = useMemo(() => parseDateComponents(todayStr) || { year: 2026, month: 9, day: 24 }, [todayStr]);
@@ -570,6 +573,15 @@ export default function TaskCalendar({
                               {task.completed ? '✓' : isTaskOverdue ? '⚠️' : palette.icon}
                             </span>
                             <span style={styles.taskChipTitle}>{task.title}</span>
+                            {stickyNotesMap[task.id]?.length > 0 && (
+                              <TaskStickyTab
+                                notes={stickyNotesMap[task.id]}
+                                taskTitle={task.title}
+                                onOpen={() => onOpenStickyNotes && onOpenStickyNotes(task)}
+                                compact={true}
+                                showAddPrompt={false}
+                              />
+                            )}
                           </div>
                         );
                       })}
@@ -686,6 +698,15 @@ export default function TaskCalendar({
                                 <span style={styles.weekTaskPriorityLabel}>
                                   {task.priority.toUpperCase()}
                                 </span>
+                                {stickyNotesMap[task.id]?.length > 0 && (
+                                  <TaskStickyTab
+                                    notes={stickyNotesMap[task.id]}
+                                    taskTitle={task.title}
+                                    onOpen={() => onOpenStickyNotes && onOpenStickyNotes(task)}
+                                    compact={true}
+                                    showAddPrompt={false}
+                                  />
+                                )}
                               </div>
                               <span style={styles.weekTaskTitle}>{task.title}</span>
                               {task.estimatedEffort && (
@@ -782,6 +803,12 @@ export default function TaskCalendar({
                             {task.estimatedEffort && (
                               <span style={styles.dayTaskEffort}>⏱ {task.estimatedEffort}h effort</span>
                             )}
+                            <TaskStickyTab
+                              notes={stickyNotesMap[task.id] || []}
+                              taskTitle={task.title}
+                              onOpen={() => onOpenStickyNotes && onOpenStickyNotes(task)}
+                              compact={true}
+                            />
                           </div>
                           <h4
                             style={{
@@ -917,6 +944,15 @@ export default function TaskCalendar({
                           {task.estimatedEffort && (
                             <span style={styles.agendaEffortBadge}>⏱ {task.estimatedEffort}h</span>
                           )}
+                          {stickyNotesMap[task.id]?.length > 0 && (
+                            <TaskStickyTab
+                              notes={stickyNotesMap[task.id]}
+                              taskTitle={task.title}
+                              onOpen={() => onOpenStickyNotes && onOpenStickyNotes(task)}
+                              compact={true}
+                              showAddPrompt={false}
+                            />
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1019,6 +1055,15 @@ export default function TaskCalendar({
                   >
                     {getPriorityPalette(selectedTask.priority).icon} {selectedTask.priority.toUpperCase()} PRIORITY
                   </span>
+                  <TaskStickyTab
+                    notes={stickyNotesMap[selectedTask.id] || []}
+                    taskTitle={selectedTask.title}
+                    onOpen={() => {
+                      const t = selectedTask;
+                      setSelectedTask(null);
+                      if (onOpenStickyNotes) onOpenStickyNotes(t);
+                    }}
+                  />
                 </div>
                 <button type="button" onClick={() => setSelectedTask(null)} style={styles.modalCloseBtn} aria-label="Close details">
                   ✕
@@ -1185,12 +1230,12 @@ const styles = {
     gap: '12px',
   },
   mainHeading: {
-    fontFamily: "'Syne', sans-serif",
+    fontFamily: "var(--font-display, 'Eagle Lake', cursive, Georgia, serif)",
     fontSize: 'clamp(22px, 2.8vw, 32px)',
-    fontWeight: '800',
+    fontWeight: '400',
     color: '#201E23',
     margin: 0,
-    letterSpacing: '-0.02em',
+    letterSpacing: '0.01em',
   },
   todayPill: {
     fontSize: '10px',
@@ -1370,9 +1415,9 @@ const styles = {
     marginBottom: '12px',
   },
   unscheduledTitle: {
-    fontFamily: "'Syne', sans-serif",
+    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, Georgia, serif)",
     fontSize: '16px',
-    fontWeight: '800',
+    fontWeight: '400',
     color: '#201E23',
     margin: 0,
   },
@@ -1699,9 +1744,9 @@ const styles = {
     paddingBottom: '16px',
   },
   dayViewDateTitle: {
-    fontFamily: "'Syne', sans-serif",
+    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, Georgia, serif)",
     fontSize: '22px',
-    fontWeight: '800',
+    fontWeight: '400',
     color: '#201E23',
     margin: 0,
   },
@@ -1855,15 +1900,16 @@ const styles = {
     gap: '12px',
   },
   agendaBadge: {
-    fontSize: '10px',
-    fontWeight: '800',
+    fontFamily: "var(--font-subheading, 'Unica One', cursive, sans-serif)",
+    fontSize: '11px',
+    fontWeight: '700',
     color: '#C85A32',
-    letterSpacing: '0.06em',
+    letterSpacing: '0.08em',
   },
   agendaTitle: {
-    fontFamily: "'Syne', sans-serif",
+    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, Georgia, serif)",
     fontSize: '18px',
-    fontWeight: '800',
+    fontWeight: '400',
     color: '#201E23',
     margin: '2px 0 0 0',
   },
@@ -1976,9 +2022,9 @@ const styles = {
     marginBottom: '8px',
   },
   modalTitle: {
-    fontFamily: "'Syne', sans-serif",
+    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, Georgia, serif)",
     fontSize: '18px',
-    fontWeight: '800',
+    fontWeight: '400',
     color: '#201E23',
     margin: 0,
   },
@@ -2074,9 +2120,9 @@ const styles = {
     gap: '8px',
   },
   detailTitle: {
-    fontFamily: "'Syne', sans-serif",
-    fontSize: '20px',
-    fontWeight: '800',
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
+    fontSize: '19px',
+    fontWeight: '700',
     color: '#201E23',
     margin: 0,
     lineHeight: '1.3',

@@ -75,6 +75,10 @@ export default function Hero({
               Act with <span className="hl hl-marigold" style={styles.headingAccent}>focus.</span>
             </h1>
 
+            <div style={styles.tagline} className="hero-editorial-tagline">
+              Predict what matters. Focus on what counts.
+            </div>
+
             <p className="hero-statement" style={styles.statement}>
               VoxPlan turns daily tasks into structured timelines, using private local intelligence to highlight which initiatives are at risk before deadlines slip.
             </p>
@@ -224,29 +228,44 @@ const styles = {
     fontSize: '11px',
   },
   eyebrowText: {
-    fontFamily: "'Plus Jakarta Sans', sans-serif",
+    fontFamily: "var(--font-compact, 'Unica One', sans-serif)",
     fontSize: '11px',
-    fontWeight: '800',
-    letterSpacing: '0.06em',
+    fontWeight: '700',
+    letterSpacing: '0.08em',
     color: '#5E5B66',
   },
   headline: {
-    fontFamily: "'Syne', sans-serif",
-    fontSize: 'clamp(32px, 4.5vw, 52px)',
-    fontWeight: '800',
-    lineHeight: '1.08',
-    letterSpacing: '-0.03em',
+    fontFamily: "var(--font-hero, 'Shrikhand', Georgia, serif)",
+    fontSize: 'clamp(32px, 4.5vw, 48px)',
+    fontWeight: '400',
+    lineHeight: '1.25',
+    letterSpacing: '-0.01em',
     color: '#3D2645',
     margin: 0,
   },
+  tagline: {
+    fontFamily: "var(--font-tagline, 'Bigelow Rules', cursive)",
+    fontSize: 'clamp(20px, 2.4vw, 28px)',
+    fontWeight: '400',
+    letterSpacing: '0.04em',
+    color: '#8D4203',
+    margin: '6px 0 12px 0',
+    lineHeight: '1.3',
+  },
   headingAccent: {
-    color: '#201E23',
+    fontFamily: "var(--font-hero-accent, 'Shadows Into Light', cursive)",
+    color: '#B45309',
+    fontSize: '1.18em',
+    display: 'inline-block',
   },
   headingAccentPlum: {
-    color: '#3D2645',
+    fontFamily: "var(--font-hero-accent, 'Shadows Into Light', cursive)",
+    color: '#C85A32',
+    fontSize: '1.18em',
+    display: 'inline-block',
   },
   statement: {
-    fontSize: '16px',
+    fontSize: '15px',
     lineHeight: '1.6',
     color: '#5E5B66',
     maxWidth: '480px',
@@ -307,11 +326,11 @@ const styles = {
     padding: '0 4px',
   },
   previewTag: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '11px',
+    fontFamily: "var(--font-subheading, 'Unica One', cursive)",
+    fontSize: '13px',
     fontWeight: '700',
     color: '#7C7885',
-    letterSpacing: '0.04em',
+    letterSpacing: '0.06em',
   },
   previewSub: {
     fontSize: '11px',
@@ -369,8 +388,8 @@ const styles = {
     color: '#2D6A4F',
   },
   cardTitle: {
-    fontFamily: "'Syne', sans-serif",
-    fontSize: '17px',
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
+    fontSize: '16px',
     fontWeight: '700',
     color: '#1E1E22',
     margin: 0,

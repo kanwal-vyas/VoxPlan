@@ -63,7 +63,7 @@ const styles = {
   },
   text: {
     margin: 0,
-    fontFamily: "var(--font-sans, 'Plus Jakarta Sans', sans-serif)",
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
     fontSize: '0.95rem',
     fontWeight: 600,
     color: 'var(--text-dark, #25242A)',

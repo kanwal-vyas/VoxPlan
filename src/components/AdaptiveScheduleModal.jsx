@@ -1979,7 +1979,7 @@ const styles = {
     overflow: 'hidden',
     position: 'relative',
     color: '#25242A',
-    fontFamily: "'Plus Jakarta Sans', sans-serif",
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
   },
   header: {
     display: 'flex',

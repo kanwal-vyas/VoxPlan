@@ -602,7 +602,7 @@ const styles = {
     fontWeight: '700',
     margin: 0,
     color: '#1F1E24',
-    fontFamily: "'Instrument Sans', 'Plus Jakarta Sans', sans-serif",
+    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, serif)",
   },
   subtitle: {
     fontSize: '13px',

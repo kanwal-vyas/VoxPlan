@@ -129,7 +129,7 @@ const styles = {
     border: '1px solid',
     boxShadow: '0 12px 32px rgba(37, 36, 42, 0.14), 0 2px 6px rgba(37, 36, 42, 0.06)',
     backdropFilter: 'blur(12px)',
-    fontFamily: "var(--font-sans, 'Plus Jakarta Sans', sans-serif)",
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
   },
   contentRow: {
     display: 'flex',
