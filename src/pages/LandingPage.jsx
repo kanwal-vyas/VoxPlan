@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import BrandBadge from '../components/BrandBadge';
+import { loadTourState, TOUR_MODES } from '../productTour/tourStorage';
 
 /**
  * VoxPlan Product Landing Page (/)
@@ -47,14 +48,76 @@ function interpolatePaletteColor(progress) {
   return SECTION_PALETTES[SECTION_PALETTES.length - 1].color;
 }
 
+/**
+ * Read-only safe workspace snapshot reader.
+ * Derives genuine task counts and active initiatives directly from local-first storage.
+ * Invariant: Never mutates tasks or introduces synthetic records.
+ */
+function loadWorkspaceSummary() {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return { hasData: false, totalCount: 0, completedCount: 0, pendingCount: 0, highPriorityCount: 0, topPending: [] };
+  }
+  try {
+    const raw = window.localStorage.getItem('voxplan_tasks');
+    if (!raw) {
+      return { hasData: false, totalCount: 0, completedCount: 0, pendingCount: 0, highPriorityCount: 0, topPending: [] };
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      return { hasData: false, totalCount: 0, completedCount: 0, pendingCount: 0, highPriorityCount: 0, topPending: [] };
+    }
+    const totalCount = parsed.length;
+    const completedCount = parsed.filter((t) => Boolean(t.completed)).length;
+    const pending = parsed.filter((t) => !t.completed);
+    const highPriorityCount = pending.filter((t) =>
+      ['high', 'urgent', 'critical'].includes(String(t.priority || '').toLowerCase())
+    ).length;
+    const topPending = pending.slice(0, 3).map((t) => ({
+      id: t.id || `task-${Math.random().toString(36).slice(2, 7)}`,
+      title: t.title || 'Untitled Commitment',
+      priority: t.priority || 'medium',
+      dueDate: t.dueDate || t.due_date || null,
+      effort: t.estimatedEffort || t.estimated_effort || null,
+    }));
+    return {
+      hasData: true,
+      totalCount,
+      completedCount,
+      pendingCount: pending.length,
+      highPriorityCount,
+      topPending,
+    };
+  } catch (err) {
+    console.warn('[Overview] Error reading workspace tasks:', err);
+    return { hasData: false, totalCount: 0, completedCount: 0, pendingCount: 0, highPriorityCount: 0, topPending: [] };
+  }
+}
+
 export default function LandingPage({ onNavigate }) {
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activePreviewTab, setActivePreviewTab] = useState('schedule'); // 'schedule' | 'risk' | 'voice'
   const [previewTimerRunning, setPreviewTimerRunning] = useState(false);
   const [previewTimerSeconds, setPreviewTimerSeconds] = useState(2540); // 42m 20s
+  const [workspaceSummary, setWorkspaceSummary] = useState(() => loadWorkspaceSummary());
+  const [tourState, setTourState] = useState(() => loadTourState());
   const pageRef = useRef(null);
   const ribbonRefs = useRef({});
+
+  // Synchronize workspace summary and tour state on window focus or storage updates
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleSyncState = () => {
+      setWorkspaceSummary(loadWorkspaceSummary());
+      setTourState(loadTourState());
+    };
+    window.addEventListener('storage', handleSyncState);
+    window.addEventListener('focus', handleSyncState);
+    return () => {
+      window.removeEventListener('storage', handleSyncState);
+      window.removeEventListener('focus', handleSyncState);
+    };
+  }, []);
 
   // Passive scroll listener: slow background color transition & moving ribbon words
   useEffect(() => {
@@ -188,6 +251,23 @@ export default function LandingPage({ onNavigate }) {
     }
   };
 
+  const handleOpenTourDemo = () => {
+    if (onNavigate) {
+      onNavigate('/app?tour=demo');
+    } else {
+      window.location.href = '/app?tour=demo';
+    }
+  };
+
+  const handleOpenAppView = (view) => {
+    const target = view ? `/app?view=${view}` : '/app';
+    if (onNavigate) {
+      onNavigate(target);
+    } else {
+      window.location.href = target;
+    }
+  };
+
   return (
     <div ref={pageRef} className="overview-page" style={styles.page}>
       {/* 1. Header / Navigation */}
@@ -212,6 +292,12 @@ export default function LandingPage({ onNavigate }) {
 
           {/* Desktop Nav Links */}
           <nav style={styles.desktopNav} aria-label="Landing Navigation">
+            <button type="button" onClick={() => scrollToSection('workspace-focus')} style={styles.navLink}>
+              Focus
+            </button>
+            <button type="button" onClick={() => scrollToSection('product-tour')} style={styles.navLinkTour}>
+              ✦ Product Tour
+            </button>
             <button type="button" onClick={() => scrollToSection('features')} style={styles.navLink}>
               Features
             </button>
@@ -255,6 +341,12 @@ export default function LandingPage({ onNavigate }) {
         {/* Mobile Dropdown Menu */}
         {mobileMenuOpen && (
           <div id="landing-mobile-menu" style={styles.mobileMenu}>
+            <button type="button" onClick={() => scrollToSection('workspace-focus')} style={styles.mobileNavLink}>
+              Today&apos;s Focus
+            </button>
+            <button type="button" onClick={() => scrollToSection('product-tour')} style={styles.mobileNavLink}>
+              ✦ Interactive Tour
+            </button>
             <button type="button" onClick={() => scrollToSection('features')} style={styles.mobileNavLink}>
               Features
             </button>
@@ -373,6 +465,161 @@ export default function LandingPage({ onNavigate }) {
               <span style={styles.microTagCheck}>✓</span> Offline Resilient
             </span>
           </div>
+        </div>
+      </section>
+
+      {/* 2.5 Today's Workspace Focus (Answers: "What should I focus on right now?") */}
+      <section id="workspace-focus" style={styles.workspaceFocusSection}>
+        <div style={styles.workspaceFocusContainer}>
+          <div style={styles.workspaceFocusHeader}>
+            <div style={styles.workspaceFocusBadge}>
+              <span style={styles.eyebrowSparkle}>✦</span>
+              <span>TODAY&apos;S WORKSPACE FOCUS</span>
+            </div>
+            <h2 style={styles.workspaceFocusTitle}>Your Active Work & Delivery State</h2>
+            <p style={styles.workspaceFocusSubtitle}>
+              Live intelligence derived directly from your browser&apos;s local-first task store. No cloud synchronization, no tracking.
+            </p>
+          </div>
+
+          {workspaceSummary.hasData ? (
+            <div style={styles.workspaceFocusCard}>
+              {/* Metrics Row */}
+              <div style={styles.metricsGrid}>
+                <div style={styles.metricStatBox}>
+                  <span style={styles.metricStatNumber}>{workspaceSummary.totalCount}</span>
+                  <span style={styles.metricStatLabel}>Total Commitments</span>
+                </div>
+                <div style={styles.metricStatBox}>
+                  <span style={{ ...styles.metricStatNumber, color: '#2E7D32' }}>
+                    {workspaceSummary.completedCount}
+                  </span>
+                  <span style={styles.metricStatLabel}>
+                    Completed ({workspaceSummary.totalCount > 0 ? Math.round((workspaceSummary.completedCount / workspaceSummary.totalCount) * 100) : 0}%)
+                  </span>
+                </div>
+                <div style={styles.metricStatBox}>
+                  <span style={{ ...styles.metricStatNumber, color: '#C85A32' }}>
+                    {workspaceSummary.pendingCount}
+                  </span>
+                  <span style={styles.metricStatLabel}>In-Flight / Pending</span>
+                </div>
+                <div style={styles.metricStatBox}>
+                  <span
+                    style={{
+                      ...styles.metricStatNumber,
+                      color: workspaceSummary.highPriorityCount > 0 ? '#B45309' : '#25242A',
+                    }}
+                  >
+                    {workspaceSummary.highPriorityCount}
+                  </span>
+                  <span style={styles.metricStatLabel}>Urgent / High Priority</span>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div style={styles.workspaceProgressBarWrap}>
+                <div style={styles.workspaceProgressLabelRow}>
+                  <span style={styles.workspaceProgressText}>Sprint Completion Rate</span>
+                  <span style={styles.workspaceProgressPercent}>
+                    {workspaceSummary.totalCount > 0
+                      ? Math.round((workspaceSummary.completedCount / workspaceSummary.totalCount) * 100)
+                      : 0}
+                    %
+                  </span>
+                </div>
+                <div style={styles.workspaceProgressTrack}>
+                  <div
+                    style={{
+                      ...styles.workspaceProgressFill,
+                      width: `${
+                        workspaceSummary.totalCount > 0
+                          ? Math.min(100, (workspaceSummary.completedCount / workspaceSummary.totalCount) * 100)
+                          : 0
+                      }%`,
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Top Focus Items */}
+              {workspaceSummary.topPending && workspaceSummary.topPending.length > 0 && (
+                <div style={styles.topTasksContainer}>
+                  <span style={styles.topTasksHeader}>Top Priority In-Flight Commitments:</span>
+                  <div style={styles.topTasksList}>
+                    {workspaceSummary.topPending.map((task) => (
+                      <div key={task.id} style={styles.topTaskItem}>
+                        <div style={styles.topTaskLeft}>
+                          <span
+                            style={
+                              ['high', 'urgent', 'critical'].includes(String(task.priority).toLowerCase())
+                                ? styles.priorityBadgeHigh
+                                : styles.priorityBadgeMed
+                            }
+                          >
+                            {task.priority || 'medium'}
+                          </span>
+                          <span style={styles.topTaskTitle}>{task.title}</span>
+                        </div>
+                        <div style={styles.topTaskMeta}>
+                          {task.effort && <span>{task.effort}h est</span>}
+                          {task.dueDate && <span>Due {task.dueDate}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Action CTA */}
+              <div style={styles.workspaceFocusActions}>
+                <button
+                  type="button"
+                  onClick={() => handleOpenAppView('today')}
+                  style={styles.workspacePrimaryActionBtn}
+                >
+                  <span>Open Workspace Cockpit</span>
+                  <span style={styles.btnArrow}>→</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOpenAppView('tasks')}
+                  style={styles.workspaceSecondaryActionBtn}
+                >
+                  <span>View Full Task Backlog</span>
+                  <span>→</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={styles.workspaceZeroCard}>
+              <div style={styles.zeroCardIcon}>✦</div>
+              <h3 style={styles.zeroCardTitle}>Workspace Ready — Zero Tasks Queued</h3>
+              <p style={styles.zeroCardDesc}>
+                Your browser storage currently has no tasks saved. VoxPlan is private and runs 100% in your browser.
+                Take the interactive tour to explore all capabilities with simulated data, or open the workspace to start planning.
+              </p>
+              <div style={styles.zeroCardActions}>
+                <button
+                  type="button"
+                  id="overview-focus-tour-btn"
+                  onClick={handleOpenTour}
+                  style={styles.workspacePrimaryActionBtn}
+                >
+                  <span>✦ Take 20-Step Tour</span>
+                  <span style={styles.btnArrow}>→</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOpenAppView('today')}
+                  style={styles.workspaceSecondaryActionBtn}
+                >
+                  <span>Open Blank Workspace</span>
+                  <span>→</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
@@ -701,13 +948,185 @@ export default function LandingPage({ onNavigate }) {
         </span>
       </div>
 
-      {/* 4. Features Grid (Only Implemented Capabilities) */}
+      {/* 4. Interactive Product Tour Promotion (Prominent First-Class Feature) */}
+      <section id="product-tour" style={styles.tourSection}>
+        <div style={styles.tourContainer}>
+          {/* Tour Section Header */}
+          <div style={styles.sectionHeader}>
+            <div style={styles.tourEyebrowBadge}>
+              <span style={styles.eyebrowSparkle}>✦</span>
+              <span>INTERACTIVE PRODUCT TOUR</span>
+            </div>
+            <h2 style={styles.tourSectionTitle}>Take the Interactive Tour</h2>
+            <p style={styles.tourSectionSubtitle}>
+              Explore VoxPlan through a guided 20-step interactive walkthrough featuring optical spotlight isolation,
+              live control highlighting, and zero risk to your personal data.
+            </p>
+          </div>
+
+          {/* Dynamic Status Banner */}
+          <div style={styles.tourStatusBanner}>
+            <div style={styles.tourStatusLeft}>
+              <span
+                style={
+                  tourState.completed
+                    ? styles.tourStatusBadgeCompleted
+                    : tourState.lastStepIndex > 0
+                    ? styles.tourStatusBadgeProgress
+                    : styles.tourStatusBadgeFresh
+                }
+              >
+                {tourState.completed
+                  ? '✓ TOUR COMPLETED'
+                  : tourState.lastStepIndex > 0
+                  ? `IN PROGRESS • STEP ${tourState.lastStepIndex + 1} OF 20`
+                  : 'NEW USER ORIENTATION • 20 STEPS'}
+              </span>
+              <span style={styles.tourStatusText}>
+                {tourState.completed
+                  ? 'You have finished all 20 guided steps. Retake the tour anytime to review topological DAG scheduling, ML models, or keyboard workflows.'
+                  : tourState.lastStepIndex > 0
+                  ? `You previously reached Step ${tourState.lastStepIndex + 1} of 20. Resume right where you left off or start fresh from Step 1.`
+                  : 'A comprehensive 3-minute walkthrough introducing the workspace cockpit, adaptive scheduling engine, duration intelligence, and voice commands.'}
+              </span>
+            </div>
+            <div style={styles.tourStatusActions}>
+              <button
+                type="button"
+                id="overview-start-tour-btn"
+                onClick={handleOpenTour}
+                style={styles.tourPrimaryLaunchBtn}
+              >
+                <span>
+                  {tourState.completed
+                    ? 'Retake Product Tour (20 Steps) ↺'
+                    : tourState.lastStepIndex > 0
+                    ? `Resume Tour (Step ${tourState.lastStepIndex + 1}) →`
+                    : 'Start Product Tour (20 Steps) →'}
+                </span>
+              </button>
+              <button
+                type="button"
+                id="overview-demo-tour-btn"
+                onClick={handleOpenTourDemo}
+                style={styles.tourDemoLaunchBtn}
+                title="Launch the tour populated with simulated tasks in an isolated demo sandbox"
+              >
+                <span>🛠 Try Hands-on Demo Tour</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Authentic Spotlight Mockup Demonstration */}
+          <div style={styles.spotlightMockupWrap}>
+            <div style={styles.spotlightMockupHeader}>
+              <span style={styles.mockupHeaderDotRed} />
+              <span style={styles.mockupHeaderDotYellow} />
+              <span style={styles.mockupHeaderDotGreen} />
+              <span style={styles.mockupHeaderTitle}>
+                Interactive Spotlight Isolation & Guided Navigation Preview
+              </span>
+              <span style={styles.mockupHeaderModeBadge}>
+                {tourState.mode === TOUR_MODES.DEMO ? 'Mode: Hands-on Demo' : 'Mode: Guided Observation'}
+              </span>
+            </div>
+
+            <div style={styles.spotlightMockupBody}>
+              {/* Dimmed Background Simulation */}
+              <div style={styles.spotlightMockupDimLayer} />
+
+              {/* Illuminated Target Box */}
+              <div style={styles.spotlightCutoutBox}>
+                <div style={styles.spotlightTargetBeacon}>
+                  <span style={styles.beaconPing} />
+                  <span style={styles.beaconDot} />
+                  <span style={styles.beaconText}>✦ Target: Adaptive Schedule Engine</span>
+                </div>
+                <div style={styles.spotlightSimulatedBtn}>
+                  <span>⚡ Run Adaptive Schedule</span>
+                </div>
+              </div>
+
+              {/* Floating Tour Callout Card Simulation */}
+              <div style={styles.spotlightCalloutSimulation}>
+                <div style={styles.simCalloutHeader}>
+                  <span style={styles.simStepPill}>Step 07 of 20</span>
+                  <span style={styles.simCategoryPill}>Adaptive Scheduling Engine</span>
+                </div>
+                <h4 style={styles.simCalloutTitle}>Kahn’s Topological Sort & Daily Bin-Packing</h4>
+                <p style={styles.simCalloutBody}>
+                  VoxPlan evaluates the Directed Acyclic Graph of prerequisites and bin-packs work into weekday working hours without weekend spillover.
+                </p>
+                <div style={styles.simCalloutPrompt}>
+                  <span style={styles.promptIcon}>💡</span>
+                  <span>Click &quot;Adaptive Schedule&quot; to inspect zero-conflict calendar allocations.</span>
+                </div>
+                <div style={styles.simCalloutFooter}>
+                  <button type="button" onClick={handleOpenTour} style={styles.simNavBtnSecondary}>
+                    ← Back
+                  </button>
+                  <span style={styles.simNavCount}>Step 7 / 20</span>
+                  <button type="button" onClick={handleOpenTour} style={styles.simNavBtnPrimary}>
+                    Next (7/20) →
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 3 Core Highlight Pillars */}
+          <div style={styles.tourPillarsGrid}>
+            <div style={styles.tourPillarCard}>
+              <div style={styles.tourPillarIcon}>🎯</div>
+              <h3 style={styles.tourPillarTitle}>Optical Spotlight Isolation</h3>
+              <p style={styles.tourPillarDesc}>
+                A dynamic SVG aperture with high-contrast borders and backdrop blur isolates the active control on screen, eliminating visual clutter so you always know where to look.
+              </p>
+            </div>
+
+            <div style={styles.tourPillarCard}>
+              <div style={styles.tourPillarIcon}>👁‍🗨</div>
+              <h3 style={styles.tourPillarTitle}>Observation vs Hands-on Demo</h3>
+              <p style={styles.tourPillarDesc}>
+                Tour your current workspace in guided observation mode, or toggle to hands-on demo mode to test scheduling, drag overrides, and time-tracking on isolated sample tasks.
+              </p>
+            </div>
+
+            <div style={styles.tourPillarCard}>
+              <div style={styles.tourPillarIcon}>🛡</div>
+              <h3 style={styles.tourPillarTitle}>100% Data Safety & Isolation</h3>
+              <p style={styles.tourPillarDesc}>
+                The tour operates strictly within an isolated memory sandbox (<code style={styles.codeSnippet}>voxplan_product_tour_state</code>). It never alters, overwrites, or deletes your actual tasks, notes, or preferences.
+              </p>
+            </div>
+          </div>
+
+          {/* Step Inventory Pills */}
+          <div style={styles.tourCurriculumBox}>
+            <span style={styles.curriculumTitle}>Covered in the 20-Step Tour:</span>
+            <div style={styles.curriculumTags}>
+              <span style={styles.curriculumTag}>01. Orientation & Workspace Layout</span>
+              <span style={styles.curriculumTag}>02. Today Focus Cockpit & Stopwatch</span>
+              <span style={styles.curriculumTag}>03. Natural Language Command Dock</span>
+              <span style={styles.curriculumTag}>04. Voice Dictation & Text-to-Speech</span>
+              <span style={styles.curriculumTag}>05. Backlog & Kahn DAG Dependencies</span>
+              <span style={styles.curriculumTag}>06. Adaptive Scheduler & Bin-Packing</span>
+              <span style={styles.curriculumTag}>07. Proposal Canvas & Manual Adjustments</span>
+              <span style={styles.curriculumTag}>08. Supervised ML Delay-Risk & Gini Importances</span>
+              <span style={styles.curriculumTag}>09. Empirical Bayesian Duration Model</span>
+              <span style={styles.curriculumTag}>10. Calendar View & RFC 5545 .ics Export</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 5. Features Grid (Only Implemented Capabilities) */}
       <section id="features" style={styles.featuresSection}>
         <div style={styles.sectionHeader}>
           <div style={styles.sectionBadge}>CORE CAPABILITIES</div>
           <h2 style={styles.sectionTitle}>Engineered for Real-World Productivity</h2>
           <p style={styles.sectionSubtitle}>
-            Every feature in VoxPlan is implemented, mathematically grounded, and covered by 832 automated tests.
+            Every feature in VoxPlan is implemented, mathematically grounded, and covered by over 1,200 automated tests.
           </p>
         </div>
 
@@ -720,7 +1139,17 @@ export default function LandingPage({ onNavigate }) {
               Resolves complex task dependency graphs with Kahn’s topological sort and 3-color DFS cycle detection.
               Downstream unblocking bonuses (+15 pts/dep) reward critical paths without penalizing ready siblings.
             </p>
-            <div style={styles.featureTag}>Kahn Topological Ready-Queue</div>
+            <div style={styles.featureCardFooter}>
+              <div style={styles.featureTag}>Kahn Topological Ready-Queue</div>
+              <button
+                type="button"
+                onClick={() => handleOpenAppView('today')}
+                style={styles.featureActionBtn}
+                aria-label="Open Adaptive Scheduler in app"
+              >
+                Launch Scheduler →
+              </button>
+            </div>
           </div>
 
           {/* Feature 2 */}
@@ -731,7 +1160,17 @@ export default function LandingPage({ onNavigate }) {
               Random Forest classifier predicting delivery risk (88.3% accuracy, 92.9% F1) based on remaining calendar
               days, workload density, and effort. Displays Gini feature importances with transparent factor breakdowns.
             </p>
-            <div style={styles.featureTag}>scikit-learn RandomForest</div>
+            <div style={styles.featureCardFooter}>
+              <div style={styles.featureTag}>scikit-learn RandomForest</div>
+              <button
+                type="button"
+                onClick={() => handleOpenAppView('insights')}
+                style={styles.featureActionBtn}
+                aria-label="Inspect ML Delay Risk in app"
+              >
+                Inspect Risk Models →
+              </button>
+            </div>
           </div>
 
           {/* Feature 3 */}
@@ -742,7 +1181,17 @@ export default function LandingPage({ onNavigate }) {
               Personal duration model computing weighted median ratios with empirical Bayesian shrinkage ($K = 3.0$).
               Validated via strict chronological walk-forward holdout testing ($N \ge 8$) to avoid target leakage.
             </p>
-            <div style={styles.featureTag}>Bayesian Shrinkage Model</div>
+            <div style={styles.featureCardFooter}>
+              <div style={styles.featureTag}>Bayesian Shrinkage Model</div>
+              <button
+                type="button"
+                onClick={() => handleOpenAppView('insights')}
+                style={styles.featureActionBtn}
+                aria-label="View Pace Learning in app"
+              >
+                View Pace Learning →
+              </button>
+            </div>
           </div>
 
           {/* Feature 4 */}
@@ -753,7 +1202,17 @@ export default function LandingPage({ onNavigate }) {
               Natural language command parser paired with browser Web Speech API dictation and speech synthesis. Full
               typed symmetry, multi-turn clarification dialogs, and confirmation prompts for destructive commands.
             </p>
-            <div style={styles.featureTag}>Web Speech API + Dialogue State Machine</div>
+            <div style={styles.featureCardFooter}>
+              <div style={styles.featureTag}>Web Speech API + Dialogue State Machine</div>
+              <button
+                type="button"
+                onClick={() => handleOpenAppView('today')}
+                style={styles.featureActionBtn}
+                aria-label="Try Voice Dock in app"
+              >
+                Try Voice Dock →
+              </button>
+            </div>
           </div>
 
           {/* Feature 5 */}
@@ -764,7 +1223,17 @@ export default function LandingPage({ onNavigate }) {
               Solves intraday availability using half-open intervals $[start, end)$ avoiding meeting blackouts.
               Automatically chunks oversized tasks across multiple eligible days while preserving parent task identity.
             </p>
-            <div style={styles.featureTag}>Intraday Half-Open Interval Solver</div>
+            <div style={styles.featureCardFooter}>
+              <div style={styles.featureTag}>Intraday Half-Open Interval Solver</div>
+              <button
+                type="button"
+                onClick={() => handleOpenAppView('calendar')}
+                style={styles.featureActionBtn}
+                aria-label="Explore Calendar in app"
+              >
+                Explore Calendar →
+              </button>
+            </div>
           </div>
 
           {/* Feature 6 */}
@@ -775,7 +1244,17 @@ export default function LandingPage({ onNavigate }) {
               Interactive proposal canvas allowing manual day/time drag overrides with live constraint re-validation,
               Undo/Revert stack, and one-click RFC 5545 standard `.ics` export for Google Calendar or Apple iCal.
             </p>
-            <div style={styles.featureTag}>RFC 5545 iCalendar Standard</div>
+            <div style={styles.featureCardFooter}>
+              <div style={styles.featureTag}>RFC 5545 iCalendar Standard</div>
+              <button
+                type="button"
+                onClick={() => handleOpenAppView('calendar')}
+                style={styles.featureActionBtn}
+                aria-label="Export RFC 5545 Calendar in app"
+              >
+                Export .ics Grid →
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -943,6 +1422,15 @@ export default function LandingPage({ onNavigate }) {
               <span>Launch VoxPlan Productivity App</span>
               <span style={styles.primaryBtnArrow}>→</span>
             </button>
+            <button
+              type="button"
+              id="landing-bottom-tour-btn"
+              onClick={handleOpenTour}
+              style={styles.ctaTourBtn}
+            >
+              <span>✦ Take 20-Step Product Tour</span>
+              <span style={styles.primaryBtnArrow}>→</span>
+            </button>
           </div>
         </div>
       </section>
@@ -965,6 +1453,15 @@ export default function LandingPage({ onNavigate }) {
             <span style={styles.footerLinksHeading}>Navigation</span>
             <button type="button" onClick={handleOpenApp} style={styles.footerLinkBtn}>
               Productivity App (/app)
+            </button>
+            <button type="button" onClick={handleOpenTour} style={styles.footerLinkBtn}>
+              Interactive Product Tour (/app?tour=1)
+            </button>
+            <button type="button" onClick={() => scrollToSection('workspace-focus')} style={styles.footerLinkBtn}>
+              Today&apos;s Focus
+            </button>
+            <button type="button" onClick={() => scrollToSection('product-tour')} style={styles.footerLinkBtn}>
+              Product Tour Showcase
             </button>
             <button type="button" onClick={() => scrollToSection('features')} style={styles.footerLinkBtn}>
               Features
@@ -2054,6 +2551,8 @@ const styles = {
   ctaBtnGroup: {
     display: 'flex',
     justifyContent: 'center',
+    gap: '16px',
+    flexWrap: 'wrap',
   },
   ctaPrimaryBtn: {
     display: 'inline-flex',
@@ -2068,6 +2567,731 @@ const styles = {
     fontWeight: '700',
     cursor: 'pointer',
     boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+    transition: 'all 0.15s ease',
+  },
+  ctaTourBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    backgroundColor: 'var(--accent-terracotta, #C85A32)',
+    color: '#FFFFFF',
+    border: 'none',
+    borderRadius: '9999px',
+    padding: '16px 32px',
+    fontSize: '15px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    boxShadow: '0 4px 14px rgba(200, 90, 50, 0.3)',
+    transition: 'all 0.15s ease',
+  },
+
+  /* Workspace Focus Section */
+  workspaceFocusSection: {
+    padding: '40px 24px 60px',
+    maxWidth: '1200px',
+    margin: '0 auto',
+  },
+  workspaceFocusContainer: {
+    width: '100%',
+  },
+  workspaceFocusHeader: {
+    textAlign: 'center',
+    marginBottom: '28px',
+  },
+  workspaceFocusBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontSize: '11px',
+    fontWeight: '700',
+    letterSpacing: '0.08em',
+    color: '#625F69',
+    backgroundColor: 'rgba(37, 36, 42, 0.05)',
+    padding: '4px 14px',
+    borderRadius: '9999px',
+    marginBottom: '10px',
+  },
+  workspaceFocusTitle: {
+    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, serif)",
+    fontSize: 'clamp(24px, 3.2vw, 36px)',
+    fontWeight: '800',
+    letterSpacing: '-0.02em',
+    color: '#25242A',
+    margin: '0 0 10px',
+  },
+  workspaceFocusSubtitle: {
+    fontSize: '15px',
+    color: '#625F69',
+    maxWidth: '680px',
+    margin: '0 auto',
+    lineHeight: 1.6,
+  },
+  workspaceFocusCard: {
+    backgroundColor: '#FFFFFF',
+    border: '1px solid rgba(37, 36, 42, 0.12)',
+    borderRadius: '24px',
+    padding: '32px',
+    boxShadow: '0 4px 20px rgba(37, 36, 42, 0.05)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '24px',
+  },
+  metricsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+    gap: '16px',
+  },
+  metricStatBox: {
+    backgroundColor: '#FDFCF7',
+    border: '1px solid rgba(37, 36, 42, 0.08)',
+    borderRadius: '16px',
+    padding: '16px 20px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  metricStatNumber: {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '32px',
+    fontWeight: '700',
+    color: '#25242A',
+    lineHeight: 1.2,
+  },
+  metricStatLabel: {
+    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontSize: '11px',
+    fontWeight: '700',
+    color: '#7A7782',
+    letterSpacing: '0.04em',
+    textTransform: 'uppercase',
+  },
+  workspaceProgressBarWrap: {
+    backgroundColor: '#FDFCF7',
+    border: '1px solid rgba(37, 36, 42, 0.08)',
+    borderRadius: '16px',
+    padding: '16px 20px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  workspaceProgressLabelRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    fontSize: '13px',
+    fontWeight: '700',
+    color: '#4A4852',
+  },
+  workspaceProgressText: {
+    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    letterSpacing: '0.04em',
+    textTransform: 'uppercase',
+    color: '#625F69',
+  },
+  workspaceProgressPercent: {
+    fontFamily: "'JetBrains Mono', monospace",
+    color: '#2E7D32',
+  },
+  workspaceProgressTrack: {
+    height: '10px',
+    backgroundColor: 'rgba(37, 36, 42, 0.06)',
+    borderRadius: '9999px',
+    overflow: 'hidden',
+  },
+  workspaceProgressFill: {
+    height: '100%',
+    backgroundColor: '#2E7D32',
+    borderRadius: '9999px',
+    transition: 'width 0.4s ease',
+  },
+  topTasksContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
+  topTasksHeader: {
+    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontSize: '12px',
+    fontWeight: '700',
+    color: '#625F69',
+    letterSpacing: '0.05em',
+    textTransform: 'uppercase',
+  },
+  topTasksList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  topTaskItem: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '12px 16px',
+    backgroundColor: '#FFFDF9',
+    border: '1px solid rgba(37, 36, 42, 0.08)',
+    borderRadius: '12px',
+    gap: '12px',
+    flexWrap: 'wrap',
+  },
+  topTaskLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    flex: '1 1 240px',
+  },
+  priorityBadgeHigh: {
+    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontSize: '10px',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    color: '#843114',
+    backgroundColor: '#FFD8C7',
+    padding: '2px 8px',
+    borderRadius: '6px',
+  },
+  priorityBadgeMed: {
+    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontSize: '10px',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    color: '#5C4100',
+    backgroundColor: '#FFE58A',
+    padding: '2px 8px',
+    borderRadius: '6px',
+  },
+  topTaskTitle: {
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#25242A',
+  },
+  topTaskMeta: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    fontSize: '12px',
+    color: '#7A7782',
+    fontFamily: "'JetBrains Mono', monospace",
+  },
+  workspaceFocusActions: {
+    display: 'flex',
+    gap: '12px',
+    flexWrap: 'wrap',
+    paddingTop: '8px',
+  },
+  workspacePrimaryActionBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    backgroundColor: '#25242A',
+    color: '#FFFFFF',
+    border: 'none',
+    borderRadius: '9999px',
+    padding: '12px 24px',
+    fontSize: '14px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+  },
+  workspaceSecondaryActionBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    backgroundColor: 'transparent',
+    color: '#25242A',
+    border: '1px solid rgba(37, 36, 42, 0.2)',
+    borderRadius: '9999px',
+    padding: '12px 24px',
+    fontSize: '14px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+  },
+  workspaceZeroCard: {
+    backgroundColor: '#FFFFFF',
+    border: '1px dashed rgba(37, 36, 42, 0.2)',
+    borderRadius: '24px',
+    padding: '48px 24px',
+    textAlign: 'center',
+    maxWidth: '720px',
+    margin: '0 auto',
+  },
+  zeroCardIcon: {
+    fontSize: '28px',
+    color: 'var(--accent-terracotta, #C85A32)',
+    marginBottom: '12px',
+  },
+  zeroCardTitle: {
+    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, serif)",
+    fontSize: '22px',
+    fontWeight: '800',
+    color: '#25242A',
+    marginBottom: '10px',
+  },
+  zeroCardDesc: {
+    fontSize: '15px',
+    color: '#625F69',
+    lineHeight: 1.6,
+    maxWidth: '560px',
+    margin: '0 auto 24px',
+  },
+  zeroCardActions: {
+    display: 'flex',
+    gap: '12px',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+  },
+
+  /* Product Tour Section */
+  tourSection: {
+    padding: '80px 24px 60px',
+    maxWidth: '1200px',
+    margin: '0 auto',
+  },
+  tourContainer: {
+    width: '100%',
+  },
+  tourEyebrowBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontSize: '11px',
+    fontWeight: '700',
+    letterSpacing: '0.08em',
+    color: 'var(--accent-terracotta, #C85A32)',
+    backgroundColor: 'rgba(200, 90, 50, 0.1)',
+    border: '1px solid rgba(200, 90, 50, 0.25)',
+    padding: '4px 14px',
+    borderRadius: '9999px',
+    marginBottom: '12px',
+  },
+  tourSectionTitle: {
+    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, serif)",
+    fontSize: 'clamp(28px, 4vw, 42px)',
+    fontWeight: '800',
+    letterSpacing: '-0.02em',
+    color: '#25242A',
+    margin: '0 0 12px',
+  },
+  tourSectionSubtitle: {
+    fontSize: '16px',
+    color: '#625F69',
+    maxWidth: '680px',
+    margin: '0 auto 36px',
+    lineHeight: 1.6,
+  },
+  tourStatusBanner: {
+    backgroundColor: '#FFFFFF',
+    border: '1px solid rgba(37, 36, 42, 0.12)',
+    borderRadius: '20px',
+    padding: '24px 28px',
+    boxShadow: '0 4px 16px rgba(37, 36, 42, 0.04)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '20px',
+    flexWrap: 'wrap',
+    marginBottom: '40px',
+  },
+  tourStatusLeft: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    flex: '1 1 360px',
+  },
+  tourStatusBadgeCompleted: {
+    display: 'inline-flex',
+    alignSelf: 'flex-start',
+    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontSize: '11px',
+    fontWeight: '800',
+    color: '#155230',
+    backgroundColor: '#BFE8D0',
+    padding: '3px 10px',
+    borderRadius: '9999px',
+    letterSpacing: '0.05em',
+  },
+  tourStatusBadgeProgress: {
+    display: 'inline-flex',
+    alignSelf: 'flex-start',
+    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontSize: '11px',
+    fontWeight: '800',
+    color: '#5C4100',
+    backgroundColor: '#FFE58A',
+    padding: '3px 10px',
+    borderRadius: '9999px',
+    letterSpacing: '0.05em',
+  },
+  tourStatusBadgeFresh: {
+    display: 'inline-flex',
+    alignSelf: 'flex-start',
+    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontSize: '11px',
+    fontWeight: '800',
+    color: '#843114',
+    backgroundColor: '#FFD8C7',
+    padding: '3px 10px',
+    borderRadius: '9999px',
+    letterSpacing: '0.05em',
+  },
+  tourStatusText: {
+    fontSize: '14px',
+    color: '#4A4852',
+    lineHeight: 1.5,
+  },
+  tourStatusActions: {
+    display: 'flex',
+    gap: '10px',
+    flexWrap: 'wrap',
+  },
+  tourPrimaryLaunchBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    backgroundColor: 'var(--accent-terracotta, #C85A32)',
+    color: '#FFFFFF',
+    border: 'none',
+    borderRadius: '9999px',
+    padding: '12px 24px',
+    fontSize: '14px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    boxShadow: '0 2px 8px rgba(200, 90, 50, 0.3)',
+    transition: 'all 0.15s ease',
+  },
+  tourDemoLaunchBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    backgroundColor: 'transparent',
+    color: '#25242A',
+    border: '1px solid rgba(37, 36, 42, 0.2)',
+    borderRadius: '9999px',
+    padding: '12px 20px',
+    fontSize: '13px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+  },
+  spotlightMockupWrap: {
+    backgroundColor: '#1E1D24',
+    borderRadius: '24px',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    overflow: 'hidden',
+    boxShadow: '0 12px 40px rgba(0, 0, 0, 0.25)',
+    marginBottom: '40px',
+  },
+  spotlightMockupHeader: {
+    backgroundColor: '#151419',
+    padding: '12px 20px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+  },
+  mockupHeaderDotRed: {
+    width: '10px',
+    height: '10px',
+    borderRadius: '50%',
+    backgroundColor: '#FF5F56',
+  },
+  mockupHeaderDotYellow: {
+    width: '10px',
+    height: '10px',
+    borderRadius: '50%',
+    backgroundColor: '#FFBD2E',
+  },
+  mockupHeaderDotGreen: {
+    width: '10px',
+    height: '10px',
+    borderRadius: '50%',
+    backgroundColor: '#27C93F',
+  },
+  mockupHeaderTitle: {
+    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontSize: '12px',
+    fontWeight: '700',
+    letterSpacing: '0.05em',
+    color: 'rgba(255, 255, 255, 0.7)',
+    textTransform: 'uppercase',
+    marginLeft: '6px',
+    flex: 1,
+  },
+  mockupHeaderModeBadge: {
+    fontSize: '11px',
+    fontWeight: '700',
+    color: '#FFE58A',
+    backgroundColor: 'rgba(255, 229, 138, 0.15)',
+    padding: '2px 8px',
+    borderRadius: '9999px',
+  },
+  spotlightMockupBody: {
+    position: 'relative',
+    minHeight: '380px',
+    padding: '36px 24px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    flexWrap: 'wrap',
+    gap: '30px',
+    backgroundImage: 'radial-gradient(circle at 50% 50%, rgba(200, 90, 50, 0.08) 0%, transparent 70%)',
+  },
+  spotlightMockupDimLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(15, 14, 18, 0.55)',
+    pointerEvents: 'none',
+  },
+  spotlightCutoutBox: {
+    position: 'relative',
+    zIndex: 2,
+    backgroundColor: '#25242A',
+    border: '2px solid var(--accent-terracotta, #C85A32)',
+    boxShadow: '0 0 0 6px rgba(200, 90, 50, 0.25), 0 8px 30px rgba(0, 0, 0, 0.4)',
+    borderRadius: '16px',
+    padding: '20px 24px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '14px',
+    maxWidth: '300px',
+  },
+  spotlightTargetBeacon: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  beaconPing: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    backgroundColor: 'var(--accent-terracotta, #C85A32)',
+    boxShadow: '0 0 8px #C85A32',
+  },
+  beaconDot: {
+    display: 'none',
+  },
+  beaconText: {
+    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontSize: '11px',
+    fontWeight: '700',
+    color: '#FFD8C7',
+    letterSpacing: '0.04em',
+    textTransform: 'uppercase',
+  },
+  spotlightSimulatedBtn: {
+    backgroundColor: '#FFE58A',
+    color: '#25242A',
+    borderRadius: '10px',
+    padding: '12px 18px',
+    fontWeight: '800',
+    fontSize: '14px',
+    textAlign: 'center',
+    boxShadow: '0 2px 0 rgba(0,0,0,0.4)',
+  },
+  spotlightCalloutSimulation: {
+    position: 'relative',
+    zIndex: 2,
+    backgroundColor: '#FFFFFF',
+    border: '1px solid rgba(37, 36, 42, 0.15)',
+    borderRadius: '18px',
+    padding: '24px',
+    boxShadow: '0 12px 36px rgba(0, 0, 0, 0.35)',
+    maxWidth: '420px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+  },
+  simCalloutHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexWrap: 'wrap',
+  },
+  simStepPill: {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '11px',
+    fontWeight: '800',
+    color: '#843114',
+    backgroundColor: '#FFD8C7',
+    padding: '2px 8px',
+    borderRadius: '6px',
+  },
+  simCategoryPill: {
+    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontSize: '11px',
+    fontWeight: '700',
+    color: '#625F69',
+    backgroundColor: 'rgba(37, 36, 42, 0.06)',
+    padding: '2px 8px',
+    borderRadius: '6px',
+    letterSpacing: '0.04em',
+  },
+  simCalloutTitle: {
+    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, serif)",
+    fontSize: '18px',
+    fontWeight: '800',
+    color: '#25242A',
+    margin: 0,
+    lineHeight: 1.3,
+  },
+  simCalloutBody: {
+    fontSize: '13px',
+    color: '#4A4852',
+    lineHeight: 1.5,
+    margin: 0,
+  },
+  simCalloutPrompt: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    backgroundColor: '#FFF9DB',
+    border: '1px solid rgba(180, 83, 9, 0.2)',
+    borderRadius: '8px',
+    padding: '8px 12px',
+    fontSize: '12px',
+    color: '#78350F',
+    fontWeight: '600',
+  },
+  promptIcon: {
+    fontSize: '14px',
+  },
+  simCalloutFooter: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: '6px',
+    borderTop: '1px solid rgba(37, 36, 42, 0.08)',
+  },
+  simNavBtnSecondary: {
+    backgroundColor: 'transparent',
+    border: '1px solid rgba(37, 36, 42, 0.15)',
+    borderRadius: '9999px',
+    padding: '6px 14px',
+    fontSize: '12px',
+    fontWeight: '600',
+    color: '#625F69',
+    cursor: 'pointer',
+  },
+  simNavBtnPrimary: {
+    backgroundColor: 'var(--accent-terracotta, #C85A32)',
+    border: 'none',
+    borderRadius: '9999px',
+    padding: '6px 16px',
+    fontSize: '12px',
+    fontWeight: '700',
+    color: '#FFFFFF',
+    cursor: 'pointer',
+  },
+  simNavCount: {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '11px',
+    color: '#7A7782',
+  },
+  tourPillarsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+    gap: '24px',
+    marginBottom: '32px',
+  },
+  tourPillarCard: {
+    backgroundColor: '#FFFFFF',
+    border: '1px solid rgba(37, 36, 42, 0.1)',
+    borderRadius: '18px',
+    padding: '24px',
+    boxShadow: '0 4px 16px rgba(37, 36, 42, 0.03)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
+  tourPillarIcon: {
+    fontSize: '24px',
+  },
+  tourPillarTitle: {
+    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, serif)",
+    fontSize: '18px',
+    fontWeight: '800',
+    color: '#25242A',
+    margin: 0,
+  },
+  tourPillarDesc: {
+    fontSize: '14px',
+    color: '#625F69',
+    lineHeight: 1.6,
+    margin: 0,
+  },
+  codeSnippet: {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '12px',
+    backgroundColor: 'rgba(37, 36, 42, 0.06)',
+    padding: '2px 4px',
+    borderRadius: '4px',
+    color: '#25242A',
+  },
+  tourCurriculumBox: {
+    backgroundColor: '#FFFDF9',
+    border: '1px solid rgba(37, 36, 42, 0.1)',
+    borderRadius: '18px',
+    padding: '20px 24px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+  },
+  curriculumTitle: {
+    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontSize: '12px',
+    fontWeight: '700',
+    color: '#625F69',
+    letterSpacing: '0.05em',
+    textTransform: 'uppercase',
+  },
+  curriculumTags: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+  },
+  curriculumTag: {
+    fontSize: '12px',
+    fontWeight: '600',
+    color: '#4A4852',
+    backgroundColor: '#FFFFFF',
+    border: '1px solid rgba(37, 36, 42, 0.08)',
+    borderRadius: '9999px',
+    padding: '4px 12px',
+  },
+  featureCardFooter: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 'auto',
+    paddingTop: '8px',
+    gap: '8px',
+    flexWrap: 'wrap',
+  },
+  featureActionBtn: {
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
+    fontSize: '12px',
+    fontWeight: '700',
+    color: 'var(--accent-terracotta, #C85A32)',
+    cursor: 'pointer',
+    transition: 'color 0.15s ease',
+  },
+  navLinkTour: {
+    background: 'transparent',
+    border: 'none',
+    color: 'var(--accent-terracotta, #C85A32)',
+    fontSize: '13px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    padding: '6px 14px',
+    borderRadius: '9999px',
     transition: 'all 0.15s ease',
   },
 

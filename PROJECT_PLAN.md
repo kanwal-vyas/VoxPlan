@@ -7811,3 +7811,76 @@ To resolve the 404 on browser reload for the `VoxPlan` Static Site:
 - `npm run build` (`vite build`): Built production bundle in 412ms with 0 errors.
 - `node scripts/secretScanner.mjs`: **0 secrets** detected across 165 files.
 - `git diff --check`: **Clean** (zero conflict markers or whitespace errors).
+
+---
+
+### Phase 8.21: Overview Page Enhancement & Interactive Product Tour Promotion (COMPLETED)
+
+#### Context & Objectives:
+Enhance the existing VoxPlan Overview page (`src/pages/LandingPage.jsx`, rendered at route `/`) to make it significantly more informative, polished, and useful to both first-time and returning users, while promoting the **20-step interactive product tour as an integral, first-class feature** rather than a hidden utility.
+
+#### Key Questions Answered by the Overview:
+1. **What is VoxPlan?**
+   - Strengthened product positioning: Combines topological DAG task management (Kahn's algorithm), supervised delay-risk machine learning (Random Forest with Gini importances), empirical Bayesian habit learning ($K = 3.0$), and conversational voice interaction (Web Speech API).
+   - Local-first architecture: 100% browser-based storage (IndexedDB `voxplan_db` and isolated localStorage), zero third-party cloud LLMs, zero user tracking.
+   - Editorial branding: Preserved warm palette (`#FFF8EF`, `#25242A`, `#C85A32`), typography system (Trade Winds, Eagle Lake, Lato, Unica One, Bigelow Rules), and four oversized animated editorial ribbons (`PLAN`, `PREDICT`, `UNDERSTAND`, `ACT`).
+   - Invariant: Excludes generic marketing slogans and preserves the removal of the old hero phrase "Plan with clarity. Act with focus."
+2. **What should I focus on right now?**
+   - Dedicated Workspace Focus section (`#workspace-focus`) positioned immediately below the hero area.
+   - Non-mutating read-only snapshot helper (`loadWorkspaceSummary`) reading `localStorage.getItem('voxplan_tasks')` without importing heavy app components.
+   - Real-time stat metrics: Total commitments, Completed count with dynamic percentage, Pending/in-flight count, and Urgent/High-Priority warnings.
+   - Visual sprint completion progress bar.
+   - Top priority active initiatives list with priority badges, effort estimates, and due dates.
+   - Clean, honest zero-state prompt when browser storage is empty, providing direct launch into the tour or blank workspace.
+   - Direct action triggers: `Open Workspace Cockpit` (`/app?view=today`) and `View Full Task Backlog` (`/app?view=tasks`).
+3. **How do I discover and use the rest of the application?**
+   - Feature discovery integrated directly into Core Capabilities (`#features`).
+   - Direct view navigation actions on each card:
+     - Deterministic DAG Scheduling ➜ `/app?view=today`
+     - Supervised ML Delay-Risk ➜ `/app?view=insights`
+     - Empirical Bayesian Pace Learning ➜ `/app?view=insights`
+     - Conversational & Voice Planning ➜ `/app?view=today`
+     - Time-Blocking & Task Chunking ➜ `/app?view=calendar`
+     - Visual Editing & .ics Calendar Export ➜ `/app?view=calendar`
+
+#### Prominent Promotion of the 20-Step Interactive Product Tour:
+- **Dedicated Tour Section (`#product-tour`)**:
+  - Eyebrow badge: `✦ INTERACTIVE PRODUCT TOUR`
+  - Concise heading: `Take the Interactive Tour`
+  - Supporting copy articulating guided navigation, active control highlighting, and zero risk to personal data.
+- **Dynamic Tour State Banner**:
+  - Connected to `loadTourState()` from `src/productTour/tourStorage.js`.
+  - Completed: `✓ TOUR COMPLETED` badge with `Retake Product Tour (20 Steps) ↺` button.
+  - In Progress: `IN PROGRESS • STEP X OF 20` badge with `Resume Tour (Step X) →` button.
+  - New User: `NEW USER ORIENTATION • 20 STEPS` with `Start Product Tour (20 Steps) →` button (`#overview-start-tour-btn`).
+  - Isolated demo option: `🛠 Try Hands-on Demo Tour` button (`#overview-demo-tour-btn`, `/app?tour=demo`).
+- **Authentic Optical Spotlight Mockup Preview**:
+  - Accurate, genuine visualization of the tour experience: dimmed translucent backdrop overlay (`rgba(15, 14, 18, 0.55)`), high-contrast spotlight cutout window with terracotta border (`#C85A32`), beacon ping, and connected floating Tour Callout Card (Step 07/20: Kahn's Topological Sort & Daily Bin-Packing).
+- **Core Tour Pillars**:
+  1. *Optical Spotlight Isolation*: SVG mask with backdrop blur isolating the active workflow control.
+  2. *Observation vs Hands-on Demo*: Passive walkthrough vs isolated sandbox with sample tasks.
+  3. *100% Data Safety & Isolation*: Operates strictly in `voxplan_product_tour_state`; never modifies user tasks, notes, or preferences.
+- **Curriculum Tags**: Highlighting all major tour domains from orientation through DAG scheduling to encrypted backups.
+
+#### Automated Quality Gates & Verification:
+- **Focused Test Suite (`tests/overview_enhancement_and_tour_promotion.test.js`)**:
+  - 17 tests passing across 5 suites covering product identity, workspace focus, tour promotion, feature discovery, and accessibility invariants.
+- **Overview Restoration Audit (`tests/overview_restoration.test.js`)**:
+  - 29 tests passing across 9 suites confirming all layout, palette, ribbon, font, and landmark invariants remain satisfied.
+- **Product Tour Suite (`tests/product_tour/product_tour.test.js`)**:
+  - 52 tests passing across 9 suites.
+- **Full Test Suite (`npm test`)**:
+  - **1,299 passed, 0 failed** across 286 suites (100% passing).
+- **Backend Tests (`python -m pytest backend/tests/`)**:
+  - **29 passed, 0 failed**.
+- **Linter (`npm run lint` / `oxlint`)**:
+  - 0 errors, 0 warnings in `src/pages/LandingPage.jsx`.
+- **Production Build (`npm run build`)**:
+  - Built production bundle in 656ms with 0 errors.
+- **Secret Scanner (`node scripts/secretScanner.mjs`)**:
+  - 0 secrets detected across 168 files scanned.
+- **Git Diff Check (`git diff --check`)**:
+  - Clean.
+- **Live Browser Verification**:
+  - Verified on `http://localhost:5173/` that the header navigation, workspace focus section, interactive preview tabs, PLAN ribbon, product tour section, spotlight mockup, and feature links render properly.
+  - Verified clicking `#overview-start-tour-btn` navigates to `/app?tour=1` and launches the 20-step tour with optical spotlight isolation and Step 1/20 callout.
