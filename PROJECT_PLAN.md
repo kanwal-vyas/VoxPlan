@@ -23,6 +23,16 @@ This document tracks the phased evolution of VoxPlan from a static task tracker 
 | **Phase 6** | Calendar-Aware Time-Blocking & Multi-Day Workload Modeling | **COMPLETED** | Multi-day task chunking for oversized work, calendar focus time-blocking, meeting buffer constraints, interactive proposal canvas editing, and local RFC 5545 iCalendar (.ics) export (4 stages). |
 | **Phase 7** | Evidence-Gated Schedule Adaptation & Preference Learning | **COMPLETED (Stage 4B Locked)** | Longitudinal feedback maturity gate (20+ decisions, 15+ outcomes), empirical friction analysis, bounded heuristic weight tuning (±20%) with Bayesian shrinkage, simulation sandbox, one-click rollback, shadow-only activation gate evaluator, minimum-evidence policy, synthetic rejection, and independent statistical validation (Stages 7.1–7.4A completed; Stage 7.4.4B intentionally locked). |
 | **Phase 8** | Production Hardening, Accessibility, Security & Release Readiness | **COMPLETED** | Full WCAG 2.1 AA accessibility compliance, keyboard navigation, schema-versioned data lifecycle & encrypted backup, bundle code-splitting, PWA offline resilience, and CI/CD release verification (4 stages). |
+| **Phase 8.7** | Three-Font Editorial Typography System | **COMPLETED** | Implementation of approved three-font editorial hierarchy (Ruigslay display, Zaslia subheadings, Olivera taglines, readable sans-serif functional UI), local font registration under public/fonts/, token consolidation, glyph coverage audit, desktop browser verification at 1440x900 and 1280x800, and comprehensive licensing evaluation. |
+| **Phase 8.8** | Distinctive Display Font Lab | **COMPLETED (Exploration)** | Exploration of high-personality display typefaces; self-hosted lean WOFF2 library of 22 open-source (OFL-1.1) candidates (Shrikhand, Caprasimo, Sonsie One, Bagel Fat One, Oi, etc.); interactive workbench at /font-specimen with authentic highlighted-word treatment, custom text, scale slider, and multi-font side-by-side arena; zero production typography impact. |
+| **Phase 8.9** | Refined Font Lab (User Typography Preferences) | **COMPLETED (Exploration)** | Expansion of font lab with 20 curated user-preferred typefaces (Tangerine, Sonsie One, Shadows Into Light, New Rocker, Ephesis, Birthstone Bounce, Sail, Caveat, etc.), Tangerine 700 bold weight addition, tri-treatment experiment (Modes A, B, C, Tri-Box), Tangerine deep-dive 4-role lab, and arena pinning. |
+| **Phase 8.10** | Illustrated Stationery Sticky Notes for Tasks | **COMPLETED** | Authentic illustrated stationery memo paper and peeking tabs attached to tasks; 6 curated stationery themes with rich scattered artwork (Morning Sky Bear, Sakura Blush Bunny, Wisteria Lavender Cat, Almond Forest Bear, Sunny Daisy Chick, Serene Matcha Clover); visually driven paper gallery with zero visible style names; live full-page illustrated memo preview updating on selection; multi-note stacks; isolated localStorage persistence (`voxplan_task_sticky_notes`); lossless task deletion undo restoration; and 20 automated unit & integration tests. |
+| **Phase 8.11** | Expand Font Specimen and All-at-Once Comparison View | **COMPLETED** | Expanded display font specimen collection with 6 new OFL-1.1 typefaces (La Belle Aurore, Aladin, Walter Turncoat, Trade Winds, Bigelow Rules, Akronim); total 47 OFL candidates (26 user preferences); self-hosted lean WOFF2 files; dense all-at-once comparison view with consistent evaluation phrase ("Plan with clarity. Act with focus."); subtle like bookmarking; independently scrollable grid/list views; search & category filtering; zero production typography impact. |
+| **Phase 8.12** | Typography Combination Preview & Final Font Selection | **COMPLETED** | Interactive 6-combination comparison workbench (A1–B3) inside `/font-specimen`; Trade Winds wordmark test strip; Eagle Lake vs Merienda headings; Unica One compact labels; Nunito Sans vs DM Sans vs Lato body text; Shrikhand + Shadows Into Light hero headline; Aladin & Bigelow Rules accent experiment; preserved 6-option sticky notes; full test suite verification. |
+| **Phase 8.13** | Final Typography Implementation (A3) + Sticky-Note Font Replacement | **COMPLETED** | Applied selected System A3 across VoxPlan production UI: Trade Winds brand wordmark, Eagle Lake main headings, Unica One smaller headings/badges, Lato functional body UI (replacing Plus Jakarta Sans), Shrikhand + Shadows Into Light hero with terracotta & marigold highlights, Bigelow Rules selected decorative accents; replaced Birthstone Bounce with self-hosted Rouge Script on Serene Matcha; zero external runtime dependencies; 1,161 frontend tests passing; 29 backend tests passing; 0 oxlint errors; 0 secrets. |
+| **Phase 8.14** | Overview Visual Correction: Headline Line Separation & Ribbon Discoverability | **COMPLETED** | Narrow visual correction addressing two defects on `/`: eliminated vertical overlap between hero headline lines ("Turn Task Lists Into" and "Executable Plans") via flex column layout and lineHeight 1.35; resolved ribbon invisibility (PLAN, PREDICT, UNDERSTAND, ACT) by increasing contrast from 4%-12% to 28%-56% with 140px min-height container; preserved approved typography and 5-stop pastel background transitions; 1,188 frontend tests passing; 29 backend tests passing. |
+| **Phase 8.15** | Complete Notification System Audit & Implementation | **COMPLETED** | Comprehensive local-first notification architecture: event detection (deadlines, overdue, schedule, dependencies, system), persistent in-app notification center, unread badge, browser notifications with pre-permission explainer, user preferences & quiet hours, bounded storage ($N=100$), deduplication throttling, and removal of Overview hero motto phrase. |
+| **Phase 8.16** | Notification Reliability Hardening & Voice Recognition Repair | **COMPLETED** | Audited and hardened notification system (dedup persistence across dismissals, auto-resolution of completed/deleted tasks, distinct lead-time keys, quiet-hours critical overrides, deleted task action safety); diagnosed and repaired voice recognition pipeline (repositioned obstructing update banner, configured continuous:false single-turn Web Speech lifecycle with immediate final dispatch, live transcript echoing, echoed unrecognized command feedback, telemetry signature fix); 1,230 frontend tests, 29 backend tests, 0 secrets, clean build. |
 
 ---
 
@@ -6318,3 +6328,1156 @@ To establish a rock-solid, production-quality visual and functional foundation, 
   - Tested at both 1440×900 and 1280×800 desktop viewports.
   - Verified Today, Tasks, Calendar, Insights, and Command Dock views with zero container jumps, clean typography hierarchy, and full interactivity.
   - Confirmed mobile redesign was frozen and responsive rules preserved.
+
+---
+
+## Phase 8.7: Three-Font Editorial Typography System (Ruigslay + Zaslia + Olivera)
+
+### 1. Objective & Typography Strategy
+Implement an approved, intentional three-font editorial typography system utilizing local font assets placed in `public/fonts/`, establishing an expressive editorial hierarchy while safeguarding functional data readability and desktop UI stability:
+- **Ruigslay** (`public/fonts/ruigslay/Ruigslay.otf`): Large display headings, brand mark, major workspace section titles, and calendar month headers.
+- **Zaslia** (`public/fonts/zaslia/Zaslia.otf`): Smaller headings, subheadings, card titles, drawer/modal headers, and sprint progression labels.
+- **Olivera** (`public/fonts/oliver/Olivera_Demo.ttf` & `OliveraObl_Demo.ttf`): Taglines, selected short editorial statements, and decorative annotations.
+- **Existing Sans-Serif (`Plus Jakarta Sans`)**: Body text, task titles, calendar event chips, date numerals, badges, form controls, buttons, tooltips, command dock inputs, and dense numerical insights.
+
+### 2. Implementation by Component & Token Architecture
+
+#### A. Registration & Shared Tokens (`src/index.css`)
+- **`@font-face` Declarations**:
+  - `Ruigslay`: Declared with canonical OpenType source `/fonts/ruigslay/Ruigslay.otf` (`format('opentype')`), `font-weight: 400`, `font-style: normal`, `font-display: swap`. Avoided duplicate TTF registration.
+  - `Zaslia`: Declared with `/fonts/zaslia/Zaslia.otf` (`format('opentype')`), `font-weight: 400`, `font-style: normal`, `font-display: swap`.
+  - `Olivera`: Declared upright `/fonts/oliver/Olivera_Demo.ttf` (`format('truetype')`, normal) and oblique `/fonts/oliver/OliveraObl_Demo.ttf` (`format('truetype')`, italic), `font-display: swap`.
+- **Consolidated Design Tokens**:
+  - `--font-display: 'Ruigslay', 'Syne', Georgia, serif;`
+  - `--font-heading: 'Zaslia', Georgia, serif;`
+  - `--font-section: 'Zaslia', Georgia, serif;` (backward-compatible alias for existing components)
+  - `--font-tagline: 'Olivera', var(--font-sans), serif;` (graceful fallback for characters outside Olivera demo glyph set)
+  - `--font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;`
+  - `--font-mono: 'JetBrains Mono', monospace;`
+
+#### B. Component Application by Semantic Role
+- **Header (`src/components/Header.jsx`)**: Brand name uses `--font-display`. Navigation links, badges, and controls retain `--font-sans`.
+- **Hero (`src/components/Hero.jsx`)**: Main headline uses `--font-display` with responsive clamping; supporting tagline uses `--font-tagline`; preview badge uses `--font-heading`; task titles and descriptions retain `--font-sans`.
+- **Today Focus & Progression (`src/pages/ProductivityApp.jsx`, `src/App.css`)**: Focus header and ribbon words use `--font-heading` and `--font-display`; task titles, checkboxes, timers, and buttons retain `--font-sans`.
+- **Overview & Metrics (`src/components/ProjectOverview.jsx`)**: Section title uses `--font-display`; percentage numbers and stat values retain `--font-sans`.
+- **Task List & Cards (`src/components/TaskList.jsx`, `src/components/TaskCard.jsx`)**: Major title uses `--font-display`; empty state uses `--font-heading`; task card titles, edit inputs, badges, and timer countdowns strictly retain `--font-sans`.
+- **Calendar (`src/components/TaskCalendar.jsx`)**: Large month/year heading uses `--font-display`; drawer, agenda, and modal headers use `--font-heading`; day numbers, grid dates, event chips, and details retain `--font-sans`.
+- **Insights & Behavioral Panels (`src/components/MLModelPanel.jsx`, `src/components/BehavioralHistoryPanel.jsx`, `src/components/LearningReadinessPanel.jsx`, `src/components/PreferenceSignalsCard.jsx`)**: Panel main titles use `--font-display` or `--font-heading`; numeric metrics, confusion matrix cells, and logs retain `--font-sans`.
+- **Command Bar (`src/components/CommandBar.jsx`)**: Title uses `--font-display`; input field, voice state status, suggestions, and dialog messages retain `--font-sans`.
+- **Specimen Page (`src/pages/FontSpecimenPage.jsx`)**: Retained and accessible at `/font-specimen` for developer typography comparison and live glyph testing.
+
+#### C. Glyph Set Audit & Fallback Resilience
+- **Olivera Demo Cut**: Contains 65 characters (A-Z, a-z, 0-9, space); lacks punctuation marks and symbols (em-dashes, quotation marks). Tested with fallback chain `'Olivera', var(--font-sans), serif;`—unsupported characters transparently fall back to Plus Jakarta Sans with zero layout shifts or missing glyph boxes.
+- **Ruigslay**: 255 glyphs; full uppercase, lowercase, punctuation, and numeric coverage.
+- **Zaslia**: 329 glyphs; comprehensive punctuation, accents, and Latin-extended characters.
+
+### 3. Licensing Audit & Deployment Assessment
+- **Ruigslay** (`1001fonts-ruigslay-eula.txt`):
+  - *Licence*: 1001Fonts Free For Personal Use (FFP) by Yumnacreative / Dhabee Studio.
+  - *Permissions*: Non-commercial personal evaluation and testing.
+  - *Public Web Deployment*: Prohibited without purchasing a commercial license.
+  - *Redistribution*: Not permitted. Excluded from git via `.gitignore`.
+- **Zaslia** (`1001fonts-zaslia-eula.txt`):
+  - *Licence*: 1001Fonts Free For Personal Use (FFP) by Ahmad Suhadi / suhadidesign.
+  - *Permissions*: Non-commercial personal evaluation and testing.
+  - *Public Web Deployment*: Prohibited without purchasing a commercial license.
+  - *Redistribution*: Not permitted. Excluded from git via `.gitignore`.
+- **Olivera** (`readmedemo.txt`):
+  - *Licence*: Personal Use Demo Version by Pentagoni Studio.
+  - *Permissions*: Personal non-commercial evaluation.
+  - *Public Web Deployment*: Commercial/corporate use requires purchasing the full commercial license via Creative Market or Filosofont.
+  - *Redistribution*: Not permitted. Excluded from git via `.gitignore`.
+- **Deployment Status**: Font assets remain purely local for development evaluation and specimen review. Git tracking of `public/fonts/` is blocked in `.gitignore`. Production deployment requires commercial licenses or replacing with open-source equivalents (e.g., Google Fonts).
+
+### 4. Quality Gates & Verification Results
+- **Automated Typography Test Suite (`tests/typography_system.test.js`)**:
+  - 18 tests passed across 6 suites (0 failed). Verified `@font-face` declarations, design tokens, semantic role mappings, and functional UI font preservation.
+- **Frontend Test Suite (`npm test`)**:
+  - 1120 tests passed across 243 suites in 16.6s (0 failed).
+- **Backend Test Suite (`python -m pytest backend/tests/`)**:
+  - 29 tests passed in 1.98s (0 failed).
+- **Production Build (`npm run build`)**:
+  - `vite build` completed cleanly in 591ms.
+- **Linter (`npm run lint` / `oxlint`)**:
+  - 0 errors across 109 files.
+- **Secret Scanner (`node scripts/secretScanner.mjs`)**:
+  - 0 secrets matched across 135 files scanned.
+- **Git Diff Whitespace Check (`git diff --check`)**:
+  - Clean; 0 errors.
+- **Live Desktop Browser Verification (`browser_subagent`)**:
+  - Verified across 1440×900 and 1280×800 desktop viewports.
+  - Today view: Brand mark and hero title render in Ruigslay; tagline renders in Olivera; sprint badges render in Zaslia; task titles render in sans-serif.
+  - Tasks view: Section title in Ruigslay, empty state in Zaslia, task cards in sans-serif.
+  - Calendar view: Month heading in Ruigslay, agenda and drawer headers in Zaslia, calendar grid numerals and task chips in sans-serif.
+  - Insights view: Major title in Ruigslay, sub-panels in Zaslia, numeric matrices in sans-serif.
+  - Specimen page (`/font-specimen`): Live evaluation page rendered cleanly with specimen tester.
+
+---
+
+## Phase 8.8: Distinctive Display Font Lab (Exploration)
+
+### 1. Objective & Typography Strategy
+Explore and benchmark genuinely expressive, fun, and unusual display typefaces for VoxPlan to identify a defining headline voice with maximum personality and visual impact, while strictly preserving functional UI readability, the warm ambient color palette, and zero production typography disruption:
+- **Baseline Context**: The user identified Shrikhand as their baseline favourite, but requested candidates with even more visual impact, playful curves, and stylistic variety, explicitly avoiding conventional editorial serifs (Fraunces, Cormorant Garamond, Playfair Display) unless exploring radical variable-font axes.
+- **Licensing Constraint**: Every candidate font must possess a verified licence permitting commercial website deployment, embedding, and redistribution with software. All candidates are licensed under the **SIL Open Font License 1.1 (OFL-1.1)**.
+- **Offline Performance**: All candidate fonts are self-hosted as lean WOFF2 subsets under \public/fonts/lab/\ with zero runtime network dependencies on Google Fonts or external CDNs.
+- **Production Isolation**: Production typography tokens (\--font-display\, \--font-heading\, \--font-tagline\, \--font-sans\) remain 100% untouched. All lab styles and @font-face rules are isolated to \/font-specimen\.
+
+### 2. Candidate Font Portfolio (22 OFL-1.1 Typefaces)
+
+The lab evaluates 22 diverse typefaces categorized into 10 aesthetic families:
+1. **Signwriting & Retro Script**:
+   - **Shrikhand** (Jonny Pinhorn, 23.3 KB): Voluptuous signwriting curves, high contrast, warm 70s personality (User baseline, 9.2/10).
+   - **Caprasimo** (Typemade / Boltana & Sharp, 22.7 KB): Extremely chunky 70s display serif with rounded teardrop terminals and joyful presence (9.4/10).
+   - **Sonsie One** (Riccardo De Franceschi, 28.3 KB): Expressive brush-stroke rhythm, friendly human signwriting (8.8/10).
+   - **Spicy Rice** (Astigmatic / Brian J. Bonislawsky, 34.2 KB): Warm psychedelic 60s/70s casual display with bouncy rhythm (9.1/10).
+2. **Chunky 70s / Warm Vintage**:
+   - **Lemon** (Eduardo Tunni, 36.9 KB): Soft fluid slab-serif with rounded joins and approachable warmth (8.5/10).
+3. **Chubby & Balloon**:
+   - **Bagel Fat One** (JAMO, 28.7 KB): Hyper-plump, pillowy rounded silhouette with joyful cartoon punch (9.1/10).
+   - **Modak** (Ek Type, 48.1 KB): Extravagantly plump balloon curves with massive black weight and tiny white counters (9.3/10).
+   - **Titan One** (Rodrigo Fuenzalida, 16.4 KB): Lively rounded cartoon bubble curves with heavy presence and great legibility (9.0/10).
+4. **Ultra-Heavy Slabs & Woodblock**:
+   - **Oi** (Kostas Bartsokas, 72.5 KB): Ultra-heavy fat slab serif with maximum typographic decibels and explosive attitude (9.3/10).
+   - **Chango** (Fontstage, 15.1 KB): Irregular chunky geometric woodblock cuts with quirky angular cartoon character (8.4/10).
+   - **Ewert** (Johan Kallas, 14.7 KB): Ornamental carnival slab serif with bifurcated fish-tail serifs (8.2/10).
+   - **Dela Gothic One** (artandtype, 22.4 KB): Muscular Japanese poster-inspired flat gothic with immense horizontal weight (8.8/10).
+5. **Urban & Architectural**:
+   - **Bungee** (David Jonathan Ross, 24.5 KB): Crisp urban sign monoline caps built for commanding display headers (8.9/10).
+   - **Bungee Shade** (David Jonathan Ross, 52.2 KB): Extruded diagonal-hatch drop shadow effect (8.9/10).
+   - **Bowlby One SC** (Vernon Adams, 33.4 KB): Raw mechanical mid-century industrial small caps with ink-trap punch (8.4/10).
+6. **Extreme Drama / Didone**:
+   - **Abril Fatface** (TypeTogether, 20.3 KB): Razor-sharp hairlines vs heavy stems with sophisticated editorial contrast (8.6/10).
+7. **Retro-Deco & Optical**:
+   - **Righteous** (Astigmatic, 22.0 KB): Smooth rounded geometric Art Deco with 80s arcade and futuristic optimism (8.7/10).
+   - **Rubik Vinyl** (Stefan Peev, 110.4 KB): Concentrically striped vinyl-groove letterforms echoing LP records and optical art (8.5/10).
+8. **Handcrafted & Irregular**:
+   - **Barriecito** (Omnibus-Type, 100.1 KB): Jittery manual letterforms with spontaneous rustic Latin American craft spirit (8.3/10).
+9. **Experimental & Variable**:
+   - **Fraunces (Wonky Soft)** (Undercase Type, 33.9 KB): Variable font tested at 144pt optical size with SOFT=100 and WONK=1 yielding offbeat charming quirks (8.7/10).
+   - **Climate Crisis (1979)** (Daniel Couper, 29.1 KB): Variable font with melting letterforms across time axes (8.6/10).
+10. **Curved Script**:
+    - **Agbalumo** (Sorkin Type, 120.8 KB): Bubbly curved script with juicy organic brush strokes (9.0/10).
+
+### 3. Interactive Workbench & Arena Implementation
+- **Route**: \/font-specimen- **Authentic Highlight Styling**: Displays candidate headlines with VoxPlan's real highlighted-word badges (\.font-lab-hl-terracotta\ and \.font-lab-hl-marigold\).
+- **Interactive Controls**:
+  - Live custom text input with 5 quick editorial presets (\Plan with clarity. Act with focus.\, \Predict what matters. Focus on what counts.\, etc.).
+  - Highlighted word pickers allowing user to customize which words receive terracotta and marigold pills.
+  - Scale slider (24px to 72px) with quick presets (\Hero 52px\, \Heading 36px\, \Small 26px\).
+  - Category filters and quick jump navigator for rapid exploration.
+  - **Side-by-Side Comparison Arena**: Direct A/B/C/D comparison of pinned candidate fonts at identical scale.
+  - Interactive variable axis sliders for Fraunces (\opsz\, \wght\, \SOFT\, \WONK\) and Climate Crisis (\YEAR\).
+  - Licence & attribution inspection modal for every candidate.
+
+### 4. Verification & Quality Gates
+- **Automated Font Lab Test Suite (\	ests/display_font_lab.test.js\)**: 6 tests passed (0 failed). Verified catalog integrity, OFL licences, non-empty WOFF2 binaries on disk, unicode ranges, and production token isolation.
+- **Frontend Test Suite (pm test\)**: 1126 tests passed across 244 suites in 15.1s (0 failed).
+- **Backend Test Suite (\python -m pytest backend/tests/\)**: 29 tests passed in 2.12s (0 failed).
+- **Production Build (pm run build\)**: Completed cleanly in 565ms with isolated code-split chunk for the font lab (\FontSpecimenPage\).
+- **Linter (pm run lint\ / \oxlint\)**: 0 errors across 112 files.
+- **Secret Scanner (ode scripts/secretScanner.mjs\)**: 0 secrets matched across 141 files.
+- **Git Diff Whitespace Check (\git diff --check\)**: Clean; 0 errors.
+- **Live Desktop Browser Verification (\rowser_subagent\)**:
+  - Verified catalog view at 1440×900: all WOFF2 fonts loaded offline, highlighted words rendered with authentic badges.
+  - Verified Side-by-Side Arena with Shrikhand, Caprasimo, Bagel Fat One, and Oi pinned side by side.
+  - Verified production application at \/app\ remained completely unaffected and functioning normally.
+
+---
+
+## Phase 8.9: Refinement of Font Lab Around User Typography Preferences
+
+### 1. Objective & Typography Strategy
+Refine the existing VoxPlan font lab at `/font-specimen` around the user's explicit typography preferences, pivoting from the previous broad display set (where Sonsie One was the sole liked candidate) to an expressive, calligraphic, and decorative catalog tailored to the user's taste:
+- **Core User Favourites**:
+  - **Tangerine** (designed by Toshi Omagari) — the user's explicit top favourite; subjected to a dedicated multi-role lab evaluation.
+  - **Sonsie One** (Riccardo De Franceschi) — retained from the previous collection as the user's approved favorite.
+  - **Birthstone Bounce**, **Ephesis**, **Sail**, **Playball**, **Allura**, **Berkshire Swash**, **Shadows Into Light**, **Indie Flower**, **Caveat**, **New Rocker**.
+- **Additional Preferred References**:
+  - **Eagle Lake**, **Miltonian Tattoo**, **Sue Ellen Francisco**, **Permanent Marker**, **Amatic SC**, **Unica One**, **Advent Pro**, **Merienda**.
+- **Preservation Policy**: All 21 previous candidate fonts are preserved in the catalog, bringing the total library to 41 typefaces.
+- **Licensing & Offline Architecture**:
+  - Every one of the 20 preferred fonts was retrieved from official Google Fonts sources and verified under the **SIL Open Font License 1.1 (OFL-1.1)**.
+  - Fully self-hosted as lean WOFF2 subsets in `/public/fonts/lab/` with zero runtime CDN calls.
+  - Full legal manifest compiled in `/public/fonts/lab/LICENSES.md` with complete OFL 1.1 terms and designer attributions.
+- **Production Isolation**: Production typography tokens (`--font-display`, `--font-heading`, `--font-tagline`, `--font-sans`) remain 100% untouched.
+
+### 2. Candidate Organization (4 Aesthetic Families for Preferred Fonts)
+1. **Expressive Scripts (6 fonts)**:
+   - **Tangerine** (Toshi Omagari, 24.2 KB Regular + 24.2 KB Bold): Chancery cursive with dramatic ascenders.
+   - **Birthstone Bounce** (Robert Leuschke, 44.0 KB): Bouncy formal brush script with exuberant flourishes.
+   - **Ephesis** (Robert Leuschke, 31.0 KB): Flowing monoline signature cursive with casual elegance.
+   - **Sail** (Mariana Trentin, 13.3 KB): High-contrast Didone-styled upright script with delicate loops.
+   - **Playball** (TypeType, 30.8 KB): Athletic baseball script with energetic rhythm and bold loops.
+   - **Allura** (Robert Leuschke, 25.9 KB): Clean calligraphic ribbon script with sophisticated pen strokes.
+2. **Ornamental & Decorative (5 fonts)**:
+   - **Sonsie One** (Riccardo De Franceschi, 28.3 KB): Lively brush-stroke rhythm and warm human signwriting.
+   - **Berkshire Swash** (Brian J. Bonislawsky, 16.9 KB): Whimsical Victorian display serif with swashed terminals.
+   - **Eagle Lake** (Astigmatic, 27.6 KB): Chiseled Celtic / Arthurian flared serif with medieval gravity.
+   - **Miltonian Tattoo** (Tatiana Ianovskaia, 44.7 KB): Old-school tattoo banner display with vintage character.
+   - **New Rocker** (Impallari Type, 28.6 KB): Heavy metal blackletter-inspired angular display serif.
+3. **Handwritten & Informal (5 fonts)**:
+   - **Shadows Into Light** (Kimberly Geswein, 15.9 KB): Tidy feminine handwriting with neat rounded strokes.
+   - **Caveat** (Pablo Impallari, 73.2 KB): Natural fluid handwriting with lively baseline variation.
+   - **Indie Flower** (Kimberly Geswein, 19.1 KB): Cheerful, rounded, open handwritten curves.
+   - **Sue Ellen Francisco** (Kimberly Geswein, 14.2 KB): Tall, spindly, condensed hand-lettering.
+   - **Permanent Marker** (Font Diner, 28.9 KB): Bold, broad-nib chisel-tip felt pen poster lettering.
+4. **Distinctive Display & Poster (4 fonts)**:
+   - **Amatic SC** (Vernon Adams, 26.6 KB): Playful condensed hand-drawn caps with tall vertical rhythm.
+   - **Unica One** (Eduardo Tunni, 13.7 KB): Slim condensed geometric headline sans with clean rhythm.
+   - **Advent Pro** (Andreas Kalpaktsidis, 31.5 KB): Modernist rounded monoline geometric display sans.
+   - **Merienda** (Eduardo Tunni, 50.8 KB): Soft brush display serif with organic curves and lively personality.
+
+### 3. Key Design Experiments & Workbench Upgrades
+- **Tri-Treatment Headline Experiment**:
+  - **Mode A: Full Decorative Headline** — renders the entire headline in the candidate font.
+  - **Mode B: Selective Word Accent** — pairs `Plus Jakarta Sans` bold base text with candidate font applied only to highlighted words ("clarity" and "focus").
+  - **Mode C: Script-Led Spacing** — optimizes layout for expressive scripts using generous `1.48` line-height and collision-proof highlight padding.
+  - **Compare All 3 Treatments (Tri-Box)** — renders Modes A, B, and C in parallel on every candidate card.
+- **Tangerine Deep-Dive Lab**:
+  - Dedicated tab evaluating Toshi Omagari's Tangerine across 4 specific UI roles:
+    1. Full Hero Headline (`Plan with clarity. Act with focus.`)
+    2. Selective Highlighted Words (`Plan with <Tangerine>clarity.</Tangerine> Act with <Tangerine>focus.</Tangerine>`)
+    3. Supporting Editorial Tagline (`Predict what matters. Focus on what counts.`)
+    4. Smaller Section Heading (`YOUR WEEK SO FAR`)
+  - Genuine weight toggle between **400 Regular** and **700 Bold** using authentic OFL WOFF2 files.
+- **Enhanced Side-by-Side Comparison Arena**:
+  - Pinned by default with the user's top favorites: **Tangerine**, **Sonsie One**, **Birthstone Bounce**, and **Sail**.
+  - Direct side-by-side scale slider, custom text testing, and treatment toggling.
+
+### 4. Verification & Quality Gates
+- **Display Font Lab Tests (`tests/display_font_lab.test.js`)**: 6 tests passed (catalog integrity, OFL licences, 41 WOFF2 binaries, unicode ranges, Tangerine 700 @font-face, and production token isolation).
+- **Typography System Tests (`tests/typography_system.test.js`)**: 18 tests passed (production typography completely intact).
+- **Frontend Test Suite (`npm test`)**: 1126 tests passed across 244 suites (0 failed).
+- **Backend Test Suite (`python -m pytest backend/tests/`)**: 29 tests passed (0 failed).
+- **Production Build (`npm run build`)**: Vite built production bundle cleanly in 1.34s with isolated `FontSpecimenPage` chunk.
+- **Linter (`npm run lint` / `oxlint`)**: 0 errors across 114 files.
+- **Secret Scanner (`node scripts/secretScanner.mjs`)**: 0 secrets detected across 144 scanned files.
+- **Git Diff Whitespace Check (`git diff --check`)**: Clean; 0 errors.
+- **Desktop Browser Verification (`browser_subagent`)**:
+  - Verified `http://localhost:5173/font-specimen` at 1440×900: default User Preferred References view (20 fonts), treatment switcher (Modes A, B, C, and Tri-Box), Tangerine Deep-Dive Lab (400 and 700 weights across 4 roles), and Side-by-Side Arena (Tangerine, Sonsie One, Birthstone Bounce, Sail).
+  - Verified `http://localhost:5173/app` at 1440×900: production workspace, calendar, tasks, and adaptive scheduling operate with standard typography completely intact.
+
+---
+
+## Phase 8.10: Illustrated Stationery Sticky Notes for Tasks (Visual Redesign & Scattered Artwork)
+
+### 1. Objective & Visual Redesign
+Refine the task sticky-note feature to deliver a rich, illustrated stationery experience matching the supplied memo pad reference aesthetic:
+- **Scattered Illustrations & Delicacy**: Reproduced the design principle of the reference memo pad: an outer patterned paper frame (gingham grid, soft stars, botanical weaves), a die-cut rounded white writing surface, and multiple scattered illustrations positioned around the perimeter (top banner with smiling stars/clouds/characters, bottom corner character line art, floating hearts, and playful handwritten micro-captions like *"yeah! happy every day"* and *"sweet moments"*).
+- **Clear Writing Surface**: Ensured writing inputs (title and body) remain centered with collision-proof padding and transparent/clean backgrounds, leaving the writing area completely legible and functional.
+- **Visually Driven Stationery Gallery**:
+  - Replaced text-heavy buttons with miniature illustrated stationery sheets showing the actual paper colors, frames, washi tape, and motif symbols.
+  - Removed all visible style names (e.g., no "Floral Cream" or "Blush Bunny" text); retained only the artwork.
+  - Selected paper is immediately obvious with an accent outline and checkmark pill badge.
+  - Complete keyboard and screen-reader accessibility with descriptive `aria-label` tags.
+- **Live Full-Page Memo Preview**:
+  - Switching stationery styles immediately updates the entire memo paper (frame pattern, washi tape, scattered illustrations, colors) without requiring save.
+  - Preserves entered title and body text across style switches.
+- **Terminology Purge**:
+  - Removed the word "Japanese" from all user-facing headers, labels, tooltips, accessible descriptions, and code comments.
+  - Header displays clean neutral title `✦ STICKY NOTES`.
+  - Task card tabs show motif icon with clean count badges (`Memo` / `N Memos`).
+- **Data Isolation & Typography Invariance**:
+  - Dedicated storage partition in `localStorage` under `voxplan_task_sticky_notes`.
+  - Zero interference with task scheduling, ML matrices, or telemetry models.
+  - Production typography tokens (`--font-display`, `--font-heading`, etc.) strictly untouched.
+
+### 2. Stationery Catalog (7 Visually Distinctive Directions)
+Defined in `src/components/stickyNotes/stationeryCatalog.js`, each style features custom scattered vector artwork, pattern frames, and distinct character personalities:
+1. **Morning Sky Bear** (`powder-blue`):
+   - Palette & Frame: Soft morning sky blue gingham grid (`#E1EDF8`, `#BCD5EE`), clean white inner card, navy line art (`#2A4E78`).
+   - Top Artwork: Smiling 5-point stars, peeking bunny head, and happy round bear head.
+   - Bottom Artwork: Fluffy white teddy bear taking a selfie with a smartphone, winking eye, rosy cheeks, doodle heart with swoosh, and *"yeah! happy every day"*.
+2. **Sakura Blush Bunny** (`blush-bunny`):
+   - Palette & Frame: Sakura pink gingham frame (`#FCECEF`), rose washi tape, warm dark wine line art (`#5C2836`).
+   - Top Artwork: Cherry blossoms, peeking upright-ear bunny, and floating hearts.
+   - Bottom Artwork: Charming bunny with long upright ears holding a ripe red strawberry, sweet heart, and *"sweet moments / cherish today"*.
+3. **Wisteria Lavender Cat** (`lavender-cat`):
+   - Palette & Frame: Lavender pastel with star sparkles (`#F3EEF9`), deep wisteria line art (`#422758`).
+   - Top Artwork: Crescent moon, sparkling stars, peeking curious cat paws, and wisteria sprigs.
+   - Bottom Artwork: Cozy curled sleeping kitten, steaming teacup with heart vapor, and *"stay cozy & soft"*.
+4. **Mint Forest Bear** (`mint-bear`):
+   - Palette & Frame: Mint green tea gingham grid (`#E8F4EC`), dark pine line art (`#204732`).
+   - Top Artwork: Sprouting clovers, fluffy clouds, and sleeping bear face.
+   - Bottom Artwork: Round friendly woodland bear with rounded ears and blush cheeks, four-leaf clover, and *"little by little"*.
+5. **Botanical Cherry Blossom** (`floral-cream`):
+   - Palette & Frame: Almond washi paper with botanical weave (`#F8F4EC`), warm espresso line art (`#4A3A2C`).
+   - Top Artwork: Gnarled sakura flower sprigs and blowing petals.
+   - Bottom Artwork: Perched songbird with distinct beak and plumage singing on flowering cherry branch, and *"bloom in your own time"*.
+6. **Sunny Daisy Chick** (`butter-yellow`):
+   - Palette & Frame: Buttercup yellow gingham grid (`#FFF9D8`), amber-brown line art (`#523A12`).
+   - Top Artwork: Smiling doodle sun with rays and floating daisies.
+   - Bottom Artwork: Fluffy round baby chick with a chamomile daisy on its head, tiny orange beak, rosy cheeks, and *"shine bright today!"*.
+7. **Serene Matcha Clover** (`matcha-leaf`):
+   - Palette & Frame: Matcha tea pastel with dot matrix (`#EFF5E8`), dark moss line art (`#2B4A1D`).
+   - Top Artwork: Sprouting botanical vines, four-leaf clovers, and morning dewdrops.
+   - Bottom Artwork: Cheerful round frog sitting under a large clover leaf umbrella, and *"lucky days ahead"*.
+
+### 3. Verification & Quality Gates
+- **Automated Unit & Integration Tests (`tests/sticky_notes.test.js`)**:
+  - **19/19 tests passed (0 failures)** across 5 suites:
+    1. Stationery catalog structure, inline SVGs, scattered artwork, accessible descriptions, and fallback resolution.
+    2. Note normalization, bounds checking, ID uniqueness, and ISO timestamps.
+    3. Storage operations, multi-note stacks, updates, deletions, and persistence across reinitialization.
+    4. Task record isolation, empty state cleanliness, and orphan cleanup.
+    5. Task deletion undo preservation and recovery.
+- **Full Frontend Test Suite (`npm test`)**: **1,145 tests passed across 250 suites (0 failures)** in 17.58s.
+- **Backend Test Suite (`python -m pytest backend/tests/`)**: **29 tests passed (0 failures)**.
+- **Linter (`npm run lint` / `oxlint`)**: **0 errors across 119 files**.
+- **Production Build (`npm run build`)**: Vite built production bundle cleanly in 715ms with isolated code splitting.
+- **Secret Scanner (`node scripts/secretScanner.mjs`)**: **0 secrets matched across 150 scanned files**.
+- **Git Diff Whitespace Check (`git diff --check`)**: Clean; 0 whitespace or formatting errors.
+- **Live Desktop Browser Verification (`browser_subagent`)**:
+  - Verified `http://localhost:5173/app?view=tasks` at 1280×1000 and 1427×807:
+    - Task cards render peeking sticky tab with motif icon and clean label (`+ Note` or `Memo`).
+    - Sticky Notes modal opens with clean header `✦ STICKY NOTES`.
+    - Stationery Gallery displays 7 miniature illustrated paper sheets with zero visible text names.
+    - Live memo preview updates immediately when switching designs (tested Morning Sky Bear, Sakura Blush Bunny, Lavender Cat).
+    - Preserves entered title (`Sprint Release Memo`) and body checklist when switching designs.
+    - Saved memo renders in full illustrated viewer mode with scattered perimeter artwork.
+    - Responsive layout verified; illustrations do not obstruct writing inputs.
+
+### 4. Phase 8.10.1: Refined Sticky Note Borders, Patterns, and Paper Colours (COMPLETED)
+- **Objective**:
+  - Replace plain/understated borders with thicker, decorative, intentional paper borders featuring fine repeating patterns.
+  - Replace stark pure white (`#FFFFFF`) paper centers with very light, soft pastel tints derived from each design's primary hue.
+  - Coordinate the visual palette across all 7 stationery styles: outer border, pattern band, inner card border, input border, and tinted center.
+  - Ensure consistent presentation across the live preview, gallery miniature sheets, saved note viewer, and compact tabs.
+- **Thicker Decorative Border System & Layered Stationery Architecture**:
+  - `.task-sticky-full-paper`: Increased padding to `18px`, outer border to `2.5px solid`, and border-radius to `20px` to create a prominent, deliberate decorative border frame around all four sides.
+  - `.task-sticky-inner-card`: Enhanced with `border: 2px solid`, `border-radius: 14px`, and `box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05), inset 0 0 0 1px rgba(255, 255, 255, 0.55)` for a layered stationery effect (outer stroke ➜ patterned border band ➜ inner stroke ➜ subtle inner highlight ➜ tinted paper center).
+- **Per-Style Decorative Patterns**:
+  1. **Morning Sky Bear** (`powder-blue`): Micro-gingham double-line grid with alternating centered accent dots (`#E4F0FA` base + `#8BB4DB` border + `#7BA8D3` dots).
+  2. **Sakura Blush Bunny** (`blush-bunny`): Delicate repeating polka dots with alternating pin-dots (`#FDECEF` base + `#EDA2B2` border + `#E58CA0` dots).
+  3. **Wisteria Lavender Cat** (`lavender-cat`): Fine parallel pinstripes with delicate star dots (`#F3ECF9` base + `#C9B4E6` border + `#B89DDC` stars).
+  4. **Mint Forest Bear** (`mint-bear`): Diagonal repeating cross-stitch / herringbone weave (`#E6F5EC` base + `#9ED4B2` border + `#7EC298` stitches).
+  5. **Botanical Cherry Blossom** (`floral-cream`): Fine double parallel lines with blossom floret dots (`#F7F2E8` base + `#D4C3A9` border + `#C2AE90` lines & `#C45732` dots).
+  6. **Sunny Daisy Chick** (`butter-yellow`): Gingham check with centered sunny daisy dots (`#FFF7D0` base + `#ECC96E` border + `#DFB548` check & `#E49218` dots).
+  7. **Serene Matcha Clover** (`matcha-leaf`): Botanical clover leaf dots & running dashes (`#EEF6E6` base + `#AFD294` border + `#93C072` dashes & `#649C3E` dots).
+- **Light Pastel Tinted Centers**:
+  1. `powder-blue`: `#F3F8FC` (extremely pale icy blue)
+  2. `blush-bunny`: `#FFF4F6` (barely-there warm blush pink)
+  3. `lavender-cat`: `#FAF5FD` (light soft lilac)
+  4. `mint-bear`: `#F2F9F5` (subtle pale mint)
+  5. `floral-cream`: `#FAF5EB` (warm ivory peach)
+  6. `butter-yellow`: `#FFFDE8` (soft creamy-yellow)
+  7. `matcha-leaf`: `#F3F8ED` (gentle pale matcha)
+- **Writing Canvas & Gallery Mini-Sheet Integration**:
+  - Input fields (`.task-sticky-title-field`, `.task-sticky-body-field`) styled with semi-translucent backdrop (`rgba(255, 255, 255, 0.52)`), `1.5px dashed` border, and high text contrast, letting the pastel paper tint breathe through naturally.
+  - Miniature sheets in gallery selector (`.task-sticky-mini-sheet`) bound to each stationery's `paperBg` to display tinted centers directly in selection cards.
+- **Verification & Quality Gates**:
+  - `node --test tests/sticky_notes.test.js`: **19/19 passed** (including assertions verifying non-white tinted `paperBg`, `frameBorder`, `borderPatternColor`, and `inputBorder`).
+  - `npm test`: **1,145/1,145 passed across 250 suites (0 failures)**.
+  - `python -m pytest backend/tests/`: **29/29 passed (0 failures)**.
+  - `npx oxlint`: **0 errors**.
+  - `npm run build`: Built production bundle cleanly in 5.14s.
+  - `node scripts/secretScanner.mjs`: **0 secrets detected across 150 scanned files**.
+  - `git diff --check`: Clean; 0 errors.
+  - Desktop browser verification (`browser_subagent`) on `http://localhost:5173/app?view=tasks`: Verified all 7 stationery styles in compose mode and saved note viewer; confirmed thick decorative patterned borders, distinct patterns, soft tinted centers, intact character line art, and memo persistence. Screenshots captured.
+
+### 5. Phase 8.10.2: Illustrated Character & Motif Corrections (COMPLETED)
+- **Objective**:
+  - Correct four specific illustrations in the illustrated sticky-note stationery collection to fix recognisability and compositional balance:
+    1. **Blush Bunny** (`blush-bunny`): Redraw with unmistakable rabbit anatomy — tall, upright distinct ears (defining feature, not rounded bumps), soft cheeks, small nose, sweet mouth, delicate whiskers, expressive eyes with catchlights, and distinct paws hugging a bright strawberry with leafy calyx.
+    2. **Almond Washi Paper Songbird** (`floral-cream`): Redraw with clear bird anatomy — distinct head, visible pointed golden beak projecting outward, recognizable wing with layered feather curves, fan tail, and two tiny feet perched gripping the sakura branch.
+    3. **Matcha Clover Frog** (`matcha-leaf`): Remove the unfinished straight line and two circles from `topDecorSvg` and replace with a compact, well-drawn floating lily pad motif featuring a distinct V-notch, radiating veins, a dewdrop sparkle, and a subtle water ripple arc.
+    4. **Sunny Daisy Chick** (`butter-yellow`): Eliminate repetitive daisy flower clusters from `bottomDecorSvg` and `topDecorSvg`. Replace with a charming decorative ribbon bow featuring soft rounded loops, knot, flowing tails, and accent sparkles, ensuring the single daisy sitting on the baby chick's head remains unique and iconic.
+- **Components & SVGs Refined**:
+  - `src/components/stickyNotes/stationeryCatalog.js`:
+    - `MOTIF_ICONS.bunny`: Long distinct rabbit ears with pink inner ear fills, rounded head, whiskers, nose, and rosy cheeks.
+    - `MOTIF_ICONS.sakuraBird`: Unmistakable perched songbird with projecting beak, round head, wing, fan tail, and perch feet.
+    - `blush-bunny`: `topDecorSvg` peeking rabbit with tall upright ears and resting paws; `bottomDecorSvg` charming sitting bunny with tall ears, cheeks, whiskers, distinct paws and strawberry.
+    - `floral-cream`: `bottomDecorSvg` perched songbird with pointed beak, layered wing, fan tail, and gripping feet on branch.
+    - `matcha-leaf`: `topDecorSvg` notched lily pad with veins and water ripple replacing the straight line with two circles.
+    - `butter-yellow`: `topDecorSvg` dainty bow & sparkle; `bottomDecorSvg` decorative ribbon bow with soft loops, knot, flowing tails, and sparkle replacing daisy clusters.
+- **Verification & Quality Gates**:
+  - `node --test tests/sticky_notes.test.js`: **19/19 passed**.
+  - `npm test`: **1,145/1,145 passed across 250 suites (0 failures)**.
+  - `python -m pytest backend/tests/`: **29/29 passed (0 failures)**.
+  - `npx oxlint`: **0 errors**.
+  - `npm run build`: Built production bundle cleanly in 1.72s.
+  - `node scripts/secretScanner.mjs`: **0 secrets detected across 150 scanned files**.
+  - `git diff --check`: Clean; 0 errors.
+
+### 6. Phase 8.10.3: Final Sticky Note Illustration and Colour Corrections (COMPLETED)
+- **Objective**:
+  - Implement three targeted corrections across the sticky-note stationery designs without altering the underlying stationery system architecture or unrelated designs:
+    1. **Fix Large Bunny Ears** (`blush-bunny`):
+       - Root cause: In `bottomDecorSvg`, the ear paths were unclosed open segments (`d="M22 2C...L25 44"`), causing the stroke to outline only one side and leaving open gaps, disconnected strokes, and unfinished endpoints.
+       - Correction: Replaced with complete, continuous closed loop paths (`M18 38 C... Z` and `M38 36 C... Z`) connecting naturally to the head, with symmetrical closed inner ear shapes (`#FFCCD5` fill with `#D95C78` outline), preserving the pink inner ear colour, burgundy stroke (`#5C2836`), face, body, and strawberry.
+    2. **Make Entire Chick Stationery Yellow** (`butter-yellow`):
+       - Root cause: Previous `paperBg: '#FFFDE8'` was visually pale/nearly white on standard monitors.
+       - Correction: Updated `paperBg: '#FFF4B8'` (soft buttery yellow), `frameBg: '#FFF0A8'` (warm sunny yellow frame), `frameBorder: '#E5BD42'`, `paperBorder: '#E8C968'`, and `borderPatternColor: '#D9A82E'`. Recoloured top and bottom ribbon bow motifs from pink (`#FFAEC0`) to harmonious golden amber tones (`#FFD268`, `#FFE890`). Updated chick body fill to pale creamy yellow (`#FFFDF0`) so the chick stands out clearly against the yellow paper while writing text and UI elements remain cleanly readable.
+    3. **Remove Bird from Almond Washi & Recolour Green Bear** (`floral-cream` & `mint-bear`):
+       - **Almond Washi (`floral-cream`)**: Initially removed songbird; subsequently completely removed this 5th stationery design per user request so that only 6 core stationery designs remain in the collection.
+       - **Almond Bear (`mint-bear`)**: Changed green bear palette to a warm, soft almond/cream/beige direction inspired by Almond Washi (`paperBg: '#FAF6EE'`, `frameBg: '#F7F1E6'`, `frameBorder: '#D5C3A8'`, `borderPatternColor: '#BAA384'`, `lineArtColor: '#4A3828'`). Recoloured bear accents, clover, honey pot, and sleeping bear to almond woodland tones (`#4A3828`, `#F5EDE0`, `#FAF6EE`, `#B86834`). Adapted diagonal cross-stitch pattern in `.theme-mint-bear` to almond stitch tones (`rgba(186, 163, 132, 0.55)`). Preserved the bear character and layout; left `matcha-leaf` (frog) completely untouched.
+    4. **Completely Remove Daisy Paper Design (5th Design)**:
+       - Removed `floral-cream` from `STATIONERY_STYLES` so exactly 6 illustrated designs remain in the catalog: Morning Sky Bear (`powder-blue`), Sakura Blush Bunny (`blush-bunny`), Wisteria Lavender Cat (`lavender-cat`), Almond Forest Bear (`mint-bear`), Sunny Daisy Chick (`butter-yellow`), and Serene Matcha Clover (`matcha-leaf`).
+       - Updated `.task-sticky-gallery-grid` to `grid-template-columns: repeat(6, 1fr)` on desktop and `repeat(3, 1fr)` on tablets for a balanced 1-row or 2-row layout.
+       - Safe fallback in `getStationeryById` defaults safely to Morning Sky Bear (`powder-blue`) for older notes or missing IDs.
+- **Components & Files Modified**:
+  - `src/components/stickyNotes/stationeryCatalog.js`: Closed bunny ear paths; updated `butter-yellow` palette and bows; removed `floral-cream` so exactly 6 styles remain; updated fallback to `powder-blue`; recoloured `mint-bear` to almond palette.
+  - `src/components/stickyNotes/TaskStickyNotes.css`: Updated `.task-sticky-gallery-grid` to 6 columns; updated `.theme-mint-bear` to almond stitch pattern; updated `.theme-butter-yellow` to rich sunny yellow gradients.
+  - `src/components/stickyNotes/TaskStickyTab.jsx`: Updated default fallback stationery.
+  - `tests/sticky_notes.test.js`: Validated exactly 6 stationery designs, closed bunny ear loops, yellow chick palette, floral-cream removal & fallback, and almond bear colourway.
+- **Verification & Quality Gates**:
+  - `node --test tests/sticky_notes.test.js`: **20/20 passed (0 failures)**.
+  - `npm test`: **1,146/1,146 passed across 250 suites (0 failures)**.
+  - `python -m pytest backend/tests/`: **29/29 passed (0 failures)**.
+  - `npx oxlint`: **0 errors**.
+  - `npm run build`: Production bundle built cleanly in 1.13s with 0 errors.
+  - `node scripts/secretScanner.mjs`: **0 secrets detected across 150 scanned files**.
+  - `git diff --check`: Clean; 0 whitespace/conflict errors.
+  - Desktop browser verification (`browser_subagent`) on `http://localhost:5173/app?view=tasks`: Verified live rendering of the 6 remaining stationery designs in a single clean row (`powder-blue`, `blush-bunny`, `lavender-cat`, `mint-bear`, `butter-yellow`, `matcha-leaf`). Verified 5th daisy design is completely removed. Screenshot saved: `sticky_notes_6_stationery`. All criteria confirmed.
+
+### 7. Phase 8.11: Expand Font Specimen & All-at-Once Comparison View (COMPLETED)
+- **Objective**:
+  - Update the existing VoxPlan font specimen page (`/font-specimen`) to include six additional requested fonts from provided references:
+    1. **La Belle Aurore** — Kimberly Geswein (`'La Belle Aurore', cursive`, SIL OFL 1.1)
+    2. **Aladin** — Sudtipos (Angel Koziupa, Alejandro Paul) (`'Aladin', cursive`, SIL OFL 1.1)
+    3. **Walter Turncoat** — Sideshow (Stuart Sandler) (`'Walter Turncoat', cursive`, SIL OFL 1.1)
+    4. **Trade Winds** — Sideshow (Stuart Sandler) (`'Trade Winds', cursive`, SIL OFL 1.1)
+    5. **Bigelow Rules** — Astigmatic (Jim Lyles) (`'Bigelow Rules', cursive`, SIL OFL 1.1)
+    6. **Akronim** — Grzegorz Klimczewski (`'Akronim', cursive`, SIL OFL 1.1)
+  - Implement a high-density, single-glance **All-at-Once Comparison View** ("Compare All") inside `/font-specimen`, enabling side-by-side inspection of all 47 candidates without switching individual cards.
+  - Preserve all existing font specimens (41 previous candidates), custom text evaluation, size controls, variable font axes, and Side-by-Side Arena pinning.
+  - Strict scope boundary: zero modifications to production typography tokens (`src/index.css`), live task cards, calendar, command dock, or backend ML models.
+- **Font Assets & Licensing Verification**:
+  - Downloaded genuine self-hosted WOFF2 files directly from Google Fonts CDN repository mirrors into `public/fonts/lab/`:
+    - `public/fonts/lab/la-belle-aurore/` (latin 17.6 KB, latin-ext 10.6 KB)
+    - `public/fonts/lab/aladin/` (latin 14.2 KB, latin-ext 1.7 KB)
+    - `public/fonts/lab/walter-turncoat/` (latin 58.9 KB)
+    - `public/fonts/lab/trade-winds/` (latin 35.6 KB)
+    - `public/fonts/lab/bigelow-rules/` (latin 19.4 KB, latin-ext 10.4 KB)
+    - `public/fonts/lab/akronim/` (latin 47.2 KB, latin-ext 15.9 KB)
+  - Registered all 6 fonts in `public/fonts/lab/catalog.json`, `public/fonts/lab/preferred_catalog.json`, and `src/pages/labFontCatalog.js` (total 47 candidates; 26 user preferences).
+  - Declared scoped `@font-face` rules in `public/fonts/lab/lab-fonts.css` with exact WOFF2 URLs, font weights, and `unicode-range` definitions.
+  - Documented full licensing terms, designers, copyright, and repositories in `public/fonts/lab/LICENSES.md` (100% SIL Open Font License 1.1 commercial readiness).
+- **All-at-Once Comparison View Implementation**:
+  - `src/pages/FontSpecimenPage.jsx`:
+    - Added dedicated tab: `⚡ Compare All (47)` alongside Candidate Catalog, Side-by-Side Arena, and Tangerine Lab.
+    - Integrated toolbar: font count stats, sample phrase indicator, search input with clear trigger, `♥ Liked (X)` filter toggle, 2-Column Grid vs Full-Width List switcher, and specimen scale slider (22px–48px).
+    - Rendered all 47 candidates with uniform sample phrase: **“Plan with clarity. Act with focus.”** in `font.cssFamily`, with terracotta/marigold word highlights.
+    - Added compact header per card: font name, monospace CSS font-family badge (`font.cssFamily`), preference pill, designer attribution, subtle selection toggle (`♥ Liked` / `♡ Like`), "+ Pin to Arena" quick toggle, and `ⓘ` info modal trigger.
+    - Independently scrollable container (`.font-lab-compare-scroll-container`) with custom branded scrollbar, isolating compare scrolling from the page layout.
+  - `src/pages/FontSpecimenPage.css`:
+    - Added responsive styles for `.font-lab-compare-section`, `.font-lab-compare-toolbar`, `.font-lab-compare-grid`, `.font-lab-compare-card`, `.font-lab-compare-like-btn`, and desktop 2-column to mobile 1-column media queries.
+- **Verification & Quality Gates**:
+  - `node --test tests/display_font_lab.test.js`: **8/8 passed (0 failures)**. Validated 47 candidates, 26 user preferences, all 6 new fonts metadata, WOFF2 file existence, OFL-1.1 licensing, CSS family definitions, and production token isolation.
+  - `npm test`: **1,148/1,148 passed across 250 suites (0 failures)**.
+  - `python -m pytest backend/tests/`: **29/29 passed (0 failures)**.
+  - `npx oxlint`: **0 errors**.
+  - `npm run build`: Production bundle built cleanly in 585ms; specimen page dynamically code-split with zero impact on production chunk sizes.
+  - `node scripts/secretScanner.mjs`: **0 secrets detected across 151 scanned files**.
+  - `git diff --check`: Clean; 0 errors.
+  - Visual Browser Verification (`browser_subagent`) on `http://localhost:5173/font-specimen`:
+    - Verified Compare All view renders with all 47 fonts.
+    - Verified 6 new fonts (La Belle Aurore, Aladin, Walter Turncoat, Trade Winds, Bigelow Rules, Akronim) render their authentic letterforms.
+    - Tested interactive search filtering (e.g. "Aladin", "Walter Turncoat", "Trade Winds").
+    - Tested selection bookmarking (`♡ Like` toggling to `♥ Liked`).
+    - Tested Liked-only filtering and restoring full collection.
+    - Tested 2-column grid and full-width list density toggling.
+    - Tested switching to Candidate Catalog view; verified all individual specimen features, custom text, and size controls remain fully functional.
+    - Tested responsive 1-column layout adaptation on narrow viewports.
+
+### 8. Phase 8.12: Typography Combination Preview & Final Font Selection (COMPLETED)
+- **Objective**:
+  - Create a realistic, side-by-side typography comparison inside the existing `/font-specimen` route to evaluate candidate fonts in the actual VoxPlan interface before applying the final typography system to production.
+  - Strictly isolated for comparison and selection only: zero changes to production typography tokens (`src/index.css`), live task cards, calendar, command dock, sticky notes, or backend ML engine.
+  - Preserve all existing 47 font candidates, controls, and specimen tools.
+  - Abril Fatface is cancelled (excluded from proposed system). Plus Jakarta Sans is explicitly excluded as the proposed body font.
+- **The Proposed Typography System Roles**:
+  1. **Brand Wordmark**: **Trade Winds** (`VOXPLAN` displayed at realistic sizes: small 20px header/navigation bar and 32px brand presentation strip, plus 18px–48px scale in inspector). Evaluated for small-size legibility without substitution.
+  2. **Main Headings**: Two mutually exclusive alternatives compared:
+     - **Option A**: **Eagle Lake** (Astigmatic / Jim Lyles)
+     - **Option B**: **Merienda** (Eduardo Tunni)
+     - Compared across the four representative heading phrases: “Your week so far”, “Today's priorities”, “Upcoming tasks”, and “Calendar”.
+  3. **Smaller Headings**: **Unica One** (Eduardo Tunni) used for compact section tags, metadata labels, and short secondary headings.
+  4. **Hero Phrase**: **Shrikhand + Shadows Into Light** pairing:
+     - Phrase: “Plan with clarity. Act with focus.”
+     - Base headline rendered in Shrikhand.
+     - Highlighted words “clarity” and “focus” rendered in Shadows Into Light handwriting with terracotta and marigold highlight badges.
+     - Natural badge fit without clipping, awkward spacing, or collisions.
+  5. **Body Text**: Three alternatives compared consistently across all functional UI elements (task titles, descriptions, priorities, deadlines, buttons, form inputs, calendar items):
+     - **Option 1**: **Nunito Sans** (Vernon Adams, Jacques Le Bailly, Manvel Shmavonyan, Alexei Vanyashin)
+     - **Option 2**: **DM Sans** (Colophon Foundry, Jonny Pinhorn, Indian Type Foundry)
+     - **Option 3**: **Lato** (Łukasz Dziedzic)
+- **The Six Controlled Combinations Implemented**:
+  - **A1**: Eagle Lake + Nunito Sans
+  - **A2**: Eagle Lake + DM Sans
+  - **A3**: Eagle Lake + Lato
+  - **B1**: Merienda + Nunito Sans
+  - **B2**: Merienda + DM Sans
+  - **B3**: Merienda + Lato
+  - *(All 6 combinations share Trade Winds wordmark, Unica One smaller headings, and Shrikhand + Shadows Into Light hero pairing)*.
+- **Representative VoxPlan Layout Preview Elements**:
+  - Brand wordmark in Trade Winds (`VOXPLAN` at 20px in nav and 32px in brand strip).
+  - Hero phrase with terracotta and marigold highlighted handwriting.
+  - Main section heading in candidate font (Eagle Lake or Merienda).
+  - Smaller section heading in Unica One.
+  - Two realistic task rows with title, description, priority badge, and deadline in body candidate font.
+  - Small calendar/agenda excerpt in body candidate font.
+  - Action buttons, navigation tabs, and supporting metadata in body candidate font.
+  - Identical copy, colors, spacing, and dimensions across all six previews.
+- **Enlarged Inspection Mode**:
+  - Accessible via "Enlarge & Inspect 🔍" button on any combination card.
+  - Displays side-by-side evaluation of all four main heading phrases with live scale slider (20px to 38px).
+  - Features dedicated 4-size Trade Winds legibility test strip (18px, 24px, 36px, 48px).
+  - Interactive interface preview with toggleable task checkboxes and action buttons.
+  - Smooth "← Return to 6-Combination Overview" navigation.
+- **Additional Accent Fonts Experiment**:
+  - Clearly separated, dedicated experiment evaluating **Aladin** and **Bigelow Rules** across four realistic scenarios:
+    1. Welcome Message: “Welcome back, Alex. Your week is on track.”
+    2. Empty-State Heading: “All caught up! No overdue tasks remaining.”
+    3. Milestone Label: “Sprint Milestone Achieved · 94% Focus Score”
+    4. Celebratory Message: “Brilliant work! 12 tasks completed ahead of schedule.”
+  - Trade Winds remains the brand wordmark; accent candidates are not forced into the six combinations.
+- **Final Sticky-Note Handwriting Fonts Reference**:
+  - Reconfirmed and preserved the six final choices in stationery preview cards:
+    1. La Belle Aurore (Sakura Blush `#FFF0F3`)
+    2. Sue Ellen Francisco (Morning Sky `#F0F7FF`)
+    3. Indie Flower (Almond Forest `#FAF6EE`)
+    4. Shadows Into Light (Sunny Daisy `#FFF4B8`)
+    5. Ephesis (Wisteria Lavender `#F7F0FA`)
+    6. Birthstone Bounce (Serene Matcha `#F0F7F2`)
+- **Self-Hosted Font Assets & OFL-1.1 Licensing**:
+  - Downloaded genuine WOFF2 files directly to `public/fonts/lab/`:
+    - `public/fonts/lab/nunito-sans/`: `nunito-sans-latin-400.woff2`, `600.woff2`, `700.woff2`, plus latin-ext subsets (~48 KB each).
+    - `public/fonts/lab/dm-sans/`: `dm-sans-latin-400.woff2`, `500.woff2`, `700.woff2`, plus latin-ext subsets (~30–61 KB each).
+    - `public/fonts/lab/lato/`: `lato-latin-400.woff2`, `700.woff2`, plus latin-ext subsets (~5.5–23 KB each).
+  - Declared scoped `@font-face` rules in `public/fonts/lab/lab-fonts.css` with exact font weights and `unicode-range`.
+  - Documented full licensing terms, designers, copyright, and repositories in `public/fonts/lab/LICENSES.md` (100% SIL Open Font License 1.1 commercial readiness).
+- **Verification & Quality Gates**:
+  - `node --test tests/display_font_lab.test.js`: **9/9 passed (0 failures)**. Validated 47 candidates, 26 user preferences, all 6 system combinations (A1–B3), self-hosted body fonts, lab-fonts.css declarations, OFL licenses, accent scenarios, and production isolation.
+  - `npm test`: **1,149/1,149 passed across 250 suites (0 failures)**.
+  - `python -m pytest backend/tests/`: **29/29 passed (0 failures)**.
+  - `npx oxlint`: **0 errors, 0 warnings** on all newly added/modified code.
+  - `npm run build`: Production bundle built cleanly in 1.13s with dynamic code splitting.
+  - `node scripts/secretScanner.mjs`: **0 secrets detected across 152 scanned files**.
+  - `git diff --check`: Clean; 0 whitespace/conflict errors.
+  - Visual Browser Verification (`browser_subagent`) on `http://localhost:5173/font-specimen`:
+    - Verified `🏛️ System Combinations (6 Previews)` loads as default tab.
+    - Verified all 6 combination cards in the overview grid with Trade Winds wordmarks, Shrikhand + Shadows Into Light hero headline, Eagle Lake vs Merienda headings, Unica One subheadings, and Nunito Sans vs DM Sans vs Lato body text.
+    - Verified enlarged inspection mode for A1 and B2: 4 heading phrases, Trade Winds 4-size legibility test, interactive task checkboxes.
+    - Verified Additional Accent Fonts Experiment (Aladin and Bigelow Rules across 4 scenarios).
+    - Verified Final Sticky-Note Handwriting Fonts Reference (6 approved styles in stationery tiles).
+
+### 9. Phase 8.13: Final Typography Implementation (System A3) + Sticky-Note Font Replacement (COMPLETED)
+- **Objective**:
+  - Implement the user's finalized typography decisions in the actual VoxPlan production application:
+    1. Apply the selected **A3 Combination (Eagle Lake + Lato)** across the live application.
+    2. Establish **Trade Winds** as the consistent brand wordmark typeface.
+    3. Use **Eagle Lake** for main page and section headings.
+    4. Use **Unica One** for smaller headings, compact labels, and metadata tags.
+    5. Use **Lato** for functional UI, body copy, task titles/descriptions, calendar entries, forms, inputs, and buttons (replacing Plus Jakarta Sans).
+    6. Retain **Shrikhand** for the base hero headline and **Shadows Into Light** for the handwritten emphasis on "clarity" and "focus" with preserved terracotta (`#C85A32`) and marigold (`#E49218`) highlights.
+    7. Select **Bigelow Rules** as the dedicated accent typeface for short celebratory, empty-state, and milestone moments.
+    8. Replace **Birthstone Bounce** with **Rouge Script** in the 6th sticky-note handwriting option (`matcha-leaf` / Serene Matcha), preserving all other 5 handwriting options, illustrations, and stationery behaviors.
+    9. Fully verify Rouge Script source, licensing (SIL OFL 1.1), and self-hosted WOFF2 assets without runtime remote dependencies.
+- **Production Typography Tokens & Scoped Font Registrations**:
+  - `src/index.css`:
+    - Registered local `@font-face` blocks for:
+      - `Trade Winds` (`/fonts/trade-winds/trade-winds-latin.woff2`, 400)
+      - `Eagle Lake` (`/fonts/eagle-lake/eagle-lake-latin.woff2`, 400)
+      - `Unica One` (`/fonts/unica-one/unica-one-latin.woff2`, 400)
+      - `Shrikhand` (`/fonts/shrikhand/shrikhand-latin.woff2`, 400)
+      - `Shadows Into Light` (`/fonts/shadows-into-light/shadows-into-light-latin.woff2`, 400)
+      - `Lato` (`/fonts/lato/lato-latin-400.woff2` and `lato-latin-700.woff2`, 400 & 700)
+      - `Bigelow Rules` (`/fonts/bigelow-rules/bigelow-rules-latin.woff2`, 400)
+      - `La Belle Aurore`, `Sue Ellen Francisco`, `Indie Flower`, `Ephesis`, `Rouge Script`
+    - Defined active design system tokens in `:root`:
+      - `--font-wordmark: 'Trade Winds', cursive;`
+      - `--font-display: 'Eagle Lake', cursive, Georgia, serif;`
+      - `--font-heading: 'Eagle Lake', cursive, Georgia, serif;`
+      - `--font-section: 'Eagle Lake', cursive, Georgia, serif;`
+      - `--font-subheading: 'Unica One', cursive, sans-serif;`
+      - `--font-compact: 'Unica One', cursive, sans-serif;`
+      - `--font-hero: 'Shrikhand', cursive, Georgia, serif;`
+      - `--font-hero-accent: 'Shadows Into Light', cursive;`
+      - `--font-sans: 'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;`
+      - `--font-accent: 'Bigelow Rules', cursive;`
+      - `--font-tagline: 'Bigelow Rules', var(--font-sans), cursive;`
+- **Component Typography Updates**:
+  - `src/components/Header.jsx`: Applied `var(--font-wordmark, 'Trade Winds', cursive)` to navigation brand title.
+  - `src/pages/LandingPage.jsx`: Applied `var(--font-wordmark, 'Trade Winds', cursive)` to public landing wordmark.
+  - `src/components/LoadingScreen.jsx`: Applied `var(--font-wordmark, 'Trade Winds', cursive)` to splash screen logo.
+  - `src/components/Hero.jsx`: Set base headline to `var(--font-hero, 'Shrikhand')`; "clarity" and "focus" to `var(--font-hero-accent, 'Shadows Into Light')`; eyebrow and preview tag to `var(--font-compact, 'Unica One')`; card titles to `var(--font-sans, 'Lato')`; tagline to `Bigelow Rules`.
+  - `src/components/TaskList.jsx`: Section title in `var(--font-display, 'Eagle Lake')`; badges in `var(--font-subheading, 'Unica One')`; empty title in `var(--font-heading, 'Eagle Lake')`; empty accent phrase in `var(--font-accent, 'Bigelow Rules')`; subtitle in `var(--font-sans, 'Lato')`.
+  - `src/components/TaskCard.jsx`: Task titles and edit inputs in `var(--font-sans, 'Lato')`; risk labels in `var(--font-compact, 'Unica One')`.
+  - `src/components/TaskCalendar.jsx`: Main calendar headings in `var(--font-display, 'Eagle Lake')`; secondary agenda headings in `var(--font-heading, 'Eagle Lake')`; badges in `var(--font-subheading, 'Unica One')`; task titles in `var(--font-sans, 'Lato')`.
+  - `src/components/ProjectOverview.jsx`: Title in `var(--font-display, 'Eagle Lake')`; badges in `var(--font-subheading, 'Unica One')`; milestone accent `✦ Sprint Milestone Achieved` in `var(--font-accent, 'Bigelow Rules')`; metrics and percentages in `var(--font-sans, 'Lato')`.
+  - `src/components/MLModelPanel.jsx`: Titles in `var(--font-display, 'Eagle Lake')`; badges in `var(--font-subheading, 'Unica One')`; metrics in `var(--font-sans, 'Lato')`.
+  - `src/components/BehavioralHistoryPanel.jsx`: Titles in `var(--font-display, 'Eagle Lake')`; badges in `var(--font-subheading, 'Unica One')`; metrics in `var(--font-sans, 'Lato')`.
+- **Sticky-Note Handwriting System & Rouge Script Replacement**:
+  - `src/components/stickyNotes/stationeryCatalog.js`:
+    - Updated `matcha-leaf` (Serene Matcha) to use `handwritingName: 'Rouge Script'` and `handwritingFont: "'Rouge Script', cursive"`.
+    - Exported `STICKY_NOTE_HANDWRITING_FONTS` containing exactly the 6 required fonts: La Belle Aurore, Sue Ellen Francisco, Indie Flower, Shadows Into Light, Ephesis, Rouge Script.
+    - Completely removed Birthstone Bounce from the active collection.
+  - `src/components/stickyNotes/TaskStickyNotes.css`:
+    - Added dedicated theme handwriting typography rules for `.theme-matcha-leaf` (`font-family: 'Rouge Script', cursive; font-size: 25px; line-height: 1.4;`) ensuring lowercase/uppercase flourishes render without clipping.
+  - `src/components/stickyNotes/TaskStickyNotesModal.jsx`:
+    - Bound `previewStationery.handwritingFont` in composer mode and `activeStationery.handwritingFont` in viewer mode to inputs and note containers.
+- **Rouge Script Asset & License Verification**:
+  - Self-hosted asset downloaded directly from official Google Fonts CDN to `public/fonts/rouge-script/rouge-script-latin.woff2` (16,464 bytes).
+  - Designed by Brenda Gallo and Sabrina Mariela Lopez; published under the SIL Open Font License, Version 1.1.
+  - Attribution, copyright, repository link, and license terms documented in `public/fonts/lab/LICENSES.md`.
+  - Registered locally via `@font-face` in both `src/index.css` (production) and `public/fonts/lab/lab-fonts.css` (specimen).
+  - Zero external HTTP/CDN requests at runtime; 100% offline and local-first privacy intact.
+- **Font Specimen Page Updates**:
+  - `src/pages/FontSpecimenPage.jsx`:
+    - Marked Combination A3 as `(SELECTED - PRODUCTION)` with green status badge.
+    - Updated header role matrix to display the final production mapping: Trade Winds, Eagle Lake (Selected A3), Unica One, Lato (Selected A3), Shrikhand + Shadows Into Light, Bigelow Rules.
+    - Updated sticky-note collection reference so the 6th style features Rouge Script on Serene Matcha; Birthstone Bounce is absent from the final list.
+    - Highlighted Bigelow Rules as the selected production accent font.
+- **Testing & Quality Gates**:
+  - `tests/typography_system.test.js`: **30/30 tests passed (0 failures)**. Verified production `@font-face` rules, tokens, component usages, 6 sticky-note fonts, Rouge Script replacement, and global scope isolation.
+  - `tests/display_font_lab.test.js`: **9/9 tests passed (0 failures)**. Verified specimen candidate catalog, licensing, and sticky-note fonts.
+  - `npm test`: **1,161/1,161 tests passed across 251 suites (0 failures)**.
+  - `python -m pytest backend/tests/`: **29/29 tests passed (0 failures)**.
+  - `npm run lint` (`oxlint`): **0 errors** on 121 files.
+  - `npm run build`: Production client built in 1.79s without errors.
+  - `node scripts/secretScanner.mjs`: Clean; 0 matching secrets across 152 files.
+  - `git diff --check`: Clean; 0 whitespace errors or conflict markers.
+- **Browser Verification**:
+  - Verified live UI at `http://localhost:5173/app?view=tasks` and `http://localhost:5173/font-specimen` using `browser_subagent`.
+  - Confirmed Trade Winds wordmark in Header and splash screens.
+  - Confirmed Shrikhand hero headline with Shadows Into Light terracotta/marigold highlights on "clarity" and "focus".
+  - Confirmed Eagle Lake display headings and Unica One badges.
+  - Confirmed Lato body text on task cards, inputs, buttons, and dates.
+  - Confirmed Bigelow Rules accent moments (empty state phrase and sprint milestone badge).
+  - Confirmed interactive sticky note modal: created Serene Matcha note with Rouge Script cursive flourishing, saved and verified viewer rendering without clipping.
+  - Confirmed dark mode contrast and responsive layout behavior.
+  - Confirmed `/font-specimen` marks A3 as selected and lists Rouge Script in sticky note reference.
+
+---
+
+### Stage 8.9: Final Typography Cleanup, Overview Integration & Decommissioning of Font Specimen Lab
+
+- **Status**: Completed (Audit passed, 0 errors, no commit/push)
+- **Objective**:
+  - Completely decommission and remove the temporary `/font-specimen` evaluation page, styles, catalog, and test files.
+  - Safely remove obsolete font assets from `public/fonts/` (9 personal-use demo font folders and the 47-font specimen lab folder) while preserving all approved production fonts under SIL Open Font License 1.1 with full attribution in `public/fonts/LICENSES.md`.
+  - Clean up `.gitignore` to ensure approved production font assets are properly tracked in version control.
+  - Integrate the approved System A3 typography (Eagle Lake, Trade Winds, Unica One, Bigelow Rules, and Lato) directly into the Overview page (`src/pages/LandingPage.jsx`).
+  - Add backward compatibility mapping for legacy persisted sticky notes referencing Birthstone Bounce.
+  - Audit and clean up typography utility scripts in `scripts/`.
+  - Formally record the two outstanding product tasks (Notifications and Overview UI Update) without implementing them.
+- **Actions Taken**:
+  1. **Decommissioned Font Specimen Page**:
+     - Removed route `/font-specimen` and lazy import of `FontSpecimenPage` from `src/App.jsx`. Unrecognized navigation to `/font-specimen` now falls back gracefully to the unknown route banner and LandingPage without throwing.
+     - Deleted `src/pages/FontSpecimenPage.jsx`, `src/pages/FontSpecimenPage.css`, and `src/pages/labFontCatalog.js`.
+     - Deleted obsolete test suite `tests/display_font_lab.test.js`.
+  2. **Obsolete Font Assets & Directory Removal**:
+     - Removed 9 obsolete experimental personal-use demo font folders from `public/fonts/`: `aloha-nineties/`, `Athofas/`, `dream-kudos/`, `hanky-demo/`, `kuigaf/`, `oliver/`, `ruigslay/`, `sunday-delight/`, and `zaslia/`.
+     - Removed obsolete specimen font directory `public/fonts/lab/` (47 candidate fonts and duplicate assets).
+     - Created `public/fonts/LICENSES.md` containing full SIL OFL 1.1 license text and complete upstream attributions for all 7 production fonts and 6 sticky-note handwriting fonts.
+     - Preserved exact approved local production font directories: `bigelow-rules/`, `eagle-lake/`, `ephesis/`, `indie-flower/`, `la-belle-aurore/`, `lato/`, `rouge-script/`, `shadows-into-light/`, `shrikhand/`, `sue-ellen-francisco/`, `trade-winds/`, `unica-one/`.
+  3. **Overview Page Typography Integration (`src/pages/LandingPage.jsx`)**:
+     - Applied `var(--font-heading, 'Eagle Lake', cursive, serif)` to `heroTitle`, `previewHeading`, `sectionTitle`, `featureCardTitle`, `stepTitle`, and `ctaTitle`.
+     - Applied `var(--font-compact, 'Unica One', cursive, sans-serif)` to `eyebrowText`, `sectionBadge`, `stickerYellow`, `stickerMint`, `stickerPeach`, `commandBadge`, and `ctaBadge`.
+     - Applied `var(--font-accent, 'Bigelow Rules', cursive)` to `taglineNote`.
+     - Confirmed `var(--font-wordmark, 'Trade Winds', cursive)` on brand name and `var(--font-sans, 'Lato', sans-serif)` for all body text, feature descriptions, and buttons.
+     - Completely eliminated obsolete `'Syne'` and `'Caveat'` font family declarations.
+  4. **Sticky-Note Backward Compatibility Safeguard (`src/utils/stickyNotesStorage.js`)**:
+     - In `normalizeStickyNote`, added automatic fallback mapping for any legacy notes containing `stationeryId: 'birthstone-bounce'` or `handwritingFont: 'Birthstone Bounce'`, redirecting them safely to `matcha-leaf` (Serene Matcha) with `Rouge Script`.
+  5. **Utility Scripts Audit (`scripts/`)**:
+     - Kept: `demoLauncher.mjs` (production demo server launcher), `secretScanner.mjs` (security scanner), `inspectFonts.mjs` (offline font verification utility), and `inspectGlyphs.mjs` (unicode cmap checker).
+     - Removed: `compileCatalogAndCss.mjs`, `fetchLabFonts.mjs`, `fetchPreferredFonts.mjs`, `fetchBodyFonts.mjs`, `fetchNewSixFonts.mjs`, and `font_inventory.json`.
+  6. **Quality Gates & Regression Testing**:
+     - `node --test tests/typography_system.test.js tests/sticky_notes.test.js`: 57/57 tests passed (0 failures).
+     - `npm test`: **1,159/1,159 tests passed across 251 suites (0 failures)**.
+     - `python -m pytest backend/tests/`: **29/29 tests passed (0 failures)**.
+     - `npm run lint`: 0 errors.
+     - `npm run build`: 88 modules transformed; built in 740ms with 0 specimen chunks.
+     - `node scripts/secretScanner.mjs`: Clean (0 secrets across 139 files).
+     - `git diff --check`: 0 errors.
+
+---
+
+## Outstanding Product Tasks Roadmap (Future Implementation)
+
+> [!IMPORTANT]
+> The following two tasks represent significant future product initiatives. Neither is implemented in this stage; they are documented here to establish exact architectural boundaries, requirements, and open questions.
+
+### Task A — Notifications Architecture & Local Delivery (NOT IMPLEMENTED)
+
+- **Status**: Future Task (Architecture Scoped / Unimplemented)
+- **Objective**: Design and implement a robust, local-first notification subsystem for VoxPlan that keeps users informed about schedule deadlines, machine learning delay-risk alerts, and workflow actions.
+- **Architectural Scope & Unanswered Design Questions**:
+  1. **Event Triggers**:
+     - *Risk Shifts*: When local ML predicts a task risk transitioning from low/medium to critical (>75%).
+     - *Schedule Milestones*: Approaching due dates, daily sprint kickoffs, or overdue unblocking dependencies.
+     - *Model Learning Updates*: When sufficient completion data unlocks personal habit model recalculations.
+     - *System States*: Offline detection, PWA cache updates, and backup export reminders.
+  2. **Notification Types & Hierarchy**:
+     - *Transient Toast*: Non-disruptive, auto-dismissing (e.g. current `FeedbackToast` for task creation/undo).
+     - *Actionable Banner*: Persistent until acted upon (e.g., schedule proposal acceptance or conflict warning).
+     - *Notification Drawer / Center*: A consolidated list of past notifications with read/unread states.
+  3. **Local-First Persistence & Synchronization**:
+     - Must store notifications in local IndexedDB (`voxplan_notifications` store) with zero cloud sync or remote telemetry.
+     - Retention policy: cap history at $N=100$ items or 14 days to prevent storage bloat.
+     - State survives page reloads and cross-tab broadcasts via `BroadcastChannel`.
+  4. **Delivery Channels**:
+     - In-app notification center / badge in header.
+     - Optional local Web Notification API (browser permissions requested only on user action, never automatically).
+     - Zero external push server, APNS/FCM, or cloud messaging services.
+  5. **Accessibility & WCAG Compliance**:
+     - Live regions (`aria-live="polite"` for non-critical, `assertive` for critical risks).
+     - Keyboard accessible dismissal, pause on hover/focus, and user-configurable duration.
+
+---
+
+### Phase 9: VoxPlan UI Restoration — Stage 8.10: Overview Page Correction & Original Visual Effects Integration
+
+**Implementation Date**: October 25, 2026
+**Commit Target**: `fix(overview): restore current overview design with original animated visual effects`
+**Correction Summary**:
+- **Previous Mistake Record**: The initial attempt at Overview restoration misunderstood the user's intent and mistakenly replaced the entire Overview page (`src/pages/LandingPage.jsx`) with the historical single-page application UI (`Hero`, `Sprint Pulse`, `Risk Landscape`, `Model Intelligence`, and `Command Center`).
+- **Correction Action**: Restored the intended, authentic current Overview design (from Git history `4bf4f94` / `a646947`) as the structural and visual foundation of `/` (`LandingPage.jsx`), and integrated **ONLY** the two requested original animated visual effects:
+  1. The original **slowly transitioning background colours** across the 5 pastel palette stops (`#FFF8EF` -> `#FFF9DB` -> `#F3EEFF` -> `#EBF8F1` -> `#FFEFEA`), smoothly interpolating across the existing sections of the current Overview page as the user scrolls.
+  2. The four oversized **moving editorial word ribbons** (**`PLAN`**, **`PREDICT`**, **`UNDERSTAND`**, and **`ACT`**), translating horizontally on scroll with GPU-composited transforms (`will-change: transform, opacity`) and bell-curve opacity as decorative section dividers.
+- **Removed from Overview**: All old app UI elements (Sprint Pulse, Risk Landscape, Model Intelligence, Command Center, sample task cards, ML simulation button, confusion matrix, assistant command input) were removed from the Overview.
+- **Preserved Productivity Workspace**: The real productivity workspace at `/app` (`ProductivityApp.jsx`) remains completely separate, untouched, and fully functional with Task Calendar, task list, sticky notes, and adaptive scheduling.
+
+#### 1. Restored Current Overview Architecture & Visual Effects
+1. **Restored Current Overview Sections**:
+   - *Sticky Header*: Brand wordmark in `Trade Winds`, "smart notebook" tagline in `Bigelow Rules`, navigation links (`Features`, `How It Works`, `Architecture`, `Safety & ML`), "Open App →" CTA (`#landing-open-app-nav-btn`), and mobile hamburger toggle (`#landing-mobile-menu`).
+   - *Main Landmark*: Accessible `<main id="main-content">` landmark for bypass navigation.
+   - *Hero Section*: Eyebrow badge in `Unica One`, approved motto (*"Plan with clarity. Act with focus."* in `Shrikhand` + `Shadows Into Light`), main headline (*"Turn Task Lists Into Executable Plans"* in `Eagle Lake`), subtitle in `Lato`, CTAs (`Launch VoxPlan App →` and `Explore Capabilities ↓`), and trust micro-tags row.
+   - *Interactive Preview Showcase*: ARIA tabs (`Adaptive Schedule`, `ML Risk & Stopwatch`, `Voice & Commands`) and demonstration focus stopwatch with accessible timing controls.
+   - *Section 01 (`#features`)*: Core Capabilities (6 feature cards: Deterministic DAG, Supervised ML Delay-Risk, Empirical Bayesian Pace Learning, Voice Planning, Time-Blocking, Visual Editing & .ics Export).
+   - *Section 02 (`#how-it-works`)*: Workflow in 4 Steps (Capture & Structure, Track & Calibrate, Solve Constraints, Fine-Tune & Export).
+   - *Section 03 (`#architecture`)*: Local-First Privacy & Safety Architecture comparison table (Local IndexedDB, Zero Cloud LLMs, Anonymous UUID, Immutable Factory Weights, Fail-Closed Activation Gate, Offline Resilience).
+   - *Bottom CTA Banner*: "Experience Predictive Planning Today" guiding users directly into `/app`.
+   - *Footer*: Brand wordmark, navigation links, documentation links, static 2026 copyright notice.
+2. **Integrated Original Animated Visual Effects**:
+   - **5-Stop Background Color Transition**:
+     - Top / Hero: `#FFF8EF` (Warm Cream / Parchment)
+     - Features (`#features`): `#FFF9DB` (Butter Yellow)
+     - How It Works (`#how-it-works`): `#F3EEFF` (Soft Lavender)
+     - Architecture (`#architecture`): `#EBF8F1` (Soft Mint)
+     - Bottom CTA Banner & Footer: `#FFEFEA` (Soft Peach)
+     - Interpolated smoothly via `lerpColor` and `interpolatePaletteColor` in passive scroll listener.
+   - **4 Moving Editorial Word Ribbons**:
+     - `PLAN`: Positioned between Hero/Preview showcase and Section 01 (`#features`).
+     - `PREDICT`: Positioned between Section 01 (`#features`) and Section 02 (`#how-it-works`).
+     - `UNDERSTAND`: Positioned between Section 02 (`#how-it-works`) and Section 03 (`#architecture`).
+     - `ACT`: Positioned between Section 03 (`#architecture`) and the Bottom CTA banner.
+     - Horizontal translation `translate3d(x, 0, 0)` smoothly bound to scroll position, with sine bell-curve opacity.
+3. **Accessibility & Reduced Motion**:
+   - Under `prefers-reduced-motion: reduce`, ribbon transforms are bypassed (`transform: none !important`), opacity is static (`0.06`), and background color remains static cream (`#FFF8EF`).
+   - Passive scroll and resize event listeners with `requestAnimationFrame` and clean unmount cancellation.
+   - Zero horizontal overflow (`overflow: hidden` on ribbons, `overflow-x: hidden` on page container).
+
+#### 2. Verification & Test Evidence
+- **Corrective Overview Restoration Suite**: `node --test tests/overview_restoration.test.js`
+  - **Result**: 28/28 passed, 0 failed across 9 suites in 165ms.
+- **Production Typography Suite**: `node --test tests/typography_system.test.js`
+  - **Result**: 32/32 passed, 0 failed across 6 suites in 81ms.
+- **Accessibility & Contrast Suite**: `node --test tests/accessibility.test.js`
+  - **Result**: 22/22 passed, 0 failed across 8 suites in 33ms.
+- **PWA & Routing Suite**: `node --test tests/pwa_and_routing.test.js`
+  - **Result**: 23/23 passed, 0 failed across 6 suites in 20ms.
+- **Complete Frontend Test Suite**: `npm test`
+  - **Result**: **1,187/1,187 passed across 260 suites (0 failures) in 21.1s**.
+- **Backend Test Suite**: `python -m pytest backend/tests/`
+  - **Result**: **29/29 passed in 3.26s (0 failures)**.
+- **Linter**: `npm run lint` (`oxlint`)
+  - **Result**: 0 errors across 114 files.
+- **Production Build**: `npm run build` (`vite build`)
+  - **Result**: 88 modules transformed; clean build in 840ms; `LandingPage` chunk cleanly isolated at 49.56 kB (< 80 kB).
+- **Secret Scanner**: `node scripts/secretScanner.mjs`
+  - **Result**: 0 secrets matched across 141 files.
+- **Whitespace / Git Diff Check**: `git diff --check`
+  - **Result**: 0 errors.
+- **Live Browser Subagent Verification (`overview_corrected_ui`)**:
+  - Verified desktop (1440x900) header, hero headline, motto, preview tabs with stopwatch.
+  - Verified smooth 5-stop pastel background transition on scroll.
+  - Verified all 4 editorial ribbons (`PLAN`, `PREDICT`, `UNDERSTAND`, `ACT`) gliding between sections without replacing current layout.
+  - Verified clean navigation to `http://localhost:5173/app` with fully functional workspace.
+  - Full session recorded to `overview_corrected_ui_1792949531739.webp`.
+
+#### 3. Scope & Protected Invariant Preservation
+- **Factory Scheduler Weights**: Canonical values strictly preserved (`urgency: 50.0`, `priority: 100.0`, `unblock: 15.0`, `risk: 25.0`).
+- **Phase 7.4.4B Safety Activation Gate**: Permanently locked (`isAdaptationUnlocked === false`).
+- **Local-First Privacy**: 100% deterministic local storage; zero cloud LLMs, zero cloud speech APIs, zero audio uploads.
+- **Notifications Feature**: Unimplemented (remains a documented, scoped future task).
+
+---
+
+## Phase 8.14 Execution Record: Overview Visual Correction (Headline Separation & Ribbon Visibility)
+
+### Objective
+Execute a narrow visual correction to the VoxPlan Overview page (`/`) resolving two specific defects identified from user inspection:
+1. **Ribbon Invisibility**: The 4 animated editorial word ribbons (`PLAN`, `PREDICT`, `UNDERSTAND`, and `ACT`) were effectively invisible due to extreme opacity attenuation (4%–12%) on light pastel backgrounds.
+2. **Hero Headline Vertical Overlap**: The headline lines *"Turn Task Lists Into"* and the yellow highlighted pill *"Executable Plans"* collided and overlapped vertically in the hero section due to an inline element lacking display block/flex separation and an overly tight `lineHeight: 1.1` on Eagle Lake.
+
+### Diagnosis
+
+#### 1. Hero Headline Overlap Root Cause
+- In `src/pages/LandingPage.jsx`, `heroTitle` declared `lineHeight: 1.1`, which is far too tight for cursive/calligraphic display typefaces like Eagle Lake (which feature pronounced ascenders and descenders).
+- Furthermore, `<span style={styles.heroHighlight}>Executable Plans</span>` was rendered as an inline element without dedicated line-height or flex gap separation. Its `#FFE58A` yellow background box and vertical padding bled upward across the baseline of the preceding line *"Turn Task Lists Into"*, causing an unsightly vertical overlap.
+
+#### 2. Editorial Ribbon Invisibility Root Cause
+- In `src/App.css`, `.overview-ribbon-word` had CSS `opacity: 0.08`.
+- In `src/pages/LandingPage.jsx`, runtime opacity was calculated as `0.04 + Math.sin(clamped * Math.PI) * 0.12`. At rest or during off-peak scroll, ribbon opacity hovered between **0.04 and 0.08** (4% to 8%), peaking at just **0.12** (12%).
+- Against pastel backgrounds (`#FFF8EF`, `#FFF9DB`, etc.), a 4%–12% opacity of `#3D2645` produces a contrast ratio of ~1.05:1 to 1.15:1, making the ribbons indistinguishable from the background on standard monitors.
+- Under `prefers-reduced-motion: reduce`, the opacity was locked at `0.06` (6%), making them completely unreadable for users with reduced motion preferences.
+- Additionally, `.overview-ribbon-wrap` had `line-height: 0.85` and lacked explicit min-height, risking vertical glyph clipping.
+
+### Implementation
+
+#### 1. Headline Vertical Separation (`src/pages/LandingPage.jsx`)
+- Wrapped the headline text into distinct line elements within a flex-column layout:
+  ```jsx
+  <h1 style={styles.heroTitle}>
+    <span style={styles.heroTitleLine}>Turn Task Lists Into</span>
+    <span style={styles.heroHighlight}>Executable Plans</span>
+  </h1>
+  ```
+- Updated `styles.heroTitle`:
+  - `display: 'flex'`
+  - `flexDirection: 'column'`
+  - `alignItems: 'center'`
+  - `gap: '14px'` (providing clean, guaranteed whitespace between lines)
+  - `lineHeight: 1.35` (room for Eagle Lake ascenders and descenders)
+  - `margin: '0 0 24px'`
+- Added `styles.heroTitleLine`:
+  - `display: 'block'`
+  - `lineHeight: 1.25`
+- Updated `styles.heroHighlight`:
+  - `display: 'inline-block'`
+  - `backgroundColor: '#FFE58A'`
+  - `padding: '4px 18px'`
+  - `borderRadius: '12px'`
+  - `lineHeight: 1.25`
+  - `boxShadow: '0 2px 8px rgba(224, 159, 62, 0.18)'`
+
+#### 2. Ribbon Contrast, Visibility & Layout (`src/App.css`, `src/pages/LandingPage.jsx`)
+- In `src/App.css`:
+  - `.overview-ribbon-wrap`: `width: 100%`, `min-height: 140px` (desktop) / `90px` (mobile), `padding: 44px 0`, `margin: 16px 0`, `overflow: hidden`, `position: relative`, `z-index: 1`.
+  - `.overview-ribbon-word`: Set base opacity to `0.28` (desktop) / `0.26` (mobile), `line-height: 1.05`, `letter-spacing: 0.02em`.
+  - `prefers-reduced-motion: reduce`: Set `.overview-ribbon-word` opacity to `0.32 !important` and `transform: none !important`.
+- In `src/pages/LandingPage.jsx`:
+  - Configured baseline opacity and peak boost:
+    ```javascript
+    const baseOpacity = isMobile ? 0.26 : 0.28;
+    const peakBoost = isMobile ? 0.22 : 0.28;
+    const opacity = baseOpacity + Math.sin(clamped * Math.PI) * peakBoost;
+    ```
+  - Ribbons are now immediately visible at `0.28` (or `0.26` on mobile) even before full scroll, and peak smoothly at `0.56` when centered in the viewport.
+  - Under `prefersReducedMotion`, static opacity is set to `0.32` with `transform: 'none'`.
+
+#### 3. Test Suite Hardening (`tests/overview_restoration.test.js`)
+- Updated test 1.3 to assert non-overlapping headline line structure (`styles.heroTitleLine`, `flexDirection: 'column'`, `gap: '14px'`).
+- Updated test 4.2 to assert `.overview-ribbon-wrap` has `min-height: 140px` and `overflow: hidden`.
+- Added test 4.3 asserting sufficient text contrast (`opacity: 0.28`, `baseOpacity = isMobile ? 0.26 : 0.28`, peak `0.56`).
+- Updated test 4.4 asserting `prefers-reduced-motion` maintains visible static ribbons (`opacity: 0.32 !important`).
+
+### Verification & Test Evidence
+- **Corrective Overview Restoration Suite**: `node --test tests/overview_restoration.test.js` -> **29/29 passed (0 failures)**.
+- **Production Typography Suite**: `node --test tests/typography_system.test.js` -> **32/32 passed (0 failures)**.
+- **Accessibility & Contrast Suite**: `node --test tests/accessibility.test.js` -> **22/22 passed (0 failures)**.
+- **PWA & Routing Suite**: `node --test tests/pwa_and_routing.test.js` -> **23/23 passed (0 failures)**.
+- **Full Frontend Test Suite**: `npm test` -> **1,188/1,188 passed across 260 suites (0 failures)**.
+- **Backend Test Suite**: `python -m pytest backend/tests/` -> **29/29 passed (0 failures)**.
+- **Linter**: `npm run lint` (`oxlint`) -> **0 errors**.
+- **Production Build**: `npm run build` (`vite build`) -> **Clean build in 332ms**; `LandingPage` chunk isolated at 49.84 kB (< 80 kB).
+- **Browser Subagent Visual Verification (`visual_defects_fix`)**:
+  - Desktop (1440x900): Confirmed zero headline overlap between "Turn Task Lists Into" and "Executable Plans"; captured high-contrast moving ribbons for `PLAN`, `PREDICT`, `UNDERSTAND`, and `ACT`.
+  - Mobile (375x812): Confirmed clean line wrapping, proper vertical spacing, ribbon scaling, and zero horizontal page overflow.
+  - Video recording saved: `visual_defects_fix_1792951154559.webp`.
+
+---
+
+## Phase 8.15 — Complete Notification System Audit & Implementation
+
+### Phase 1: Comprehensive Notification System Audit
+
+#### 1. Existing and Verified Functionality
+- **`FeedbackToast.jsx` (`src/components/FeedbackToast.jsx`)**:
+  - Implements an accessible, floating feedback toast rendered at the bottom-right of the viewport.
+  - Used for immediate action confirmations: task creation, deletion (with lossless single-action Undo), rescheduling, completion, and adaptive schedule acceptance.
+  - Purely in-memory and transient (auto-dismisses after 4–8 seconds). Does not persist across page reloads or maintain an unread history.
+- **`UpdateNotification.jsx` (`src/components/UpdateNotification.jsx`)**:
+  - Service worker update notification banner that notifies users when a new application shell is installed and waiting to activate.
+  - Provides a "Refresh Now" action that sends `SKIP_WAITING` to `sw.js` and a "Dismiss" action.
+- **`pwaManager.js` (`src/utils/pwaManager.js`)**:
+  - Encapsulates service worker registration, update availability subscriptions, online/offline network detection (`isOnline`, `subscribeNetworkStatus`), and PWA install prompt capture.
+- **`sw.js` (`public/sw.js`)**:
+  - Production service worker caching app shell assets, static bundles, and fonts.
+  - Strictly implements local-first guarantees: never intercepts or caches API mutations or task database storage.
+  - Contains message listener for `SKIP_WAITING`.
+- **Local Persistence & Data Sources**:
+  - Authoritative task store in `localStorage` (`voxplan_tasks`).
+  - Sticky notes store in `localStorage` (`voxplan_task_sticky_notes`).
+  - Behavioral telemetry event store in `IndexedDB` (`voxplan_telemetry`).
+  - Accepted schedule proposals stored in `localStorage` (`voxplan_accepted_schedule`).
+  - Deterministic adaptive scheduling engine (`adaptiveScheduler.js`) computing placements, feasibility, cycle detection, and blocked dependencies.
+
+#### 2. Existing but Incomplete or Unreliable Functionality
+- **Notification History & Center**: **Completely absent**. If a user is scrolled away or misses a 4-second toast, there is no place to view what happened or review overdue tasks.
+- **Browser Notifications**: **Completely absent**. Zero usage of the Web Notification API (`Notification.requestPermission`, `new Notification`, or `registration.showNotification`).
+- **Deadline & Overdue Reminders**: **Completely absent**. No background or foreground timer evaluates task due dates to warn users of upcoming deadlines or overdue tasks.
+- **Schedule Conflict Warnings**: Schedule feasibility and conflict warnings only appear transiently inside the `AdaptiveScheduleModal` when manually opened by the user; no persistent or ambient notification exists when an accepted plan becomes infeasible.
+- **Dependency & Blocker Alerts**: Blocked dependency statuses are only shown on individual task cards; no notification surfaces when a task is newly unblocked by a completed prerequisite.
+
+#### 3. Missing Functionality
+- **Central Event Detection & Pipeline (`src/notifications/`)**:
+  - Pure event detection logic analyzing tasks, due dates, schedule proposals, and dependencies.
+  - Configurable reminder lead times (e.g. at deadline, 15m before, 1h before, 1 day before).
+  - Deterministic deduplication keys (`category:targetId:eventKey`) preventing duplicate alerts on renders, polling intervals, or reloads.
+- **In-App Notification Center UI (`src/components/notifications/`)**:
+  - Persistent Notification Bell in `Header.jsx` with real-time unread count badge.
+  - Interactive notification drawer/modal with:
+    - Unread count header, "Mark all as read", and "Clear all" actions.
+    - Category filtering: All, Unread, Deadlines, Schedule, Dependencies.
+    - Notification cards with status icons, relative timestamps, read/unread states, and actionable navigation buttons (e.g. "View Task", "Open Schedule").
+    - Empty states, loading fallbacks, and mobile-responsive drawer presentation.
+    - Full WCAG 2.1 AA keyboard accessibility, focus trap, and live region announcements.
+- **Browser Notifications Integration**:
+  - User-initiated permission request flow with pre-permission explainer modal highlighting VoxPlan's local-first privacy.
+  - State handling for `default`, `granted`, and `denied` (with browser settings instructions).
+  - Service worker `notificationclick` handler in `sw.js` to focus existing tabs or navigate to `/app`.
+- **User Preferences & Configuration**:
+  - Local preferences storage (`voxplan_notification_preferences`).
+  - Master enable/disable toggle.
+  - Separate toggles for In-App and Browser notification delivery.
+  - Category-level preferences (Deadlines, Overdue, Schedule, Dependencies, System).
+  - Configurable reminder lead times.
+  - Quiet hours window (e.g. 22:00 to 08:00) during which non-critical notifications are silenced.
+- **Safe Persistence & Lifecycle**:
+  - Local persistence (`voxplan_notifications`) bounded at $N=100$ items with 14-day expiration.
+  - Resilient schema validation preventing app crashes from corrupted storage.
+
+#### 4. Bugs, Duplicated Logic, and Architectural Risks
+- **Risk of Notification Loops**: If notification evaluation mutates state that triggers component re-renders, which in turn re-triggers evaluation, an infinite loop can occur.
+  - *Mitigation*: Separate notification state into a singleton store and evaluate events using pure functions with cached deduplication keys.
+- **Risk of Over-Notification**: Flooding users with multiple alerts for every task edit or render.
+  - *Mitigation*: Strict deduplication keys combining task ID, event type, and due date/revision fingerprint, plus throttling cooldowns.
+- **Risk of Battery / CPU Drain**: Aggressive polling intervals (e.g. every 1-5 seconds).
+  - *Mitigation*: Single low-frequency passive timer (60 seconds) when the tab is visible, complemented by event-driven checks on app launch, visibility change (`document.visibilityState === 'visible'`), and explicit task mutations.
+
+#### 5. Browser/Platform Delivery Limitations (Honest Local-First Guarantees)
+- **Closed-Browser Background Execution**: In a local-first web application without a centralized cloud push server (APNS/FCM), standard browser tabs cannot execute arbitrary JavaScript while closed or while the host machine is suspended.
+- **Guaranteed Delivery Windows**:
+  1. *Active Session*: Notifications are evaluated and delivered in real-time while VoxPlan is open.
+  2. *Reopen / Focus Reconciliation*: When the user reopens or focuses VoxPlan, the notification pipeline immediately evaluates all tasks and surfaces any deadlines or overdue events that occurred while the app was closed.
+  3. *Service Worker Clicks*: While the browser is running, notifications shown via Service Worker registrations reliably handle user clicks to focus the window.
+- VoxPlan honestly communicates these platform boundaries to users and does not fabricate cloud push guarantees.
+
+---
+
+### Implementation Plan & Acceptance Criteria
+
+1. **Step 1: Core Notification Pipeline & Store (`src/notifications/`)**:
+   - `types.js`: Schema definitions, categories (`deadline`, `overdue`, `schedule`, `dependency`, `system`), priorities, and actions.
+   - `notificationPreferences.js`: Local persistence of user notification settings, quiet hours evaluation, and sensible defaults.
+   - `notificationStore.js`: Persistent store (`voxplan_notifications`) with bounded capacity ($N=100$), mark-as-read, dismiss, clear-all, and subscriber callbacks.
+   - `eventDetector.js`: Pure deterministic scanner comparing tasks, deadlines, and schedules against current time and deduplication history.
+   - `browserNotifier.js`: Web Notification API wrapper, pre-permission explainer flow, permission state management, and SW notification triggers.
+   - `notificationManager.js`: Central orchestrator uniting detector, store, preferences, and browser notifier with reconciliation on launch and visibility change.
+2. **Step 2: In-App Notification Center (`src/components/notifications/`)**:
+   - `NotificationBell.jsx`: Accessible bell icon with badge counter integrated into `Header.jsx`.
+   - `NotificationCenter.jsx`: Responsive notification drawer/modal with filter tabs, cards, actions, and empty states.
+   - `NotificationPreferencesModal.jsx`: Settings dialog for enabling/disabling channels, lead times, quiet hours, and browser permissions.
+3. **Step 3: Service Worker Notification Integration (`public/sw.js`)**:
+   - Add `notificationclick` handler to focus the open client or navigate to `/app`.
+4. **Step 4: Phase 9 Small Overview Correction (`src/pages/LandingPage.jsx`)**:
+   - Remove the decorative hero phrase “Plan with clarity. Act with focus.” and its associated styles.
+   - Update `tests/overview_restoration.test.js` to preserve typography tests without requiring the removed hero motto.
+5. **Step 5: Automated Testing & Verification**:
+   - Created `tests/notification_system.test.js` covering event detection, lifecycle, persistence, deduplication, preferences, quiet hours, and UI accessibility (Suites 1–8).
+   - Verified initial test suite: 1,222 frontend tests passing, 29 backend tests passing.
+
+---
+
+## Phase 8.16 — Notification Reliability Hardening & Voice Recognition Repair
+
+### 1. Notification Reliability Audit: Root Causes & Repairs
+
+#### Defects Discovered and Resolved:
+1. **Deduplication Loss Across Dismissals & Clear-All (`src/notifications/notificationStore.js`)**:
+   - *Root Cause*: `dismissNotification(id)` and `clearAll()` previously mutated the notifications list using `.filter()`, completely deleting notification records. When the periodic background evaluator ran (every 60 seconds) or when tasks updated, the event detector checked `existingKeys = store.getNotifications().map(n => n.dedupKey)`; since dismissed notifications had been deleted from the store, their dedup keys were gone, causing dismissed notifications to immediately resurrect.
+   - *Repair*: Updated `dismissNotification` to mark notifications as `dismissed: true, read: true` instead of deleting them. Added `getAllDedupKeys()` which returns dedup keys for all active and dismissed notifications, guaranteeing dismissed reminders stay dismissed.
+2. **Zombie Notifications on Task Completion/Deletion (`src/notifications/notificationManager.js`)**:
+   - *Root Cause*: When a task with an active approaching-deadline or overdue alert was completed or deleted by the user, its existing notification remained stuck in the Notification Center drawer indefinitely.
+   - *Repair*: Added automated reconciliation in `syncAndEvaluate()`. On every sync, `notificationManager` checks all active deadline, overdue, and dependency notifications; if the target task is completed (`task.completed === true`) or deleted (`!task`), the notification is automatically dismissed.
+3. **Approaching Deadline vs "Due Today" Collision (`src/notifications/eventDetector.js`)**:
+   - *Root Cause*: The event detector was using `deadline:${task.id}:${dueStr}` for both general "Due today" notices and specific lead-time alerts (15m, 1h, 1d). Consequently, if a "Due today" notice was evaluated in the morning, the 1-hour lead-time reminder would be suppressed by deduplication.
+   - *Repair*: Separated keys into `deadline:today:${task.id}:${dueStr}` and `deadline:lead:${leadMinutes}m:${task.id}:${dueStr}`.
+4. **Quiet Hours Critical Overrides & Time Mocking (`src/notifications/browserNotifier.js`)**:
+   - *Root Cause*: `showBrowserNotification` checked quiet hours using `new Date()`, making quiet-hours unit tests non-deterministic depending on local execution time. Furthermore, overdue alerts with critical priority were blocked during quiet hours.
+   - *Repair*: Added an optional `now = new Date()` injection parameter to `showBrowserNotification` for deterministic time testing. Enabled critical notifications (`item.priority === NOTIFICATION_PRIORITIES.CRITICAL`) to bypass quiet hours when `preferences.allowCriticalOverrides !== false`.
+5. **Safe Navigation on Deleted Task Actions (`src/pages/ProductivityApp.jsx`)**:
+   - *Root Cause*: Clicking "View Task" on a notification referencing a task that was subsequently deleted could cause undefined property access or silent navigation failure.
+   - *Repair*: Added safety guard in `handleNotificationAction`: checks `tasks.find(t => t.id === targetId)`. If not found, notifies the user with an accessible feedback toast ("Referenced task is no longer available") instead of failing silently.
+
+---
+
+### 2. Voice Command Recognition Repair: Root Causes & Repairs
+
+#### Defects Discovered and Resolved:
+1. **Physical UI Overlay on Microphone & Speaker Controls (`src/components/UpdateNotification.jsx`)**:
+   - *Root Cause*: `#update-notification` was fixed at `bottom: 24px, right: 24px, zIndex: 9990`. On standard desktop and laptop viewports (e.g. 1280x800 or 1440x900), the 680px centered command dock (`bottom: 20px, left: 50%`) horizontally overlapped with this banner. Clicks intended for `#voice-mic-btn` or `#speech-toggle-btn` were physically intercepted by the update notification banner.
+   - *Repair*: Moved the update banner container to `top: '24px', right: '24px'`, completely clearing the bottom command dock across all viewports.
+2. **Recognition Session Hanging & Premature Cancellation (`src/pages/ProductivityApp.jsx`, `src/conversation/speechEngine.js`)**:
+   - *Root Cause*: In `ProductivityApp.jsx`, `VoiceRecognitionController` was configured with `continuous: true` and `silenceTimeoutMs: 1400`. In Chromium desktop engines, continuous mode keeps the recognition connection open across multiple utterances, waiting for silence. When a user stopped speaking, Chrome's underlying audio stream emitted `onspeechend` or `onend` / `onerror: 'no-speech'`, which triggered controller cleanup and wiped `_latestDraft` before the 1400ms silence timer could finalize.
+   - *Repair*: Reconfigured `VoiceRecognitionController` in `ProductivityApp.jsx` to `continuous: false` and `silenceTimeoutMs: 1000`. In `speechEngine.js`, verified that in `continuous: false` single-turn mode, final results (`isFinal: true`) dispatch immediately to `onResult` without waiting for the silence timer.
+3. **Live Transcript Visibility & UI Feedback (`src/pages/ProductivityApp.jsx`, `src/components/CommandBar.jsx`)**:
+   - *Root Cause*: The command bar only showed `inputVal`, which remained completely blank while speech was being captured. The user had zero visual feedback that their voice was being heard or transcribed.
+   - *Repair*: Synchronized live `interimResult` and final speech directly into the command dock input and derived `displayedValue` without triggering cascading React renders (`react(set-state-in-effect)`).
+4. **Echoed Unrecognized Command Guidance (`src/conversation/dialogueManager.js`)**:
+   - *Root Cause*: When a spoken phrase was transcribed but did not match any grammar rule, the assistant returned a generic `Command not recognized. Try: ...` with no indication of what text was actually received, making users believe the microphone had captured nothing.
+   - *Repair*: Updated `DialogueManager.processInput` unknown intent fallback to echo the recognized transcript: `Command not recognized: "${text}". Try: "add task [name] due tomorrow", "tell me about [task]", "mark it done", or "train the model".`
+5. **Telemetry Signature Bug (`src/pages/ProductivityApp.jsx`, `src/telemetry/telemetryManager.js`)**:
+   - *Root Cause*: `telemetry.recordTaskCreated(newTask.id, newTask.priority)` in `ProductivityApp.jsx` passed string arguments, whereas `telemetryManager.js` expected `task` object (`task.id`).
+   - *Repair*: Updated `ProductivityApp.jsx` to pass `newTask` object, and added backwards-compatible fallback in `recordTaskCreated` accepting either a task object or `(id, priority)` arguments.
+
+---
+
+### 3. Event-to-Delivery Architecture
+
+```
++-------------------------------------------------------------------------+
+|                          TASK & SCHEDULE STORE                          |
+|             (localStorage: voxplan_tasks, accepted_schedule)            |
++-------------------------------------------------------------------------+
+                                    │
+                                    ▼
++-------------------------------------------------------------------------+
+|                         EVENT DETECTOR SCANNER                          |
+|  - Scans deadlines (lead times: 15m, 1h, 1d)                            |
+|  - Scans overdue tasks (> 1h grace, throttled 24h repeat)               |
+|  - Scans unblocked tasks (dependencies newly satisfied)                 |
+|  - Scans schedule feasibility (infeasible placements, overdue assigned) |
++-------------------------------------------------------------------------+
+                                    │
+                         Candidate Notifications
+                                    │
+                                    ▼
++-------------------------------------------------------------------------+
+|                       PREFERENCES & QUIET HOURS                         |
+|  - Category filter: preferences.categories[item.category] !== false     |
+|  - Channel filter: preferences.channels.inApp !== false                 |
+|  - Quiet hours window check (e.g. 22:00 - 08:00)                        |
+|  - Critical priority bypass (allowCriticalOverrides !== false)          |
++-------------------------------------------------------------------------+
+                                    │
+                         Eligible Notifications
+                                    │
+                                    ▼
++-------------------------------------------------------------------------+
+|                         DEDUPLICATION ENGINE                            |
+|  - Keys: getAllDedupKeys() across active & dismissed items              |
+|  - Suppresses duplicate alerts across scans, renders, and reloads       |
++-------------------------------------------------------------------------+
+                                    │
+                                    ├──► [In-App Delivery]
+                                    │      - Stored in bounded storage (N=100)
+                                    │      - Reactive unread count in Header Bell
+                                    │      - Accessible Drawer with filters & actions
+                                    │      - Auto-resolves on task completion/deletion
+                                    │
+                                    └──► [Browser Delivery (if enabled)]
+                                           - Feature check: 'Notification' in window
+                                           - Permission state: 'granted'
+                                           - Local-first Web Notification API
+                                           - SW notificationclick focuses /app
+```
+
+---
+
+### 4. Supported Voice Command Grammar & Verified Examples
+
+VoxPlan's deterministic natural language dialogue manager supports the following command grammar:
+
+| Category | Example Utterance | Parser & Dispatcher Action |
+|---|---|---|
+| **Task Creation** | `"add task Finish quarterly taxes due Friday with high priority"` | Creates task with title, parsed due date, and priority |
+| **Task Completion** | `"mark task Finish quarterly taxes as complete"` | Resolves task and updates lifecycle with telemetry |
+| **Task Query** | `"tell me about Finish quarterly taxes"` | Surfaces task details, status, dependencies, and risk |
+| **Model Training** | `"train the model"` | Triggers local behavioral ML retraining |
+| **Schedule Generation** | `"optimize schedule"` or `"plan my day"` | Generates deterministic adaptive schedule proposal |
+| **Compound Commands** | `"add task Review docs, and mark Prepare slides as done"` | Splits compound utterances and dispatches sequentially |
+| **Clarification Flow** | `"the first one"` or `"cancel"` | Resolves multi-turn task ambiguity or confirms operations |
+| **Unrecognized Feedback** | `"hello voxplan how is the weather"` | Echoes recognized transcript and provides actionable examples |
+
+---
+
+### 5. Test Results & Quality Gates
+
+- **Frontend Test Suite (`npm test`)**:
+  - Total tests: **1,230 passed, 0 failed** across **271 suites**.
+  - New test coverage added:
+    - `tests/notification_system.test.js`: Suite 9 (4 tests verifying dedup persistence across dismissals, auto-resolution on task completion, distinct lead-time keys, quiet-hours critical overrides).
+    - `tests/voice_command_reliability.test.js`: Section G (4 tests verifying unrecognized transcript feedback, single-phrase immediate dispatch, empty transcript safety, UpdateNotification layout unblocking).
+- **Backend Test Suite (`python -m pytest backend/tests/`)**:
+  - Total tests: **29 passed, 0 failed**.
+- **Linter (`npm run lint` / `oxlint`)**:
+  - **0 errors**, 1 pre-existing warning in `AdaptiveScheduleModal.jsx`.
+  - Zero warnings in modified files; eliminated `react(set-state-in-effect)` in `CommandBar.jsx`.
+- **Production Build (`npm run build` / `vite build`)**:
+  - **Clean build in 1.59s**.
+- **Secret Scanner (`node scripts/secretScanner.mjs`)**:
+  - **0 secrets found** across 151 files.
+- **Diff Validation (`git diff --check`)**:
+  - **Clean, 0 errors**.
+
+---
+
+### 6. Browser Verification & Platform Boundaries
+
+#### Real Browser Verification:
+- Automated browser subagents and manual browser sessions verified on `http://localhost:5173/app`:
+  1. The voice microphone button (`#voice-mic-btn`) and speech output toggle (`#speech-toggle-btn`) are completely unobstructed at the bottom of the viewport.
+  2. Clicking `#voice-mic-btn` transitions immediately to the `LISTENING (MIC ACTIVE)` state with red pulsing animation and opens the Assistant Details panel displaying `🎙️ LISTENING`.
+  3. The notification bell in `Header.jsx` displays real-time badge counts, and the Notification Center drawer renders cleanly with filter tabs, mark-as-read, and dismiss controls.
+
+#### Platform Boundaries & Local-First Guarantees:
+1. **Browser Speech Recognition**:
+   - The Web Speech API (`webkitSpeechRecognition` / `SpeechRecognition`) is supported in Chromium-based browsers (Chrome, Edge, Brave, Opera) and Safari. In Firefox, the Web Speech Recognition API is disabled by default behind browser flags.
+   - Speech recognition requires an active microphone input and, in Chromium, network connectivity to Google's speech recognition backend service (unless offline speech models are installed by the OS/browser).
+   - In headless or automated testing environments lacking physical audio inputs or Google Speech service access, the browser emits `network` or `no-speech` errors. VoxPlan safely handles these errors with clear user feedback and full typed fallback symmetry.
+2. **Local-First Notifications**:
+   - Without an external cloud push server (APNS/FCM), background notifications cannot be generated while the browser process is completely terminated.
+   - VoxPlan provides guaranteed in-session delivery and reconciliation upon reopening/focusing the app, preserving complete local-first privacy with 0 third-party data leaks.
+
+---
+
+### 7. Remaining Known Issues & Follow-Up Work
+
+- Pre-existing linter warning in `src/components/AdaptiveScheduleModal.jsx:281` (`set-state-in-effect` on `setDraftProposal`).
+- Optional future enhancement: Native Web Notification action buttons (`actions: [{ action: 'view', title: 'View' }]`) where supported by desktop Chrome/Edge notification engines.
+
+---
+
+### 8. Final Notification Smoke Test & Commit Readiness Review
+
+#### Live Browser Smoke Test Verification (`/app`):
+1. **In-App Deadline Notification**:
+   - Created test task `"Smoke Test Notification"` due today with high priority via command dock.
+   - Event detector immediately identified candidate notification: `category: 'deadline'`, `title: 'Task Due Today: Smoke Test Notification'`.
+   - Notification Bell unread badge dynamically incremented from 8 to 9.
+   - Opened Notification Center: verified notification card rendered with correct title, message (`"Smoke Test Notification" is scheduled to be completed today.`), relative timestamp, and `Open Details →` action button.
+   - Clicked `Open Details →`: app navigated from today to `/app?view=tasks` and smooth-scrolled/focused the target task card.
+2. **Deduplication, Dismissal & Persistence**:
+   - Dismissed notification via card `✕` button: unread badge decremented from 9 back to 8.
+   - Triggered repeated scan cycles across views: dismissed notification did not reappear.
+   - Reloaded `/app`: unread count remained stable at 8, dismissed notification stayed dismissed, and deduplication fingerprint persisted.
+   - Cleaned up test task via task card delete button; zero temporary test data left in workspace.
+3. **Voice Command Regression Verification**:
+   - Verified 83 voice-related unit/integration tests passing (49 tests in `voice_command_reliability.test.js`, 34 tests in `voice_interaction.test.js`).
+   - Confirmed user's spoken utterance (`"Add task Prepare slide deck due tomorrow with high priority."`) executed successfully in actual browser.
+   - Zero parser regressions, zero duplicate executions, and verified telemetry signature compatibility.
+4. **Final Quality Gate Summary**:
+   - Frontend Suite: **1,230 passed, 0 failed** (271 suites).
+   - Backend Suite: **29 passed, 0 failed**.
+   - Linter (`oxlint`): **0 errors**, zero warnings in modified files.
+   - Build (`vite build`): **Clean build in 400ms**.
+   - Secret Scanner: **0 secrets found** across 151 files.
+   - Diff Validation: **Clean, 0 errors**.
+   - Scheduler Factory Weights: strictly preserved at `Urgency: 50.0, Priority: 100.0, Unblock: 15.0, Risk: 25.0`.
+   - Adaptation Gate: Phase 7.4.4B strictly locked.
+   - Overview & Typography: `/` is Overview, `/app` is productivity app, hero motto removed, ribbons untouched.

@@ -133,15 +133,19 @@ export class TelemetryManager {
 
   // --- Task Lifecycle Events ---
 
-  async recordTaskCreated(task) {
-    if (!task || !task.id) return null;
-    return this.record('task_created', task.id, {
-      title: task.title,
-      category: task.category || 'General',
-      priority: task.priority || 'medium',
-      due_date: task.dueDate || null,
-      estimated_effort: task.estimatedEffort ?? task.estimated_effort ?? null,
-      dependencies: Array.isArray(task.dependencies) ? task.dependencies : [],
+  async recordTaskCreated(task, optionalPriority) {
+    if (!task) return null;
+    const taskObj = typeof task === 'string'
+      ? { id: task, priority: optionalPriority || 'medium' }
+      : task;
+    if (!taskObj || !taskObj.id) return null;
+    return this.record('task_created', taskObj.id, {
+      title: taskObj.title || '',
+      category: taskObj.category || 'General',
+      priority: taskObj.priority || 'medium',
+      due_date: taskObj.dueDate || null,
+      estimated_effort: taskObj.estimatedEffort ?? taskObj.estimated_effort ?? null,
+      dependencies: Array.isArray(taskObj.dependencies) ? taskObj.dependencies : [],
     });
   }
 

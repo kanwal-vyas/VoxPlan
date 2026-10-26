@@ -66,7 +66,7 @@ export default function UpdateNotification() {
 const styles = {
   container: {
     position: 'fixed',
-    bottom: '24px',
+    top: '24px',
     right: '24px',
     zIndex: 9990,
     maxWidth: '460px',
@@ -97,13 +97,13 @@ const styles = {
     gap: '0.2rem',
   },
   title: {
-    fontFamily: "var(--font-sans, 'Plus Jakarta Sans', sans-serif)",
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
     fontWeight: 700,
     fontSize: '0.95rem',
     color: 'var(--text-dark, #25242A)',
   },
   description: {
-    fontFamily: "var(--font-sans, 'Plus Jakarta Sans', sans-serif)",
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
     fontSize: '0.85rem',
     color: 'var(--text-body, #4A4852)',
     lineHeight: 1.4,
@@ -123,7 +123,7 @@ const styles = {
     fontSize: '0.85rem',
     fontWeight: 600,
     cursor: 'pointer',
-    fontFamily: "var(--font-sans, 'Plus Jakarta Sans', sans-serif)",
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
   },
   dismissBtn: {
     padding: '0.5rem 0.9rem',
@@ -134,6 +134,6 @@ const styles = {
     fontSize: '0.85rem',
     fontWeight: 600,
     cursor: 'pointer',
-    fontFamily: "var(--font-sans, 'Plus Jakarta Sans', sans-serif)",
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
   },
 };

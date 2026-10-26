@@ -2910,7 +2910,7 @@ export class DialogueManager {
       state: CONVERSATION_STATES.IDLE,
       intent: CONVERSATION_INTENTS.UNKNOWN,
       targetTask: null,
-      responseText: 'Command not recognized. Try: "add task [name] due tomorrow", "tell me about [task]", "mark it done", or "train the model".',
+      responseText: `Command not recognized: "${text}". Try: "add task [name] due tomorrow", "tell me about [task]", "mark it done", or "train the model".`,
       feedbackType: 'error',
       requiresConfirmation: false,
       isAuthorized: false,

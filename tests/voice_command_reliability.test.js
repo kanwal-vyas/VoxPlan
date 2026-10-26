@@ -1,7 +1,14 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { DialogueManager, CONVERSATION_STATES, CONVERSATION_INTENTS } from '../src/conversation/dialogueManager.js';
 import { VoiceRecognitionController, RECOGNITION_STATES } from '../src/conversation/speechEngine.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, '..');
 
 // Fixed reference date: Wednesday, October 21, 2026, 12:00:00 UTC
 const FIXED_CLOCK_TIMESTAMP = new Date('2026-10-21T12:00:00Z').getTime();
@@ -1093,6 +1100,61 @@ describe('Voice Command Reliability — Phase 2 & 3 Regression Tests', () => {
       assert.equal(res.action.actions[0].priority, 'high');
       assert.equal(res.action.actions[1].title, 'Beta');
       assert.equal(res.action.actions[1].priority, 'low');
+    });
+  });
+
+  describe('G. Voice Recognition Repair & Unrecognized Transcript Feedback', () => {
+    test('G1: Unknown / unrecognized voice transcripts are preserved and reported in responseText', () => {
+      const dm = new DialogueManager({ clock: injectedClock });
+      const unknownUtterance = 'turn on the coffee machine please';
+      const res = dm.processInput(unknownUtterance, { tasks: [] });
+
+      assert.equal(res.intent, CONVERSATION_INTENTS.UNKNOWN);
+      assert.equal(res.isAuthorized, false);
+      assert.ok(res.responseText.includes('turn on the coffee machine please'), 'Unrecognized transcript must be echoed in feedback');
+    });
+
+    test('G2: In single-phrase mode (continuous: false), final results dispatch immediately without waiting for silence timeout', () => {
+      let mockRec;
+      let dispatched = null;
+
+      const controller = new VoiceRecognitionController({
+        getSpeechRecognition: () => {
+          mockRec = new MockSpeechRecognition();
+          return function () { return mockRec; };
+        },
+        continuous: false,
+        onResult: (transcript) => {
+          dispatched = transcript;
+        },
+      });
+
+      controller.start();
+      assert.equal(controller.state, RECOGNITION_STATES.LISTENING);
+
+      // Send final speech result
+      mockRec.simulateResult('Add task review security policy', true);
+
+      // In continuous: false mode, dispatch is immediate
+      assert.equal(dispatched, 'Add task review security policy', 'Must dispatch final result immediately');
+      assert.equal(controller.state, RECOGNITION_STATES.IDLE);
+    });
+
+    test('G3: Empty and whitespace transcripts are safely rejected without triggering actions', () => {
+      const dm = new DialogueManager({ clock: injectedClock });
+      const resEmpty = dm.processInput('', { tasks: [] });
+      const resSpaces = dm.processInput('    ', { tasks: [] });
+
+      assert.equal(resEmpty.isAuthorized, false);
+      assert.equal(resEmpty.action, null);
+      assert.equal(resSpaces.isAuthorized, false);
+      assert.equal(resSpaces.action, null);
+    });
+
+    test('G4: UpdateNotification banner is positioned at top-right to prevent covering command dock and mic button', () => {
+      const updateBannerSrc = fs.readFileSync(path.join(projectRoot, 'src', 'components', 'UpdateNotification.jsx'), 'utf-8');
+      assert.ok(updateBannerSrc.includes("top: '24px'"), 'Update banner must be anchored at top to avoid blocking bottom controls');
+      assert.ok(!updateBannerSrc.includes("bottom: '24px'"), 'Update banner must not sit at bottom where mic button is docked');
     });
   });
 });

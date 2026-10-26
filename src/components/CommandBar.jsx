@@ -54,6 +54,12 @@ export default function CommandBar({
     prevTriggerRef.current = currentTriggerKey;
   }, [hasInteractiveTrigger, conversationState, pendingClarification, activeProposal, recognitionState, interimTranscript, userDismissed]);
 
+  // Derive displayed command input: during speech recognition, display live interim transcript
+  const displayedValue =
+    (recognitionState === 'LISTENING' || recognitionState === 'PROCESSING') && interimTranscript
+      ? interimTranscript
+      : inputVal;
+
   const showExpanded = isExpanded || (hasInteractiveTrigger && !userDismissed);
 
   const liveAnnouncement =
@@ -74,7 +80,7 @@ export default function CommandBar({
   const handleSubmit = (e) => {
     if (e && e.preventDefault) e.preventDefault();
     const domVal = document.getElementById('command-input')?.value || '';
-    const trimmed = (inputVal || domVal).trim();
+    const trimmed = (inputVal || displayedValue || domVal).trim();
     if (!trimmed) return;
 
     setInputVal('');
@@ -568,7 +574,7 @@ export default function CommandBar({
             </label>
             <input
               type="text"
-              value={inputVal}
+              value={displayedValue}
               onChange={(e) => setInputVal(e.target.value)}
               onInput={(e) => setInputVal(e.target.value)}
               onKeyDown={(e) => {
@@ -938,8 +944,8 @@ const styles = {
     color: '#C92A1D',
   },
   title: {
-    fontFamily: "'Syne', sans-serif",
-    fontSize: '32px',
+    fontFamily: "var(--font-display, 'Eagle Lake', cursive, serif)",
+    fontSize: '30px',
     fontWeight: '800',
     color: '#25242A',
     letterSpacing: '-0.02em',
@@ -980,7 +986,7 @@ const styles = {
     backgroundColor: 'transparent',
     border: 'none',
     outline: 'none',
-    fontFamily: "'Plus Jakarta Sans', sans-serif",
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
     fontSize: '16px',
     fontWeight: '600',
     color: '#201E23',

@@ -14,6 +14,17 @@ import LoadingScreen from '../components/LoadingScreen';
 import FeedbackToast from '../components/FeedbackToast';
 import EditorialBackground from '../components/EditorialBackground';
 
+// Illustrated Sticky Notes (Memos)
+import '../components/stickyNotes/TaskStickyNotes.css';
+import TaskStickyTab from '../components/stickyNotes/TaskStickyTab';
+import TaskStickyNotesModal from '../components/stickyNotes/TaskStickyNotesModal';
+import {
+  loadAllStickyNotes,
+  saveStickyNote,
+  deleteStickyNote,
+  restoreStickyNotesForTask,
+} from '../utils/stickyNotesStorage';
+
 // Lazy-loaded on-demand heavy modals (Phase 8, Stage 8.3)
 const TaskExplanationModal = lazy(() => import('../components/TaskExplanationModal'));
 const AdaptiveScheduleModal = lazy(() => import('../components/AdaptiveScheduleModal'));
@@ -23,6 +34,7 @@ import { initCinematicScrollStory } from '../animations/scrollStory';
 import { telemetry } from '../telemetry/telemetryManager';
 import { completeTaskLifecycle, reopenTaskLifecycle } from '../telemetry/taskLifecycle';
 import { buildPersonalDurationModel, computeBatchGuardedRisk } from '../telemetry/personalModel';
+import { notificationManager } from '../notifications/notificationManager';
 import {
   checkBackendHealth,
   getModelStatus,
@@ -252,6 +264,62 @@ export default function ProductivityApp({ onNavigate }) {
   const [acceptedSchedule, setAcceptedSchedule] = useState(() => loadAcceptedSchedule());
   const [pendingClarification, setPendingClarification] = useState(null);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
+  const [stickyNotesMap, setStickyNotesMap] = useState(() => loadAllStickyNotes());
+  const [stickyNotesModalTask, setStickyNotesModalTask] = useState(null);
+
+  const handleOpenStickyNotes = useCallback((targetTask) => {
+    setStickyNotesModalTask(targetTask);
+  }, []);
+
+  const handleCloseStickyNotes = useCallback(() => {
+    setStickyNotesModalTask(null);
+  }, []);
+
+  const handleSaveStickyNote = useCallback((taskId, noteData) => {
+    const res = saveStickyNote(taskId, noteData);
+    if (res.success) {
+      setStickyNotesMap((prev) => ({
+        ...prev,
+        [taskId]: res.notes,
+      }));
+      setFeedback({
+        type: 'success',
+        message: 'Saved sticky memo.',
+      });
+    }
+    return res;
+  }, []);
+
+  const handleDeleteStickyNote = useCallback((taskId, noteId) => {
+    const res = deleteStickyNote(taskId, noteId);
+    if (res.success) {
+      setStickyNotesMap((prev) => {
+        const next = { ...prev };
+        if (res.remainingNotes.length === 0) {
+          delete next[taskId];
+        } else {
+          next[taskId] = res.remainingNotes;
+        }
+        return next;
+      });
+      setFeedback({
+        type: 'info',
+        message: 'Deleted sticky memo.',
+        onUndo: () => {
+          restoreStickyNotesForTask(taskId, [res.deletedNote]);
+          setStickyNotesMap((prev) => ({
+            ...prev,
+            [taskId]: [...(prev[taskId] || []), res.deletedNote],
+          }));
+          setFeedback({
+            type: 'info',
+            message: 'Restored sticky memo.',
+          });
+        },
+      });
+    }
+    return res;
+  }, []);
 
   const voiceRecognitionRef = useRef(null);
   const speechSynthesisRef = useRef(null);
@@ -792,6 +860,9 @@ export default function ProductivityApp({ onNavigate }) {
     const originalIndex = tasks.findIndex((t) => t.id === taskId);
     if (!taskToDelete) return;
 
+    // Capture task's sticky notes so undo can restore them cleanly
+    const associatedNotes = stickyNotesMap[taskId] || [];
+
     if (activeTimerState && activeTimerState.taskId === taskId) {
       telemetry.stopTimer(taskId);
       setActiveTimerState(null);
@@ -808,6 +879,13 @@ export default function ProductivityApp({ onNavigate }) {
           next.splice(insertAt, 0, taskToDelete);
           return next;
         });
+        if (associatedNotes.length > 0) {
+          restoreStickyNotesForTask(taskToDelete.id, associatedNotes);
+          setStickyNotesMap((prev) => ({
+            ...prev,
+            [taskToDelete.id]: associatedNotes,
+          }));
+        }
         setFeedback({
           type: 'info',
           message: `Restored task: "${taskToDelete.title}"`,
@@ -892,7 +970,7 @@ export default function ProductivityApp({ onNavigate }) {
     setTasks((prev) => [...prev, newTask]);
     dialogueManager.setActiveSubject(newTask.id);
     setActiveSubjectTaskId(newTask.id);
-    await telemetry.recordTaskCreated(newTask.id, newTask.priority);
+    await telemetry.recordTaskCreated(newTask);
     setFeedback({
       type: 'success',
       message: `Created task: "${newTask.title}"${newTask.dueDate ? ` (Due: ${newTask.dueDate})` : ''}`,
@@ -1410,8 +1488,8 @@ export default function ProductivityApp({ onNavigate }) {
     speechSynthesisRef.current = synth;
 
     const recog = new VoiceRecognitionController({
-      continuous: true,
-      silenceTimeoutMs: 1400,
+      continuous: false,
+      silenceTimeoutMs: 1000,
       onStateChange: (state) => {
         setRecognitionState(state);
         if (state !== RECOGNITION_STATES.LISTENING && state !== RECOGNITION_STATES.PROCESSING) {
@@ -1420,9 +1498,17 @@ export default function ProductivityApp({ onNavigate }) {
       },
       onInterimResult: (draft) => {
         setInterimTranscript(draft);
+        const cmdInput = document.getElementById('command-input');
+        if (cmdInput && document.activeElement !== cmdInput) {
+          cmdInput.value = draft;
+        }
       },
       onResult: (transcript) => {
         setInterimTranscript('');
+        const cmdInput = document.getElementById('command-input');
+        if (cmdInput) {
+          cmdInput.value = transcript;
+        }
         if (executeCommandRef.current) {
           executeCommandRef.current(transcript);
         }
@@ -1533,6 +1619,58 @@ export default function ProductivityApp({ onNavigate }) {
     }
   }, [handleSelectView, handleQuickAdd]);
 
+  const handleNotificationAction = useCallback((notif) => {
+    if (!notif || !notif.target) return;
+    const { target } = notif;
+    if (target.action === 'open_schedule') {
+      setIsScheduleModalOpen(true);
+    } else if (target.action === 'open_backup') {
+      setIsBackupModalOpen(true);
+    } else if (target.view) {
+      handleSelectView(target.view);
+    }
+
+    if (target.type === 'task' && target.id) {
+      const taskExists = tasks.some((t) => t.id === target.id);
+      if (!taskExists) {
+        setFeedback({
+          type: 'info',
+          message: 'The task referenced by this notification is no longer in your active tasks.',
+        });
+        return;
+      }
+      handleSelectView('tasks');
+      setTimeout(() => {
+        const elem = document.getElementById(`task-card-${target.id}`) || document.querySelector(`[data-task-id="${target.id}"]`);
+        if (elem) {
+          elem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 150);
+    }
+  }, [handleSelectView, tasks]);
+
+  // Initialize Notification Manager & sync on tasks/schedule change
+  useEffect(() => {
+    notificationManager.init({
+      onNavigate: (targetUrl) => {
+        if (targetUrl.includes('view-today')) handleSelectView('today');
+        else if (targetUrl.includes('view-tasks')) handleSelectView('tasks');
+        else if (targetUrl.includes('view-calendar')) handleSelectView('calendar');
+        else if (targetUrl.includes('view-insights')) handleSelectView('insights');
+      },
+    });
+    return () => {
+      notificationManager.destroy();
+    };
+  }, [handleSelectView]);
+
+  useEffect(() => {
+    notificationManager.syncAndEvaluate({
+      tasks,
+      acceptedSchedule,
+    });
+  }, [tasks, acceptedSchedule]);
+
   // Initialize Presentation-Only Cinematic Editorial Motion System
   useEffect(() => {
     const cleanup = initCinematicScrollStory({ currentView });
@@ -1587,6 +1725,7 @@ export default function ProductivityApp({ onNavigate }) {
           onClearDemo={handleClearDemo}
           onNavigate={onNavigate}
           onOpenBackup={() => setIsBackupModalOpen(true)}
+          onNotificationAction={handleNotificationAction}
         />
 
         {/* Main Landmark for Accessibility (WCAG 2.2 1.3.1 Info and Relationships & 2.4.1 Bypass Blocks) */}
@@ -1713,6 +1852,12 @@ export default function ProductivityApp({ onNavigate }) {
                                 {task.estimatedEffort && (
                                   <span style={styles.todayEffortTag}>⏱ {task.estimatedEffort}h</span>
                                 )}
+                                <TaskStickyTab
+                                  notes={stickyNotesMap[task.id] || []}
+                                  taskTitle={task.title}
+                                  onOpen={() => handleOpenStickyNotes(task)}
+                                  compact={true}
+                                />
                               </div>
                               <h4 style={styles.todayTaskTitle}>{task.title}</h4>
                             </div>
@@ -1814,6 +1959,8 @@ export default function ProductivityApp({ onNavigate }) {
               onClearCompleted={handleClearCompleted}
               completedCount={completedCount}
               onQuickAdd={handleQuickAdd}
+              stickyNotesMap={stickyNotesMap}
+              onOpenStickyNotes={handleOpenStickyNotes}
             />
           </div>
 
@@ -1847,6 +1994,8 @@ export default function ProductivityApp({ onNavigate }) {
                 })
               }
               acceptedSchedule={acceptedSchedule}
+              stickyNotesMap={stickyNotesMap}
+              onOpenStickyNotes={handleOpenStickyNotes}
             />
           </div>
 
@@ -1956,6 +2105,18 @@ export default function ProductivityApp({ onNavigate }) {
         </Suspense>
       )}
 
+      {/* Illustrated Stationery Sticky Notes Modal */}
+      {stickyNotesModalTask && (
+        <TaskStickyNotesModal
+          isOpen={Boolean(stickyNotesModalTask)}
+          task={stickyNotesModalTask}
+          notes={stickyNotesMap[stickyNotesModalTask.id] || []}
+          onClose={handleCloseStickyNotes}
+          onSaveNote={handleSaveStickyNote}
+          onDeleteNote={handleDeleteStickyNote}
+        />
+      )}
+
       {/* Global Floating Feedback Toast with Undo & Accessible Announcements */}
       <FeedbackToast
         feedback={feedback}
@@ -1970,7 +2131,7 @@ const styles = {
     minHeight: '100vh',
     backgroundColor: 'var(--voxplan-canvas-bg, #FBF9F4)',
     color: '#201E23',
-    fontFamily: "'Plus Jakarta Sans', sans-serif",
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
     position: 'relative',
     overflowX: 'hidden',
     padding: '0 20px 180px 20px',
@@ -2024,9 +2185,9 @@ const styles = {
     letterSpacing: '0.08em',
   },
   todayFocusTitle: {
-    fontFamily: "'Syne', sans-serif",
+    fontFamily: "var(--font-section, 'Eagle Lake', cursive, serif)",
     fontSize: '22px',
-    fontWeight: '800',
+    fontWeight: '700',
     color: '#3D2645',
     margin: '4px 0 2px 0',
   },
@@ -2141,7 +2302,7 @@ const styles = {
     fontWeight: '600',
   },
   todayTaskTitle: {
-    fontFamily: "'Plus Jakarta Sans', sans-serif",
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
     fontSize: '15px',
     fontWeight: '700',
     color: '#201E23',

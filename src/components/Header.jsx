@@ -1,4 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import NotificationBell from './notifications/NotificationBell';
+import NotificationCenter from './notifications/NotificationCenter';
+import NotificationPreferencesModal from './notifications/NotificationPreferencesModal';
+import { notificationStore } from '../notifications/notificationStore';
 
 export default function Header({
   isBackendOnline,
@@ -10,10 +14,20 @@ export default function Header({
   onClearDemo,
   onNavigate,
   onOpenBackup,
+  onNotificationAction,
 }) {
   const [scrolled, setScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(() => notificationStore.getUnreadCount());
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isNotificationSettingsOpen, setIsNotificationSettingsOpen] = useState(false);
+
+  useEffect(() => {
+    return notificationStore.subscribe((_list, unread) => {
+      setUnreadNotificationsCount(unread);
+    });
+  }, []);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -187,6 +201,28 @@ export default function Header({
               </span>
             </div>
 
+            {/* Notification Bell & Center Dropdown */}
+            <div style={{ position: 'relative' }}>
+              <NotificationBell
+                unreadCount={unreadNotificationsCount}
+                isOpen={isNotificationsOpen}
+                onToggle={() => setIsNotificationsOpen((prev) => !prev)}
+              />
+              <NotificationCenter
+                isOpen={isNotificationsOpen}
+                onClose={() => setIsNotificationsOpen(false)}
+                onOpenSettings={() => {
+                  setIsNotificationsOpen(false);
+                  setIsNotificationSettingsOpen(true);
+                }}
+                onAction={(notif) => {
+                  if (onNotificationAction) {
+                    onNotificationAction(notif);
+                  }
+                }}
+              />
+            </div>
+
             {/* Desktop Actions */}
             {!isMobile && (
               <div style={styles.actionControls}>
@@ -276,6 +312,28 @@ export default function Header({
                         <span>🔐 Encrypted Backup</span>
                       </button>
                     )}
+                    <button
+                      type="button"
+                      id="mobile-notifications-btn"
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                        setIsNotificationsOpen(true);
+                      }}
+                      style={styles.menuItem}
+                    >
+                      <span>🔔 Notifications {unreadNotificationsCount > 0 ? `(${unreadNotificationsCount})` : ''}</span>
+                    </button>
+                    <button
+                      type="button"
+                      id="mobile-notification-settings-btn"
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                        setIsNotificationSettingsOpen(true);
+                      }}
+                      style={styles.menuItem}
+                    >
+                      <span>⚙️ Notification Settings</span>
+                    </button>
                     {onSeedDemo && (
                       <button
                         type="button"
@@ -391,6 +449,13 @@ export default function Header({
           </nav>
         )}
       </div>
+      {/* Notification Preferences Modal */}
+      {isNotificationSettingsOpen && (
+        <NotificationPreferencesModal
+          isOpen={true}
+          onClose={() => setIsNotificationSettingsOpen(false)}
+        />
+      )}
     </header>
   );
 }
@@ -453,10 +518,10 @@ const styles = {
     boxShadow: '0 2px 4px rgba(200, 90, 50, 0.25)',
   },
   brandName: {
-    fontFamily: "'Syne', sans-serif",
-    fontSize: '17px',
-    fontWeight: '800',
-    letterSpacing: '-0.02em',
+    fontFamily: "var(--font-wordmark, 'Trade Winds', cursive)",
+    fontSize: '18px',
+    fontWeight: '400',
+    letterSpacing: '0.04em',
     color: '#3D2645',
   },
   nav: {
