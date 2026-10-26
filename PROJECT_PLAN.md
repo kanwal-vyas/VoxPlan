@@ -7884,3 +7884,80 @@ Enhance the existing VoxPlan Overview page (`src/pages/LandingPage.jsx`, rendere
 - **Live Browser Verification**:
   - Verified on `http://localhost:5173/` that the header navigation, workspace focus section, interactive preview tabs, PLAN ribbon, product tour section, spotlight mockup, and feature links render properly.
   - Verified clicking `#overview-start-tour-btn` navigates to `/app?tour=1` and launches the 20-step tour with optical spotlight isolation and Step 1/20 callout.
+---
+
+### Phase 8.22: Overview Floating-Text Animation Diagnosis & Restoration (COMPLETED)
+
+#### Context & Objectives:
+Diagnose and resolve the regression where animated editorial ribbon words (\PLAN\, \PREDICT\, \UNDERSTAND\, \ACT\) on the VoxPlan Overview page (\/\) stopped floating over time. Restore continuous, organic floating motion while preserving responsive scroll-glide interpolation, editorial typography, layout stability, and strict reduced-motion accessibility.
+
+#### Root Cause Analysis:
+1. **Absence of Temporal Floating Keyframes in CSS**:
+   - In \src/App.css\, \.overview-ribbon-wrap\ and \.overview-ribbon-word\ lacked \@keyframes\ animation declarations.
+   - The CSS only specified \	ransition: transform 0.1s linear, opacity 0.2s ease;\, which solely animated property transitions when new values were supplied by JavaScript during scroll events.
+2. **Scroll-Only Listener Execution**:
+   - In \src/pages/LandingPage.jsx\, \updateScrollStory\ only executed in response to \window.addEventListener('scroll')\ and \
+esize\.
+   - When a user was stationary reading a section or admiring the layout, no animation ticks fired, freezing the words at fixed coordinates.
+3. **Transform Property Collision Avoidance**:
+   - In JavaScript, \updateScrollStory\ applied horizontal scroll translation directly to \el.style.transform\ on \.overview-ribbon-word\. If a keyframe animation were applied to \	ransform\ on \.overview-ribbon-word\, CSS animation precedence would override or collide with the scroll-glide transform.
+   - **Architectural Solution**: Clean separation of motion axes. The parent container (\.overview-ribbon-wrap\) executes the continuous vertical bobbing and subtle rotational tilt via hardware-accelerated CSS keyframes (\@keyframes ribbonFloatSlow\, \@keyframes ribbonFloatGentle\), while the inner child element (\.overview-ribbon-word\) executes the horizontal scroll glide and opacity surge.
+
+#### Implementation Details:
+1. **CSS Floating Keyframes & Wrap Animation (\src/App.css\)**:
+   - Defined \@keyframes ribbonFloatSlow\: Gentle $\pm 9\text{px}$ vertical oscillation and $+0.4^\circ$ tilt with smooth ease-in-out curve.
+   - Defined \@keyframes ribbonFloatGentle\: Inverted \text{px}$ vertical displacement and $-0.4^\circ$ counter-tilt for staggered organic rhythm.
+   - Applied \nimation: ribbonFloatSlow 6.5s ease-in-out infinite alternate; will-change: transform;\ to \.overview-ribbon-wrap\.
+   - Added staggered modifier classes with organic negative animation delays:
+     - \.overview-ribbon-wrap.ribbon-plan\: 6.5s duration, 0s delay.
+     - \.overview-ribbon-wrap.ribbon-predict\, \.ribbon-alt\: 8.0s duration, -2s delay.
+     - \.overview-ribbon-wrap.ribbon-understand\: 7.2s duration, -3.8s delay.
+     - \.overview-ribbon-wrap.ribbon-act\: 8.5s duration, -5.5s delay.
+2. **Accessibility & Reduced Motion Enforcement (\src/App.css\, \src/pages/LandingPage.jsx\)**:
+   - In \src/App.css\, under \@media (prefers-reduced-motion: reduce)\:
+     - \.overview-ribbon-wrap\: \nimation: none !important; transform: none !important;\
+     - \.overview-ribbon-word\: \nimation: none !important; transform: none !important; opacity: 0.32 !important; transition: none !important;\
+   - In \src/pages/LandingPage.jsx\:
+     - Added a dynamic \change\ event listener to \window.matchMedia('(prefers-reduced-motion: reduce)')\ so OS preference updates instantly freeze or restore motion without requiring a hard reload.
+     - Cleaned up event listeners on component unmount.
+3. **Compound Two-Axis Motion**:
+   - While stationary: Words continuously and gently float up and down with subtle organic tilts.
+   - While scrolling: Words glide smoothly horizontally across the viewport from $+70\text{px}$ to $-70\text{px}$ (desktop) / $+36\text{px}$ to $-36\text{px}$ (mobile) while opacity swells up to .56$ at the viewport center.
+
+#### Affected Files:
+- \src/App.css\: Added \@keyframes ribbonFloatSlow\, \@keyframes ribbonFloatGentle\, modifier animation styles, and reduced-motion resets.
+- \src/pages/LandingPage.jsx\: Added ribbon modifier classes (\
+ibbon-plan\, \
+ibbon-predict\, \
+ibbon-understand\, \
+ibbon-act\) and dynamic media query change listener.
+- \	ests/overview_restoration.test.js\: Added test 4.5 verifying keyframe definitions, wrap animation assignment, reduced motion suppression, and ribbon classes.
+- \PROJECT_PLAN.md\: Documented root cause, architecture, and verification results.
+
+#### Automated Quality Gates & Verification:
+- **Overview Restoration Test Suite (\	ests/overview_restoration.test.js\)**:
+  - **30/30 tests passed (0 failures)** across 9 suites.
+- **Overview Enhancement Suite (\	ests/overview_enhancement_and_tour_promotion.test.js\)**:
+  - **17/17 tests passed (0 failures)** across 5 suites.
+- **Typography System Suite (\	ests/typography_system.test.js\)**:
+  - **49/49 tests passed (0 failures)** across 12 suites.
+- **Full Frontend Regression Suite (\
+pm test\)**:
+  - **1,300 passed, 0 failed** across 286 suites (100% passing).
+- **Backend Test Suite (\python -m pytest backend/tests/\)**:
+  - **29 passed, 0 failed** in 2.12s.
+- **Linter (\
+pm run lint\ / \oxlint\)**:
+  - 0 errors, 1 pre-existing warning in unrelated modal.
+- **Production Build (\
+pm run build\)**:
+  - Built production bundle in 500ms with 0 errors.
+- **Secret Scanner (\
+ode scripts/secretScanner.mjs\)**:
+  - 0 secrets detected across 168 files scanned.
+- **Git Diff Check (\git diff --check\)**:
+  - Clean (no merge conflict markers, no trailing whitespace).
+- **Live Browser Verification**:
+  - Verified in browser at desktop (1280x800) and mobile (390x844).
+  - Evaluated computed styles and bounding client rects over 1000ms intervals, confirming visible vertical displacement and continuous oscillation over time.
+  - Confirmed page stability, no horizontal overflow (\overflow-x: hidden\), and zero layout shifts.

@@ -125,6 +125,17 @@ describe('VoxPlan Overview Page Restoration — Corrective Audit Suite', () => {
       assert.ok(appCssContent.includes('transform: none !important'), 'Reduced motion must disable transforms on ribbon words');
       assert.ok(appCssContent.includes('opacity: 0.32 !important'), 'Reduced motion must maintain visible ribbon opacity');
     });
+
+    it('4.5 defines floating keyframe animations (ribbonFloatSlow, ribbonFloatGentle) and applies them to ribbon wraps', () => {
+      assert.ok(appCssContent.includes('@keyframes ribbonFloatSlow'), 'App.css must define ribbonFloatSlow keyframe');
+      assert.ok(appCssContent.includes('@keyframes ribbonFloatGentle'), 'App.css must define ribbonFloatGentle keyframe');
+      assert.ok(appCssContent.includes('animation: ribbonFloatSlow'), 'App.css must apply ribbonFloatSlow animation');
+      assert.ok(appCssContent.includes('animation: none !important'), 'App.css must disable animation for reduced motion');
+      assert.ok(landingContent.includes('ribbon-plan'), 'LandingPage must include ribbon-plan class');
+      assert.ok(landingContent.includes('ribbon-predict'), 'LandingPage must include ribbon-predict class');
+      assert.ok(landingContent.includes('ribbon-understand'), 'LandingPage must include ribbon-understand class');
+      assert.ok(landingContent.includes('ribbon-act'), 'LandingPage must include ribbon-act class');
+    });
   });
 
   describe('5. Navigation Actions to Productivity Workspace (/app)', () => {

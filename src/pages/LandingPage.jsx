@@ -123,7 +123,8 @@ export default function LandingPage({ onNavigate }) {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const motionMediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let prefersReducedMotion = motionMediaQuery.matches;
     let rafId = null;
     let isTicking = false;
 
@@ -194,13 +195,28 @@ export default function LandingPage({ onNavigate }) {
       }
     };
 
+    const onMotionChange = (e) => {
+      prefersReducedMotion = e.matches;
+      updateScrollStory();
+    };
+
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onResize, { passive: true });
+    if (motionMediaQuery.addEventListener) {
+      motionMediaQuery.addEventListener('change', onMotionChange);
+    } else if (motionMediaQuery.addListener) {
+      motionMediaQuery.addListener(onMotionChange);
+    }
     updateScrollStory();
 
     return () => {
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', onResize);
+      if (motionMediaQuery.removeEventListener) {
+        motionMediaQuery.removeEventListener('change', onMotionChange);
+      } else if (motionMediaQuery.removeListener) {
+        motionMediaQuery.removeListener(onMotionChange);
+      }
       if (rafId) {
         window.cancelAnimationFrame(rafId);
       }
@@ -937,7 +953,7 @@ export default function LandingPage({ onNavigate }) {
       </section>
 
       {/* Editorial Word Ribbon: PLAN */}
-      <div className="overview-ribbon-wrap" aria-hidden="true">
+      <div className="overview-ribbon-wrap ribbon-plan" aria-hidden="true">
         <span
           className="overview-ribbon-word"
           ref={(el) => {
@@ -1260,7 +1276,7 @@ export default function LandingPage({ onNavigate }) {
       </section>
 
       {/* Editorial Word Ribbon: PREDICT */}
-      <div className="overview-ribbon-wrap" aria-hidden="true">
+      <div className="overview-ribbon-wrap ribbon-predict ribbon-alt" aria-hidden="true">
         <span
           className="overview-ribbon-word"
           ref={(el) => {
@@ -1325,7 +1341,7 @@ export default function LandingPage({ onNavigate }) {
       </section>
 
       {/* Editorial Word Ribbon: UNDERSTAND */}
-      <div className="overview-ribbon-wrap" aria-hidden="true">
+      <div className="overview-ribbon-wrap ribbon-understand" aria-hidden="true">
         <span
           className="overview-ribbon-word"
           ref={(el) => {
@@ -1392,7 +1408,7 @@ export default function LandingPage({ onNavigate }) {
       </section>
 
       {/* Editorial Word Ribbon: ACT */}
-      <div className="overview-ribbon-wrap" aria-hidden="true">
+      <div className="overview-ribbon-wrap ribbon-act ribbon-alt" aria-hidden="true">
         <span
           className="overview-ribbon-word"
           ref={(el) => {

@@ -511,6 +511,25 @@ button:active {
   padding: 0 20px 80px 20px;
 }
 
+/* Overview Floating Ribbon Keyframes */
+@keyframes ribbonFloatSlow {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-9px) rotate(0.4deg);
+  }
+}
+
+@keyframes ribbonFloatGentle {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(9px) rotate(-0.4deg);
+  }
+}
+
 .overview-ribbon-wrap {
   width: 100%;
   min-height: 140px;
@@ -524,6 +543,29 @@ button:active {
   user-select: none;
   position: relative;
   z-index: 1;
+  animation: ribbonFloatSlow 6.5s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.overview-ribbon-wrap.ribbon-plan {
+  animation: ribbonFloatSlow 6.5s ease-in-out infinite alternate;
+  animation-delay: 0s;
+}
+
+.overview-ribbon-wrap.ribbon-predict,
+.overview-ribbon-wrap.ribbon-alt {
+  animation: ribbonFloatGentle 8s ease-in-out infinite alternate;
+  animation-delay: -2s;
+}
+
+.overview-ribbon-wrap.ribbon-understand {
+  animation: ribbonFloatSlow 7.2s ease-in-out infinite alternate;
+  animation-delay: -3.8s;
+}
+
+.overview-ribbon-wrap.ribbon-act {
+  animation: ribbonFloatGentle 8.5s ease-in-out infinite alternate;
+  animation-delay: -5.5s;
 }
 
 .overview-ribbon-word {
@@ -560,7 +602,12 @@ button:active {
     background-color: #FFF8EF !important;
     transition: none !important;
   }
+  .overview-ribbon-wrap {
+    animation: none !important;
+    transform: none !important;
+  }
   .overview-ribbon-word {
+    animation: none !important;
     transform: none !important;
     opacity: 0.32 !important;
     transition: none !important;
