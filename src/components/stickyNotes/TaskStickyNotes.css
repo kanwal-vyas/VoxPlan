@@ -1,0 +1,1025 @@
+/* ==========================================================================
+   VoxPlan — Illustrated Stationery Sticky Notes Styling
+   Rich, scattered illustrations, die-cut memo paper, and visual stationery gallery
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. TASK CARD TAB INDICATOR (Attached to task card and calendar chips)
+   -------------------------------------------------------------------------- */
+
+.task-sticky-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px 6px 4px 4px;
+  border: 1px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.4, 1), box-shadow 0.18s ease;
+  user-select: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  vertical-align: middle;
+}
+
+.task-sticky-tab:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.09);
+}
+
+.task-sticky-tab:focus-visible {
+  outline: 2px solid var(--accent-terracotta, #C85A32);
+  outline-offset: 2px;
+}
+
+.task-sticky-tab-compact {
+  padding: 2px 5px;
+  font-size: 10px;
+  gap: 3px;
+  border-radius: 4px;
+}
+
+.task-sticky-tab-motif {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+}
+
+.task-sticky-tab-compact .task-sticky-tab-motif {
+  width: 12px;
+  height: 12px;
+}
+
+.task-sticky-tab-motif svg,
+.stationery-svg-motif {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.task-sticky-tab-count {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 0 3px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.task-sticky-tab-text {
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Discreet trigger for tasks without notes */
+.task-sticky-empty-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border-radius: 5px;
+  border: 1px dashed rgba(61, 38, 69, 0.22);
+  background: rgba(255, 255, 255, 0.6);
+  color: #726084;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.task-sticky-empty-trigger:hover {
+  background: #FFF;
+  border-color: var(--accent-terracotta, #C85A32);
+  color: var(--accent-terracotta, #C85A32);
+  transform: translateY(-1px);
+}
+
+.task-sticky-empty-trigger:focus-visible {
+  outline: 2px solid var(--accent-terracotta, #C85A32);
+  outline-offset: 1px;
+}
+
+.task-sticky-empty-compact {
+  padding: 2px 4px;
+  font-size: 10px;
+}
+
+.task-sticky-empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* --------------------------------------------------------------------------
+   2. STICKY NOTES MODAL DIALOG & BACKDROP
+   -------------------------------------------------------------------------- */
+
+.task-sticky-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(32, 24, 38, 0.5);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: taskStickyFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes taskStickyFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.task-sticky-modal-dialog {
+  background: #FFFFFF;
+  border-radius: 20px;
+  border: 1px solid rgba(61, 38, 69, 0.14);
+  box-shadow: 0 20px 50px rgba(32, 24, 38, 0.2), 0 6px 16px rgba(32, 24, 38, 0.1);
+  width: 100%;
+  max-width: 780px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: taskStickySlideUp 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes taskStickySlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   3. MODAL HEADER & DECK NAVIGATION
+   -------------------------------------------------------------------------- */
+
+.task-sticky-modal-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid rgba(61, 38, 69, 0.08);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  background: #FCFAF8;
+}
+
+.task-sticky-header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.task-sticky-kicker {
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent-terracotta, #C85A32);
+}
+
+.task-sticky-task-title {
+  margin: 0;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 17px;
+  font-weight: 700;
+  color: #201E23;
+  line-height: 1.35;
+}
+
+.task-sticky-header-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.task-sticky-category-tag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgba(61, 38, 69, 0.08);
+  color: #3D2645;
+}
+
+.task-sticky-count-tag {
+  font-size: 11px;
+  font-weight: 500;
+  color: #726084;
+}
+
+.task-sticky-close-btn {
+  background: transparent;
+  border: 1px solid rgba(61, 38, 69, 0.16);
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: #726084;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.task-sticky-close-btn:hover {
+  background: rgba(61, 38, 69, 0.08);
+  color: #201E23;
+  border-color: rgba(61, 38, 69, 0.28);
+}
+
+.task-sticky-close-btn:focus-visible {
+  outline: 2px solid var(--accent-terracotta, #C85A32);
+}
+
+.task-sticky-modal-body {
+  padding: 12px 20px 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Deck Strip (Tabs for existing notes) */
+.task-sticky-deck-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid rgba(61, 38, 69, 0.08);
+  padding-bottom: 10px;
+}
+
+.task-sticky-tabs-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+
+.task-sticky-deck-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 7px;
+  border: 1px solid currentColor;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.task-sticky-deck-tab:hover {
+  opacity: 0.95;
+  transform: translateY(-1px);
+}
+
+.task-sticky-deck-tab-active {
+  opacity: 1;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+}
+
+.task-sticky-deck-tab-motif {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+}
+
+.task-sticky-deck-tab-motif svg {
+  width: 100%;
+  height: 100%;
+}
+
+.task-sticky-deck-tab-label {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.task-sticky-new-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--accent-terracotta, #C85A32);
+  background: var(--accent-terracotta-light, #FDF0ED);
+  color: var(--accent-terracotta, #C85A32);
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.task-sticky-new-btn:hover {
+  background: var(--accent-terracotta, #C85A32);
+  color: #FFF;
+}
+
+.task-sticky-new-btn-active {
+  background: var(--accent-terracotta, #C85A32);
+  color: #FFF;
+}
+
+/* Error Banner */
+.task-sticky-error-banner {
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: #FDF0ED;
+  border: 1px solid #F5C6BE;
+  color: #D9383A;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* --------------------------------------------------------------------------
+   4. VISUALLY DRIVEN STATIONERY GALLERY (NO WRITTEN NAMES)
+   -------------------------------------------------------------------------- */
+
+.task-sticky-stationery-gallery-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.task-sticky-gallery-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.task-sticky-gallery-title {
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 13px;
+  font-weight: 700;
+  color: #3D2645;
+}
+
+.task-sticky-gallery-subtitle {
+  font-size: 11px;
+  color: #726084;
+}
+
+.task-sticky-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+}
+
+.task-sticky-gallery-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 6px;
+  border-radius: 10px;
+  border: 2px solid;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+  background-repeat: repeat;
+  background-size: 12px 12px;
+}
+
+.task-sticky-gallery-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.task-sticky-gallery-card:focus-visible {
+  outline: 2px solid var(--accent-terracotta, #C85A32);
+  outline-offset: 2px;
+}
+
+.task-sticky-gallery-card-selected {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+/* Miniature Memo Sheet in Gallery Card */
+.task-sticky-mini-sheet {
+  position: relative;
+  width: 100%;
+  height: 52px;
+  border-radius: 7px;
+  border: 1.5px solid;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  transition: all 0.15s ease;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+}
+
+.task-sticky-mini-tape {
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 22px;
+  height: 7px;
+  border-radius: 1px;
+}
+
+.task-sticky-mini-motif {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 4px;
+}
+
+.task-sticky-mini-motif svg {
+  width: 100%;
+  height: 100%;
+}
+
+.task-sticky-mini-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 70%;
+  margin-top: 3px;
+}
+
+.task-sticky-mini-lines span {
+  height: 1.5px;
+  border-radius: 1px;
+  opacity: 0.6;
+}
+
+/* Selected Checkmark Badge */
+.task-sticky-selected-check-pill {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  color: #FFFFFF;
+  font-size: 10px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* --------------------------------------------------------------------------
+   5. FULL-PAGE ILLUSTRATED LIVE PREVIEW PAPER & SCATTERED ARTWORK
+   -------------------------------------------------------------------------- */
+
+.task-sticky-full-paper {
+  position: relative;
+  border-radius: 20px;
+  border: 2.5px solid;
+  padding: 18px;
+  transition: all 0.22s ease;
+  overflow: hidden;
+}
+
+/* Distinct Decorative Border Patterns for Each Stationery Theme */
+.theme-powder-blue {
+  background-image:
+    repeating-linear-gradient(0deg, rgba(120, 168, 212, 0.45) 0px, rgba(120, 168, 212, 0.45) 1.5px, transparent 1.5px, transparent 12px),
+    repeating-linear-gradient(90deg, rgba(120, 168, 212, 0.45) 0px, rgba(120, 168, 212, 0.45) 1.5px, transparent 1.5px, transparent 12px),
+    radial-gradient(circle at 6px 6px, rgba(95, 146, 194, 0.6) 1.5px, transparent 1.5px);
+  background-size: 12px 12px;
+}
+
+.theme-blush-bunny {
+  background-image:
+    radial-gradient(circle at 5px 5px, rgba(224, 118, 140, 0.65) 1.8px, transparent 1.8px),
+    radial-gradient(circle at 13px 13px, rgba(224, 118, 140, 0.5) 1.2px, transparent 1.2px);
+  background-size: 16px 16px;
+}
+
+.theme-lavender-cat {
+  background-image:
+    repeating-linear-gradient(90deg, rgba(170, 140, 210, 0.45) 0px, rgba(170, 140, 210, 0.45) 1px, transparent 1px, transparent 4px, rgba(170, 140, 210, 0.45) 4px, rgba(170, 140, 210, 0.45) 5px, transparent 5px, transparent 15px),
+    radial-gradient(circle at 10px 7.5px, rgba(142, 105, 192, 0.65) 1.6px, transparent 1.6px);
+  background-size: 15px 15px;
+}
+
+.theme-mint-bear {
+  background-image:
+    repeating-linear-gradient(45deg, rgba(186, 163, 132, 0.55) 0px, rgba(186, 163, 132, 0.55) 1.5px, transparent 1.5px, transparent 10px),
+    repeating-linear-gradient(-45deg, rgba(186, 163, 132, 0.55) 0px, rgba(186, 163, 132, 0.55) 1.5px, transparent 1.5px, transparent 10px);
+  background-size: 10px 10px;
+}
+
+.theme-floral-cream {
+  background-image:
+    repeating-linear-gradient(0deg, rgba(182, 156, 126, 0.45) 0px, rgba(182, 156, 126, 0.45) 1px, transparent 1px, transparent 4px, rgba(182, 156, 126, 0.45) 4px, rgba(182, 156, 126, 0.45) 5px, transparent 5px, transparent 16px),
+    radial-gradient(circle at 8px 10.5px, rgba(196, 87, 50, 0.55) 1.8px, transparent 1.8px),
+    radial-gradient(circle at 8px 10.5px, rgba(216, 164, 140, 0.5) 3.2px, transparent 3.2px);
+  background-size: 16px 16px;
+}
+
+.theme-butter-yellow {
+  background-image:
+    repeating-linear-gradient(0deg, rgba(218, 164, 32, 0.52) 0px, rgba(218, 164, 32, 0.52) 1.8px, transparent 1.8px, transparent 14px),
+    repeating-linear-gradient(90deg, rgba(218, 164, 32, 0.52) 0px, rgba(218, 164, 32, 0.52) 1.8px, transparent 1.8px, transparent 14px),
+    radial-gradient(circle at 7px 7px, rgba(224, 142, 18, 0.65) 1.8px, transparent 1.8px);
+  background-size: 14px 14px;
+}
+
+.theme-matcha-leaf {
+  background-image:
+    repeating-linear-gradient(90deg, rgba(134, 184, 98, 0.5) 0px, rgba(134, 184, 98, 0.5) 4px, transparent 4px, transparent 8px),
+    radial-gradient(circle at 4px 8px, rgba(100, 156, 62, 0.65) 1.8px, transparent 1.8px),
+    radial-gradient(circle at 8px 4px, rgba(100, 156, 62, 0.65) 1.8px, transparent 1.8px);
+  background-size: 16px 16px;
+}
+
+/* Die-cut Inner Writing Card with Layered Stationery Stroke */
+.task-sticky-inner-card {
+  position: relative;
+  border-radius: 14px;
+  border: 2px solid;
+  min-height: 330px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05), inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+}
+
+/* Washi Tape Strip at Top Center */
+.task-sticky-washi-tape {
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90px;
+  height: 20px;
+  border-radius: 2px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  border-left: 2px dashed rgba(0, 0, 0, 0.08);
+  border-right: 2px dashed rgba(0, 0, 0, 0.08);
+  z-index: 4;
+}
+
+/* Scattered Top Artwork Banner */
+.task-sticky-scattered-top-wrapper {
+  position: absolute;
+  top: 4px;
+  left: 0;
+  right: 0;
+  height: 60px;
+  pointer-events: none;
+  z-index: 2;
+  overflow: hidden;
+}
+
+.stationery-scattered-top {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Scattered Bottom Artwork Banner */
+.task-sticky-scattered-bottom-wrapper {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 110px;
+  pointer-events: none;
+  z-index: 2;
+  overflow: hidden;
+}
+
+.stationery-scattered-bottom {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Central Writing Surface (Buffered to avoid artwork collisions) */
+.task-sticky-writing-area {
+  position: relative;
+  z-index: 3;
+  padding: 56px 20px 105px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Central Reading Surface (For viewer) */
+.task-sticky-reading-area {
+  position: relative;
+  z-index: 3;
+  padding: 50px 20px 105px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* --------------------------------------------------------------------------
+   6. FORM INPUT FIELDS (WRITING CANVAS)
+   -------------------------------------------------------------------------- */
+
+.task-sticky-input-group {
+  position: relative;
+}
+
+.task-sticky-title-field {
+  width: 100%;
+  padding: 8px 12px;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 15px;
+  font-weight: 700;
+  border: 1.5px dashed;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.52);
+  box-sizing: border-box;
+  transition: all 0.15s ease;
+}
+
+.task-sticky-title-field:focus {
+  background: rgba(255, 255, 255, 0.88);
+  border-style: solid;
+  outline: 2px solid var(--accent-terracotta, #C85A32);
+}
+
+.task-sticky-body-field {
+  width: 100%;
+  padding: 10px 12px;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 14px;
+  line-height: 1.55;
+  border: 1.5px dashed;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.52);
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 95px;
+  transition: all 0.15s ease;
+}
+
+.task-sticky-body-field:focus {
+  background: rgba(255, 255, 255, 0.88);
+  border-style: solid;
+  outline: 2px solid var(--accent-terracotta, #C85A32);
+}
+
+.task-sticky-char-limit {
+  display: block;
+  text-align: right;
+  font-size: 10px;
+  opacity: 0.65;
+  margin-top: 2px;
+}
+
+/* Composer Action Controls */
+.task-sticky-composer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.task-sticky-cancel-btn {
+  padding: 9px 18px;
+  border-radius: 8px;
+  border: 1px solid rgba(61, 38, 69, 0.22);
+  background: #FFF;
+  color: #3D2645;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.task-sticky-cancel-btn:hover {
+  background: rgba(61, 38, 69, 0.05);
+}
+
+.task-sticky-save-btn {
+  padding: 9px 24px;
+  border-radius: 8px;
+  border: 1px solid;
+  color: #FFF;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.14);
+}
+
+.task-sticky-save-btn:hover {
+  filter: brightness(0.92);
+  transform: translateY(-1px);
+}
+
+/* --------------------------------------------------------------------------
+   7. VIEWER META & ACTIONS
+   -------------------------------------------------------------------------- */
+
+.task-sticky-note-meta-row {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 5;
+}
+
+.task-sticky-meta-tab-pip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 22px;
+  border-radius: 5px;
+  border: 1px solid currentColor;
+}
+
+.task-sticky-meta-motif {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+}
+
+.task-sticky-meta-motif svg {
+  width: 100%;
+  height: 100%;
+}
+
+.task-sticky-timestamp {
+  font-size: 11px;
+  opacity: 0.7;
+  font-weight: 500;
+}
+
+.task-sticky-note-title {
+  margin: 0;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.task-sticky-note-body {
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.task-sticky-viewer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  gap: 12px;
+}
+
+.task-sticky-edit-trigger-btn {
+  padding: 8px 18px;
+  border-radius: 8px;
+  border: 1px solid rgba(61, 38, 69, 0.22);
+  background: #FFF;
+  color: #201E23;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.task-sticky-edit-trigger-btn:hover {
+  border-color: var(--accent-terracotta, #C85A32);
+  color: var(--accent-terracotta, #C85A32);
+  background: var(--accent-terracotta-light, #FDF0ED);
+}
+
+.task-sticky-delete-trigger-btn {
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #8C636E;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.task-sticky-delete-trigger-btn:hover {
+  background: #FFF0F3;
+  color: #D9383A;
+}
+
+.task-sticky-confirm-delete-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #FFF0F3;
+  padding: 5px 10px;
+  border-radius: 7px;
+  border: 1px solid #F5C6BE;
+}
+
+.task-sticky-confirm-text {
+  font-size: 11px;
+  font-weight: 600;
+  color: #D9383A;
+}
+
+.task-sticky-confirm-yes-btn {
+  padding: 3px 9px;
+  border-radius: 5px;
+  border: none;
+  background: #D9383A;
+  color: #FFF;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.task-sticky-confirm-cancel-btn {
+  padding: 3px 9px;
+  border-radius: 5px;
+  border: 1px solid #F5C6BE;
+  background: #FFF;
+  color: #726084;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+/* --------------------------------------------------------------------------
+   8. ACCESSIBILITY & REDUCED MOTION PREFERENCES
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .task-sticky-modal-backdrop,
+  .task-sticky-modal-dialog,
+  .task-sticky-tab,
+  .task-sticky-empty-trigger,
+  .task-sticky-gallery-card,
+  .task-sticky-save-btn {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   9. RESPONSIVE ADJUSTMENTS
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 768px) {
+  .task-sticky-gallery-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .task-sticky-writing-area,
+  .task-sticky-reading-area {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+@media (max-width: 520px) {
+  .task-sticky-modal-dialog {
+    max-height: 95vh;
+  }
+
+  .task-sticky-modal-header,
+  .task-sticky-modal-body {
+    padding: 12px 16px;
+  }
+
+  .task-sticky-gallery-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .task-sticky-full-paper {
+    padding: 8px;
+  }
+
+  .task-sticky-inner-card {
+    min-height: 340px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   10. STATIONERY HANDWRITING TYPOGRAPHY (6 AUTHENTIC HANDWRITING FONTS)
+   -------------------------------------------------------------------------- */
+
+.theme-powder-blue .task-sticky-title-field,
+.theme-powder-blue .task-sticky-note-title {
+  font-family: 'Sue Ellen Francisco', cursive;
+  font-size: 20px;
+  line-height: 1.3;
+}
+.theme-powder-blue .task-sticky-body-field,
+.theme-powder-blue .task-sticky-note-body {
+  font-family: 'Sue Ellen Francisco', cursive;
+  font-size: 18px;
+  line-height: 1.5;
+}
+
+.theme-blush-bunny .task-sticky-title-field,
+.theme-blush-bunny .task-sticky-note-title {
+  font-family: 'La Belle Aurore', cursive;
+  font-size: 19px;
+  line-height: 1.35;
+}
+.theme-blush-bunny .task-sticky-body-field,
+.theme-blush-bunny .task-sticky-note-body {
+  font-family: 'La Belle Aurore', cursive;
+  font-size: 17px;
+  line-height: 1.55;
+}
+
+.theme-lavender-cat .task-sticky-title-field,
+.theme-lavender-cat .task-sticky-note-title {
+  font-family: 'Ephesis', cursive;
+  font-size: 22px;
+  line-height: 1.35;
+}
+.theme-lavender-cat .task-sticky-body-field,
+.theme-lavender-cat .task-sticky-note-body {
+  font-family: 'Ephesis', cursive;
+  font-size: 20px;
+  line-height: 1.5;
+}
+
+.theme-mint-bear .task-sticky-title-field,
+.theme-mint-bear .task-sticky-note-title {
+  font-family: 'Indie Flower', cursive;
+  font-size: 18px;
+  line-height: 1.35;
+}
+.theme-mint-bear .task-sticky-body-field,
+.theme-mint-bear .task-sticky-note-body {
+  font-family: 'Indie Flower', cursive;
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.theme-butter-yellow .task-sticky-title-field,
+.theme-butter-yellow .task-sticky-note-title {
+  font-family: 'Shadows Into Light', cursive;
+  font-size: 19px;
+  line-height: 1.35;
+}
+.theme-butter-yellow .task-sticky-body-field,
+.theme-butter-yellow .task-sticky-note-body {
+  font-family: 'Shadows Into Light', cursive;
+  font-size: 17px;
+  line-height: 1.55;
+}
+
+.theme-matcha-leaf .task-sticky-title-field,
+.theme-matcha-leaf .task-sticky-note-title {
+  font-family: 'Rouge Script', cursive;
+  font-size: 25px;
+  line-height: 1.4;
+  letter-spacing: 0.3px;
+}
+.theme-matcha-leaf .task-sticky-body-field,
+.theme-matcha-leaf .task-sticky-note-body {
+  font-family: 'Rouge Script', cursive;
+  font-size: 22px;
+  line-height: 1.55;
+  letter-spacing: 0.2px;
+}

@@ -23,6 +23,8 @@ export default function TaskList({
   onClearCompleted,
   completedCount = 0,
   onQuickAdd,
+  stickyNotesMap = {},
+  onOpenStickyNotes,
 }) {
   const sectionRef = useRef(null);
   const [isVisible, setIsVisible] = useState(false);
@@ -160,6 +162,8 @@ export default function TaskList({
                 activeTimerState={activeTimerState}
                 onStartTimer={onStartTimer}
                 onPauseTimer={onPauseTimer}
+                stickyNotes={stickyNotesMap[task.id] || []}
+                onOpenStickyNotes={onOpenStickyNotes}
               />
             );
           })}
@@ -167,6 +171,9 @@ export default function TaskList({
           {filteredTasks.length === 0 && (
             <div style={styles.emptyCard}>
               <span style={styles.emptyEmoji}>{tasks.length === 0 ? '✨' : '🎉'}</span>
+              <span style={styles.emptyAccentPhrase}>
+                {tasks.length === 0 ? '✦ Fresh canvas awaits your vision' : '✦ Brilliant momentum · Keep the streak alive'}
+              </span>
               <h4 style={styles.emptyTitle}>
                 {tasks.length === 0
                   ? 'Your workspace is ready — no tasks created yet.'
@@ -245,20 +252,22 @@ const styles = {
     color: '#C85A32',
   },
   badge: {
-    fontSize: '11px',
-    fontWeight: '800',
+    fontFamily: "var(--font-subheading, 'Unica One', cursive, sans-serif)",
+    fontSize: '12px',
+    fontWeight: '700',
     letterSpacing: '0.08em',
     color: '#5E5B66',
   },
   title: {
-    fontFamily: "'Syne', sans-serif",
-    fontSize: '28px',
-    fontWeight: '800',
+    fontFamily: "var(--font-display, 'Eagle Lake', cursive, Georgia, serif)",
+    fontSize: '26px',
+    fontWeight: '400',
     color: '#3D2645',
-    letterSpacing: '-0.02em',
+    letterSpacing: '0.01em',
     margin: 0,
   },
   subtitle: {
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
     fontSize: '14px',
     color: '#5E5B66',
     margin: 0,
@@ -309,10 +318,17 @@ const styles = {
   emptyEmoji: {
     fontSize: '36px',
   },
+  emptyAccentPhrase: {
+    fontFamily: "var(--font-accent, 'Bigelow Rules', cursive)",
+    fontSize: '22px',
+    color: '#C85A32',
+    letterSpacing: '0.04em',
+    marginBottom: '2px',
+  },
   emptyTitle: {
-    fontFamily: "'Syne', sans-serif",
+    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, Georgia, serif)",
     fontSize: '20px',
-    fontWeight: '700',
+    fontWeight: '400',
     color: '#25242A',
     margin: 0,
   },

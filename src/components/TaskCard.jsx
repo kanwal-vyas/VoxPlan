@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { formatTaskDueDate } from '../conversation/compoundCommandParser';
+import TaskStickyTab from './stickyNotes/TaskStickyTab';
 
 function formatDueDate(dueDateStr, referenceDate) {
   return formatTaskDueDate(dueDateStr, referenceDate);
@@ -39,6 +40,8 @@ export default function TaskCard({
   activeTimerState,
   onStartTimer,
   onPauseTimer,
+  stickyNotes = [],
+  onOpenStickyNotes,
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(task.title);
@@ -250,6 +253,11 @@ export default function TaskCard({
           >
             {task.priority ? `${task.priority.toUpperCase()} PRIORITY` : 'MEDIUM PRIORITY'}
           </button>
+          <TaskStickyTab
+            notes={stickyNotes}
+            taskTitle={task.title}
+            onOpen={() => onOpenStickyNotes && onOpenStickyNotes(task)}
+          />
         </div>
 
         <div style={styles.actionButtons}>
@@ -756,11 +764,11 @@ const styles = {
     gap: '8px',
   },
   title: {
-    fontFamily: "'Syne', sans-serif",
-    fontSize: '20px',
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
+    fontSize: '18px',
     fontWeight: '700',
     color: '#201E23',
-    letterSpacing: '-0.02em',
+    letterSpacing: '-0.01em',
     margin: 0,
     lineHeight: 1.25,
   },
@@ -783,8 +791,8 @@ const styles = {
     border: '1.5px solid #25242A',
     borderRadius: '6px',
     color: '#25242A',
-    fontFamily: "'Syne', sans-serif",
-    fontSize: '18px',
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
+    fontSize: '17px',
     fontWeight: '700',
     padding: '4px 8px',
     outline: 'none',
@@ -1045,10 +1053,10 @@ const styles = {
     gap: '8px',
   },
   riskLabel: {
-    fontFamily: "'Plus Jakarta Sans', sans-serif",
+    fontFamily: "var(--font-compact, 'Unica One', sans-serif)",
     fontSize: '11px',
-    fontWeight: '800',
-    letterSpacing: '0.04em',
+    fontWeight: '700',
+    letterSpacing: '0.06em',
   },
   completedBadge: {
     fontSize: '12px',
