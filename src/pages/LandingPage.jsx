@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 /**
  * VoxPlan Product Landing Page (/)
@@ -6,20 +6,141 @@ import React, { useState, useEffect } from 'react';
  * Visually distinctive, responsive landing page presenting VoxPlan's local-first
  * predictive task and schedule intelligence platform.
  */
+
+// Section palette stops for smooth scroll interpolation across Overview
+const SECTION_PALETTES = [
+  { id: 'hero', color: '#FFF8EF', pos: 0.0 },
+  { id: 'features', color: '#FFF9DB', pos: 0.25 },
+  { id: 'how-it-works', color: '#F3EEFF', pos: 0.50 },
+  { id: 'architecture', color: '#EBF8F1', pos: 0.75 },
+  { id: 'cta', color: '#FFEFEA', pos: 1.0 },
+];
+
+function hexToRgb(hex) {
+  const clean = hex.replace('#', '');
+  const bigint = parseInt(clean, 16);
+  return [(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255];
+}
+
+function lerpColor(hexA, hexB, t) {
+  const clampedT = Math.max(0, Math.min(1, t));
+  const [r1, g1, b1] = hexToRgb(hexA);
+  const [r2, g2, b2] = hexToRgb(hexB);
+  const r = Math.round(r1 + (r2 - r1) * clampedT);
+  const g = Math.round(g1 + (g2 - g1) * clampedT);
+  const b = Math.round(b1 + (b2 - b1) * clampedT);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+function interpolatePaletteColor(progress) {
+  const p = Math.max(0, Math.min(1, progress));
+  for (let i = 0; i < SECTION_PALETTES.length - 1; i++) {
+    const s1 = SECTION_PALETTES[i];
+    const s2 = SECTION_PALETTES[i + 1];
+    if (p >= s1.pos && p <= s2.pos) {
+      const span = s2.pos - s1.pos;
+      const localT = span > 0 ? (p - s1.pos) / span : 0;
+      return lerpColor(s1.color, s2.color, localT);
+    }
+  }
+  return SECTION_PALETTES[SECTION_PALETTES.length - 1].color;
+}
+
 export default function LandingPage({ onNavigate }) {
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activePreviewTab, setActivePreviewTab] = useState('schedule'); // 'schedule' | 'risk' | 'voice'
   const [previewTimerRunning, setPreviewTimerRunning] = useState(false);
   const [previewTimerSeconds, setPreviewTimerSeconds] = useState(2540); // 42m 20s
+  const pageRef = useRef(null);
+  const ribbonRefs = useRef({});
 
-  // Sticky header scroll elevation
+  // Passive scroll listener: slow background color transition & moving ribbon words
   useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 20);
+    if (typeof window === 'undefined') return;
+
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let rafId = null;
+    let isTicking = false;
+
+    const updateScrollStory = () => {
+      isTicking = false;
+      const scrollY = window.scrollY || window.pageYOffset || 0;
+      setScrolled(scrollY > 20);
+
+      if (prefersReducedMotion) {
+        if (pageRef.current) {
+          pageRef.current.style.setProperty('--overview-bg', '#FFF8EF');
+          pageRef.current.style.backgroundColor = '#FFF8EF';
+        }
+        Object.entries(ribbonRefs.current).forEach(([, el]) => {
+          if (!el) return;
+          el.style.transform = 'none';
+          el.style.opacity = '0.32';
+        });
+        return;
+      }
+
+      const docHeight = document.documentElement.scrollHeight || document.body.scrollHeight || 0;
+      const winHeight = window.innerHeight || 1;
+      const maxScroll = Math.max(1, docHeight - winHeight);
+      const progress = Math.max(0, Math.min(1, scrollY / maxScroll));
+
+      // 1. Slow, continuous background color transition across established pastel palette
+      const currentColor = interpolatePaletteColor(progress);
+      if (pageRef.current) {
+        pageRef.current.style.setProperty('--overview-bg', currentColor);
+        pageRef.current.style.backgroundColor = currentColor;
+      }
+
+      // 2. Horizontal movement on oversized editorial ribbon words (PLAN, PREDICT, UNDERSTAND, ACT)
+      const isMobile = window.innerWidth <= 768;
+      const moveDistance = isMobile ? 36 : 70;
+      const baseOpacity = isMobile ? 0.26 : 0.28;
+      const peakBoost = isMobile ? 0.22 : 0.28;
+
+      Object.entries(ribbonRefs.current).forEach(([, el]) => {
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        // Ribbon progress from viewport entry (bottom) to exit (top)
+        const ribbonProgress = 1 - (rect.top / (winHeight + rect.height));
+        const clamped = Math.max(0, Math.min(1, ribbonProgress));
+
+        // Horizontal glide from +moveDistance to -moveDistance
+        const currentX = moveDistance - (clamped * (moveDistance * 2));
+        // Opacity: starts at baseOpacity (so always discoverable), peaks at (baseOpacity + peakBoost) in viewport center
+        const opacity = baseOpacity + (Math.sin(clamped * Math.PI) * peakBoost);
+
+        el.style.transform = `translate3d(${currentX.toFixed(1)}px, 0, 0)`;
+        el.style.opacity = opacity.toFixed(3);
+      });
     };
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
+
+    const onScroll = () => {
+      if (!isTicking) {
+        isTicking = true;
+        rafId = window.requestAnimationFrame(updateScrollStory);
+      }
+    };
+
+    const onResize = () => {
+      if (!isTicking) {
+        isTicking = true;
+        rafId = window.requestAnimationFrame(updateScrollStory);
+      }
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onResize, { passive: true });
+    updateScrollStory();
+
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onResize);
+      if (rafId) {
+        window.cancelAnimationFrame(rafId);
+      }
+    };
   }, []);
 
   // Demo interactive stopwatch tick for the preview card
@@ -59,7 +180,7 @@ export default function LandingPage({ onNavigate }) {
   };
 
   return (
-    <div style={styles.page}>
+    <div ref={pageRef} className="overview-page" style={styles.page}>
       {/* 1. Header / Navigation */}
       <header
         style={{
@@ -161,9 +282,10 @@ export default function LandingPage({ onNavigate }) {
             <span style={styles.eyebrowText}>PREDICTIVE TASK & SCHEDULE INTELLIGENCE</span>
           </div>
 
+
           {/* Main Headline */}
           <h1 style={styles.heroTitle}>
-            Turn Task Lists Into <br />
+            <span style={styles.heroTitleLine}>Turn Task Lists Into</span>
             <span style={styles.heroHighlight}>Executable Plans</span>
           </h1>
 
@@ -530,6 +652,18 @@ export default function LandingPage({ onNavigate }) {
         </div>
       </section>
 
+      {/* Editorial Word Ribbon: PLAN */}
+      <div className="overview-ribbon-wrap" aria-hidden="true">
+        <span
+          className="overview-ribbon-word"
+          ref={(el) => {
+            ribbonRefs.current.plan = el;
+          }}
+        >
+          PLAN
+        </span>
+      </div>
+
       {/* 4. Features Grid (Only Implemented Capabilities) */}
       <section id="features" style={styles.featuresSection}>
         <div style={styles.sectionHeader}>
@@ -609,6 +743,18 @@ export default function LandingPage({ onNavigate }) {
         </div>
       </section>
 
+      {/* Editorial Word Ribbon: PREDICT */}
+      <div className="overview-ribbon-wrap" aria-hidden="true">
+        <span
+          className="overview-ribbon-word"
+          ref={(el) => {
+            ribbonRefs.current.predict = el;
+          }}
+        >
+          PREDICT
+        </span>
+      </div>
+
       {/* 5. How It Works Section */}
       <section id="how-it-works" style={styles.howSection}>
         <div style={styles.sectionHeader}>
@@ -661,6 +807,18 @@ export default function LandingPage({ onNavigate }) {
           </div>
         </div>
       </section>
+
+      {/* Editorial Word Ribbon: UNDERSTAND */}
+      <div className="overview-ribbon-wrap" aria-hidden="true">
+        <span
+          className="overview-ribbon-word"
+          ref={(el) => {
+            ribbonRefs.current.understand = el;
+          }}
+        >
+          UNDERSTAND
+        </span>
+      </div>
 
       {/* 6. Local-First Privacy & Safety Architecture */}
       <section id="architecture" style={styles.safetySection}>
@@ -716,6 +874,18 @@ export default function LandingPage({ onNavigate }) {
           </table>
         </div>
       </section>
+
+      {/* Editorial Word Ribbon: ACT */}
+      <div className="overview-ribbon-wrap" aria-hidden="true">
+        <span
+          className="overview-ribbon-word"
+          ref={(el) => {
+            ribbonRefs.current.act = el;
+          }}
+        >
+          ACT
+        </span>
+      </div>
 
       {/* 7. Final Call to Action */}
       <section style={styles.ctaSection}>
@@ -798,9 +968,11 @@ export default function LandingPage({ onNavigate }) {
 const styles = {
   page: {
     minHeight: '100vh',
-    backgroundColor: '#FFF8EF',
     color: '#25242A',
-    fontFamily: "'Plus Jakarta Sans', 'Instrument Sans', sans-serif",
+    fontFamily: "var(--font-sans, 'Lato', sans-serif)",
+    backgroundColor: 'var(--overview-bg, #FFF8EF)',
+    transition: 'background-color 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+    willChange: 'background-color',
     lineHeight: 1.6,
   },
   header: {
@@ -850,14 +1022,14 @@ const styles = {
     boxShadow: '0 2px 0 rgba(37, 36, 42, 0.8)',
   },
   brandName: {
-    fontFamily: "'Syne', sans-serif",
+    fontFamily: "var(--font-wordmark, 'Trade Winds', cursive)",
     fontSize: '20px',
     fontWeight: '800',
     letterSpacing: '-0.03em',
     color: '#25242A',
   },
   taglineNote: {
-    fontFamily: "'Caveat', cursive",
+    fontFamily: "var(--font-accent, 'Bigelow Rules', cursive)",
     fontSize: '17px',
     color: '#7A7782',
     fontWeight: '600',
@@ -965,24 +1137,34 @@ const styles = {
   eyebrowText: {
     fontSize: '11px',
     fontWeight: '700',
+    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
     letterSpacing: '0.08em',
     color: '#4A4852',
   },
   heroTitle: {
-    fontFamily: "'Syne', sans-serif",
-    fontSize: 'clamp(36px, 5.5vw, 62px)',
+    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, serif)",
+    fontSize: 'clamp(32px, 5.2vw, 58px)',
     fontWeight: '800',
-    lineHeight: 1.1,
-    letterSpacing: '-0.03em',
+    lineHeight: 1.35,
+    letterSpacing: '-0.02em',
     color: '#25242A',
-    margin: '0 0 20px',
+    margin: '0 0 24px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '14px',
+  },
+  heroTitleLine: {
+    display: 'block',
+    lineHeight: 1.25,
   },
   heroHighlight: {
+    display: 'inline-block',
     backgroundColor: '#FFE58A',
-    padding: '0 8px',
-    borderRadius: '8px',
-    boxDecorationBreak: 'clone',
-    WebkitBoxDecorationBreak: 'clone',
+    padding: '4px 18px',
+    borderRadius: '12px',
+    lineHeight: 1.25,
+    boxShadow: '0 2px 8px rgba(224, 159, 62, 0.18)',
   },
   heroSubtitle: {
     fontSize: 'clamp(16px, 2vw, 19px)',
@@ -1183,7 +1365,7 @@ const styles = {
     letterSpacing: '0.04em',
   },
   previewHeading: {
-    fontFamily: "'Syne', sans-serif",
+    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, serif)",
     fontSize: '24px',
     fontWeight: '800',
     color: '#25242A',
@@ -1526,6 +1708,7 @@ const styles = {
     marginBottom: '12px',
   },
   commandBadge: {
+    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
     fontSize: '11px',
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -1565,7 +1748,7 @@ const styles = {
     marginBottom: '12px',
   },
   sectionTitle: {
-    fontFamily: "'Syne', sans-serif",
+    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, serif)",
     fontSize: 'clamp(28px, 4vw, 42px)',
     fontWeight: '800',
     letterSpacing: '-0.02em',
@@ -1659,7 +1842,7 @@ const styles = {
     fontFamily: "'JetBrains Mono', monospace",
   },
   featureCardTitle: {
-    fontFamily: "'Syne', sans-serif",
+    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, serif)",
     fontSize: '19px',
     fontWeight: '800',
     color: '#25242A',
@@ -1719,7 +1902,7 @@ const styles = {
     border: '1px solid rgba(37, 36, 42, 0.2)',
   },
   stepTitle: {
-    fontFamily: "'Syne', sans-serif",
+    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, serif)",
     fontSize: '18px',
     fontWeight: '800',
     color: '#25242A',
@@ -1819,7 +2002,7 @@ const styles = {
     marginBottom: '16px',
   },
   ctaTitle: {
-    fontFamily: "'Syne', sans-serif",
+    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, serif)",
     fontSize: 'clamp(28px, 4vw, 40px)',
     fontWeight: '800',
     color: '#25242A',

@@ -496,6 +496,78 @@ button:active {
 }
 
 /* --------------------------------------------------------------------------
+   Restored Overview Page (.overview-page) Atmosphere & Ribbons
+   -------------------------------------------------------------------------- */
+
+.overview-page {
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+  background-color: var(--overview-bg, #FFF8EF);
+  color: var(--text-dark, #201E23);
+  font-family: var(--font-sans, 'Lato', sans-serif);
+  transition: background-color 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: background-color;
+  padding: 0 20px 80px 20px;
+}
+
+.overview-ribbon-wrap {
+  width: 100%;
+  min-height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 44px 0;
+  margin: 16px 0;
+  pointer-events: none;
+  user-select: none;
+  position: relative;
+  z-index: 1;
+}
+
+.overview-ribbon-word {
+  font-family: var(--font-display, 'Eagle Lake', cursive, serif);
+  font-size: clamp(64px, 12vw, 150px);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.05;
+  color: #3D2645;
+  opacity: 0.28;
+  will-change: transform, opacity;
+  display: inline-block;
+  white-space: nowrap;
+  transition: transform 0.1s linear, opacity 0.2s ease;
+}
+
+@media (max-width: 768px) {
+  .overview-page {
+    padding: 0 12px 64px 12px;
+  }
+  .overview-ribbon-wrap {
+    min-height: 90px;
+    padding: 24px 0;
+    margin: 8px 0;
+  }
+  .overview-ribbon-word {
+    font-size: clamp(42px, 11vw, 76px);
+    opacity: 0.26;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overview-page {
+    background-color: #FFF8EF !important;
+    transition: none !important;
+  }
+  .overview-ribbon-word {
+    transform: none !important;
+    opacity: 0.32 !important;
+    transition: none !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
    App Atmosphere & Transform Layers
    -------------------------------------------------------------------------- */
 
