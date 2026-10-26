@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import BrandBadge from './BrandBadge';
 import NotificationBell from './notifications/NotificationBell';
 import NotificationCenter from './notifications/NotificationCenter';
 import NotificationPreferencesModal from './notifications/NotificationPreferencesModal';
@@ -85,9 +86,7 @@ export default function Header({
           aria-label={onNavigate ? 'Back to VoxPlan product landing page' : 'VoxPlan home, scroll to top'}
           title={onNavigate ? 'Back to Product Landing Page' : 'Scroll to top'}
         >
-          <div style={styles.brandBadge}>
-            <span>✦</span>
-          </div>
+          <BrandBadge size={28} />
           <span style={styles.brandName}>VOXPLAN</span>
         </button>
 
@@ -533,18 +532,6 @@ const styles = {
     font: 'inherit',
     textAlign: 'left',
     flexShrink: 0,
-  },
-  brandBadge: {
-    width: '24px',
-    height: '24px',
-    borderRadius: '6px',
-    backgroundColor: '#C85A32',
-    color: '#FFFFFF',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '12px',
-    boxShadow: '0 2px 4px rgba(200, 90, 50, 0.25)',
   },
   brandName: {
     fontFamily: "var(--font-wordmark, 'Trade Winds', cursive)",

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import BrandBadge from '../components/BrandBadge';
 
 /**
  * VoxPlan Product Landing Page (/)
@@ -204,9 +205,7 @@ export default function LandingPage({ onNavigate }) {
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
             aria-label="VoxPlan home, scroll to top"
           >
-            <div style={styles.brandBadge}>
-              <span>✦</span>
-            </div>
+            <BrandBadge size={32} />
             <span style={styles.brandName}>VOXPLAN</span>
             <span style={styles.taglineNote}>smart notebook</span>
           </button>
@@ -954,9 +953,7 @@ export default function LandingPage({ onNavigate }) {
         <div style={styles.footerContainer}>
           <div style={styles.footerBrandCol}>
             <div style={styles.brand}>
-              <div style={styles.brandBadge}>
-                <span>✦</span>
-              </div>
+              <BrandBadge size={32} />
               <span style={styles.brandName}>VOXPLAN</span>
             </div>
             <p style={styles.footerTagline}>

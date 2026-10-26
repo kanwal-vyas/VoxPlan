@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import BrandBadge from './BrandBadge';
 
 export default function LoadingScreen({ onComplete }) {
   const [progress, setProgress] = useState(0);
@@ -61,7 +62,7 @@ export default function LoadingScreen({ onComplete }) {
 
         {/* Wordmark */}
         <div style={styles.logoGroup}>
-          <div style={styles.logoBadge}>✨</div>
+          <BrandBadge size={44} />
           <h1 style={styles.logo}>VOXPLAN</h1>
         </div>
 
