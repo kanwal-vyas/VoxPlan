@@ -36,6 +36,7 @@ This document tracks the phased evolution of VoxPlan from a static task tracker 
 | **Phase 8.17** | Fully Isolated Interactive Product Tour | **COMPLETED** | Comprehensive guided product tour covering all VoxPlan capabilities (Overview vs Workspace, task management, adaptive scheduling, voice & typed command dock, stationery sticky notes, notification center, ML risk & duration intelligence, encrypted backups, local-first privacy), Mode A observation tour vs Mode B disposable in-memory hands-on demo, scoped CSS & spotlight cutout, keyboard navigation, reversible launchers, 30 automated unit tests (1,260 frontend tests total). |
 | **Phase 8.18** | Product Tour Spotlight Visibility & Target Highlighting Overhaul | **COMPLETED** | SVG mask clear-window cutout exempting active targets from 8px backdrop blur and dimming; 2.5px solid warm terracotta spotlight border with hairline accents and beacon tag; visibility-aware DOM querying bypassing hidden inactive tabs; semantic ID tagging on critical workflow targets; 52 tour tests passing. |
 | **Phase 8.19** | App Icon and Browser Favicon Unification | **COMPLETED** | Reused exact canonical Overview brand symbol (`✦` inside `#FFE58A` rounded square with `#25242A` shadow and border) across `/` and `/app` via shared `BrandBadge.jsx`; replaced Vite starter purple lightning bolt with canonical `favicon.svg` using exact extracted vector path; generated multi-size `favicon.ico`, `favicon-32x32.png`, and PWA raster icons; 0 errors across 1,282 tests. |
+| **Phase 8.20** | Render Static Site SPA Routing & Live Service Verification | **COMPLETED** | Diagnosed live Render deployment 404 on reload (`https://voxplan-u31l.onrender.com/app`); confirmed backend `voxplan-api` at `https://voxplan-api.onrender.com` healthy (FastAPI 200 OK); identified missing Render Static Site rewrite rule for SPA navigation fallback; documented exact Render Dashboard rewrite rule (`/*` -> `/index.html`); 1,282 frontend tests, 29 backend tests passing. |
 
 
 ---
@@ -7763,5 +7764,50 @@ Conducted full browser verification across all 20 steps on `http://localhost:517
 - `python -m pytest backend/tests/`: **29 passed, 0 failed** (1.92s).
 - `npm run lint` (`oxlint`): **0 errors, 1 pre-existing warning**.
 - `npm run build` (`vite build`): Built production bundle in 423ms with 0 errors.
+- `node scripts/secretScanner.mjs`: **0 secrets** detected across 165 files.
+- `git diff --check`: **Clean** (zero conflict markers or whitespace errors).
+
+---
+
+### 9. Render Static Site SPA Routing & Live Service Verification (Phase 8.20)
+
+#### Root Cause Analysis:
+1. **Render Static Site Missing SPA Rewrite (`VoxPlan`)**:
+   - The frontend application is deployed as a Render **Static Site** (`https://voxplan-u31l.onrender.com/`).
+   - In single-page applications, client-side navigation transitions routes using `window.history.pushState` (e.g. from `/` to `/app`).
+   - Live HTTP probe on `https://voxplan-u31l.onrender.com/`:
+     - `GET /` -> **HTTP 200 OK** (serves `dist/index.html`).
+   - Live HTTP probe on `https://voxplan-u31l.onrender.com/app`:
+     - `GET /app` -> **HTTP 404 Not Found** (`rndr-id: 74e41253-0ea7-4475`, `Content-Type: text/plain; charset=utf-8`).
+   - **Root Cause**: Render Static Sites serve files directly from the published `dist/` directory. Without a configured **Rewrite Rule**, any direct URL request or browser reload on `/app` fails to find `dist/app` or `dist/app.html`, causing Render's edge to return a plain-text 404 error.
+2. **Backend Service Health Verification (`voxplan-api`)**:
+   - Live HTTP probe on `https://voxplan-api.onrender.com/health`:
+     - Returned **HTTP 200 OK**: `{"status":"ok","service":"voxplan-ml"}`.
+   - Live HTTP probe on `https://voxplan-api.onrender.com/api/model/status`:
+     - Returned **HTTP 200 OK**: `{"is_trained":true,"model_type":"RandomForestClassifier","accuracy":0.8833}`.
+   - **Conclusion**: The Render Python backend (`voxplan-api`) is 100% operational, healthy, and serving live ML models. API failures are **not** the cause of the website reload 404.
+
+#### Render Dashboard Configuration:
+To resolve the 404 on browser reload for the `VoxPlan` Static Site:
+1. In the **Render Dashboard**, open the **`VoxPlan`** Static Site.
+2. Navigate to **Redirects/Rewrites** in the settings menu.
+3. Click **Add Rule** and enter:
+   - **Type**: `Rewrite`
+   - **Source**: `/*`
+   - **Destination**: `/index.html`
+4. Click **Save Changes**.
+
+*Render will immediately rewrite all non-file navigation requests to `/index.html`, while all physical files (`dist/assets/*`, `favicon.svg`, `manifest.webmanifest`, `sw.js`, fonts) continue to be served directly from disk with priority.*
+
+#### Reversion of Vercel-Specific Files:
+- Removed `vercel.json` and `tests/vercel_routing.test.js`.
+- Reverted Vercel-specific test additions in `tests/ci_and_deployment.test.js`.
+- Confirmed zero residual Vercel artifacts in the repository.
+
+#### Automated Quality Gates:
+- `npm test`: **1,282 passed, 0 failed** across 280 suites.
+- `python -m pytest backend/tests/`: **29 passed, 0 failed**.
+- `npm run lint` (`oxlint`): **0 errors, 1 pre-existing warning**.
+- `npm run build` (`vite build`): Built production bundle in 412ms with 0 errors.
 - `node scripts/secretScanner.mjs`: **0 secrets** detected across 165 files.
 - `git diff --check`: **Clean** (zero conflict markers or whitespace errors).
