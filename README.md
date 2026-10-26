@@ -1,488 +1,763 @@
-# VoxPlan: Predictive Task & Schedule Intelligence
-[Live Demo](https://voxplan-u31l.onrender.com/)
+# VoxPlan: Adaptive Productivity & Task-Scheduling Intelligence
 
-> **"VoxPlan transforms task lists into structured execution plans, evaluating delivery risk with supervised machine learning and an accessible natural language interface."**
+[![Frontend CI](https://github.com/kanwal-vyas/VoxPlan/actions/workflows/ci.yml/badge.svg)](https://github.com/kanwal-vyas/VoxPlan/actions)
+[![React](https://img.shields.io/badge/React-19.2-blue?logo=react)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/Vite-6.0-646CFF?logo=vite)](https://vitejs.dev/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
+[![scikit-learn](https://img.shields.io/badge/scikit--learn-1.5-F7931E?logo=scikitlearn)](https://scikit-learn.org/)
+[![Local-First](https://img.shields.io/badge/Architecture-Local--First%20IndexedDB-brightgreen)](https://github.com/kanwal-vyas/VoxPlan)
+[![Tests Passing](https://img.shields.io/badge/Tests-1%2C282%20Frontend%20%7C%2029%20Backend-success)](https://github.com/kanwal-vyas/VoxPlan)
 
-VoxPlan is being evolved from a student/sprint task tracker into an independent, AI-powered personal planning system that learns from actual user task-completion patterns and adapts scheduling to individual working styles.
+> **"VoxPlan transforms static task lists into executable calendar plans, evaluating completion risk with supervised machine learning, adapting to individual pacing with empirical Bayesian shrinkage, and guiding users with a browser-native voice and interactive tour experience—all while keeping your data 100% local."**
 
 ---
 
-## Application Structure & Routing
+## Live Deployments & Repository
 
-VoxPlan is organized into two distinct experiences with seamless client-side routing:
-- **`/` — Product Landing Page**: Product introduction, interactive feature previews (Adaptive Schedule, ML Risk, Voice Commands), architecture comparison, and direct calls to action.
-- **`/app` — Functional Productivity Application**: The full operational intelligence workspace featuring task management, live stopwatch timers, ML delay-risk prediction, Kahn DAG dependency scheduling, visual proposal editing, behavioral habit insights, and RFC 5545 `.ics` calendar export.
+- **GitHub Repository**: [https://github.com/kanwal-vyas/VoxPlan](https://github.com/kanwal-vyas/VoxPlan)
+- **Frontend Web Application (Render Static Site)**: [https://voxplan-u31l.onrender.com](https://voxplan-u31l.onrender.com/)
+- **Machine Learning API Service (Render Web Service)**: [https://voxplan-api.onrender.com](https://voxplan-api.onrender.com/)
+- **Interactive OpenAPI Documentation**: [https://voxplan-api.onrender.com/docs](https://voxplan-api.onrender.com/docs) (or `http://127.0.0.1:8000/docs` locally)
 
-```bash
-# Automated Launch (Node.js script or Windows batch wrapper)
-npm run demo                 # Starts services and opens Product Landing Page (/)
-npm run demo -- --app        # Starts services and opens directly to Productivity App (/app)
-# or on Windows:
-.\run-demo.bat
-.\run-demo.bat --app
+---
 
-# Launch flags:
-npm run demo -- --app        # Open directly to Productivity Application (/app)
-npm run demo -- --no-open    # Start services without automatically opening browser
-npm run demo -- --dry-run    # Preflight check and port inspection without spawning processes
-npm run demo -- --help       # Show all orchestration options
+## Table of Contents
+
+1. [Executive Overview & Key Highlights](#executive-overview--key-highlights)
+2. [Problem Statement & Motivation](#problem-statement--motivation)
+3. [Core Design Principles](#core-design-principles)
+4. [Complete Feature Inventory](#complete-feature-inventory)
+5. [Interactive Product Tour (Phase 8.17 & 8.18)](#interactive-product-tour)
+6. [How VoxPlan Works](#how-voxplan-works)
+7. [System Architecture](#system-architecture)
+8. [Deterministic Adaptive Scheduling Engine](#deterministic-adaptive-scheduling-engine)
+9. [Empirical Bayesian Personalization Model](#empirical-bayesian-personalization-model)
+10. [Machine Learning Delay-Risk Estimation](#machine-learning-delay-risk-estimation)
+11. [Local-First Persistence & Privacy Architecture](#local-first-persistence--privacy-architecture)
+12. [Natural Language & Voice Interaction](#natural-language--voice-interaction)
+13. [Installation & Developer Setup](#installation--developer-setup)
+14. [Testing & Quality Verification](#testing--quality-verification)
+15. [Deployment Configuration](#deployment-configuration)
+16. [Repository Structure](#repository-structure)
+17. [Known Limitations & Future Scope](#known-limitations--future-scope)
+18. [Authors & Community](#authors--community)
+
+---
+
+## Executive Overview & Key Highlights
+
+VoxPlan is an adaptive personal planning application designed to solve the rigidity, privacy invasion, and unreliability of modern productivity tools. It pairs **deterministic mathematical scheduling** running locally in the browser with a lightweight **supervised machine learning microservice** that forecasts task delay risk.
+
+### Key Highlights
+- **Deterministic DAG Scheduling**: Uses Kahn’s algorithm to topologically sequence tasks based on strict prerequisite dependencies, daily working capacity limits (6.0h/day default), and deadline urgency—without any external cloud solvers.
+- **Empirical Bayesian Personalization**: Automatically learns individual estimation pace using statistical shrinkage ($w = \frac{n}{n + 3.0}$) against historical stopwatch tracking, preventing erratic schedule swings on sparse data.
+- **Supervised ML Delay Risk**: A Python/FastAPI microservice running scikit-learn `RandomForestClassifier` assesses completion risk and provides plain-English factor explanations.
+- **20-Step Interactive Product Tour**: A camera-focused onboarding experience with an SVG mask cutout, 8px backdrop blur, terracotta spotlight highlighting, and two operating modes (Observation vs. Hands-on Demo).
+- **100% Local-First Resilience**: Tasks, behavioral telemetry, and notes stay in browser `IndexedDB` (`voxplan_db`) and `localStorage`. Core task management, scheduling, and calendar generation function completely offline.
+- **Zero Cloud LLM Dependency**: Natural language processing uses deterministic regex and preposition grammar splitters; voice dictation operates via the browser’s native Web Speech API. Zero audio or task content is sent to third-party AI APIs.
+- **Verified Software Quality**: 1,282 frontend unit/integration tests (`npm test`) across 280 suites, 52 dedicated product-tour tests, and 29 backend tests (`pytest`) pass with zero failures.
+
+---
+
+## Problem Statement & Motivation
+
+Traditional task managers and calendar tools suffer from three fundamental architectural flaws:
+
+1. **Static, Non-Adaptive Scheduling**: Conventional apps function as static checklists. When a project overruns or an unexpected dependency blocks work, users must manually calculate and reschedule every dependent task across multiple calendar days.
+2. **Privacy Risks & Cloud LLM Hallucinations**: Modern "AI productivity" apps frequently send personal notes, schedules, and voice dictations to third-party cloud APIs (such as OpenAI or Anthropic). This compromises privacy and injects non-deterministic hallucinations into mathematical scheduling constraints.
+3. **Fragile Network Dependency**: Cloud-heavy productivity suites fail when network connectivity is lost, leaving users without access to their schedules during travel or network outages.
+
+**VoxPlan's Answer**: Keep user data on the device, solve scheduling deterministically using graph theory, apply machine learning solely for explainable delay risk predictions, and process voice inputs through native browser APIs.
+
+---
+
+## Core Design Principles
+
+| Principle | Architectural Implementation |
+|---|---|
+| **Local-First by Default** | All tasks, timers, notes, and telemetry are persisted in browser `IndexedDB` (`voxplan_db`) and `localStorage`. No remote database account or cloud authentication is required. |
+| **Human Agency (Two-Phase Commit)** | The scheduler never scrambles your live calendar silently. It generates an **Active Proposal** showing a visual diff (original deadline ➜ proposed placement). The user must explicitly inspect and click "Apply Schedule" or "Discard". |
+| **Separation of Scheduling & ML** | Machine learning is strictly utilized for **delay risk estimation** (`RandomForestClassifier`). Schedule generation is handled by a deterministic, mathematically verifiable topological DAG solver. |
+| **Strict Privacy & Zero Cloud LLM** | No third-party LLM APIs (OpenAI, Anthropic, Gemini). Spoken commands use browser-native Web Speech API. Audio is never stored or streamed to external servers. |
+| **Immutable Safety Invariants** | In accordance with Phase 7.4.4B, factory scheduler weights are immutable at runtime (`priority: 100.0`, `urgency: 50.0`, `unblock: 15.0`, `risk: 25.0`) to prevent algorithmic drift. |
+
+---
+
+## Complete Feature Inventory
+
+### 1. Workspace Navigation & Organization
+- **Client-Side Routing**:
+  - `/` — Product Landing Page & Feature Showcase (lazy-loaded).
+  - `/app` — Full operational productivity workspace (lazy-loaded).
+- **Four Dedicated Workspace Views**:
+  - **Today's Cockpit (`#view-today`)**: High-impact focus tasks for the day, active stopwatch timers, daily capacity status, and quick-add shortcuts.
+  - **Tasks Backlog (`#view-tasks`)**: Full task list with priority filters (All, Pending, High Priority, Overdue), manual drag-and-drop or button reordering, inline editing, and deletion with instant undo.
+  - **Interactive Calendar (`#view-calendar`)**: Visual multi-day schedule timeline, scheduled task blocks, and RFC 5545 iCalendar (`.ics`) standard export for external sync.
+  - **Productivity Insights (`#view-insights`)**: FastAPI model health status, feature importance bars, behavioral habit telemetry, and the Personal Model Dashboard.
+
+### 2. Task Management & Annotation
+- **Rich Task Properties**: Title, category, priority (High, Medium, Low), arbitrary due dates, estimated effort hours, dependency prerequisites (`dependsOn`), and completion status.
+- **Active Stopwatch Time-Tracking**: Live stopwatch timer on task cards that tracks active focused working seconds across sessions, automatically filtering out paused time.
+- **Illustrated Stationery Sticky Notes**: Task-attached digital memo notes with realistic paper tape/pin styling and 6 curated themes:
+  - *Classic Yellow*, *Coral Alert*, *Mint Calm*, *Lavender Focus*, *Rose Gold*, and *Blueprint*.
+  - Stored locally in `localStorage` under `voxplan_sticky_notes`.
+- **Safe Task Deletion & Lossless Undo**: Accidental task deletion displays a persistent floating toast with an "Undo" action that cleanly restores the task at its original list position.
+
+### 3. Proactive Notification Engine
+- **Notification Center (`NotificationCenter.jsx`)**: Header bell button with unread counter badge displaying categorized proactive alerts:
+  - *Overdue Deadlines*, *Capacity Alerts*, *Dependency Deadlocks*, and *Schedule Recommendations*.
+- **Notification Preferences Modal (`NotificationPreferencesModal.jsx`)**: Configurable advance lead times (15m, 1h, 1d), audio chimes, and quiet hours.
+
+### 4. Natural Language & Voice Command Dock
+- **CommandBar (`src/components/CommandBar.jsx`)**: Docked command center supporting both typed text and spoken voice commands with identical conversational handling.
+- **Preposition Grammar Engine**: Robust compound sentence parsing (e.g., *"Add task Review budget due Friday 3h and mark Invoice as completed"*).
+- **Spoken Audio Feedback (TTS)**: Optional speech synthesis debriefing completed operations and schedule changes aloud.
+- **Clarification State Machine**: When an action is ambiguous (e.g. multiple tasks sharing a name), VoxPlan displays an interactive candidate selection card rather than executing destructive actions blindly.
+
+---
+
+## Interactive Product Tour
+
+The VoxPlan Interactive Product Tour (**Phase 8.17 & Phase 8.18**) is a core onboarding system that introduces new and returning users to the entire application.
+
+```mermaid
+flowchart TD
+    A[User Enters VoxPlan] --> B{Trigger Tour?}
+    B -- Click Header '✦ Tour' --> C[Initialize Tour Hook]
+    B -- Click Landing Hero '✦ Tour' --> C
+    B -- Query Param '?tour=1' --> C
+
+    C --> D[Load State from localStorage: 'voxplan_product_tour_state']
+    D --> E{Choose Operating Mode}
+
+    E -- Mode A: Observation --> F[Bind to Live Application Views]
+    E -- Mode B: Hands-on Demo --> G[Inject Disposable In-Memory Tasks & Notes]
+
+    F --> H[Step 1: Welcome & Orientation]
+    G --> H
+
+    H --> I[Execute View Coordination: onSelectView]
+    I --> J[Run Visibility-Aware DOM Query: findVisibleElement]
+    J --> K[Compute Bounding Box: computeSpotlightRect]
+
+    K --> L[Render SVG Mask Cutout: #voxplan-tour-spotlight-mask]
+    L --> M[Apply 8px Backdrop Blur & Dark Dimming to Background]
+    M --> N[Exempt Active Target: 100% Sharp & Unblurred]
+    N --> O[Render Terracotta Spotlight & Callout Card]
+
+    O --> P{User Action}
+    P -- Next / ArrowRight --> Q[Advance Step Index]
+    P -- Back / ArrowLeft --> R[Decrement Step Index]
+    P -- Skip / Exit / Escape --> S[Save State & Dismount Overlay]
+    P -- Mode Switcher --> E
+
+    Q --> T{Is Final Step 20?}
+    T -- No --> I
+    T -- Yes --> U[Mark Tour Completed: ISO Timestamp]
+    U --> S
 ```
 
-### Manual Individual Commands (Traditional Development)
-```bash
-# 1. FastAPI Machine Learning Backend (Terminal 1)
-.venv\Scripts\activate
-python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+### 1. The 20 Curated Tour Steps
 
-# 2. Vite React Frontend (Terminal 2)
-npm run dev
-# Browser opens at: http://localhost:5173
+The tour covers all 8 functional domains across 20 sequential steps defined in `src/productTour/tourSteps.js`:
+
+| Step | ID | Domain | Target Element | Primary Concept Demonstrated |
+|---|---|---|---|---|
+| **1** | `step-orientation` | Orientation | `#header-nav-landing-btn` | Overview page (`/`) vs. Workspace (`/app`) separation. |
+| **2** | `step-today-cockpit` | Daily Planning | `#today-focus-card` | Daily sprint focus, urgency badges, stopwatch time tracking. |
+| **3** | `step-command-dock` | Commands | `#command` | Natural language command dock for fast keyboard entry. |
+| **4** | `step-voice-mic` | Voice & Input | `#voice-mic-btn` | Single-turn Web Speech dictation with live interim transcript. |
+| **5** | `step-speech-toggle` | Voice & Input | `#speech-toggle-btn` | Browser speech synthesis toggle for spoken debriefs. |
+| **6** | `step-tasks-workspace` | Tasks | `#nav-tab-tasks` | Backlog workspace organization and priority triaging. |
+| **7** | `step-smart-filtering` | Tasks | `#task-filter-bar` | Dynamic backlog filtering (All, Pending, High Priority, Overdue). |
+| **8** | `step-task-card` | Tasks | `#first-task-card` | Anatomy of a task card: priority cycling, due dates, effort hours. |
+| **9** | `step-sticky-notes` | Stationery | `#first-task-sticky-trigger` | Illustrated stationery sticky notes and 6 color themes. |
+| **10** | `step-safe-deletion` | Tasks | `#first-task-delete-btn` | Safe task deletion with global floating undo toast. |
+| **11** | `step-calendar-view` | Planning | `#nav-tab-calendar` | Calendar timeline visualization and multi-day scheduled blocks. |
+| **12** | `step-export-ics` | Planning | `#calendar-export-btn` | Standards-compliant RFC 5545 `.ics` export for external calendars. |
+| **13** | `step-adaptive-scheduler` | Scheduling | `#btn-open-schedule-modal` | Kahn's DAG topological solver and capacity packing. |
+| **14** | `step-schedule-modal` | Scheduling | `#btn-open-schedule-modal` | Schedule proposal review modal and diff inspection. |
+| **15** | `step-insights-view` | Intelligence | `#nav-tab-insights` | ML intelligence panel, backend connectivity, and feature weights. |
+| **16** | `step-risk-explanation` | Intelligence | `#view-insights` | Task delay risk explainability modal and plain-English factors. |
+| **17** | `step-personal-model` | Personalization | `.personal-model-card` | Empirical Bayesian duration shrinkage ($w = \frac{n}{n + 3.0}$). |
+| **18** | `step-adaptation-gate` | Governance | `#adaptation-gate-status` | Phase 7.4.4B permanently locked adaptation gate invariant. |
+| **19** | `step-notification-bell` | Notifications | `#header-notification-bell-btn` | Proactive alert notification center and category filters. |
+| **20** | `step-graduation` | Graduation | `#header-tour-btn` | Tour completion summary and how to restart anytime. |
+
+### 2. Optical Spotlight Architecture & Visual Isolation (Phase 8.18)
+
+Earlier overlay approaches placed a generic darkened layer over the entire screen, making highlighted targets blurry and hard to read. Phase 8.18 overhauled this with an **SVG Mask Clear-Window Cutout**:
+
+1. **SVG Mask Definition (`TourOverlay.jsx`)**:
+   - An SVG `<mask id="voxplan-tour-spotlight-mask">` covers the viewport.
+   - When a target element is located, an SVG `<rect>` with fill `black` is punched out at the exact bounding box of the target (plus 8px padding, matching the target’s dynamic border-radius).
+2. **Backdrop Blur & Dimming (`ProductTour.css`)**:
+   - The `.voxplan-tour-backdrop` element applies `mask: url(#voxplan-tour-spotlight-mask)`.
+   - The backdrop uses `backdrop-filter: blur(8px)` and a dark overlay `rgba(32, 30, 35, 0.62)`.
+   - **Result**: The active interface target remains **100% sharp, vibrant, and unblurred**, while the rest of the application is dimmed and blurred out of focus.
+3. **Terracotta Spotlight Highlighting (`TourSpotlight.jsx`)**:
+   - Outlines the active element with a 2.5px solid warm terracotta border (`#C85A32`), outer/inner white hairlines (`rgba(255, 255, 255, 0.9)`), and a warm glow (`box-shadow: 0 0 20px rgba(200, 90, 50, 0.45)`).
+   - A docked `"✦ Target"` beacon tag anchors directly to the spotlight border.
+
+### 3. Visibility-Aware Target Resolution
+
+Complex single-page applications mount inactive views in the DOM that can cause element selector collisions. VoxPlan's tour engine resolves targets using `findVisibleElement()`:
+- Splits selector lists and checks each candidate node.
+- Validates that `rect.width > 0 && rect.height > 0`, ignoring unrendered elements in hidden tabs.
+- Incorporates a 240ms settle timer after view transitions to accommodate tab slide animations (`viewEnter 0.18s ease-out`).
+- Falls back gracefully to a centered callout card if a target element is not present.
+
+### 4. Two Operating Modes & Data Safety
+
+- **Mode A (Guided Observation)**:
+  - Explores the user’s real workspace without creating, editing, or deleting any data.
+- **Mode B (Hands-on Practice Demo)**:
+  - Injects disposable, in-memory sample tasks and sticky notes (`demoTasks`, `demoNotes`).
+  - Users can click checkboxes, delete demo tasks, and test features without affecting real tasks.
+  - Resetting or leaving the tour discards the demo state from memory.
+- **Strict Isolation Guarantee**:
+  - Tour progress is saved exclusively under `localStorage.getItem('voxplan_product_tour_state')`.
+  - Real user tasks (`voxplan_tasks`), notifications (`voxplan_notifications`), and notes (`voxplan_task_sticky_notes`) are never modified by the tour.
+
+### 5. Tour Controls & Keyboard Accessibility
+
+- **Forward Navigation**: Click "Next Step →" or press `ArrowRight`.
+- **Backward Navigation**: Click "← Back" or press `ArrowLeft`.
+- **Dismissal / Exit**: Click the "✕" button or press `Escape` (remembers your last step).
+- **Restart**: Click "Restart Tour" on the graduation step or click the header `✦ Tour` button.
+- **Reduced Motion**: Respects `@media (prefers-reduced-motion: reduce)` by disabling spotlight animations and transitions.
+
+---
+
+## How VoxPlan Works
+
+```
+1. USER ENTERS TASKS
+   ├── Via Text / Click (TaskFormModal / QuickAdd)
+   └── Via Voice Dictation (Web Speech API -> compoundCommandParser.js)
+           ↓
+2. TASKS SAVED TO LOCAL INDEXEDDB (voxplan_db)
+   ├── Task metadata: effort hours, priority, deadlines, dependencies
+   └── Lifecycle tracking: stopwatch timers, completions, reschedules
+           ↓
+3. DETERMINISTIC ADAPTIVE SCHEDULING (adaptiveScheduler.js)
+   ├── Resolves dependencies via Kahn's Topological Sort (DAG)
+   ├── Ranks tasks with Composite Priority Formula
+   ├── Adjusts duration using Empirical Bayesian Shrinkage (personalModel.js)
+   └── Packs into daily working capacity bins (default 6.0h/day)
+           ↓
+4. SCHEDULE PROPOSAL GENERATED (Two-Phase Commit)
+   ├── User inspects proposed dates and unblocking gains in Modal diff
+   ├── User clicks "✓ Apply Schedule" -> updates tasks in IndexedDB
+   └── User clicks "✕ Discard" -> leaves existing tasks untouched
+           ↓
+5. SUPERVISED ML RISK FORECASTING (FastAPI + scikit-learn)
+   ├── Backend computes Delay Probability [0.0 - 1.0] and Risk Category
+   └── User clicks "view details →" to inspect contributing delay factors
 ```
 
-### Verified Test Suites & Quality Metrics
-- **Frontend Test Suite**: **995 / 995 passing** across 204 test suites in 30 test files (`npm test`).
-- **Backend Test Suite**: **29 / 29 passing** across REST and ML endpoints (`pytest backend/tests/`).
-- **Secret & Credential Scanner**: Hardened path-aware scanner with recursive `.env` detection and zero log leakage (`node scripts/secretScanner.mjs`).
-- **CI / CD Quality Gates**: Automated GitHub Actions workflow (`.github/workflows/ci.yml`) enforcing least-privilege read-only permissions, linting, tests, build artifact checks, and secret exposure verification.
-- **Linter**: Zero errors (`npm run lint` / `oxlint`).
-- **Production Build**: Clean compilation with route-level and component code splitting (75.9% initial load reduction) (`npm run build`).
-- **Containerization**: Minimal multi-stage non-root container (`Dockerfile`) with healthcheck and `.dockerignore`.
-- **PWA & Offline Readiness**: W3C manifest, service worker app shell caching, and standalone installability.
-- **Authoritative Scope Document**: See [PROJECT_SCOPE.md](file:///c:/Users/kaval%20vyas/OneDrive/Desktop/Projects/VoxPlan/PROJECT_SCOPE.md) for full classification (Categories A through F).
-
 ---
 
-## Current Architecture & System State (Phase 7 Stage 4A Verified, Demo Ready)
+## System Architecture
+
+VoxPlan follows a **local-first frontend architecture** coupled with an optional **FastAPI machine learning microservice**:
 
 ```
-BROWSER WEB SPEECH API / TEXT INPUT
-                 ↓
-      [ Speech-to-Text Dictation ]
-                 ↓
-VOXPLAN COMMAND ENGINE (Deterministic NL Parser)
-                 ↓
-SHARED TASK LIFECYCLE ENGINE (taskLifecycle.js)
-     │
-     ├─ Idempotent State Transitions (complete / reopen / delete)
-     ├─ Active Stopwatch Session Finalization & Duration Classification
-     └─ Reliable Behavioral Telemetry Event Generation
-                 ↓
-REACT / VITE DASHBOARD (Client State & Local-First Architecture)
-     │
-     ├─ Dynamic Task Roadmap (Real User Tasks & Dates)
-     ├─ Guarded Hybrid Risk Visualizations (Baseline RF + Personal Shrinkage)
-     ├─ Interactive Stopwatch Timers (Start / Pause / Resume)
-     ├─ Behavioral History & Habit Insights (Section 04)
-     ├─ Personal Estimation Model & Evaluation Dashboard (Section 05)
-     ├─ Adaptive Sprint Proposal Modal (AdaptiveScheduleModal.jsx)
-     ├─ Task Explanation Modal with Personalization Transparency Card
-     ├─ Offline-Resilient Local State (Tasks & Active Timers)
-     │
-     ↕ (IndexedDB: voxplan_db)
-LOCAL EVENT STORE & PERSONAL AI ENGINES
-     ├─ Stable Profile Isolation (prof_<uuid>)
-     ├─ 11 Versioned Event Types (Schema v1)
-     ├─ Honest Duration Accounting (Tracked vs Self-Reported vs Unknown)
-     ├─ Personal Duration Estimator (Weighted Median + Empirical Bayesian Shrinkage, K=3.0)
-     ├─ Chronological Walk-Forward Holdout Evaluation (min 3 train, min 5 held-out, N>=8)
-     ├─ Guarded Personal Completion-Risk Estimator (personalRiskModel.js)
-     │   ├─ Cold-start guard (W < 3.0 -> pure baseline)
-     │   ├─ Audited signals: Postponements (+5%/+10%), Bias Stress (+6%/-4%), Reopening (+5%)
-     │   ├─ Strict bounds: clamped to ±15% with Bayesian shrinkage W / (W + 5.0)
-     │   └─ Leakage protection: zero target leakage, strict timestamp <= asOfTime
-     ├─ Hardened Adaptive Scheduler (src/scheduler/adaptiveScheduler.js)
-     │   ├─ Kahn's topological ready-queue (strict DAG precedence over priority scores)
-     │   ├─ Downstream unblocking bonus (+15 pts/dep, max +45 pts) replacing depth penalties
-     │   ├─ Multi-tier deterministic tie-breaking (score -> dueDate -> Shortest Processing Time -> taskId)
-     │   ├─ 3-color DFS cycle isolation, self-dependency, and downstream blocked propagation
-     │   ├─ Oversized task manual resolution (status: oversized_exceeds_capacity)
-     │   ├─ Cumulative daily capacity enforcement & accurate capacity utilization metric
-     │   ├─ Timezone-safe inclusive calendar deadlines & weekend rollover
-     │   ├─ Rich placement explainability (prerequisite constraints, unblocking, overdue recovery)
-     │   └─ Safe proposal flow: stale-proposal guard, non-destructive filtering, deduplicated telemetry
-     └─ Evidence-Based Behavioral Stats (Sparse-Data Guard < 3 tasks)
-     │
-     ↕ (HTTP REST, Optional Backend)
-FASTAPI ML BACKEND (scikit-learn Pipeline & Batch Endpoints)
-     ├─ /api/model/status (Baseline Training State & Holdout Metrics)
-     ├─ /api/train (Fits RandomForest on Baseline Dataset)
-     ├─ /api/predict/all (Batch Delay-Risk Probabilities)
-     ├─ /api/feature-importance (Gini Feature Importances)
-     └─ /api/telemetry/events (Validated Batch Ingestion & History Query)
++---------------------------------------------------------------------------------------+
+|                                    CLIENT BROWSER                                     |
+|                                                                                       |
+|  +--------------------+   +-----------------------+   +----------------------------+  |
+|  | Web Speech API     |   | PWA Service Worker    |   | Keyboard & Focus Nav       |  |
+|  | (In-browser STT)   |   | (public/sw.js cache)   |   | (WCAG 2.2 AA Accessible)   |  |
+|  +--------------------+   +-----------------------+   +----------------------------+  |
+|                                         │                                             |
+|                                         ▼                                             |
+|  +---------------------------------------------------------------------------------+  |
+|  |                      REACT 19 + VITE FRONTEND APPLICATION                       |  |
+|  |                                                                                 |  |
+|  |  [ Client-Side Router: / (LandingPage) & /app (ProductivityApp) ]               |  |
+|  |  ├── Product Tour Engine (useProductTour, SVG Mask Spotlight, 20 Steps)         |  |
+|  |  ├── Task Backlog & Kanban Cards (TaskCard, Stopwatch Timer, Lossless Undo)     |  |
+|  |  ├── Command Dock & Voice Engine (CommandBar, dialogueManager, Preposition NLP) |  |
+|  |  ├── Illustrated Stationery Sticky Notes (6 Themes, LocalStorage)               |  |
+|  |  ├── Proactive Notification System (NotificationCenter, NotificationBell)       |  |
+|  |  ├── Calendar & Time-Blocking (TaskCalendar, RFC 5545 .ics Exporter)            |  |
+|  |  └── Intelligence Dashboard (MLModelPanel, BehavioralHistoryPanel)              |  |
+|  |                                                                                 |  |
+|  |  [ Core Deterministic Scheduling Engine (src/scheduler/adaptiveScheduler.js) ] |  |
+|  |  ├── Kahn's Algorithm DAG Topological Sorter (Cycle Detection)                  |  |
+|  |  ├── Composite Priority Scorer (100*Prio + 50*Urg + 15*Unblock + 25*Risk)      |  |
+|  |  ├── Daily Capacity Bin-Packer (6.0h/day default + Multi-Day Chunking)          |  |
+|  |  └── Two-Phase Commit Proposal Generator (Diff Review -> Apply/Discard)         |  |
+|  |                                                                                 |  |
+|  |  [ Personal Duration Estimator (src/telemetry/personalModel.js) ]               |  |
+|  |  ├── Weighted Median Observed Pace Ratio                                        |  |
+|  |  ├── Empirical Bayesian Shrinkage (k = 3.0 toward neutral 1.0 prior)            |  |
+|  |  └── Learning Readiness Gate (Threshold n >= 3 completions)                    |  |
+|  +---------------------------------------------------------------------------------+  |
+|                   │                                               │                   |
+|                   ▼                                               ▼                   |
+|  +----------------------------------+            +---------------------------------+  |
+|  |  INDEXEDDB STORE (voxplan_db)    |            |  LOCALSTORAGE STORE             |  |
+|  |  - tasks (Full task entities)    |            |  - voxplan_sticky_notes (Memos) |  |
+|  |  - telemetry_events (Stopwatch,  |            |  - voxplan_product_tour_state   |  |
+|  |    completions, reschedules)     |            |  - User preferences             |  |
+|  +----------------------------------+            +---------------------------------+  |
++---------------------------------------------------------------------------------------+
+                                    │ (HTTP REST JSON)
+                                    ▼ (Optional / Graceful Offline Fallback)
++---------------------------------------------------------------------------------------+
+|                          PYTHON 3.12 / FASTAPI ML BACKEND                             |
+|                                                                                       |
+|  [ REST API Endpoints: backend/main.py ]                                              |
+|  ├── GET  /health                   -> Healthcheck and service uptime                 |
+|  ├── GET  /api/model/status         -> Model accuracy, sample count, training time    |
+|  ├── POST /api/predict & /batch     -> Delay probability [0.0 - 1.0] and risk factors |
+|  ├── POST /api/train                -> Retrains model on reference/telemetry data     |
+|  └── GET  /api/feature-importance   -> Gini importance metrics                        |
+|                                                                                       |
+|  [ Machine Learning Pipeline ]                                                        |
+|  ├── scikit-learn RandomForestClassifier (Estimating task delivery delay risk)        |
+|  └── Rule-based explainability engine (Translates feature weights to plain English)   |
++---------------------------------------------------------------------------------------+
 ```
 
 ---
 
-## Machine Learning Pipeline & Data Truth
+## Deterministic Adaptive Scheduling Engine
 
-### 1. Synthetic vs. User-Provided Data
-- **Synthetic Historical Dataset (`backend/ml/data_generator.py`)**: Used solely as a cold-start baseline to fit the initial Random Forest classifier (`backend/ml/train.py`). It models correlations between task effort, remaining calendar days, workload pressure, priority, and completion delays.
-- **User-Provided Tasks**: All tasks displayed in the task manager, the roadmap, and the sprint health overview are genuine user tasks entered manually or via voice commands, persisted in browser `localStorage` and `IndexedDB`.
-- **Illustrative UI Previews**: The Hero section contains explicitly labeled design previews for illustration.
+- **Source File**: `src/scheduler/adaptiveScheduler.js`
+- **Primary Function**: `generateScheduleProposal(tasks, events, config)`
 
-### 2. Genuinely Measured Metrics vs. Unavailable States
-- **Model Evaluation Metrics**: Accuracy, Precision, Recall, F1 score, and the 2x2 Confusion Matrix are **genuinely computed** by scikit-learn on a 20% stratified test holdout split during `/api/train`.
-- **Personal Duration Evaluation**: Genuinely evaluated via strict chronological walk-forward holdout validation (`evaluatePersonalDurationModel`). Requires at least 3 train tasks per step and 5 held-out predictions ($N \ge 8$); otherwise renders explicit `insufficient_evaluation_data` state without fabricating metrics.
-- **Honest Offline States**: If the backend is not running or the model is not yet trained, the dashboard displays an honest "awaiting analysis" / "model not trained" state (`—`). No fallback accuracy or confusion matrix numbers are fabricated.
-- **Individual Task Explanations**: Contributing risk factors in the Task Explanation Modal disclose synthetic baseline probability vs. personal adjustments, applied signals, and fallback reasons.
+The scheduler is **not** an opaque machine learning model. It is a deterministic constraint-satisfaction solver:
 
-### 3. Backend Dependency & Offline Resilience
-- **Without Backend**: Full task management (creation, editing, completion, priority cycling, arbitrary calendar dates, deletion, filtering, local persistence, stopwatch duration tracking, behavioral habit analytics, and deterministic adaptive scheduling) works entirely offline in the browser. Task risk cards display an honest "Awaiting analysis" indicator.
-- **With Backend**: Connecting the FastAPI backend enables live delay-risk inference via `predict_proba()`, real-time sprint risk aggregation, model training, and optional backend telemetry ingestion.
+### 1. Kahn’s Topological Sort on Task Dependencies
+Tasks can specify prerequisite tasks via their `dependsOn` property. The scheduler builds an adjacency list and in-degree map:
+- Tasks with `inDegree === 0` are placed in the ready queue.
+- When a task is placed, its dependents' in-degrees are decremented.
+- Includes a 3-color Depth-First Search (DFS) cycle-detection guard to isolate circular dependencies without crashing.
 
-### 4. Personalization Roadmap
-- **Phase 1 (Completed)**: Unified arbitrary date parsing, task schema normalization, complete de-mocking of metrics and demo fallbacks, dynamic task-risk visualizations, and browser Web Speech integration.
-- **Phase 2 (Completed)**: Local-first IndexedDB persistence, behavioral telemetry event schema (11 event types), stopwatch working duration vs. self-reported vs. unknown duration, inline reschedule/effort/reorder instrumentation, sparse-data honest behavioral statistics (< 3 completions), Behavioral History & Habit Insights UI panel with JSON export and history deletion, and automated test suite.
-- **Phase 3, Stage 1 (Completed)**: Telemetry repair (command-bar lifecycle convergence, active timer finalization, idempotency) & transparent, local-first Personal Duration Estimator (`personalModel.js`) using weighted median and empirical Bayesian shrinkage toward 1.0. Dual duration badges on task cards.
-- **Phase 3, Stage 2 (Completed)**: Personal Model Dashboard (`PersonalModelDashboard.jsx`), sample weight transparency, Bayesian shrinkage formula explainer, leak-free chronological walk-forward holdout evaluation (`evaluatePersonalDurationModel`), MAE/MdAPE baseline comparison, and honest cold-start states.
-- **Phase 3, Stage 3 (Completed)**: Guarded personal completion-risk estimation (`personalRiskModel.js`), hardened evaluation guard ($N \ge 8$), bounded personal probability shifts ($\pm 15\%$), Bayesian confidence shrinkage, and explainability modal transparency card.
-- **Phase 4, Stage 1 (Completed)**: Deterministic Adaptive Scheduling Engine (`src/scheduler/adaptiveScheduler.js`), topological DAG analysis with cycle detection, personalized duration model integration with cold-start fallbacks, daily working-hour capacity bin-packing, weekend rollover, proposal review modal (`AdaptiveScheduleModal.jsx`), safe approval flow, non-destructive diffs, and 19 unit tests (72 tests total).
-- **Phase 4, Stage 2 (Completed)**: Scheduling correctness & reliability audit: Kahn's topological ready-queue (guaranteed DAG order over priority scores), explicit 3-color DFS cycle isolation, blocked dependent propagation, oversized task manual resolution (`status: 'oversized_exceeds_capacity'`), cumulative daily capacity constraint enforcement, accurate capacity utilization denominator, timezone-safe deadline policies, stale-proposal detection with one-click regeneration, non-destructive diff filtering, deduplicated telemetry, and 81 automated tests across 16 suites.
-- **Phase 4, Stage 3 (Completed)**: Schedule quality evaluation & benchmarking: independent 7-dimension evaluation metrics (coverage, deadline feasibility, dependency correctness, capacity compliance, workload balance CV, horizon coverage, perturbation churn), multi-strategy benchmarking comparing Adaptive against Earliest Deadline First (EDF) and Priority-First under identical hard constraints, 12 reproducible scenario fixtures (`scheduleBenchmarks.js`), stability churn analysis, interactive modal benchmark tab, and 93 automated tests across 19 suites.
-- **Phase 4, Stage 4 (Completed)**: Evidence-driven scheduler optimization: replaced topological depth penalty with bounded downstream unblocking bonus (`+ min(45, unblockCount * 15)`), eliminating critical-path bottlenecks without penalizing ready dependents (reduced churn on satisfied dependencies from 40% to 0%, overall average churn from 24% to 16%); multi-tier deterministic tie-breaking (score $\to$ due date $\to$ Shortest Processing Time $\to$ task ID); evaluator metric honesty reporting `schedulableOnTimeRate` and `schedulerDaysDelayed` to separate impossible deadlines and pre-existing delays; enriched placement explainability; 99 automated tests passing across 20 suites.
-- **Phase 4, Stage 5 (Completed)**: Local Schedule Feedback & Outcome Tracking: versioned privacy-preserving telemetry schema (`SCHEMA_VERSION = 2`) recording proposal generation, acceptance, and discard actions; single-action deduplication in `telemetryManager`; subsequent manual date override detection (postponed vs advanced shift tracking); unaltered completion outcome matching (excluding tasks manually moved prior to finish); pure local feedback module (`src/scheduler/scheduleFeedback.js`); focused modal feedback tab with explicit denominators and insufficient-data guards (< 3 observations); strict cautious learning boundary (no automatic weight retuning); and 110 automated tests passing across 27 suites.
-- **Phase 4, Stage 6 (Completed)**: Schedule Feedback Integrity & Attribution Audit: stable session-scoped proposal identities; durable deduplication surviving page reloads without backend dependency (hydrating index from cached IndexedDB events on `telemetry.init()`); multi-proposal interval-based outcome attribution (`[acceptedAt, supersededAt)`); task lifecycle hardening (excluding reopened incomplete tasks and active backlog tasks from completion outcomes); isolation of conflicting proposal decisions; standardized unique task denominators; real-time attribution diagnostics in feedback UI; and 115 automated tests passing across 30 suites.
-- **Phase 5 (Completed & Verified)**: Conversational Planning, Multi-Turn Dialog & Voice Experience: 4 stages delivering contextual dialog state machine, safety confirmations for destructive actions, natural language rescheduling engine, Web Speech voice synthesis with typed fallback symmetry, and constraint debriefing.
-- **Phase 6 (Completed & Verified)**: Calendar-Aware Time-Blocking & Multi-Day Workload Modeling: 4 stages delivering multi-day task chunking for oversized work, intra-day focus blocks and meeting buffer constraints, interactive visual proposal editing canvas with drag/override support, and RFC 5545 iCalendar (`.ics`) standard export.
-- **Phase 7 (Completed & Verified - Stage 4B Locked)**: Evidence-Gated Schedule Adaptation & Preference Learning: 4 stages delivering Bayesian weight shrinkage, shadow evaluation sandbox, explicit synthetic evidence rejection, and fail-closed production activation gates (`isAdaptationUnlocked: false`, `productionApplied: false`). Supervised live deployment (Stage 7.4.4B) is intentionally unstarted and locked until genuine longitudinal evidence anchors are established.
-- **Phase 8 (Deferred Post-Demo)**: Production Hardening, Accessibility, Security & Release Readiness: PWA offline service worker, full automated WCAG 2.1 AA audit, client-side encrypted backup, and CI release pipeline are scheduled for post-demo execution.
+### 2. Composite Priority Scoring Function
+Tasks in the ready queue are ordered using a fixed linear scoring formula:
+$$\text{Score} = (100.0 \times P) + (50.0 \times U) + (15.0 \times B) + (25.0 \times R)$$
 
-*(For the complete, authoritative deliverable breakdown across Categories A through F, consult [PROJECT_SCOPE.md](file:///c:/Users/kaval%20vyas/OneDrive/Desktop/Projects/VoxPlan/PROJECT_SCOPE.md). For detailed historical engineering stage logs, refer to [PROJECT_PLAN.md](file:///c:/Users/kaval%20vyas/OneDrive/Desktop/Projects/VoxPlan/PROJECT_PLAN.md).)*
+Where:
+- $P \in \{1, 2, 3\}$: Priority level (`low` = 1, `medium` = 2, `high` = 3).
+- $U \in [0.0, 1.0]$: Urgency ratio based on calendar proximity to deadline.
+- $B \in [0, 3]$: Bounded downstream unblocking bonus ($+\min(45, 15 \times \text{dependents})$), prioritizing tasks that unblock subsequent work.
+- $R \in [0.0, 1.0]$: Delay risk probability from the ML backend.
+
+> **Immutable Security Invariant (Phase 7.4.4B)**: Factory weights are strictly frozen at runtime (`100.0, 50.0, 15.0, 25.0`). Dynamic weight tuning is locked to ensure reproducible, predictable scheduling behavior.
+
+### 3. Daily Capacity Bin-Packing
+- Tasks are packed into consecutive working weekdays up to a configured daily maximum (default `6.0h/day`).
+- **Oversized Task Handling**: Tasks exceeding daily capacity are either split across multiple working sessions (`taskChunker.js`) or flagged for user review.
+- Weekends and configured meeting blocks are automatically skipped.
+
+### 4. Two-Phase Commit Proposal Review
+Schedule output is returned as an immutable proposal diff. The user reviews original deadlines against proposed dates in `AdaptiveScheduleModal.jsx` before changes are committed to `IndexedDB`.
 
 ---
 
-## Personal Behavioral Telemetry & Durable Persistence (Phase 2)
+## Empirical Bayesian Personalization Model
 
-VoxPlan records how the user actually works to form the empirical foundation for Phase 3's personalized ML models.
+- **Source File**: `src/telemetry/personalModel.js`
+- **Primary Function**: `buildPersonalDurationModel(events)`
 
-### 1. Persistence Architecture: Local-First IndexedDB
-- **Constraint**: VoxPlan's hosted backend runs on Render free-tier with ephemeral disks that reset every 15 minutes of inactivity. Storing user telemetry exclusively in a remote SQLite file would result in silent data loss and potential cross-user collision.
-- **Solution**: The primary source of truth for behavioral history is the browser's **IndexedDB** (`voxplan_db`), keyed by an anonymous client profile identifier (`prof_<uuid>`).
-- **Durability**: Telemetry survives browser refreshes, tab closures, offline sessions, and application restarts.
-- **Zero Lock-in & No Cloud Auth**: Operates with complete privacy without requiring account registration, cloud auth, or external paid databases.
+VoxPlan personalizes task duration estimates locally using empirical Bayesian statistics:
 
-### 2. Versioned Behavioral Event Schema (`schema_version: 1`)
-Every user action is recorded as an immutable, validated event with UUID v4 identifier, stable profile ID, stable task ID, and ISO-8601 timestamp:
-- `task_created`: Initial task definition, priority, deadline, estimated effort.
-- `task_started`: Explicit stopwatch timer start timestamp and session ID.
-- `task_paused`: Stopwatch timer pause timestamp and elapsed session seconds.
-- `task_completed`: Task completion with explicit duration source (`tracked`, `self_reported`, or `unknown`).
-- `task_reopened`: Reopening of a completed task, safely updating completion metrics.
-- `task_rescheduled`: Due date change capturing previous and new deadlines.
-- `task_priority_changed`: Priority elevation or reduction with previous and new levels.
-- `task_effort_revised`: Effort adjustment with previous and new hours.
-- `task_reordered`: Manual drag or up/down task reordering capturing full order sequence.
-- `recommendation_accepted` / `recommendation_rejected`: User response to algorithmic suggestions.
+### 1. Duration Accounting
+When a user completes a task, duration is classified strictly by evidence quality:
+- **`tracked`** ($w = 1.0$): Measured accurately via the live stopwatch timer.
+- **`self_reported`** ($w = 0.5$): User-entered estimate upon completion.
+- **`unknown`** ($w = 0.0$): Unmeasured completions are excluded from ratio calculations.
 
-### 3. Honest Working Duration Accounting
-- **Tracked Stopwatch Duration**: Live stopwatch on task cards accumulates active focused working seconds across multiple sessions and persists across page reloads. Paused time is strictly excluded.
-- **Self-Reported Duration**: When completing a task without having run the stopwatch, users can optionally enter an approximate duration. This is explicitly labeled as `self_reported`.
-- **Unknown Duration**: Tasks completed without tracked or reported duration store `duration_source: 'unknown'` rather than fabricating 0 minutes.
-- **Wall-Clock Separation**: Elapsed calendar time is never conflated with active working duration.
+### 2. Empirical Bayesian Shrinkage Formula
+For category $i$, observed pace ratios are calculated as $r = \frac{\text{actual duration}}{\text{estimated effort}}$. The model calculates the weighted median observed ratio $\bar{r}_i$ and shrinks it toward a neutral prior ($1.0$):
 
-### 4. Transparent Behavioral Statistics & Sparse-Data Honesty
-- Computes completed task count, duration-measured count, median observed duration per task, categorical duration breakdowns, estimation accuracy ratios, and weekday velocity distributions.
-- **Sparse-Data Rule**: Requires at least **3 completed task observations** before presenting behavioral trends. When observations are fewer than 3, the UI returns an honest "insufficient data" state rather than premature conclusions.
+$$w_i = \frac{N_i}{N_i + K}$$
 
-### 5. User Agency & Data Control
-- Users can inspect their complete behavioral profile in Section 04 of the dashboard.
-- **Export**: One-click download of all telemetry events as standard JSON.
-- **Clear History**: Double-confirmed permanent deletion of profile telemetry from IndexedDB without affecting active tasks.
+$$r_{\text{adjusted}} = w_i \bar{r}_i + (1 - w_i) \times 1.0$$
+
+Where:
+- $N_i$: Total effective completed task weight in category $i$.
+- $K = 3.0$: Shrinkage parameter representing prior confidence strength.
+
+### 3. Learning Readiness Gate
+To prevent premature or erratic duration shifts on sparse data:
+- If effective completions $N < 3.0$, the model remains in **`sparse`** or **`cold_start`** mode, returning the user’s original estimate unmodified.
+- Once $N \ge 3.0$, conservative shrinkage activates, displaying the adjusted estimate and sample count on task cards (e.g. `⏱️ 2h → ~2.5h (4)`).
 
 ---
 
-## Personal Duration Estimator & Telemetry Repair (Phase 3, Stage 1)
+## Machine Learning Delay-Risk Estimation
 
-Phase 3, Stage 1 repairs task completion telemetry across all natural language and UI input paths and introduces a local-first, evidence-based Personal Duration Estimator that learns personal effort-bias without backend dependencies or cloud services.
+- **Source File**: `backend/main.py`
+- **Model Framework**: scikit-learn `RandomForestClassifier`
 
-### 1. Telemetry Convergence & Lifecycle Engine (`src/telemetry/taskLifecycle.js`)
-Previously, natural language voice and text commands mutated task status directly without executing stopwatch timer finalization or recording validated telemetry events.
-- **Unified Lifecycle**: Command-bar actions now route directly through `completeTaskLifecycle()` and `reopenTaskLifecycle()`, sharing identical logic with the interactive task card buttons.
-- **Active Timer Finalization**: Completing a task with a running stopwatch timer automatically finalizes the active session, calculates accurate elapsed working seconds excluding pauses, and attributes the duration as `duration_source: 'tracked'`.
-- **Idempotency & Duplicate Protection**: Executing repeated completion or reopening commands checks current state and returns `already_completed` or `already_open`. No duplicate telemetry events are generated.
-- **Duration Source Truth**: Duration is classified strictly as `tracked` (measured via stopwatch), `self_reported` (user prompt), or `unknown` (unmeasured). Unmeasured tasks store `null` elapsed duration rather than fabricating zero.
+### 1. Role & Boundaries
+Machine learning in VoxPlan is strictly used for **delay risk estimation**, not schedule optimization. It evaluates whether a task is likely to miss its deadline given historical indicators.
 
-### 2. Observation Eligibility & Privacy Safeguards (`src/telemetry/personalModel.js`)
-The estimator reconstructs personal work patterns exclusively from the local browser IndexedDB store:
-- **Observation Units**: Historical tasks joined by stable `task_id`.
-- **Reopening Policy**: Intermediate completions of reopened tasks are ignored; only the final completion state of a completed task is evaluated to prevent double-counting.
-- **Plausibility Filters**: Durations outside the range $[0.01\text{ hours}, 200.0\text{ hours}]$ ($36\text{ seconds}$ to $200\text{ hours}$) are excluded as non-finite or implausible artifacts.
-- **Ratio Requirements**: Tasks lacking a valid positive estimated effort ($> 0$) are excluded from effort-ratio calculations.
-- **Target Leakage Safeguard**: Post-completion attributes (actual completion time, tracked duration, duration source) are **never** used as prediction inputs. Prediction utilizes strictly pre-completion planning inputs (`estimatedEffort`, `category`).
-- **Zero Backend Exposure**: Personal telemetry remains 100% within the browser. Clearing history via the UI permanently wipes all observations and immediately restores the model to cold-start.
+### 2. Evaluated Features
+1. **Estimated Effort**: Planned duration in hours.
+2. **Priority Weight**: Numerical priority encoding.
+3. **Calendar Lead Time**: Days remaining until the deadline.
+4. **Dependency Depth**: Distance from root in the prerequisite DAG.
+5. **Historical Category Delay Ratio**: Prior overdue frequency for similar tasks.
 
-### 3. Personal Effort-Bias Correction Formula
-For each eligible completed task $i$, the effort ratio is:
-$$r_i = \frac{\text{observed\_duration\_hours}_i}{\text{original\_estimated\_effort\_hours}_i}$$
-
-Each observation is weighted by evidence reliability:
-- **Tracked Stopwatch Sessions**: $w_i = 1.0$ (highest fidelity).
-- **Self-Reported Sessions**: $w_i = 0.5$ (lower weight to account for recall bias).
-- **Unknown Duration**: $w_i = 0.0$ (excluded from ratio).
-
-The central bias ratio is computed using a **Weighted Median**:
-$$r_{med} = \text{WeightedMedian}\left(\left\{(r_i, w_i)\right\}\right)$$
-
-To protect against extreme ratios from sparse observations, an **Empirical Bayesian Shrinkage** is applied toward a neutral ratio of $1.0$:
-$$r_{adjusted} = \frac{W \cdot r_{med} + K \cdot 1.0}{W + K}$$
-where $W = \sum w_i$ is the total effective observation weight and $K = 3.0$ is the shrinkage strength constant.
-
-The predicted duration is then:
-$$\hat{D} = \text{user\_estimate\_hours} \times r_{adjusted}$$
-
-### 4. Sample Size Tiers & Honest Uncertainty
-The estimator transparently signals sample maturity and avoids presenting heuristic intervals as calibrated statistical confidence intervals:
-- **`cold_start`** ($W = 0$): Returns original estimate unmodified. "Using your original estimate (no completed task history yet)".
-- **`sparse`** ($0 < W < 3$): Returns original estimate unmodified. "Collecting observations ($X$ recorded, 3 needed to adjust)".
-- **`developing`** ($3 \le W < 8$): Applies conservative shrinkage adjustment. "Adjusted using your observed task durations ($X$ observations)".
-- **`supported`** ($W \ge 8$): Applies full personal adjustment with empirical heuristic spread $[r_{p25} \dots r_{p75}]$.
-- **`unavailable`**: If the task lacks an initial effort estimate, personal duration prediction is explicitly marked unavailable.
-
-### 5. UI Integration & Task Cards
-- **Dual Duration Pill**: Task cards display the original estimate alongside the adjusted prediction when supported by genuine data (e.g., `⏱️ 2h → ~2.6h (4)`).
-- **Explanatory Tooltip**: Hovering discloses the exact sample count, effective weight, bias ratio, empirical range, and plain-English explanation.
-- **Baseline Distinction**: The completion-risk classifier remains a synthetic Random Forest baseline; duration estimation is explicitly labeled as the sole personalized component.
-
-### 6. Personal Model Dashboard & Walk-Forward Holdout Evaluation (Phase 3, Stage 2)
-Section 05 of the dashboard (**HOW VOXPLAN LEARNS YOUR PACE**) provides full transparency into the personal estimator and its held-out generalization performance:
-- **Sample Weight Transparency**: Displays effective sample weight $W = 1.0 \times N_{tracked} + 0.5 \times N_{reported}$, clearly distinguishing raw observation counts from effective weighted sample size.
-- **Maturity Status Tiers**: Color-coded badges indicating current model phase (`cold_start`, `sparse`, `developing`, `supported`).
-- **Personal Bias Ratio & Live Simulator**: Shows current $r_{adjusted}$ multiplier alongside raw median $r_{med}$ and an interactive tool demonstrating how arbitrary estimates (e.g. 2.0h) are adjusted.
-- **Bayesian Shrinkage Architecture**: Formula display detailing how neutral prior weight $K = 3.0$ anchors early estimates and smoothly yields to empirical observations.
-- **Leak-Free Walk-Forward Evaluation (`evaluatePersonalDurationModel`)**:
-  - Evaluates tasks in strict chronological completion order with zero lookahead bias.
-  - Each prediction fits model parameters strictly on prior completed tasks ($k \ge 3$).
-  - Never evaluates on training observations.
-  - Requires at least 5 completed tasks (`MIN_EVALUATION_TASKS = 5`) to report generalization metrics.
-  - When $\ge 5$ tasks exist, reports Model MAE, Baseline MAE, Error Reduction hours and %, Model MdAPE vs. Baseline MdAPE, and a complete audit table of test predictions.
-  - When $< 5$ tasks exist, displays an honest progress indicator and methodology disclosure.
-- **Methodological Honesty Disclosures**: Explicitly explains that the model is an interpretable bias-correction method (not deep learning), separates duration bias from generic delay risk, and assures 100% on-device privacy.
-
----
-
-## Voice & Natural Language Workflow
-
-VoxPlan provides browser-native voice dictation using the **Web Speech API** (`webkitSpeechRecognition` / `SpeechRecognition`) with an immediate text fallback. No external paid voice APIs are required.
-
-### Supported Commands:
-- **Task Management**:
-  - `"Add task Prepare Client Presentation due Friday 3h"`
-  - `"Create a high priority task called Infrastructure Audit due 2026-11-15"`
-  - `"Complete Prepare Client Presentation"`
-  - `"Uncomplete Prepare Client Presentation"`
-  - `"Delete Prepare Client Presentation"`
-  - `"Clear completed tasks"`
-- **Predictive ML Intelligence**:
-  - `"Train the model"` / `"Retrain baseline"`
-  - `"Show high risk tasks"`
-  - `"Show model performance"`
-  - `"Explain project risk"`
-
----
-
-## API Endpoints Reference
-
-FastAPI exposes interactive OpenAPI documentation at **`http://127.0.0.1:8000/docs`**.
+### 3. API Endpoints
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/health` | Backend status check (`status: ok`) |
-| `GET` | `/api/model/status` | Current training state, timestamp & holdout metrics |
-| `POST` | `/api/train` | Trains RandomForest on baseline dataset; returns measured test-split metrics |
-| `GET` | `/api/metrics` | Measured evaluation metrics & 2x2 confusion matrix |
-| `GET` | `/api/feature-importance` | Gini feature importances calculated from fitted trees |
-| `POST` | `/api/predict` | Single-task delay risk probability and contributing factors |
-| `POST` | `/api/predict/all` | Batch delay-risk predictions & sprint aggregate statistics |
-| `POST` | `/api/telemetry/events` | Ingests batch of behavioral telemetry events with deduplication |
-| `GET` | `/api/telemetry/events` | Retrieves stored telemetry events scoped by profile ID |
-| `DELETE` | `/api/telemetry/events` | Deletes stored telemetry events scoped by profile ID |
+| `GET` | `/health` | Healthcheck returning `{ "status": "ok", "service": "voxplan-ml" }` |
+| `GET` | `/api/model/status` | Model training status, sample count, accuracy, and timestamp |
+| `POST` | `/api/predict` | Single-task delay probability $[0.0, 1.0]$ and categorical risk (`LOW`, `MEDIUM`, `HIGH`) |
+| `POST` | `/api/predict/all` | Batch inference across multiple tasks |
+| `POST` | `/api/train` | Retrains model on reference dataset or telemetry |
+| `GET` | `/api/feature-importance` | Returns Gini importance scores across predictors |
+
+### 4. Graceful Offline Fallback
+If the FastAPI backend is offline or unreachable:
+- The frontend status pill in the header displays `"Offline"`.
+- The scheduler automatically uses a local deterministic heuristic risk baseline.
+- Full task management, scheduling, sticky notes, and calendar export continue operating with zero data loss or application crashes.
 
 ---
 
-## Local Development & Setup
+## Local-First Persistence & Privacy Architecture
+
+### 1. Client Storage Layers
+- **IndexedDB (`voxplan_db`)**:
+  - `tasks`: Full structured task objects, priorities, dependencies, and timestamps.
+  - `telemetry_events`: Immutable audit trail of completions, stopwatch intervals, and reschedules.
+- **localStorage**:
+  - `voxplan_sticky_notes`: Task memo notes across 6 stationery themes.
+  - `voxplan_product_tour_state`: Tour completion flags, step index, and operating mode.
+  - User notification preferences and theme settings.
+- **PWA Service Worker (`public/sw.js`)**:
+  - Implements a cache-first strategy for static application assets (HTML, CSS, JS, fonts).
+  - Enables standalone offline installability on desktop and mobile.
+
+### 2. Privacy Guarantees
+- **No Third-Party Cloud LLMs**: Task details, personal notes, and voice transcripts are never transmitted to external AI providers.
+- **Local Audio Processing**: Voice recognition runs through the client browser's Web Speech API implementation.
+- **Encrypted Workspace Backup**: Built-in client-side AES-GCM (256-bit) encryption allows users to export and restore their complete workspace with password protection (`src/components/BackupModal.jsx`).
+
+---
+
+## Natural Language & Voice Interaction
+
+- **Source Files**: `src/components/CommandBar.jsx`, `src/conversation/dialogueManager.js`, `src/conversation/compoundCommandParser.js`
+
+### Supported Natural Language Commands
+
+```text
+# Task Creation & Priority
+"Add task Prepare Presentation due Friday 3h"
+"Create a high priority task Infrastructure Audit due 2026-11-15"
+"New task Draft project report with low priority"
+
+# Task Lifecycle & Status
+"Mark Prepare Presentation as completed"
+"Uncomplete Prepare Presentation"
+"Delete Infrastructure Audit"
+"Clear completed tasks"
+
+# Scheduling & Planning
+"Plan sprint"
+"Optimize schedule"
+"Spread tasks across next 3 days"
+
+# Predictive Intelligence Queries
+"Show high risk tasks"
+"Explain project risk"
+"How did my plan go?"
+"Train the model"
+```
+
+### Conversational Safeguards
+- **Compound Splitting**: Sentences containing multiple instructions (e.g. *"Create task Alpha, and mark Beta as done"*) are split and processed sequentially.
+- **Disambiguation**: If an action targets a name shared by multiple tasks, VoxPlan displays a clarification modal asking the user to choose the intended task.
+- **Confirmation for Destructive Actions**: Deleting tasks or clearing history requires explicit confirmation.
+
+---
+
+## Installation & Developer Setup
 
 ### Prerequisites
-- Node.js (v18+)
-- Python 3.10+
+- **Node.js**: v18.0.0 or higher (v20+ recommended)
+- **Python**: 3.10, 3.11, 3.12, or 3.13
+- **Git**
 
-### 1. Start the FastAPI ML Backend
+---
+
+### Step 1: Clone the Repository
+
 ```bash
-# Install Python dependencies
+git clone https://github.com/kanwal-vyas/VoxPlan.git
+cd VoxPlan
+```
+
+---
+
+### Step 2: Configure Environment Variables
+
+Copy the example template to create your local `.env`:
+
+```bash
+cp .env.example .env
+```
+
+Default `.env` contents for local development:
+```ini
+# Frontend: URL of the local FastAPI backend
+VITE_API_BASE_URL=http://127.0.0.1:8000
+
+# Backend: Local host and port
+HOST=127.0.0.1
+PORT=8000
+CORS_ORIGINS=*
+ENVIRONMENT=development
+```
+
+---
+
+### Step 3: Start the Backend (Terminal 1)
+
+```bash
+# 1. Create a Python virtual environment
+python -m venv .venv
+
+# 2. Activate the virtual environment
+# On Windows (PowerShell):
+.venv\Scripts\Activate.ps1
+# On Windows (Command Prompt):
+.venv\Scripts\activate.bat
+# On macOS / Linux:
+source .venv/bin/activate
+
+# 3. Install backend dependencies
 pip install -r backend/requirements.txt
 
-# Start FastAPI server on port 8000
+# 4. Start the FastAPI ASGI server
 python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-### 2. Start the React/Vite Frontend
+The backend is now live at `http://127.0.0.1:8000`. You can inspect the interactive Swagger API documentation at `http://127.0.0.1:8000/docs`.
+
+---
+
+### Step 4: Start the Frontend (Terminal 2)
+
 ```bash
-# Install dependencies
+# 1. Install frontend npm dependencies
 npm install
 
-# Start Vite dev server
+# 2. Start the Vite development server
 npm run dev
 ```
 
-### 3. Run Automated Tests
+Open your browser to `http://localhost:5173`.
+- Visit `http://localhost:5173/` for the **Product Landing Page**.
+- Visit `http://localhost:5173/app` for the **Productivity Application Workspace**.
+- Visit `http://localhost:5173/app?tour=1` to launch the **Interactive Product Tour** directly.
+
+---
+
+### Automated Multi-Service Launchers
+
+For convenience, VoxPlan provides an automated launch script that checks ports, verifies dependencies, starts both services, and opens the browser:
+
 ```bash
-# Run Node.js telemetry test suite (14 unit tests)
+# Cross-platform Node.js launcher
+npm run demo              # Launches services and opens Landing Page (/)
+npm run demo -- --app     # Launches services and opens Workspace (/app)
+npm run demo -- --no-open # Launches services without opening the browser
+npm run demo -- --dry-run # Performs port and dependency preflight check only
+
+# On Windows:
+.\run-demo.bat
+.\run-demo.bat --app
+```
+
+---
+
+## Testing & Quality Verification
+
+VoxPlan enforces strict quality gates across both frontend and backend suites.
+
+```bash
+# 1. Run Complete Frontend Test Suite (Node.js test runner)
 npm test
+# Verified result: 1,282 passing tests across 280 suites (0 failures)
 
-# Run Python ML backend & date test suite (27 pytest tests)
+# 2. Run Dedicated Product Tour Test Suite
+node --test tests/product_tour/product_tour.test.js
+# Verified result: 52 passing tests across 9 suites (0 failures)
+
+# 3. Run Backend Test Suite (Pytest)
 python -m pytest backend/tests/ -v
-```
+# Verified result: 29 passing tests across date handling and ML routes (0 failures)
 
-### 4. Build Frontend for Production & Lint
-```bash
-# Fast linter check
+# 4. Run Fast Linter Check (Oxlint)
 npm run lint
+# Verified result: 0 errors
 
-# Compile production bundle
+# 5. Compile Production Bundle (Vite)
 npm run build
+# Verified result: Clean build with code-splitting in < 1s
+
+# 6. Run Secret & Credential Exposure Scanner
+node scripts/secretScanner.mjs
+# Verified result: 0 secrets detected across repository
 ```
+
+---
+
+## Deployment Configuration
+
+VoxPlan is configured for deployment on **Render**:
+
+| Service | Render Service Type | Environment / Build Command | Publish / Start Command | Live URL |
+|---|---|---|---|---|
+| **`VoxPlan`** | Static Site | `npm install && npm run build` | `dist/` | `https://voxplan-u31l.onrender.com` |
+| **`voxplan-api`** | Web Service | `pip install -r backend/requirements.txt` | `uvicorn backend.main:app --host 0.0.0.0 --port $PORT` | `https://voxplan-api.onrender.com` |
+
+### Critical Render Static Site Configuration: SPA Rewrite Rule
+Because VoxPlan is a single-page application utilizing client-side routing (`/` and `/app`), direct page visits or browser reloads on `/app` require a rewrite rule in the Render dashboard:
+- **Type**: `Rewrite`
+- **Source**: `/*`
+- **Destination**: `/index.html`
+
+*Physical assets (`/assets/*`, `/favicon.svg`, `/manifest.webmanifest`, `/sw.js`) continue to be served directly from disk with priority.*
 
 ---
 
 ## Repository Structure
 
-```
+```text
 VoxPlan/
 ├── backend/
-│   ├── main.py                  # FastAPI application, REST endpoints & telemetry routes
-│   ├── requirements.txt         # Python dependencies
+│   ├── main.py                     # FastAPI application, CORS, REST endpoints & ML routes
+│   ├── requirements.txt            # Python dependencies (FastAPI, scikit-learn, pydantic)
 │   ├── ml/
-│   │   ├── data_generator.py    # Synthetic historical dataset generator (baseline)
-│   │   ├── features.py          # Unified calendar date parsing & feature pipeline
-│   │   ├── train.py             # RandomForest training & test-split evaluation
-│   │   ├── predict.py           # Delay risk inference & rule-based factor signals
-│   │   └── model.py             # Pydantic schemas (TaskInput, TelemetryEventInput, etc.)
-│   ├── models/                  # Saved model artifacts (.joblib, metadata.json)
+│   │   ├── data_generator.py       # Reference baseline dataset generator
+│   │   ├── features.py             # Feature extraction & calendar date parsing
+│   │   ├── train.py                # RandomForest training & evaluation pipeline
+│   │   ├── predict.py              # Delay risk inference & factor signal extraction
+│   │   └── model.py                # Pydantic schemas (TaskInput, PredictionOutput)
+│   ├── models/                     # Serialized model artifacts (.joblib, metadata.json)
 │   └── tests/
-│       ├── test_date_handling.py # 18 tests for calendar date & timezone logic
-│       └── test_ml_backend.py   # 9 tests for FastAPI routes & telemetry ingestion
+│       ├── test_date_handling.py   # 18 unit tests for calendar dates & timezone logic
+│       └── test_ml_backend.py      # 11 unit tests for FastAPI endpoints & prediction
+│
+├── public/
+│   ├── favicon.svg                 # Canonical warm yellow rounded square with sparkle badge
+│   ├── favicon.ico                 # Multi-size fallback favicon (16x16, 32x32, 48x48)
+│   ├── manifest.webmanifest        # W3C PWA web application manifest
+│   ├── sw.js                       # PWA Service Worker implementing offline app shell cache
+│   └── brand-icons/                # High-res PWA raster icons (192x192, 512x512, maskable)
 │
 ├── src/
 │   ├── api/
-│   │   └── mlApi.js             # HTTP client for FastAPI backend
+│   │   └── mlApi.js                # HTTP client for backend communication with offline guards
 │   ├── components/
-│   │   ├── Header.jsx           # Top bar & live backend connectivity status
-│   │   ├── Hero.jsx             # Editorial typography & illustrative preview cards
-│   │   ├── CommandBar.jsx       # Browser Web Speech API & NL command parser (Section 06)
-│   │   ├── ProjectOverview.jsx  # Dynamic task risk pathway, live sprint health & scheduler trigger
-│   │   ├── MLModelPanel.jsx     # Honest metrics, holdout confusion matrix, Gini bars
-│   │   ├── TaskList.jsx         # Task management controls & filterable list
-│   │   ├── TaskCard.jsx         # Stopwatch timer, inline reschedule/effort/reorder, ML pill
-│   │   ├── TaskExplanationModal.jsx # Risk factor & personalization transparency modal
-│   │   ├── AdaptiveScheduleModal.jsx # Adaptive sprint schedule proposal review & configuration
-│   │   ├── BehavioralHistoryPanel.jsx # Behavioral habits, focus metrics & privacy (Section 04)
-│   │   └── PersonalModelDashboard.jsx # Personal duration & risk model dashboard (Section 05)
+│   │   ├── Header.jsx              # Application navigation, status pill, and tour trigger
+│   │   ├── Hero.jsx                # Landing hero with editorial typography & preview cards
+│   │   ├── CommandBar.jsx          # Voice and typed command dock with interim transcript
+│   │   ├── ProjectOverview.jsx     # Sprint health overview & adaptive schedule trigger
+│   │   ├── TaskList.jsx            # Task filtering, priority pills, and sorting controls
+│   │   ├── TaskCard.jsx            # Stopwatch timer, inline edit, memo tab, and risk badge
+│   │   ├── TaskCalendar.jsx        # Calendar view, time-blocked grid, and .ics export
+│   │   ├── TaskExplanationModal.jsx # ML delay risk explainability modal with plain-English factors
+│   │   ├── AdaptiveScheduleModal.jsx # Adaptive schedule proposal diff review modal
+│   │   ├── BehavioralHistoryPanel.jsx # Focus habits, velocity trends, and telemetry controls
+│   │   ├── PersonalModelDashboard.jsx # Bayesian shrinkage duration model & evaluation
+│   │   ├── LearningReadinessPanel.jsx # Learning readiness gate indicators (n >= 3 threshold)
+│   │   ├── FeedbackToast.jsx       # Floating global feedback toast with lossless undo
+│   │   ├── BackupModal.jsx         # AES-GCM encrypted workspace export and restore
+│   │   ├── notifications/          # Proactive notification bell, center, and settings modals
+│   │   ├── stickyNotes/            # Illustrated stationery sticky notes modal and 6 themes
+│   │   └── productTour/            # Scoped Product Tour overlay, spotlight, and callout components
+│   │
+│   ├── productTour/
+│   │   ├── tourSteps.js            # Authoritative 20-step curated tour inventory
+│   │   ├── useProductTour.js       # Hook managing tour state, SVG spotlight bounds, and keyboard nav
+│   │   ├── tourStorage.js          # Isolated storage helper ('voxplan_product_tour_state')
+│   │   ├── demoState.js            # Disposable in-memory demo data for hands-on practice (Mode B)
+│   │   └── positionHelper.js       # Spotlight geometry calculations & viewport boundary clamping
+│   │
 │   ├── scheduler/
-│   │   └── adaptiveScheduler.js # Deterministic local-first scheduling engine & DAG resolver
+│   │   ├── adaptiveScheduler.js    # Deterministic Kahn DAG topological solver & capacity packer
+│   │   ├── taskChunker.js          # Multi-day task session chunking for oversized work
+│   │   ├── timeBlockScheduler.js   # Intraday focus windows and meeting buffer constraints
+│   │   ├── proposalEditor.js       # Manual placement overrides on draft proposals with undo
+│   │   ├── icalExporter.js         # RFC 5545 iCalendar standard .ics generator
+│   │   └── activationGateEvaluator.js # Security gate enforcing locked Stage 7.4.4B invariants
+│   │
 │   ├── telemetry/
-│   │   ├── eventSchema.js       # Typed event schemas, UUID generator & validation
-│   │   ├── indexedDbStore.js    # Local-first IndexedDB store (voxplan_db) & fallback
-│   │   ├── behavioralStats.js   # Evidence-based stats calculation & sparse-data guard
-│   │   ├── taskLifecycle.js     # Shared task lifecycle engine & timer finalization
-│   │   ├── personalModel.js     # Duration model (weighted median + shrinkage) & walk-forward eval
-│   │   ├── personalRiskModel.js # Guarded hybrid completion-risk personalization
-│   │   └── telemetryManager.js  # Profile ID manager, timer persistence & event logger
+│   │   ├── eventSchema.js          # Schema v2 typed behavioral event definitions
+│   │   ├── indexedDbStore.js       # Local-first IndexedDB wrapper ('voxplan_db')
+│   │   ├── taskLifecycle.js        # Shared task lifecycle engine & stopwatch finalization
+│   │   ├── personalModel.js        # Weighted median & empirical Bayesian duration shrinkage
+│   │   └── telemetryManager.js     # Client profile manager, timer persistence & event logger
+│   │
+│   ├── conversation/
+│   │   ├── speechEngine.js         # Web Speech API recognition & speech synthesis controller
+│   │   ├── dialogueManager.js      # Multi-turn conversation state machine & confirmations
+│   │   └── compoundCommandParser.js # Deterministic preposition-based natural language parser
+│   │
+│   ├── pages/
+│   │   ├── LandingPage.jsx         # Product overview & feature preview route ('/')
+│   │   └── ProductivityApp.jsx     # Operational task planning workspace route ('/app')
+│   │
 │   ├── utils/
-│   │   └── demoDataSeeder.js    # Calibrated demo dataset, Schema v2 events & safe teardown
-│   ├── App.jsx                  # State orchestrator, telemetry integration & Web Speech
-│   ├── App.css                  # Highlighters, animations & typography styles
-│   └── main.jsx
+│   │   ├── pwaManager.js           # Service worker registration and PWA install prompt handler
+│   │   ├── stickyNotesStorage.js   # LocalStorage persistence for illustrated sticky notes
+│   │   └── demoDataSeeder.js       # Deterministic 12-task showcase seeding and clean teardown
+│   │
+│   ├── App.jsx                     # Top-level client router and error boundary
+│   └── main.jsx                    # React 19 entry point
 │
+├── tests/                          # 1,282 automated unit, integration, and regression tests
+│   ├── product_tour/               # 52 dedicated product tour tests across 9 suites
+│   ├── scheduler.test.js           # Kahn DAG sort, capacity packing, unblocking bonuses
+│   ├── personal_model.test.js      # Bayesian duration shrinkage and readiness gates
+│   ├── voice_dialogue.test.js      # Compound preposition parsing and Web Speech states
+│   └── components.test.jsx         # Accessibility, modal keyboard traps, and design tokens
+│
+├── ppt_assets/                     # Presentation assets (12 genuine screenshots, architecture diagram)
 ├── scripts/
-│   └── demoLauncher.mjs         # Windows/Cross-platform demo orchestrator with health checks
+│   ├── demoLauncher.mjs            # Cross-platform demo orchestrator with port probes
+│   ├── secretScanner.mjs           # Recursive credential scanner for git hooks and CI
+│   └── generateBrandFavicons.py    # Generates multi-size brand favicons and PWA rasters
 │
-├── tests/
-│   ├── telemetry.test.js          # 14 unit tests for schema, IndexedDB, stats & timers
-│   ├── personal_model.test.js     # 39 unit tests for duration model, evaluation guards & risk
-│   └── adaptive_scheduler.test.js # 19 unit tests for scheduling engine, DAG, limits & safety
-│
-├── voxplan_architecture_audit.md # Full architecture audit and transformation plan
-├── run-demo.bat                 # Windows one-click demo launch wrapper
-├── PROJECT_SCOPE.md             # Authoritative scope register (Categories A-F & boundaries)
-├── PROJECT_PLAN.md              # Living implementation roadmap & phase tracking
-└── README.md
+├── .env.example                    # Template environment configuration
+├── Dockerfile                      # Non-root multi-stage production container
+├── PROJECT_PLAN.md                 # Authoritative historical engineering phases
+├── PROJECT_SCOPE.md                # Authoritative scope boundaries (Categories A-F)
+├── package.json                    # Dependencies, scripts, and project metadata
+└── README.md                       # Comprehensive project documentation
 ```
 
 ---
 
-## Adaptive Scheduling Foundations (Phase 4, Stage 1)
+## Known Limitations & Future Scope
 
-VoxPlan features a deterministic, local-first adaptive scheduling engine designed to turn static task lists into executable calendar proposals without ever silently rearranging the user's plan.
+### Known Limitations (Honest Technical Disclosures)
+1. **Single-Device Local Persistence**: Because tasks, telemetry, and sticky notes are stored in client-side `IndexedDB` and `localStorage`, data does not automatically synchronize across different browsers or devices without using the manual encrypted backup feature (`BackupModal.jsx`).
+2. **Speech Recognition Browser Variability**: Web Speech API speech-to-text relies on native browser support. It operates with high accuracy in Chromium-based browsers (Google Chrome, Microsoft Edge, Brave) and Safari, but has limited support in Mozilla Firefox. Typed input in the command dock serves as an identical, fully functional fallback.
+3. **ML Microservice Cold-Start**: On free-tier cloud deployments (such as Render free web services), the backend API may take 30–50 seconds to spin up from an idle state. During this time, the frontend operates seamlessly offline, using its deterministic heuristic baseline.
 
-### 1. Key Principles & Governance
-- **Proposal-Based Flow**: The engine generates a transparent proposal object. Existing tasks and due dates remain completely untouched until the user explicitly clicks **"Apply Schedule"**.
-- **Deterministic Output**: Given identical inputs (tasks, settings, personal history), the engine always outputs identical placements, utilizing deterministic tie-breaking based on stable IDs.
-- **Evidence-Based Durations**: When the local Personal Duration Model has observed sufficient evidence ($W \ge 3.0$), the scheduler automatically allocates time based on the user's personalized pace ($r_{\text{adjusted}} \times \text{estimate}$). In cold-start or sparse data scenarios, it seamlessly falls back to the user's original estimate.
-- **Zero Paid AI / Local Execution**: Runs entirely in the client without external optimization APIs, cloud services, or paid token dependencies.
-
-### 2. Constraint Solving & Prioritization Rules
-1. **Topological Dependency Ordering**: Tasks with prerequisites are scheduled after their prerequisites, verified via DFS 3-color cycle detection. Circular dependencies are safely isolated without crashing.
-2. **Earliest Deadline First (EDF) & Overdue Recovery**: Overdue tasks and near-term deadlines receive elevated prioritization scores to protect commitments.
-3. **Daily Working-Hour Capacity**: Consecutive calendar slots are populated up to user-configured hours (default `6.0h/day`). Tasks that exceed remaining day hours cleanly roll over into the next working weekday.
-4. **Guarded Delay-Risk Urgency**: Tasks identified by the hybrid model as having high completion risk ($P_{\text{delay}} \ge 0.65$) receive a secondary heuristic boost to position them earlier in the sprint.
-5. **No Hidden Failures**: If the planning horizon cannot accommodate a task or a deadline is missed, the scheduler reports explicit conflict reasons (`deadline_missed`, `capacity_exceeded`, `unscheduled`) rather than concealing feasibility limits.
+### Future Scope (Genuinely Not Yet Implemented)
+- **Peer-to-Peer Encrypted Device Sync**: Implementing local-first WebRTC / CRDT synchronization between desktop and mobile devices without requiring a centralized cloud database.
+- **Bi-directional CalDAV Synchronization**: Two-way live synchronization with Google Calendar, Nextcloud, and Outlook via the CalDAV protocol, extending the current one-way RFC 5545 `.ics` export.
+- **On-Device Small Language Model (SLM)**: Running lightweight WebAssembly-compiled local language models (such as WebLLM / Gemma 2B) directly in the browser to expand conversational query capabilities without external API dependencies.
 
 ---
 
-## Local Schedule Feedback & Outcome Tracking (Phase 4, Stage 5)
+## Authors & Community
 
-Phase 4 Stage 5 establishes empirical feedback tracking to determine whether VoxPlan's schedule proposals are genuinely useful in real-world usage.
-
-### 1. Versioned Event Schema (Schema Version 2)
-The behavioral telemetry event schema (`SCHEMA_VERSION = 2`) introduces versioned, minimal scheduling events:
-- **`schedule_proposal_generated`**: Logged once when a unique schedule ID is calculated (`total_eligible_tasks`, `scheduled_count`, `date_changes_count`, `feasibility`).
-- **`schedule_proposal_accepted`**: Logged when the user clicks "Apply Schedule", capturing the exact snapshot of applied task placements (`task_id`, `original_due_date`, `proposed_date`).
-- **`schedule_proposal_discarded`**: Logged if the user closes or discards the proposal without applying it (`reason`: `user_discard` | `user_closed`).
-
-### 2. Privacy & Local Storage
-- **Zero Remote Transmission**: All feedback records remain strictly inside browser IndexedDB (`voxplan_db`). No schedule events or task details are transmitted to the backend.
-- **Content Minimization**: Only stable opaque IDs (`task_id`, `schedule_id`) and dates are stored. No task titles, descriptions, or sensitive text are embedded in proposal events.
-- **Immediate Data Deletion**: Clicking "Clear Behavioral History" in Section 04 permanently wipes all telemetry records and resets all feedback metrics to cold-start immediately.
-
-### 3. Metric Definitions & Explicit Denominators
-- **Proposal Acceptance Rate**:
-  $$\text{Acceptance Rate} = \frac{\text{acceptedCount}}{\text{acceptedCount} + \text{discardedCount}}$$
-  Explicitly reports the denominator of decided proposals. Measures initial adoption willingness, **not** schedule quality.
-- **Manual Override Rate**:
-  Measures tasks altered after proposal acceptance via `task_rescheduled` (where `reason !== 'adaptive_scheduler'`):
-  $$\text{Task Override Rate} = \frac{\text{uniqueOverriddenTasksCount}}{\text{totalPlacedTasksCount}}$$
-  Classifies shift direction: **postponed** ($+Xd$) vs **advanced** ($-Xd$).
-- **Unaltered On-Time Completion Rate**:
-  $$\text{On-Time Completion Rate} = \frac{\text{completedOnTimeCount}}{\text{eligibleCompletedCount}}$$
-  Strictly evaluates tasks that were **not** manually rescheduled prior to completion.
-
-### 4. Outcome Attribution & Limitation Integrity
-- **Interval-Based Multi-Proposal Attribution**: When a task appears in multiple proposals over time, events are attributed strictly within the interval `[acceptedAt, supersededAt)` of the active proposal placement.
-- **Manual Overrides Prior to Completion**: If a user reschedules a scheduled task prior to completing it, that task's completion is categorized under `excludedObservations` (`overridden_prior_to_completion`). This prevents attributing the outcome of manual user interventions to the automated scheduling algorithm.
-- **Lifecycle Integrity**: Tasks reopened after completion or still active in backlog are excluded (`reopened_incomplete_lifecycle`, `task_currently_open`).
-- **Sparse Data Guard**: If fewer than 3 decided proposals or completed observations exist, the UI renders an honest insufficient-data banner without extrapolating or fabricating metrics.
-
-### 5. Cautious Learning Boundary
-- **Measurement Only**: VoxPlan strictly does **not** automatically retrain the scheduler, tune heuristic weights, or alter priority rules from sparse user feedback.
-- **Concept Independence**: Acceptance rate, manual overrides, and execution timeliness are separated into distinct concepts. A high acceptance rate is not proof that the schedule was good; a low override rate is not proof that all tasks were completed on time.
-- **Automated Test Coverage**: 115 automated tests passing across 30 suites in `tests/schedule_feedback.test.js`, `tests/schedule_evaluation.test.js`, `tests/personal_model.test.js`, and `tests/telemetry.test.js`.
-
----
-
-## Demo Data Recovery & Process Lifecycle Architecture
-
-VoxPlan includes a hardened demonstration data seeding, recovery, and launch system designed for zero accidental data loss:
-
-### 1. Hardened Backup & Recovery Protocol (`src/utils/demoDataSeeder.js`)
-- **Versioned Backup Envelope**: Genuine user tasks are backed up to `voxplan_user_tasks_backup` with schema metadata (`schema_version: 1`, `backed_up_at`, `profile_id`, `task_count`). Both legacy raw-array and versioned envelope formats are supported backward-compatibly.
-- **Non-Demo Merge Preservation**: Any genuine user tasks created or edited during an active demo session are merged with the restored backup on reset rather than wiped.
-- **Strict Provenance & Ambiguous Record Preservation**: Demo tasks are strictly identified via explicit provenance markers (`isDemoSeed: true`, `isSyntheticData: true`, `provenanceSource: 'demo_seeding_utility'`). Neither a canonical demo ID nor a canonical title alone proves demo ownership. Unmarked tasks matching demo patterns are treated conservatively as ambiguous, preserved across resets, and reported with actionable diagnostics.
-- **Cross-Tab Concurrency & Conflict Detection**: Task persistence coordinates ordinary writes using `safePersistTasks()` and `voxplan_tasks_revision`. Writes are safely blocked while another tab executes demo seeding or reset, and concurrent non-overlapping edits across tabs are merged by task ID without silent data loss.
-- **Interruption-Resilient Recovery**: Resetting writes a durable cleanup record (`voxplan_demo_cleanup_pending`) before teardown. If the application or tab crashes before IndexedDB event cleanup completes, the pending cleanup is detected and finalized idempotently on next launch.
-- **Selective Telemetry Cleanup**: Resetting a demo profile invokes `clearDemoEventsByProfile()`, which selectively deletes only synthetic demo events, preserving all genuine user telemetry.
-- **Quarantine on Corrupted Data**: If a backup contains malformed JSON or corrupted structures, the raw payload is quarantined in `voxplan_quarantine_backup_<timestamp>` rather than destructively wiped, and uncorrupted active tasks are preserved.
-- **Atomic Rollback on Partial Write**: If IndexedDB event saving fails during demo seeding, `localStorage` tasks and seed markers are automatically rolled back to their pre-seed state.
-
-### 2. Demo Launch Orchestration (`scripts/demoLauncher.mjs`)
-- **Loopback Probe Optimization**: Probing uses IPv4 loopback (`127.0.0.1`), eliminating Windows OS IPv6 DNS fallback delays (reducing dry-run preflight from ~41s to ~2s).
-- **Honest Health Reporting**: Service status is verified through real HTTP response probes before displaying `[ONLINE]` status in banners.
-- **Process Ownership Isolation**: Child process cleanup on exit (`SIGINT`/`SIGTERM`) terminates only processes spawned by the current launcher invocation using process-tree termination on Windows (`taskkill /pid <PID> /T /F`), never killing pre-existing healthy services or unrelated applications.
+- **Creator & Lead Developer**: Kanwal Vyas ([GitHub](https://github.com/kanwal-vyas))
+- **Repository**: [https://github.com/kanwal-vyas/VoxPlan](https://github.com/kanwal-vyas/VoxPlan)
+- **Live Application**: [https://voxplan-u31l.onrender.com](https://voxplan-u31l.onrender.com/)
