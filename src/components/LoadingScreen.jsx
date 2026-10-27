@@ -76,7 +76,7 @@ export default function LoadingScreen({ onComplete }) {
           <span style={{ ...styles.dot, backgroundColor: '#BFE8D0', animationDelay: '540ms' }} />
         </div>
 
-        {/* Playful Progress Bar & Number */}
+        {/* Progress Bar & Number */}
         <div style={styles.progressContainer}>
           <div style={styles.progressBar}>
             <div style={{ ...styles.progressFill, width: `${progress}%` }} />

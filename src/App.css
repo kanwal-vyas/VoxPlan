@@ -987,6 +987,199 @@ a:focus-visible {
     padding: 10px 14px !important;
     gap: 8px !important;
   }
+
+  /* ========================================================================
+     Landing Page (.overview-page) Mobile Optimization & Overflow Elimination
+     ======================================================================== */
+  .overview-page {
+    padding: 0 0 60px 0 !important;
+    max-width: 100vw !important;
+    box-sizing: border-box !important;
+  }
+
+  .overview-ribbon-wrap {
+    display: none !important;
+  }
+
+  .landing-header {
+    top: 4px !important;
+    padding: 0 4px !important;
+  }
+
+  .landing-header-container {
+    padding: 4px 8px !important;
+    gap: 8px !important;
+    border-radius: 12px !important;
+    min-height: 42px !important;
+  }
+
+  .landing-desktop-nav {
+    display: none !important;
+  }
+
+  .landing-mobile-menu-toggle {
+    display: flex !important;
+  }
+
+  .landing-preview-section {
+    padding: 12px 10px 36px !important;
+  }
+
+  .landing-preview-container {
+    border-radius: 14px !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .landing-preview-card-header {
+    padding: 10px 12px !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+
+  .landing-preview-tabs {
+    width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding-bottom: 2px !important;
+  }
+
+  .landing-preview-body {
+    display: flex !important;
+    flex-direction: column !important;
+    grid-template-columns: 1fr !important;
+    padding: 14px 10px !important;
+    gap: 16px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    min-width: 0 !important;
+  }
+
+  .landing-preview-left-col,
+  .landing-preview-right-col {
+    width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .landing-features-section {
+    padding: 36px 10px !important;
+  }
+
+  .landing-features-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .landing-feature-card {
+    padding: 16px 14px !important;
+    border-radius: 14px !important;
+    box-sizing: border-box !important;
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  .landing-how-section {
+    padding: 36px 10px !important;
+  }
+
+  .landing-timeline-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .landing-timeline-card {
+    padding: 16px 14px !important;
+    border-radius: 14px !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .landing-safety-section {
+    padding: 36px 10px !important;
+  }
+
+  .landing-comparison-card {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    border-radius: 12px !important;
+    box-sizing: border-box !important;
+  }
+
+  .landing-comparison-table {
+    min-width: 480px !important;
+  }
+
+  .landing-tour-section {
+    padding: 36px 10px !important;
+  }
+
+  .landing-tour-status-banner {
+    padding: 14px 12px !important;
+    border-radius: 14px !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .landing-tour-pillars-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .landing-workspace-section {
+    padding: 24px 10px 36px !important;
+  }
+
+  .landing-workspace-card {
+    padding: 16px 12px !important;
+    border-radius: 16px !important;
+    box-sizing: border-box !important;
+  }
+
+  .landing-metrics-grid {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  .landing-cta-section {
+    padding: 24px 10px 50px !important;
+  }
+
+  .landing-cta-card {
+    padding: 28px 14px !important;
+    border-radius: 18px !important;
+    box-shadow: 0 6px 0 #25242A !important;
+  }
+
+  .landing-cta-btn-group {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    max-width: 280px !important;
+    margin: 0 auto !important;
+  }
+
+  .landing-footer {
+    padding: 32px 14px 16px !important;
+  }
+
+  .landing-footer-container {
+    display: flex !important;
+    flex-direction: column !important;
+    grid-template-columns: 1fr !important;
+    gap: 20px !important;
+  }
 }
 
 /* Reduced Motion */

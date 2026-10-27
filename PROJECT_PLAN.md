@@ -38,6 +38,7 @@ This document tracks the phased evolution of VoxPlan from a static task tracker 
 | **Phase 8.19** | App Icon and Browser Favicon Unification | **COMPLETED** | Reused exact canonical Overview brand symbol (`✦` inside `#FFE58A` rounded square with `#25242A` shadow and border) across `/` and `/app` via shared `BrandBadge.jsx`; replaced Vite starter purple lightning bolt with canonical `favicon.svg` using exact extracted vector path; generated multi-size `favicon.ico`, `favicon-32x32.png`, and PWA raster icons; 0 errors across 1,282 tests. |
 | **Phase 8.20** | Render Static Site SPA Routing & Live Service Verification | **COMPLETED** | Diagnosed live Render deployment 404 on reload (`https://voxplan-u31l.onrender.com/app`); confirmed backend `voxplan-api` at `https://voxplan-api.onrender.com` healthy (FastAPI 200 OK); identified missing Render Static Site rewrite rule for SPA navigation fallback; documented exact Render Dashboard rewrite rule (`/*` -> `/index.html`); 1,282 frontend tests, 29 backend tests passing. |
 | **Phase 8.21** | Mobile-First UI Optimization & Product Tour Responsiveness | **COMPLETED** | Comprehensive mobile-first optimization across all viewports (320px–430px phones, 768px tablet, 1280px+ desktop regression); compact smart-docked product tour callouts preventing target obstruction; 4-tab mobile workspace header navigation without wrapping; single-column task card layouts with $\ge 44\text{px}$ touch targets; horizontally scrollable filter bars; mobile viewport modal dialog fit with safe areas; zero regressions to existing scheduling, voice, persistence, or desktop layouts; 1,300 frontend tests, 29 backend tests, 0 lint errors, clean build. |
+| **Phase 8.22** | Mobile Overflow Elimination & Brand Copy Refinement | **COMPLETED** | Systematic root-cause elimination of horizontal scroll overflow across all 5 standard mobile viewports (320px, 360px, 375px, 390px, 430px) in both open and closed interactive states; complete removal of gimmicky "playful intelligence" branding/copy across metadata, pages, components, and tests in favor of professional terminology ("predictive task planning", "adaptive scheduling", "task insights"); automated regression suite; 1,309 frontend tests, 29 backend tests passing. |
 
 
 ---
@@ -8116,3 +8117,70 @@ Deliver a visually obvious, genuine mobile transformation beyond minor font and 
   - `after_390px_today_view.png`: Flawless layout on 390px viewport.
   - `after_375px_tasks_view.png`: Immediate risk landscape and task cards.
   - `after_1280px_desktop_1793089066172.png`: Confirmed zero desktop regression.
+
+---
+
+## [2026-10-27] — Phase 8.22: Mobile Overflow Elimination & Brand Copy Refinement
+
+### Primary Objectives
+1. **Systematic Mobile Overflow Elimination Across All Standard Viewports**:
+   - Tested and verified at **320px, 360px, 375px, 390px, and 430px** (both closed and open interactive states: navigation, overflow menus, notification center, product tour).
+   - Eliminated horizontal scroll blowout (`document.documentElement.scrollWidth > document.documentElement.clientWidth`) by fixing underlying flex/grid containment constraints, not by applying blanket `overflow-x: hidden`.
+   - Identified root cause in landing page (`/`):
+     - Unresponsive desktop navigation bar (`.landing-desktop-nav`) with fixed flex row min-width ~494px.
+     - Hardcoded CSS Grid columns (`minmax(320px, 1fr)`) compounded with 36px inner card padding and 20px `.overview-page` root container padding, resulting in a min-width of 412px on 320px viewports.
+     - Uncontained comparison table and preview grids.
+   - Implemented responsive solutions:
+     - Replaced hardcoded column minimums with modern dynamic clamp sizing: `grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr))`.
+     - In `src/App.css`, added `@media (max-width: 768px)` rules: `.landing-desktop-nav { display: none !important; }`, `.landing-mobile-menu-toggle { display: flex !important; }`, `.landing-comparison-card { max-width: 100% !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }`, and vertical flex stacks for preview, timeline, and feature grids.
+     - Streamlined mobile header height to single-row 42px with collapsible dropdown menu.
+     - Verified app views (`/app`: Today, Tasks, Calendar, Insights) remain at 0px overflow across all 5 viewports.
+
+2. **Complete Removal of "Playful Intelligence" Branding and Gimmicky Copy**:
+   - Replaced all user-facing instances and code comments referencing "playful intelligence" or gimmicky phrases with professional, value-driven terminology:
+     - Page `<title>` and document headers: `VoxPlan — Predictive Task Planning & Adaptive Scheduling`.
+     - Route configuration in `src/App.jsx`: `VoxPlan — Predictive Task Planning & Adaptive Scheduling`.
+     - Updated automated test assertions in `tests/accessibility.test.js`.
+     - Cleaned code comments in `ProductivityApp.jsx` and `LoadingScreen.jsx`.
+     - Confirmed zero active occurrences of "playful intelligence" across the entire repository via exhaustive ripgrep search.
+
+3. **Preserved Invariants & Desktop Regression Safety**:
+   - Factory scheduler weights remain immutable (`Urgency 50.0`, `Priority 100.0`, `Unblock 15.0`, `Risk 25.0`).
+   - Production activation gate remains permanently locked (`isAdaptationUnlocked === false`).
+   - Desktop viewports (1280px and 1440px) verified to preserve complete layouts, grid structures, and typography with zero regressions.
+
+### Automated Regression Suite Added
+- Created `tests/mobile_overflow_and_copy_regression.test.js`:
+  - Suite A: Zero "Playful Intelligence" Copy Invariant (verifies `index.html`, `LandingPage.jsx`, `ProductivityApp.jsx`, `App.jsx`, `LoadingScreen.jsx`).
+  - Suite B: Mobile Layout & Overflow Containment Logic (validates `scrollWidth <= clientWidth` comparison logic, responsive CSS media query containment, comparison table horizontal scrolling encapsulation).
+
+### Verification Results
+- **Mobile Viewport Overflow Audit (Chrome DevTools Protocol Emulation)**:
+  - 320px viewport: `scrollWidth = 320px, clientWidth = 320px` (0px overflow, `hasOverflow = false`).
+  - 360px viewport: `scrollWidth = 360px, clientWidth = 360px` (0px overflow, `hasOverflow = false`).
+  - 375px viewport: `scrollWidth = 375px, clientWidth = 375px` (0px overflow, `hasOverflow = false`).
+  - 390px viewport: `scrollWidth = 390px, clientWidth = 390px` (0px overflow, `hasOverflow = false`).
+  - 430px viewport: `scrollWidth = 430px, clientWidth = 430px` (0px overflow, `hasOverflow = false`).
+  - Open states (landing menu, app overflow menu, notification center, product tour): all within viewport bounds (`offLeft: false`, `offRight: false`).
+- **Frontend Test Suite (`npm test`)**:
+  - **1,309 passed, 0 failed** across 291 suites.
+- **Backend Test Suite (`python -m pytest backend/tests/`)**:
+  - **29 passed, 0 failed** across 2 test modules.
+- **Linter (`npm run lint` / `oxlint`)**:
+  - 0 errors, 1 pre-existing warning in unrelated modal.
+- **Production Build (`npm run build`)**:
+  - Vite v8.3.2 production build succeeded in 1.24s (0 errors).
+- **Secret Scanner (`node scripts/secretScanner.mjs`)**:
+  - 0 secrets detected across 169 files scanned.
+- **Git Diff Check (`git diff --check`)**:
+  - Clean (0 whitespace/formatting errors).
+- **Visual Evidence Captured**:
+  - `screenshot_landing_320px.png`: 320px landing page perfectly fitted with mobile burger navigation.
+  - `screenshot_landing_375px.png`: 375px landing page clean layout.
+  - `screenshot_landing_menu_375px.png`: Open landing navigation menu contained within viewport.
+  - `screenshot_today_320px.png`: 320px Today workspace view with 42px compact header and zero overflow.
+  - `screenshot_today_375px.png`: 375px Today workspace view.
+  - `screenshot_tasks_375px.png`: 375px Tasks view with full card containment.
+  - `screenshot_app_menu_375px.png`: Workspace `•••` overflow menu contained without lateral clip.
+  - `screenshot_app_tour_375px.png`: Product tour spotlight & callout dock on mobile viewport.
+  - `screenshot_desktop_landing.png` & `screenshot_desktop_today.png`: 1440px desktop layouts verified completely intact.

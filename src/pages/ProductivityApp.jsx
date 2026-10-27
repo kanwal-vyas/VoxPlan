@@ -1778,7 +1778,7 @@ export default function ProductivityApp({ onNavigate }) {
               width: '100%',
             }}
           >
-            {/* Playful Hero */}
+            {/* Hero Section */}
             <Hero
               modelMetadata={modelStatus}
               tasks={effectiveTasks}

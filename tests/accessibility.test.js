@@ -85,7 +85,7 @@ describe('Phase 8, Stage 8.1: Accessibility Audit & Keyboard Navigation Test Sui
       const appContent = fs.readFileSync(path.join(rootDir, 'src', 'App.jsx'), 'utf-8');
       assert.ok(appContent.includes('document.title ='), 'App.jsx must dynamically set document.title');
       assert.ok(appContent.includes('VoxPlan App — Tasks & Adaptive Scheduling'), 'App.jsx must set title for /app');
-      assert.ok(appContent.includes('VoxPlan — Playful Project Intelligence'), 'App.jsx must set title for /');
+      assert.ok(appContent.includes('VoxPlan — Predictive Task Planning & Adaptive Scheduling'), 'App.jsx must set title for /');
     });
 
     it('2.3 LandingPage and ProductivityApp provide main landmark with matching id="main-content"', () => {

@@ -86,7 +86,7 @@ export default function App() {
     if (isApp) {
       document.title = 'VoxPlan App — Tasks & Adaptive Scheduling';
     } else {
-      document.title = 'VoxPlan — Playful Project Intelligence';
+      document.title = 'VoxPlan — Predictive Task Planning & Adaptive Scheduling';
     }
   }, [isApp]);
 

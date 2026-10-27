@@ -101,8 +101,22 @@ export default function LandingPage({ onNavigate }) {
   const [previewTimerSeconds, setPreviewTimerSeconds] = useState(2540); // 42m 20s
   const [workspaceSummary, setWorkspaceSummary] = useState(() => loadWorkspaceSummary());
   const [tourState, setTourState] = useState(() => loadTourState());
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth <= 768;
+  });
   const pageRef = useRef(null);
   const ribbonRefs = useRef({});
+
+  // Responsive resize tracking for mobile navigation containment
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize, { passive: true });
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Synchronize workspace summary and tour state on window focus or storage updates
   useEffect(() => {
@@ -288,12 +302,13 @@ export default function LandingPage({ onNavigate }) {
     <div ref={pageRef} className="overview-page" style={styles.page}>
       {/* 1. Header / Navigation */}
       <header
+        className="landing-header"
         style={{
           ...styles.header,
           ...(scrolled ? styles.headerScrolled : {}),
         }}
       >
-        <div style={styles.headerContainer}>
+        <div className="landing-header-container" style={styles.headerContainer}>
           {/* Brand */}
           <button
             type="button"
@@ -301,13 +316,20 @@ export default function LandingPage({ onNavigate }) {
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
             aria-label="VoxPlan home, scroll to top"
           >
-            <BrandBadge size={32} />
-            <span style={styles.brandName}>VOXPLAN</span>
-            <span style={styles.taglineNote}>smart notebook</span>
+            <BrandBadge size={isMobile ? 26 : 32} />
+            <span style={isMobile ? { ...styles.brandName, fontSize: '18px' } : styles.brandName}>VOXPLAN</span>
+            {!isMobile && <span style={styles.taglineNote}>adaptive planner</span>}
           </button>
 
           {/* Desktop Nav Links */}
-          <nav style={styles.desktopNav} aria-label="Landing Navigation">
+          <nav
+            className="landing-desktop-nav"
+            style={{
+              ...styles.desktopNav,
+              display: isMobile ? 'none' : 'flex',
+            }}
+            aria-label="Landing Navigation"
+          >
             <button type="button" onClick={() => scrollToSection('workspace-focus')} style={styles.navLink}>
               Focus
             </button>
@@ -334,7 +356,11 @@ export default function LandingPage({ onNavigate }) {
               type="button"
               id="landing-open-app-nav-btn"
               onClick={handleOpenApp}
-              style={styles.openAppBtn}
+              style={{
+                ...styles.openAppBtn,
+                padding: isMobile ? '6px 14px' : '8px 18px',
+                fontSize: isMobile ? '12px' : '13px',
+              }}
             >
               <span>Open App</span>
               <span style={styles.btnArrow}>→</span>
@@ -343,8 +369,12 @@ export default function LandingPage({ onNavigate }) {
             {/* Mobile Hamburger Toggle */}
             <button
               type="button"
+              className="landing-mobile-menu-toggle"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              style={styles.mobileMenuToggle}
+              style={{
+                ...styles.mobileMenuToggle,
+                display: isMobile ? 'flex' : 'none',
+              }}
               aria-label="Toggle Navigation Menu"
               aria-expanded={mobileMenuOpen}
               aria-controls="landing-mobile-menu"
@@ -485,7 +515,7 @@ export default function LandingPage({ onNavigate }) {
       </section>
 
       {/* 2.5 Today's Workspace Focus (Answers: "What should I focus on right now?") */}
-      <section id="workspace-focus" style={styles.workspaceFocusSection}>
+      <section id="workspace-focus" className="landing-workspace-section" style={styles.workspaceFocusSection}>
         <div style={styles.workspaceFocusContainer}>
           <div style={styles.workspaceFocusHeader}>
             <div style={styles.workspaceFocusBadge}>
@@ -499,9 +529,9 @@ export default function LandingPage({ onNavigate }) {
           </div>
 
           {workspaceSummary.hasData ? (
-            <div style={styles.workspaceFocusCard}>
+            <div className="landing-workspace-card" style={styles.workspaceFocusCard}>
               {/* Metrics Row */}
-              <div style={styles.metricsGrid}>
+              <div className="landing-metrics-grid" style={styles.metricsGrid}>
                 <div style={styles.metricStatBox}>
                   <span style={styles.metricStatNumber}>{workspaceSummary.totalCount}</span>
                   <span style={styles.metricStatLabel}>Total Commitments</span>
@@ -640,10 +670,10 @@ export default function LandingPage({ onNavigate }) {
       </section>
 
       {/* 3. Authentic Interactive Product Preview Showcase */}
-      <section style={styles.previewSection}>
-        <div style={styles.previewContainer}>
+      <section className="landing-preview-section" style={styles.previewSection}>
+        <div className="landing-preview-container" style={styles.previewContainer}>
           {/* Card Header & Tab Switcher */}
-          <div style={styles.previewCardHeader}>
+          <div className="landing-preview-card-header" style={styles.previewCardHeader}>
             <div style={styles.previewCardBadge}>
               <span style={styles.previewDotRed} />
               <span style={styles.previewDotYellow} />
@@ -651,6 +681,7 @@ export default function LandingPage({ onNavigate }) {
               <span style={styles.previewTitleText}>VoxPlan Interactive System Architecture</span>
             </div>
             <div
+              className="landing-preview-tabs"
               style={styles.previewTabs}
               role="tablist"
               aria-label="Interactive demonstration showcase tabs"
@@ -725,9 +756,10 @@ export default function LandingPage({ onNavigate }) {
               id="preview-panel-schedule"
               aria-labelledby="preview-tab-schedule"
               tabIndex={0}
+              className="landing-preview-body"
               style={styles.previewBody}
             >
-              <div style={styles.previewLeftCol}>
+              <div className="landing-preview-left-col" style={styles.previewLeftCol}>
                 <div style={styles.previewCardTitleWrap}>
                   <span style={styles.stickerYellow}>Topological Ready-Queue</span>
                   <h3 style={styles.previewHeading}>Kahn’s Algorithm + Daily Capacity Bin-Packing</h3>
@@ -759,7 +791,7 @@ export default function LandingPage({ onNavigate }) {
                 </div>
               </div>
 
-              <div style={styles.previewRightCol}>
+              <div className="landing-preview-right-col" style={styles.previewRightCol}>
                 <div style={styles.mockScheduleContainer}>
                   <div style={styles.mockScheduleHeader}>
                     <span style={styles.mockScheduleTag}>PROPOSED EXECUTION PLAN</span>
@@ -808,9 +840,10 @@ export default function LandingPage({ onNavigate }) {
               id="preview-panel-risk"
               aria-labelledby="preview-tab-risk"
               tabIndex={0}
+              className="landing-preview-body"
               style={styles.previewBody}
             >
-              <div style={styles.previewLeftCol}>
+              <div className="landing-preview-left-col" style={styles.previewLeftCol}>
                 <div style={styles.previewCardTitleWrap}>
                   <span style={styles.stickerMint}>Supervised ML + Bayesian Pace</span>
                   <h3 style={styles.previewHeading}>Delivery Risk Prediction & Stopwatch Focus</h3>
@@ -853,7 +886,7 @@ export default function LandingPage({ onNavigate }) {
                 </div>
               </div>
 
-              <div style={styles.previewRightCol}>
+              <div className="landing-preview-right-col" style={styles.previewRightCol}>
                 <div style={styles.mockRiskCard}>
                   <div style={styles.mockRiskHeader}>
                     <div style={styles.mockRiskTagRow}>
@@ -901,9 +934,10 @@ export default function LandingPage({ onNavigate }) {
               id="preview-panel-voice"
               aria-labelledby="preview-tab-voice"
               tabIndex={0}
+              className="landing-preview-body"
               style={styles.previewBody}
             >
-              <div style={styles.previewLeftCol}>
+              <div className="landing-preview-left-col" style={styles.previewLeftCol}>
                 <div style={styles.previewCardTitleWrap}>
                   <span style={styles.stickerPeach}>Voice + Typed Symmetry</span>
                   <h3 style={styles.previewHeading}>Conversational Planning & Clarification Dialogue</h3>
@@ -930,7 +964,7 @@ export default function LandingPage({ onNavigate }) {
                 </div>
               </div>
 
-              <div style={styles.previewRightCol}>
+              <div className="landing-preview-right-col" style={styles.previewRightCol}>
                 <div style={styles.commandShowcaseCard}>
                   <div style={styles.commandHeader}>
                     <span style={styles.commandBadge}>Supported Command Capabilities</span>
@@ -965,7 +999,7 @@ export default function LandingPage({ onNavigate }) {
       </div>
 
       {/* 4. Interactive Product Tour Promotion (Prominent First-Class Feature) */}
-      <section id="product-tour" style={styles.tourSection}>
+      <section id="product-tour" className="landing-tour-section" style={styles.tourSection}>
         <div style={styles.tourContainer}>
           {/* Tour Section Header */}
           <div style={styles.sectionHeader}>
@@ -981,7 +1015,7 @@ export default function LandingPage({ onNavigate }) {
           </div>
 
           {/* Dynamic Status Banner */}
-          <div style={styles.tourStatusBanner}>
+          <div className="landing-tour-status-banner" style={styles.tourStatusBanner}>
             <div style={styles.tourStatusLeft}>
               <span
                 style={
@@ -1137,7 +1171,7 @@ export default function LandingPage({ onNavigate }) {
       </section>
 
       {/* 5. Features Grid (Only Implemented Capabilities) */}
-      <section id="features" style={styles.featuresSection}>
+      <section id="features" className="landing-features-section" style={styles.featuresSection}>
         <div style={styles.sectionHeader}>
           <div style={styles.sectionBadge}>CORE CAPABILITIES</div>
           <h2 style={styles.sectionTitle}>Engineered for Real-World Productivity</h2>
@@ -1146,9 +1180,9 @@ export default function LandingPage({ onNavigate }) {
           </p>
         </div>
 
-        <div style={styles.featuresGrid}>
+        <div className="landing-features-grid" style={styles.featuresGrid}>
           {/* Feature 1 */}
-          <div style={styles.featureCard}>
+          <div className="landing-feature-card" style={styles.featureCard}>
             <div style={styles.featureIconBadgeYellow}>01</div>
             <h3 style={styles.featureCardTitle}>Deterministic DAG Scheduling</h3>
             <p style={styles.featureCardDesc}>
@@ -1169,7 +1203,7 @@ export default function LandingPage({ onNavigate }) {
           </div>
 
           {/* Feature 2 */}
-          <div style={styles.featureCard}>
+          <div className="landing-feature-card" style={styles.featureCard}>
             <div style={styles.featureIconBadgeMint}>02</div>
             <h3 style={styles.featureCardTitle}>Supervised ML Delay-Risk</h3>
             <p style={styles.featureCardDesc}>
@@ -1190,7 +1224,7 @@ export default function LandingPage({ onNavigate }) {
           </div>
 
           {/* Feature 3 */}
-          <div style={styles.featureCard}>
+          <div className="landing-feature-card" style={styles.featureCard}>
             <div style={styles.featureIconBadgeLavender}>03</div>
             <h3 style={styles.featureCardTitle}>Empirical Bayesian Pace Learning</h3>
             <p style={styles.featureCardDesc}>
@@ -1211,7 +1245,7 @@ export default function LandingPage({ onNavigate }) {
           </div>
 
           {/* Feature 4 */}
-          <div style={styles.featureCard}>
+          <div className="landing-feature-card" style={styles.featureCard}>
             <div style={styles.featureIconBadgePeach}>04</div>
             <h3 style={styles.featureCardTitle}>Conversational & Voice Planning</h3>
             <p style={styles.featureCardDesc}>
@@ -1232,7 +1266,7 @@ export default function LandingPage({ onNavigate }) {
           </div>
 
           {/* Feature 5 */}
-          <div style={styles.featureCard}>
+          <div className="landing-feature-card" style={styles.featureCard}>
             <div style={styles.featureIconBadgeSky}>05</div>
             <h3 style={styles.featureCardTitle}>Time-Blocking & Task Chunking</h3>
             <p style={styles.featureCardDesc}>
@@ -1253,7 +1287,7 @@ export default function LandingPage({ onNavigate }) {
           </div>
 
           {/* Feature 6 */}
-          <div style={styles.featureCard}>
+          <div className="landing-feature-card" style={styles.featureCard}>
             <div style={styles.featureIconBadgeYellow}>06</div>
             <h3 style={styles.featureCardTitle}>Visual Editing & .ics Calendar Export</h3>
             <p style={styles.featureCardDesc}>
@@ -1288,7 +1322,7 @@ export default function LandingPage({ onNavigate }) {
       </div>
 
       {/* 5. How It Works Section */}
-      <section id="how-it-works" style={styles.howSection}>
+      <section id="how-it-works" className="landing-how-section" style={styles.howSection}>
         <div style={styles.sectionHeader}>
           <div style={styles.sectionBadge}>WORKFLOW</div>
           <h2 style={styles.sectionTitle}>How VoxPlan Works in 4 Steps</h2>
@@ -1297,7 +1331,7 @@ export default function LandingPage({ onNavigate }) {
           </p>
         </div>
 
-        <div style={styles.timelineGrid}>
+        <div className="landing-timeline-grid" style={styles.timelineGrid}>
           {/* Step 1 */}
           <div style={styles.timelineCard}>
             <div style={styles.stepNumber}>1</div>
@@ -1353,7 +1387,7 @@ export default function LandingPage({ onNavigate }) {
       </div>
 
       {/* 6. Local-First Privacy & Safety Architecture */}
-      <section id="architecture" style={styles.safetySection}>
+      <section id="architecture" className="landing-safety-section" style={styles.safetySection}>
         <div style={styles.sectionHeader}>
           <div style={styles.sectionBadge}>PRIVACY & SAFETY FIRST</div>
           <h2 style={styles.sectionTitle}>Built on Principled Boundaries</h2>
@@ -1362,8 +1396,8 @@ export default function LandingPage({ onNavigate }) {
           </p>
         </div>
 
-        <div style={styles.comparisonTableCard}>
-          <table style={styles.comparisonTable}>
+        <div className="landing-comparison-card" style={styles.comparisonTableCard}>
+          <table className="landing-comparison-table" style={styles.comparisonTable}>
             <thead>
               <tr style={styles.tableHeaderRow}>
                 <th style={styles.tableHeaderCell}>Architectural Dimension</th>
@@ -1420,15 +1454,15 @@ export default function LandingPage({ onNavigate }) {
       </div>
 
       {/* 7. Final Call to Action */}
-      <section style={styles.ctaSection}>
-        <div style={styles.ctaCard}>
+      <section className="landing-cta-section" style={styles.ctaSection}>
+        <div className="landing-cta-card" style={styles.ctaCard}>
           <div style={styles.ctaBadge}>GET STARTED IN SECONDS</div>
           <h2 style={styles.ctaTitle}>Experience Predictive Planning Today</h2>
           <p style={styles.ctaDesc}>
             No registration required. Open the application and click <strong>⚡ Demo Seed</strong> to explore calibrated
             historical telemetry, or start fresh with your own genuine commitments.
           </p>
-          <div style={styles.ctaBtnGroup}>
+          <div className="landing-cta-btn-group" style={styles.ctaBtnGroup}>
             <button
               type="button"
               id="landing-bottom-open-app-btn"
@@ -1453,8 +1487,8 @@ export default function LandingPage({ onNavigate }) {
       </main>
 
       {/* 8. Footer */}
-      <footer style={styles.footer}>
-        <div style={styles.footerContainer}>
+      <footer className="landing-footer" style={styles.footer}>
+        <div className="landing-footer-container" style={styles.footerContainer}>
           <div style={styles.footerBrandCol}>
             <div style={styles.brand}>
               <BrandBadge size={32} />
@@ -1785,7 +1819,7 @@ const styles = {
 
   /* Preview Section */
   previewSection: {
-    padding: '20px 24px 60px',
+    padding: '20px 16px 60px',
   },
   previewContainer: {
     maxWidth: '1100px',
@@ -1859,9 +1893,9 @@ const styles = {
   },
   previewBody: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-    gap: '32px',
-    padding: '36px',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
+    gap: '24px',
+    padding: '24px 16px',
     alignItems: 'center',
   },
   previewLeftCol: {
@@ -2276,7 +2310,7 @@ const styles = {
 
   /* Features Section */
   featuresSection: {
-    padding: '80px 24px',
+    padding: '60px 16px',
     maxWidth: '1200px',
     margin: '0 auto',
   },
@@ -2311,7 +2345,7 @@ const styles = {
   },
   featuresGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
     gap: '24px',
   },
   featureCard: {
@@ -2415,7 +2449,7 @@ const styles = {
 
   /* How It Works */
   howSection: {
-    padding: '80px 24px',
+    padding: '60px 16px',
     backgroundColor: '#F9F6F0',
     borderTop: '1px solid rgba(37, 36, 42, 0.06)',
     borderBottom: '1px solid rgba(37, 36, 42, 0.06)',
@@ -2424,7 +2458,7 @@ const styles = {
     maxWidth: '1200px',
     margin: '0 auto',
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))',
     gap: '24px',
   },
   timelineCard: {
@@ -2465,7 +2499,7 @@ const styles = {
 
   /* Safety & Comparison */
   safetySection: {
-    padding: '80px 24px',
+    padding: '60px 16px',
     maxWidth: '1200px',
     margin: '0 auto',
   },
@@ -2526,17 +2560,17 @@ const styles = {
 
   /* Final CTA */
   ctaSection: {
-    padding: '40px 24px 80px',
+    padding: '30px 16px 60px',
     maxWidth: '960px',
     margin: '0 auto',
   },
   ctaCard: {
     backgroundColor: '#FFE58A',
-    borderRadius: '28px',
-    padding: '50px 36px',
+    borderRadius: '24px',
+    padding: '36px 18px',
     textAlign: 'center',
     border: '2px solid #25242A',
-    boxShadow: '0 12px 0 #25242A',
+    boxShadow: '0 8px 0 #25242A',
   },
   ctaBadge: {
     display: 'inline-block',
@@ -2603,7 +2637,7 @@ const styles = {
 
   /* Workspace Focus Section */
   workspaceFocusSection: {
-    padding: '40px 24px 60px',
+    padding: '30px 16px 50px',
     maxWidth: '1200px',
     margin: '0 auto',
   },
@@ -2647,15 +2681,15 @@ const styles = {
     backgroundColor: '#FFFFFF',
     border: '1px solid rgba(37, 36, 42, 0.12)',
     borderRadius: '24px',
-    padding: '32px',
+    padding: '24px 16px',
     boxShadow: '0 4px 20px rgba(37, 36, 42, 0.05)',
     display: 'flex',
     flexDirection: 'column',
-    gap: '24px',
+    gap: '20px',
   },
   metricsGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 140px), 1fr))',
     gap: '16px',
   },
   metricStatBox: {
@@ -2860,7 +2894,7 @@ const styles = {
 
   /* Product Tour Section */
   tourSection: {
-    padding: '80px 24px 60px',
+    padding: '60px 16px 50px',
     maxWidth: '1200px',
     margin: '0 auto',
   },
@@ -3315,15 +3349,15 @@ const styles = {
   footer: {
     backgroundColor: '#FFFFFF',
     borderTop: '1px solid rgba(37, 36, 42, 0.1)',
-    padding: '50px 24px 24px',
+    padding: '40px 16px 20px',
   },
   footerContainer: {
     maxWidth: '1200px',
     margin: '0 auto',
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-    gap: '40px',
-    marginBottom: '40px',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))',
+    gap: '32px',
+    marginBottom: '32px',
   },
   footerBrandCol: {
     display: 'flex',
