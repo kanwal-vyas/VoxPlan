@@ -240,16 +240,16 @@ export default function TaskCard({
       title={prediction ? 'Click card to view prediction intelligence explanation' : 'Model prediction awaiting backend evaluation'}
     >
       {/* Top Meta Row */}
-      <div style={styles.topRow}>
-        <div style={styles.leftTags}>
-          <span style={styles.categoryLabel}>{task.category ? task.category.toUpperCase() : 'GENERAL'}</span>
+      <div style={styles.topRow} className="task-card-top-row">
+        <div style={styles.leftTags} className="task-card-left-tags">
+          <span style={styles.categoryLabel} className="task-card-category">{task.category ? task.category.toUpperCase() : 'GENERAL'}</span>
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onCyclePriority(task.id);
             }}
-            className={theme.tagClass}
+            className={`task-card-priority-btn ${theme.tagClass}`}
             style={styles.priorityBtn}
             title="Click to cycle priority"
           >
@@ -263,7 +263,7 @@ export default function TaskCard({
           />
         </div>
 
-        <div style={styles.actionButtons}>
+        <div style={styles.actionButtons} className="task-card-action-buttons">
           {/* Manual Reordering Controls */}
           {canMoveUp && onMoveUp && (
             <button
@@ -272,6 +272,7 @@ export default function TaskCard({
                 e.stopPropagation();
                 onMoveUp(index);
               }}
+              className="task-card-reorder-btn"
               style={styles.reorderBtn}
               title={`Move "${task.title}" up`}
               aria-label={`Move task "${task.title}" up`}
@@ -286,6 +287,7 @@ export default function TaskCard({
                 e.stopPropagation();
                 onMoveDown(index);
               }}
+              className="task-card-reorder-btn"
               style={styles.reorderBtn}
               title={`Move "${task.title}" down`}
               aria-label={`Move task "${task.title}" down`}
@@ -334,7 +336,7 @@ export default function TaskCard({
       </div>
 
       {/* Task Title Area */}
-      <div style={styles.titleArea}>
+      <div style={styles.titleArea} className="task-card-title-area">
         {isEditing ? (
           <div style={styles.editRow} onClick={(e) => e.stopPropagation()}>
             <input
@@ -377,6 +379,7 @@ export default function TaskCard({
         ) : (
           <div style={styles.titleDisplay}>
             <h3
+              className="task-card-title"
               style={{
                 ...styles.title,
                 textDecoration: task.completed ? 'line-through' : 'none',
@@ -454,8 +457,8 @@ export default function TaskCard({
       )}
 
       {/* Middle Information: Due Date, Effort, & Timer Controls */}
-      <div style={styles.middleMeta}>
-        <div style={styles.dateEffortGroup}>
+      <div style={styles.middleMeta} className="task-card-middle-meta">
+        <div style={styles.dateEffortGroup} className="task-card-date-effort">
           {/* Due date display or editor */}
           {isRescheduling ? (
             <div style={styles.inlineEditGroup} onClick={(e) => e.stopPropagation()}>
@@ -486,6 +489,7 @@ export default function TaskCard({
           ) : (
             <button
               type="button"
+              className="task-card-due-btn"
               style={styles.dueDateBtn}
               onClick={(e) => {
                 e.stopPropagation();
@@ -531,6 +535,7 @@ export default function TaskCard({
           ) : task.estimatedEffort != null ? (
             <button
               type="button"
+              className="task-card-effort-btn"
               style={styles.durationPillBtn}
               onClick={(e) => {
                 e.stopPropagation();
@@ -554,9 +559,9 @@ export default function TaskCard({
                  durationEstimate.personalization_status === 'developing' ||
                  durationEstimate.personalization_status === 'supported') &&
                 durationEstimate.predicted_duration_hours !== null && (
-                  <span style={styles.predictedDurationBadge}>
+                  <span style={styles.predictedDurationBadge} className="task-card-predicted-badge">
                     → ~{durationEstimate.predicted_duration_hours}h
-                    <span style={styles.obsCountBadge} title={`Based on ${durationEstimate.eligible_observation_count} measured tasks`}>
+                    <span style={styles.obsCountBadge} className="task-card-obs-badge" title={`Based on ${durationEstimate.eligible_observation_count} measured tasks`}>
                       ({durationEstimate.eligible_observation_count})
                     </span>
                   </span>
@@ -569,6 +574,7 @@ export default function TaskCard({
                 e.stopPropagation();
                 setIsEditingEffort(true);
               }}
+              className="task-card-effort-btn"
               style={styles.addEffortBtn}
               title="Set estimated effort to view personalized duration predictions"
               aria-label={`Add estimated effort for "${task.title}"`}
@@ -580,7 +586,7 @@ export default function TaskCard({
 
         {/* Stopwatch Timer Control Button */}
         {!task.completed && (
-          <div style={styles.timerControlWrap} onClick={(e) => e.stopPropagation()}>
+          <div style={styles.timerControlWrap} className="task-card-timer-wrap" onClick={(e) => e.stopPropagation()}>
             {isTimerRunning ? (
               <button
                 type="button"
@@ -625,8 +631,8 @@ export default function TaskCard({
       </div>
 
       {/* Bottom Footer: Circled Risk Numeral with count-up */}
-      <div style={styles.cardFooter}>
-        <div style={styles.riskWrap}>
+      <div style={styles.cardFooter} className="task-card-footer">
+        <div style={styles.riskWrap} className="task-card-risk-wrap">
           {task.completed ? (
             <span style={styles.completedBadge}>Completed ✓</span>
           ) : prediction ? (
@@ -641,12 +647,13 @@ export default function TaskCard({
               >
                 {displayRisk != null ? `${displayRisk}%` : '...'}
               </span>
-              <span style={{ ...styles.riskLabel, color: theme.textColor }}>
+              <span style={{ ...styles.riskLabel, color: theme.textColor }} className="task-card-risk-label">
                 {riskCategory} RISK
               </span>
               {prediction.is_personalized && prediction.personal_adjustment !== 0 && (
                 <span
                   style={styles.personalPill}
+                  className="task-card-personal-pill"
                   title={`Personalized: ${prediction.personal_adjustment > 0 ? '+' : ''}${Math.round(prediction.personal_adjustment * 100)}% adjustment from observed habits (Baseline: ${Math.round((prediction.baseline_delay_probability ?? prob) * 100)}%)`}
                 >
                   {prediction.personal_adjustment > 0 ? `+${Math.round(prediction.personal_adjustment * 100)}%` : `${Math.round(prediction.personal_adjustment * 100)}%`}
@@ -663,6 +670,7 @@ export default function TaskCard({
         {prediction ? (
           <button
             type="button"
+            className="task-card-explain-btn"
             style={styles.explainHintBtn}
             onClick={(e) => {
               e.stopPropagation();

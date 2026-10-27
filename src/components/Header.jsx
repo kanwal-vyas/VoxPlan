@@ -69,13 +69,17 @@ export default function Header({
         ...(scrolled ? styles.headerScrolled : {}),
       }}
     >
-      <div style={styles.headerInner}>
+      <div style={styles.headerInner} className="app-header-inner">
         {/* Top / Main Bar */}
-        <div style={styles.topRow}>
+        <div
+          style={isMobile ? { ...styles.topRow, flexWrap: 'wrap', rowGap: '6px' } : styles.topRow}
+          className="app-header-top-row"
+        >
         {/* Brand Wordmark & Dot */}
         <button
           type="button"
           style={styles.brand}
+          className="app-header-brand"
           onClick={() => {
             if (onNavigate) {
               onNavigate('/');
@@ -90,9 +94,10 @@ export default function Header({
           <span style={{ ...styles.brandName, fontSize: isMobile ? '13px' : '18px' }}>VOXPLAN</span>
         </button>
 
-          {/* Center Navigation (Unified Single Row on both Desktop and Mobile) */}
+          {/* Center Navigation (Desktop inline flex, Mobile 4-column full-width grid) */}
           <nav
-            style={isMobile ? styles.navMobileSingleRow : styles.nav}
+            style={isMobile ? styles.navMobile : styles.nav}
+            className="app-header-nav"
             aria-label="Sections"
           >
             {onNavigate && !isMobile && (
@@ -116,7 +121,7 @@ export default function Header({
                   aria-current={currentView === 'today' ? 'page' : undefined}
                   style={{
                     ...(currentView === 'today' ? styles.activeNavLink : styles.navLink),
-                    ...(isMobile ? (currentView === 'today' ? styles.activeNavLinkMobileSingleRow : styles.navLinkMobileSingleRow) : {}),
+                    ...(isMobile ? (currentView === 'today' ? styles.activeNavLinkMobile : styles.navLinkMobile) : {}),
                   }}
                 >
                   Today
@@ -128,7 +133,7 @@ export default function Header({
                   aria-current={currentView === 'tasks' ? 'page' : undefined}
                   style={{
                     ...(currentView === 'tasks' ? styles.activeNavLink : styles.navLink),
-                    ...(isMobile ? (currentView === 'tasks' ? styles.activeNavLinkMobileSingleRow : styles.navLinkMobileSingleRow) : {}),
+                    ...(isMobile ? (currentView === 'tasks' ? styles.activeNavLinkMobile : styles.navLinkMobile) : {}),
                   }}
                 >
                   Tasks
@@ -140,7 +145,7 @@ export default function Header({
                   aria-current={currentView === 'calendar' ? 'page' : undefined}
                   style={{
                     ...(currentView === 'calendar' ? styles.activeNavLink : styles.navLink),
-                    ...(isMobile ? (currentView === 'calendar' ? styles.activeNavLinkMobileSingleRow : styles.navLinkMobileSingleRow) : {}),
+                    ...(isMobile ? (currentView === 'calendar' ? styles.activeNavLinkMobile : styles.navLinkMobile) : {}),
                   }}
                 >
                   Calendar
@@ -152,7 +157,7 @@ export default function Header({
                   aria-current={currentView === 'insights' ? 'page' : undefined}
                   style={{
                     ...(currentView === 'insights' ? styles.activeNavLink : styles.navLink),
-                    ...(isMobile ? (currentView === 'insights' ? styles.activeNavLinkMobileSingleRow : styles.navLinkMobileSingleRow) : {}),
+                    ...(isMobile ? (currentView === 'insights' ? styles.activeNavLinkMobile : styles.navLinkMobile) : {}),
                   }}
                 >
                   Insights
@@ -163,21 +168,21 @@ export default function Header({
                 <button
                   type="button"
                   onClick={() => onScrollToSection && onScrollToSection('pulse')}
-                  style={isMobile ? styles.navLinkMobileSingleRow : styles.navLink}
+                  style={isMobile ? styles.navLinkMobile : styles.navLink}
                 >
                   Today
                 </button>
                 <button
                   type="button"
                   onClick={() => onScrollToSection && onScrollToSection('landscape')}
-                  style={isMobile ? styles.navLinkMobileSingleRow : styles.navLink}
+                  style={isMobile ? styles.navLinkMobile : styles.navLink}
                 >
                   Tasks
                 </button>
                 <button
                   type="button"
                   onClick={() => onScrollToSection && onScrollToSection('intelligence')}
-                  style={isMobile ? styles.navLinkMobileSingleRow : styles.navLink}
+                  style={isMobile ? styles.navLinkMobile : styles.navLink}
                 >
                   {isMobile ? 'Insights' : 'Baseline'}
                 </button>
@@ -186,7 +191,7 @@ export default function Header({
           </nav>
 
           {/* Right Controls: Status & Actions */}
-          <div style={styles.rightGroup}>
+          <div style={styles.rightGroup} className="app-header-right-group">
             {/* Desktop Status Indicator (Moved to Overflow Menu on Mobile) */}
             {!isMobile && (
               <div
@@ -527,68 +532,35 @@ const styles = {
     flexShrink: 0,
     whiteSpace: 'nowrap',
   },
-  navMobileSingleRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '2px',
-    backgroundColor: '#F4F1EA',
-    padding: '2px',
-    borderRadius: '8px',
-    border: '1px solid rgba(61, 38, 69, 0.08)',
-    overflowX: 'auto',
-    maxWidth: '100%',
-    scrollbarWidth: 'none',
-    WebkitOverflowScrolling: 'touch',
-    flexShrink: 1,
-  },
-  navLinkMobileSingleRow: {
-    background: 'transparent',
-    border: 'none',
-    color: '#5E5B66',
-    fontSize: '11px',
-    fontWeight: '700',
-    cursor: 'pointer',
-    padding: '3px 6px',
-    borderRadius: '6px',
-    transition: 'all 0.15s ease',
-    flexShrink: 0,
-    whiteSpace: 'nowrap',
-    minHeight: '26px',
-  },
-  activeNavLinkMobileSingleRow: {
-    backgroundColor: '#201E23',
-    color: '#FFFFFF',
-    fontWeight: '700',
-    boxShadow: '0 1px 3px rgba(32, 30, 35, 0.15)',
-  },
   navMobile: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
+    gridTemplateColumns: 'repeat(4, 1fr)',
     gap: '3px',
     width: '100%',
     backgroundColor: '#F4F1EA',
-    padding: '2px',
-    borderRadius: '10px',
+    padding: '3px',
+    borderRadius: '8px',
     border: '1px solid rgba(61, 38, 69, 0.08)',
-    overflowX: 'auto',
-    maxWidth: '100%',
+    boxSizing: 'border-box',
+    order: 3,
   },
   navLinkMobile: {
     background: 'transparent',
     border: 'none',
     color: '#5E5B66',
-    fontSize: '12px',
-    fontWeight: '600',
+    fontSize: '11.5px',
+    fontWeight: '700',
     cursor: 'pointer',
-    padding: '5px 0',
-    minHeight: '32px',
+    padding: '5px 2px',
+    minHeight: '28px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     textAlign: 'center',
-    borderRadius: '8px',
+    borderRadius: '6px',
     transition: 'all 0.15s ease',
-    flexShrink: 0,
+    width: '100%',
+    boxSizing: 'border-box',
     whiteSpace: 'nowrap',
   },
   activeNavLinkMobile: {

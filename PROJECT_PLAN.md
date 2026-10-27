@@ -8184,3 +8184,67 @@ Deliver a visually obvious, genuine mobile transformation beyond minor font and 
   - `screenshot_app_menu_375px.png`: Workspace `•••` overflow menu contained without lateral clip.
   - `screenshot_app_tour_375px.png`: Product tour spotlight & callout dock on mobile viewport.
   - `screenshot_desktop_landing.png` & `screenshot_desktop_today.png`: 1440px desktop layouts verified completely intact.
+
+---
+
+## [2026-10-27] — Phase 8.23: Mobile Calendar, Navigation & Task Card Optimization
+
+### Primary Objectives & Requirements
+
+1. **Mobile Navigation — All Four Tabs Visible Immediately**:
+   - The `Today`, `Tasks`, `Calendar`, and `Insights` tabs are immediately visible in the initial mobile viewport down to 320px without horizontal scrolling or hidden tabs.
+   - Built with a compact, four-column grid (`display: grid; grid-template-columns: repeat(4, 1fr)`) inside `.app-header-nav` at phone widths.
+   - Labels are centered, readable, and properly spaced with touch targets maintained (28px height, 5px 2px padding).
+   - Preserves active tab styling, keyboard accessibility, and view navigation.
+
+2. **Mobile Calendar — Compact and Fully Usable**:
+   - **Month View**: Entire 7-column calendar grid (`Sunday` to `Saturday`) fits within the phone's viewport width without horizontal page blowout. Day numbers sized to a compact 18px circle, compact day cells with `min-height: 48px`, and compact task chips (`font-size: 9px; line-height: 1.15; max-width: 100%; text-overflow: ellipsis; overflow: hidden`).
+   - **Calendar Toolbar**: Month/year navigation compact (`Today < >`), view switcher compact (`Month Week Day`), redundant secondary text hidden, and toolbar controls wrap neatly without tall clutter.
+   - **Week & Day Views**: Week view timeline contained inside the calendar area (`overflow-x: auto; -webkit-overflow-scrolling: touch; min-width: 540px` on grid columns) preventing whole-page horizontal overflow.
+   - **Interactions**: Preserves date selection, quick-add, view switching, period navigation, and event handling intact.
+
+3. **Mobile Task Cards — Substantially Less Bulky**:
+   - Significantly reduced card padding from desktop 22px to compact 10px 12px; task grid gap reduced to 8px.
+   - Task title remains prominent (14.5px font size, line-height 1.25) and naturally wraps.
+   - Secondary metadata sections made compact: `.task-card-obs-badge` hidden on phone viewports; effort, due date, and timer buttons streamlined.
+   - Shorter card footprint allows multiple cards to be visible above the fold simultaneously.
+   - Touch targets for completion, edit, delete, timer, priority, and sticky notes remain easily tappable (>= 28px/44px).
+
+4. **Strict Desktop Protection (ZERO Desktop Changes)**:
+   - Zero changes made to desktop styles, typography, layouts, or component dimensions.
+   - All mobile adjustments scoped strictly inside `@media (max-width: 768px)` media queries.
+   - Verified via automated before/after screenshot comparisons at 1280×800 and 1440×900: desktop layouts remain 100% pixel-identical.
+   - Protected invariants intact: factory scheduler weights (`Urgency 50.0`, `Priority 100.0`, `Unblock 15.0`, `Risk 25.0`) and locked production activation gate (`isAdaptationUnlocked === false`).
+
+### Automated Regression Suite Added
+- Created `tests/mobile_calendar_navigation_cards.test.js`:
+  - Suite 1: Mobile Header Navigation Declares 4-Column Grid (validates grid-template-columns, 4 tabs visibility, centered text).
+  - Suite 2: Mobile Calendar Declares Compact Containment & Contained Week Scroll (validates 7-column month grid, compact cell height, contained week scroll).
+  - Suite 3: Mobile Task Cards Declare Compact Heights, Padding & Prominent Title (validates 10px 12px padding, prominent title, compact meta, hidden observation badge).
+  - Suite 4: Invariants & Desktop Layout Preservation (validates factory weights, locked gate, desktop styles intact).
+
+### Verification Results
+- **Mobile Viewport Overflow Audit**:
+  - Tested across 320px, 360px, 375px, 390px, and 430px across `Today`, `Tasks`, and `Calendar` views (15 combinations total):
+  - `scrollWidth === clientWidth` and `hasOverflow === false` across all 15 configurations (0px overflow).
+  - 320px viewport: all 4 navigation tabs compute to equal 63.25px width, fitting cleanly between 29px and 291px inside the screen.
+- **Frontend Test Suite (`npm test`)**:
+  - **1,314 passed, 0 failed** across 291 test suites.
+- **Backend Test Suite (`python -m pytest backend/tests/`)**:
+  - **29 passed, 0 failed** across 2 test modules.
+- **Linter (`npm run lint` / `oxlint`)**:
+  - 0 errors, 1 pre-existing warning in unrelated modal.
+- **Production Build (`npm run build`)**:
+  - Vite v8.3.2 production build succeeded in 664ms (0 errors); LandingPage chunk optimized to 78.14 kB (< 80 kB).
+- **Secret Scanner (`node scripts/secretScanner.mjs`)**:
+  - 0 secrets detected across 174 files scanned.
+- **Git Diff Check (`git diff --check`)**:
+  - Clean (0 whitespace/formatting errors).
+- **Visual Evidence Captured**:
+  - `after_today_320x568.png`: 4-column navigation grid with all 4 tabs visible immediately on 320px.
+  - `after_calendar_320x568.png`: Compact month view and toolbar controls on 320px.
+  - `after_tasks_320x568.png`: Compact task cards on 320px.
+  - `after_calendar_375x812.png`: Month calendar fits with all 7 columns legible on 375px.
+  - `after_tasks_375x812.png`: Substantially less bulky task cards on 375px.
+  - `after_calendar_1280x800.png` vs `before_calendar_1280x800.png`: Verified pixel-for-pixel desktop identical.
+  - `after_tasks_1280x800.png` vs `before_tasks_1280x800.png`: Verified pixel-for-pixel desktop identical.

@@ -53,18 +53,20 @@ function interpolatePaletteColor(progress) {
  * Derives genuine task counts and active initiatives directly from local-first storage.
  * Invariant: Never mutates tasks or introduces synthetic records.
  */
+const EMPTY_SUMMARY = { hasData: false, totalCount: 0, completedCount: 0, pendingCount: 0, highPriorityCount: 0, topPending: [] };
+
 function loadWorkspaceSummary() {
   if (typeof window === 'undefined' || !window.localStorage) {
-    return { hasData: false, totalCount: 0, completedCount: 0, pendingCount: 0, highPriorityCount: 0, topPending: [] };
+    return EMPTY_SUMMARY;
   }
   try {
     const raw = window.localStorage.getItem('voxplan_tasks');
     if (!raw) {
-      return { hasData: false, totalCount: 0, completedCount: 0, pendingCount: 0, highPriorityCount: 0, topPending: [] };
+      return EMPTY_SUMMARY;
     }
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed) || parsed.length === 0) {
-      return { hasData: false, totalCount: 0, completedCount: 0, pendingCount: 0, highPriorityCount: 0, topPending: [] };
+      return EMPTY_SUMMARY;
     }
     const totalCount = parsed.length;
     const completedCount = parsed.filter((t) => Boolean(t.completed)).length;
@@ -89,7 +91,7 @@ function loadWorkspaceSummary() {
     };
   } catch (err) {
     console.warn('[Overview] Error reading workspace tasks:', err);
-    return { hasData: false, totalCount: 0, completedCount: 0, pendingCount: 0, highPriorityCount: 0, topPending: [] };
+    return EMPTY_SUMMARY;
   }
 }
 
@@ -423,7 +425,7 @@ export default function LandingPage({ onNavigate }) {
                 marginTop: '8px',
                 backgroundColor: 'transparent',
                 border: '1px solid var(--accent-terracotta, #C85A32)',
-                color: 'var(--accent-terracotta, #C85A32)',
+                color: C_TERRA,
               }}
             >
               ✦ Guided Product Tour
@@ -476,7 +478,7 @@ export default function LandingPage({ onNavigate }) {
               style={{
                 ...styles.heroSecondaryBtn,
                 borderColor: 'var(--accent-terracotta, #C85A32)',
-                color: 'var(--accent-terracotta, #C85A32)',
+                color: C_TERRA,
                 fontWeight: '700',
               }}
               title="Launch the interactive guided product tour"
@@ -993,9 +995,7 @@ export default function LandingPage({ onNavigate }) {
           ref={(el) => {
             ribbonRefs.current.plan = el;
           }}
-        >
-          PLAN
-        </span>
+        >PLAN</span>
       </div>
 
       {/* 4. Interactive Product Tour Promotion (Prominent First-Class Feature) */}
@@ -1316,9 +1316,7 @@ export default function LandingPage({ onNavigate }) {
           ref={(el) => {
             ribbonRefs.current.predict = el;
           }}
-        >
-          PREDICT
-        </span>
+        >PREDICT</span>
       </div>
 
       {/* 5. How It Works Section */}
@@ -1381,9 +1379,7 @@ export default function LandingPage({ onNavigate }) {
           ref={(el) => {
             ribbonRefs.current.understand = el;
           }}
-        >
-          UNDERSTAND
-        </span>
+        >UNDERSTAND</span>
       </div>
 
       {/* 6. Local-First Privacy & Safety Architecture */}
@@ -1448,9 +1444,7 @@ export default function LandingPage({ onNavigate }) {
           ref={(el) => {
             ribbonRefs.current.act = el;
           }}
-        >
-          ACT
-        </span>
+        >ACT</span>
       </div>
 
       {/* 7. Final Call to Action */}
@@ -1547,6 +1541,15 @@ export default function LandingPage({ onNavigate }) {
   );
 }
 
+const F_COMPACT = "var(--font-compact, 'Unica One', cursive, sans-serif)";
+const F_MONO = "'JetBrains Mono', monospace";
+const F_HEADING = "var(--font-heading, 'Eagle Lake', cursive, serif)";
+const B_10 = "1px solid rgba(37, 36, 42, 0.1)";
+const B_08 = "1px solid rgba(37, 36, 42, 0.08)";
+const B_12 = "1px solid rgba(37, 36, 42, 0.12)";
+const B_15 = "1px solid rgba(37, 36, 42, 0.15)";
+const C_TERRA = "var(--accent-terracotta, #C85A32)";
+
 const styles = {
   page: {
     minHeight: '100vh',
@@ -1595,7 +1598,7 @@ const styles = {
     height: '32px',
     borderRadius: '10px',
     backgroundColor: '#FFE58A',
-    border: '1px solid rgba(37, 36, 42, 0.12)',
+    border: B_12,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1624,7 +1627,7 @@ const styles = {
     backgroundColor: 'rgba(255, 255, 255, 0.75)',
     padding: '4px 6px',
     borderRadius: '9999px',
-    border: '1px solid rgba(37, 36, 42, 0.08)',
+    border: B_08,
   },
   navLink: {
     background: 'transparent',
@@ -1648,7 +1651,7 @@ const styles = {
     gap: '6px',
     backgroundColor: '#FFE58A',
     color: '#25242A',
-    border: '1px solid rgba(37, 36, 42, 0.15)',
+    border: B_15,
     borderRadius: '9999px',
     padding: '8px 18px',
     fontSize: '13px',
@@ -1664,7 +1667,7 @@ const styles = {
   mobileMenuToggle: {
     display: 'none',
     background: 'none',
-    border: '1px solid rgba(37, 36, 42, 0.15)',
+    border: B_15,
     borderRadius: '8px',
     fontSize: '18px',
     padding: '6px 10px',
@@ -1678,7 +1681,7 @@ const styles = {
     marginTop: '12px',
     backgroundColor: '#FFFFFF',
     borderRadius: '16px',
-    border: '1px solid rgba(37, 36, 42, 0.1)',
+    border: B_10,
     boxShadow: '0 10px 30px rgba(0, 0, 0, 0.08)',
   },
   mobileNavLink: {
@@ -1706,7 +1709,7 @@ const styles = {
     alignItems: 'center',
     gap: '6px',
     backgroundColor: 'rgba(255, 255, 255, 0.85)',
-    border: '1px solid rgba(37, 36, 42, 0.12)',
+    border: B_12,
     borderRadius: '9999px',
     padding: '6px 14px',
     marginBottom: '20px',
@@ -1719,12 +1722,12 @@ const styles = {
   eyebrowText: {
     fontSize: '11px',
     fontWeight: '700',
-    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontFamily: F_COMPACT,
     letterSpacing: '0.08em',
     color: '#4A4852',
   },
   heroTitle: {
-    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, serif)",
+    fontFamily: F_HEADING,
     fontSize: 'clamp(32px, 5.2vw, 58px)',
     fontWeight: '800',
     lineHeight: 1.35,
@@ -1788,7 +1791,7 @@ const styles = {
     gap: '6px',
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
     color: '#4A4852',
-    border: '1px solid rgba(37, 36, 42, 0.15)',
+    border: B_15,
     borderRadius: '9999px',
     padding: '14px 26px',
     fontSize: '15px',
@@ -1866,7 +1869,7 @@ const styles = {
   previewTitleText: {
     fontSize: '12px',
     fontWeight: '700',
-    fontFamily: "'JetBrains Mono', monospace",
+    fontFamily: F_MONO,
     color: '#625F69',
     marginLeft: '6px',
   },
@@ -1947,7 +1950,7 @@ const styles = {
     letterSpacing: '0.04em',
   },
   previewHeading: {
-    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, serif)",
+    fontFamily: F_HEADING,
     fontSize: '24px',
     fontWeight: '800',
     color: '#25242A',
@@ -1962,7 +1965,7 @@ const styles = {
   },
   metricCard: {
     backgroundColor: '#FBF9F5',
-    border: '1px solid rgba(37, 36, 42, 0.08)',
+    border: B_08,
     borderRadius: '14px',
     padding: '16px',
     display: 'flex',
@@ -2015,7 +2018,7 @@ const styles = {
   },
   mockScheduleContainer: {
     backgroundColor: '#FFFDF9',
-    border: '1px solid rgba(37, 36, 42, 0.1)',
+    border: B_10,
     borderRadius: '16px',
     padding: '18px',
     boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
@@ -2029,7 +2032,7 @@ const styles = {
   mockScheduleTag: {
     fontSize: '10px',
     fontWeight: '800',
-    fontFamily: "'JetBrains Mono', monospace",
+    fontFamily: F_MONO,
     letterSpacing: '0.05em',
     color: '#7A7782',
   },
@@ -2060,7 +2063,7 @@ const styles = {
   },
   mockTaskBlock: {
     backgroundColor: '#FFFFFF',
-    border: '1px solid rgba(37, 36, 42, 0.08)',
+    border: B_08,
     borderRadius: '10px',
     padding: '10px 12px',
     marginBottom: '6px',
@@ -2099,7 +2102,7 @@ const styles = {
   /* Stopwatch Mock */
   stopwatchCard: {
     backgroundColor: '#FDFCF7',
-    border: '1px solid rgba(37, 36, 42, 0.1)',
+    border: B_10,
     borderRadius: '16px',
     padding: '20px',
     textAlign: 'center',
@@ -2132,7 +2135,7 @@ const styles = {
     borderRadius: '9999px',
   },
   stopwatchDigits: {
-    fontFamily: "'JetBrains Mono', monospace",
+    fontFamily: F_MONO,
     fontSize: '38px',
     fontWeight: '700',
     color: '#25242A',
@@ -2167,7 +2170,7 @@ const styles = {
   resetBtn: {
     backgroundColor: 'transparent',
     color: '#7A7782',
-    border: '1px solid rgba(37, 36, 42, 0.15)',
+    border: B_15,
     borderRadius: '9999px',
     padding: '8px 14px',
     fontSize: '13px',
@@ -2176,7 +2179,7 @@ const styles = {
   },
   mockRiskCard: {
     backgroundColor: '#FFFDF9',
-    border: '1px solid rgba(37, 36, 42, 0.1)',
+    border: B_10,
     borderRadius: '16px',
     padding: '20px',
   },
@@ -2210,7 +2213,7 @@ const styles = {
   mockGiniScore: {
     fontSize: '11px',
     fontWeight: '600',
-    fontFamily: "'JetBrains Mono', monospace",
+    fontFamily: F_MONO,
     color: '#7A7782',
   },
   mockRiskTaskTitle: {
@@ -2255,7 +2258,7 @@ const styles = {
   /* Dialogue Box */
   dialogueBox: {
     backgroundColor: '#FDFBF7',
-    border: '1px solid rgba(37, 36, 42, 0.1)',
+    border: B_10,
     borderRadius: '14px',
     padding: '16px',
     display: 'flex',
@@ -2274,7 +2277,7 @@ const styles = {
   dialogueAssistant: {
     color: '#25242A',
     backgroundColor: '#FFFFFF',
-    border: '1px solid rgba(37, 36, 42, 0.08)',
+    border: B_08,
     padding: '8px 12px',
     borderRadius: '8px',
     alignSelf: 'flex-start',
@@ -2282,7 +2285,7 @@ const styles = {
   },
   commandShowcaseCard: {
     backgroundColor: '#FFFDF9',
-    border: '1px solid rgba(37, 36, 42, 0.1)',
+    border: B_10,
     borderRadius: '16px',
     padding: '20px',
   },
@@ -2290,7 +2293,7 @@ const styles = {
     marginBottom: '12px',
   },
   commandBadge: {
-    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontFamily: F_COMPACT,
     fontSize: '11px',
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -2330,7 +2333,7 @@ const styles = {
     marginBottom: '12px',
   },
   sectionTitle: {
-    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, serif)",
+    fontFamily: F_HEADING,
     fontSize: 'clamp(28px, 4vw, 42px)',
     fontWeight: '800',
     letterSpacing: '-0.02em',
@@ -2350,7 +2353,7 @@ const styles = {
   },
   featureCard: {
     backgroundColor: '#FFFFFF',
-    border: '1px solid rgba(37, 36, 42, 0.1)',
+    border: B_10,
     borderRadius: '20px',
     padding: '28px',
     boxShadow: '0 4px 16px rgba(37, 36, 42, 0.04)',
@@ -2369,7 +2372,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontFamily: "'JetBrains Mono', monospace",
+    fontFamily: F_MONO,
   },
   featureIconBadgeMint: {
     width: '38px',
@@ -2382,7 +2385,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontFamily: "'JetBrains Mono', monospace",
+    fontFamily: F_MONO,
   },
   featureIconBadgeLavender: {
     width: '38px',
@@ -2395,7 +2398,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontFamily: "'JetBrains Mono', monospace",
+    fontFamily: F_MONO,
   },
   featureIconBadgePeach: {
     width: '38px',
@@ -2408,7 +2411,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontFamily: "'JetBrains Mono', monospace",
+    fontFamily: F_MONO,
   },
   featureIconBadgeSky: {
     width: '38px',
@@ -2421,10 +2424,10 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontFamily: "'JetBrains Mono', monospace",
+    fontFamily: F_MONO,
   },
   featureCardTitle: {
-    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, serif)",
+    fontFamily: F_HEADING,
     fontSize: '19px',
     fontWeight: '800',
     color: '#25242A',
@@ -2441,7 +2444,7 @@ const styles = {
     fontSize: '11px',
     fontWeight: '700',
     color: '#7A7782',
-    fontFamily: "'JetBrains Mono', monospace",
+    fontFamily: F_MONO,
     borderTop: '1px solid rgba(37, 36, 42, 0.08)',
     paddingTop: '12px',
     marginTop: '4px',
@@ -2463,7 +2466,7 @@ const styles = {
   },
   timelineCard: {
     backgroundColor: '#FFFFFF',
-    border: '1px solid rgba(37, 36, 42, 0.1)',
+    border: B_10,
     borderRadius: '18px',
     padding: '24px',
     position: 'relative',
@@ -2484,7 +2487,7 @@ const styles = {
     border: '1px solid rgba(37, 36, 42, 0.2)',
   },
   stepTitle: {
-    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, serif)",
+    fontFamily: F_HEADING,
     fontSize: '18px',
     fontWeight: '800',
     color: '#25242A',
@@ -2505,7 +2508,7 @@ const styles = {
   },
   comparisonTableCard: {
     backgroundColor: '#FFFFFF',
-    border: '1px solid rgba(37, 36, 42, 0.12)',
+    border: B_12,
     borderRadius: '20px',
     overflowX: 'auto',
     boxShadow: '0 10px 30px rgba(0,0,0,0.04)',
@@ -2584,7 +2587,7 @@ const styles = {
     marginBottom: '16px',
   },
   ctaTitle: {
-    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, serif)",
+    fontFamily: F_HEADING,
     fontSize: 'clamp(28px, 4vw, 40px)',
     fontWeight: '800',
     color: '#25242A',
@@ -2652,7 +2655,7 @@ const styles = {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '6px',
-    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontFamily: F_COMPACT,
     fontSize: '11px',
     fontWeight: '700',
     letterSpacing: '0.08em',
@@ -2663,7 +2666,7 @@ const styles = {
     marginBottom: '10px',
   },
   workspaceFocusTitle: {
-    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, serif)",
+    fontFamily: F_HEADING,
     fontSize: 'clamp(24px, 3.2vw, 36px)',
     fontWeight: '800',
     letterSpacing: '-0.02em',
@@ -2679,7 +2682,7 @@ const styles = {
   },
   workspaceFocusCard: {
     backgroundColor: '#FFFFFF',
-    border: '1px solid rgba(37, 36, 42, 0.12)',
+    border: B_12,
     borderRadius: '24px',
     padding: '24px 16px',
     boxShadow: '0 4px 20px rgba(37, 36, 42, 0.05)',
@@ -2694,7 +2697,7 @@ const styles = {
   },
   metricStatBox: {
     backgroundColor: '#FDFCF7',
-    border: '1px solid rgba(37, 36, 42, 0.08)',
+    border: B_08,
     borderRadius: '16px',
     padding: '16px 20px',
     display: 'flex',
@@ -2702,14 +2705,14 @@ const styles = {
     gap: '4px',
   },
   metricStatNumber: {
-    fontFamily: "'JetBrains Mono', monospace",
+    fontFamily: F_MONO,
     fontSize: '32px',
     fontWeight: '700',
     color: '#25242A',
     lineHeight: 1.2,
   },
   metricStatLabel: {
-    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontFamily: F_COMPACT,
     fontSize: '11px',
     fontWeight: '700',
     color: '#7A7782',
@@ -2718,7 +2721,7 @@ const styles = {
   },
   workspaceProgressBarWrap: {
     backgroundColor: '#FDFCF7',
-    border: '1px solid rgba(37, 36, 42, 0.08)',
+    border: B_08,
     borderRadius: '16px',
     padding: '16px 20px',
     display: 'flex',
@@ -2734,13 +2737,13 @@ const styles = {
     color: '#4A4852',
   },
   workspaceProgressText: {
-    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontFamily: F_COMPACT,
     letterSpacing: '0.04em',
     textTransform: 'uppercase',
     color: '#625F69',
   },
   workspaceProgressPercent: {
-    fontFamily: "'JetBrains Mono', monospace",
+    fontFamily: F_MONO,
     color: '#2E7D32',
   },
   workspaceProgressTrack: {
@@ -2761,7 +2764,7 @@ const styles = {
     gap: '10px',
   },
   topTasksHeader: {
-    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontFamily: F_COMPACT,
     fontSize: '12px',
     fontWeight: '700',
     color: '#625F69',
@@ -2779,7 +2782,7 @@ const styles = {
     justifyContent: 'space-between',
     padding: '12px 16px',
     backgroundColor: '#FFFDF9',
-    border: '1px solid rgba(37, 36, 42, 0.08)',
+    border: B_08,
     borderRadius: '12px',
     gap: '12px',
     flexWrap: 'wrap',
@@ -2791,7 +2794,7 @@ const styles = {
     flex: '1 1 240px',
   },
   priorityBadgeHigh: {
-    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontFamily: F_COMPACT,
     fontSize: '10px',
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -2801,7 +2804,7 @@ const styles = {
     borderRadius: '6px',
   },
   priorityBadgeMed: {
-    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontFamily: F_COMPACT,
     fontSize: '10px',
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -2821,7 +2824,7 @@ const styles = {
     gap: '12px',
     fontSize: '12px',
     color: '#7A7782',
-    fontFamily: "'JetBrains Mono', monospace",
+    fontFamily: F_MONO,
   },
   workspaceFocusActions: {
     display: 'flex',
@@ -2868,11 +2871,11 @@ const styles = {
   },
   zeroCardIcon: {
     fontSize: '28px',
-    color: 'var(--accent-terracotta, #C85A32)',
+    color: C_TERRA,
     marginBottom: '12px',
   },
   zeroCardTitle: {
-    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, serif)",
+    fontFamily: F_HEADING,
     fontSize: '22px',
     fontWeight: '800',
     color: '#25242A',
@@ -2905,11 +2908,11 @@ const styles = {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '6px',
-    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontFamily: F_COMPACT,
     fontSize: '11px',
     fontWeight: '700',
     letterSpacing: '0.08em',
-    color: 'var(--accent-terracotta, #C85A32)',
+    color: C_TERRA,
     backgroundColor: 'rgba(200, 90, 50, 0.1)',
     border: '1px solid rgba(200, 90, 50, 0.25)',
     padding: '4px 14px',
@@ -2917,7 +2920,7 @@ const styles = {
     marginBottom: '12px',
   },
   tourSectionTitle: {
-    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, serif)",
+    fontFamily: F_HEADING,
     fontSize: 'clamp(28px, 4vw, 42px)',
     fontWeight: '800',
     letterSpacing: '-0.02em',
@@ -2933,7 +2936,7 @@ const styles = {
   },
   tourStatusBanner: {
     backgroundColor: '#FFFFFF',
-    border: '1px solid rgba(37, 36, 42, 0.12)',
+    border: B_12,
     borderRadius: '20px',
     padding: '24px 28px',
     boxShadow: '0 4px 16px rgba(37, 36, 42, 0.04)',
@@ -2953,7 +2956,7 @@ const styles = {
   tourStatusBadgeCompleted: {
     display: 'inline-flex',
     alignSelf: 'flex-start',
-    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontFamily: F_COMPACT,
     fontSize: '11px',
     fontWeight: '800',
     color: '#155230',
@@ -2965,7 +2968,7 @@ const styles = {
   tourStatusBadgeProgress: {
     display: 'inline-flex',
     alignSelf: 'flex-start',
-    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontFamily: F_COMPACT,
     fontSize: '11px',
     fontWeight: '800',
     color: '#5C4100',
@@ -2977,7 +2980,7 @@ const styles = {
   tourStatusBadgeFresh: {
     display: 'inline-flex',
     alignSelf: 'flex-start',
-    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontFamily: F_COMPACT,
     fontSize: '11px',
     fontWeight: '800',
     color: '#843114',
@@ -3060,7 +3063,7 @@ const styles = {
     backgroundColor: '#27C93F',
   },
   mockupHeaderTitle: {
-    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontFamily: F_COMPACT,
     fontSize: '12px',
     fontWeight: '700',
     letterSpacing: '0.05em',
@@ -3126,7 +3129,7 @@ const styles = {
     display: 'none',
   },
   beaconText: {
-    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontFamily: F_COMPACT,
     fontSize: '11px',
     fontWeight: '700',
     color: '#FFD8C7',
@@ -3147,7 +3150,7 @@ const styles = {
     position: 'relative',
     zIndex: 2,
     backgroundColor: '#FFFFFF',
-    border: '1px solid rgba(37, 36, 42, 0.15)',
+    border: B_15,
     borderRadius: '18px',
     padding: '24px',
     boxShadow: '0 12px 36px rgba(0, 0, 0, 0.35)',
@@ -3163,7 +3166,7 @@ const styles = {
     flexWrap: 'wrap',
   },
   simStepPill: {
-    fontFamily: "'JetBrains Mono', monospace",
+    fontFamily: F_MONO,
     fontSize: '11px',
     fontWeight: '800',
     color: '#843114',
@@ -3172,7 +3175,7 @@ const styles = {
     borderRadius: '6px',
   },
   simCategoryPill: {
-    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontFamily: F_COMPACT,
     fontSize: '11px',
     fontWeight: '700',
     color: '#625F69',
@@ -3182,7 +3185,7 @@ const styles = {
     letterSpacing: '0.04em',
   },
   simCalloutTitle: {
-    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, serif)",
+    fontFamily: F_HEADING,
     fontSize: '18px',
     fontWeight: '800',
     color: '#25242A',
@@ -3219,7 +3222,7 @@ const styles = {
   },
   simNavBtnSecondary: {
     backgroundColor: 'transparent',
-    border: '1px solid rgba(37, 36, 42, 0.15)',
+    border: B_15,
     borderRadius: '9999px',
     padding: '6px 14px',
     fontSize: '12px',
@@ -3238,7 +3241,7 @@ const styles = {
     cursor: 'pointer',
   },
   simNavCount: {
-    fontFamily: "'JetBrains Mono', monospace",
+    fontFamily: F_MONO,
     fontSize: '11px',
     color: '#7A7782',
   },
@@ -3250,7 +3253,7 @@ const styles = {
   },
   tourPillarCard: {
     backgroundColor: '#FFFFFF',
-    border: '1px solid rgba(37, 36, 42, 0.1)',
+    border: B_10,
     borderRadius: '18px',
     padding: '24px',
     boxShadow: '0 4px 16px rgba(37, 36, 42, 0.03)',
@@ -3262,7 +3265,7 @@ const styles = {
     fontSize: '24px',
   },
   tourPillarTitle: {
-    fontFamily: "var(--font-heading, 'Eagle Lake', cursive, serif)",
+    fontFamily: F_HEADING,
     fontSize: '18px',
     fontWeight: '800',
     color: '#25242A',
@@ -3275,7 +3278,7 @@ const styles = {
     margin: 0,
   },
   codeSnippet: {
-    fontFamily: "'JetBrains Mono', monospace",
+    fontFamily: F_MONO,
     fontSize: '12px',
     backgroundColor: 'rgba(37, 36, 42, 0.06)',
     padding: '2px 4px',
@@ -3284,7 +3287,7 @@ const styles = {
   },
   tourCurriculumBox: {
     backgroundColor: '#FFFDF9',
-    border: '1px solid rgba(37, 36, 42, 0.1)',
+    border: B_10,
     borderRadius: '18px',
     padding: '20px 24px',
     display: 'flex',
@@ -3292,7 +3295,7 @@ const styles = {
     gap: '12px',
   },
   curriculumTitle: {
-    fontFamily: "var(--font-compact, 'Unica One', cursive, sans-serif)",
+    fontFamily: F_COMPACT,
     fontSize: '12px',
     fontWeight: '700',
     color: '#625F69',
@@ -3309,7 +3312,7 @@ const styles = {
     fontWeight: '600',
     color: '#4A4852',
     backgroundColor: '#FFFFFF',
-    border: '1px solid rgba(37, 36, 42, 0.08)',
+    border: B_08,
     borderRadius: '9999px',
     padding: '4px 12px',
   },
@@ -3329,14 +3332,14 @@ const styles = {
     fontFamily: "var(--font-sans, 'Lato', sans-serif)",
     fontSize: '12px',
     fontWeight: '700',
-    color: 'var(--accent-terracotta, #C85A32)',
+    color: C_TERRA,
     cursor: 'pointer',
     transition: 'color 0.15s ease',
   },
   navLinkTour: {
     background: 'transparent',
     border: 'none',
-    color: 'var(--accent-terracotta, #C85A32)',
+    color: C_TERRA,
     fontSize: '13px',
     fontWeight: '700',
     cursor: 'pointer',

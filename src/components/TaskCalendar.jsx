@@ -223,10 +223,10 @@ export default function TaskCalendar({
         {/* Consolidated Desktop Calendar Control Hub */}
         <div style={styles.controlHub} className="digital-card calendar-control-hub">
           {/* Top Row: Heading, Period Nav, View Switcher, Tasks shortcut */}
-          <div style={styles.topBar}>
-            <div style={styles.headingGroup}>
-              <span style={styles.badge}>WORKSPACE CALENDAR</span>
-              <div style={styles.titleRow}>
+          <div style={styles.topBar} className="calendar-top-bar">
+            <div style={styles.headingGroup} className="calendar-heading-group">
+              <span style={styles.badge} className="calendar-badge">WORKSPACE CALENDAR</span>
+              <div style={styles.titleRow} className="calendar-title-row">
                 <h2 style={styles.mainHeading} id="calendar-view-heading">
                   {calendarView === 'month' && formatMonthYearHeading(viewYear, viewMonth)}
                   {calendarView === 'week' && `Week of ${formatMonthYearHeading(viewYear, viewMonth)}`}
@@ -236,7 +236,7 @@ export default function TaskCalendar({
                   <span style={styles.todayPill}>TODAY</span>
                 )}
               </div>
-              <p style={styles.subHeading}>
+              <p style={styles.subHeading} className="calendar-subheading">
                 {overdueCount > 0 && (
                   <span style={styles.overdueNotice}>
                     ⚠️ {overdueCount} overdue task{overdueCount === 1 ? '' : 's'} ·{' '}
@@ -249,9 +249,9 @@ export default function TaskCalendar({
             </div>
 
             {/* Right Toolbar Controls */}
-            <div style={styles.toolbarControls}>
+            <div style={styles.toolbarControls} className="calendar-toolbar-controls">
               {/* Navigation buttons */}
-              <div style={styles.navButtonGroup} role="group" aria-label="Calendar navigation">
+              <div style={styles.navButtonGroup} className="calendar-nav-buttons" role="group" aria-label="Calendar navigation">
                 <button
                   type="button"
                   id="calendar-today-btn"
@@ -285,7 +285,7 @@ export default function TaskCalendar({
               </div>
 
               {/* View Switcher: Month / Week / Day */}
-              <div style={styles.viewSwitcherGroup} role="group" aria-label="Calendar view switcher">
+              <div style={styles.viewSwitcherGroup} className="calendar-view-switcher" role="group" aria-label="Calendar view switcher">
                 <button
                   type="button"
                   id="calendar-view-month-btn"
@@ -357,11 +357,11 @@ export default function TaskCalendar({
           </div>
 
           {/* Integrated Divider */}
-          <div style={styles.hubDivider} />
+          <div style={styles.hubDivider} className="calendar-hub-divider" />
 
           {/* Bottom Row: Filter Pills & Priority Legend */}
-          <div style={styles.filterAndLegendRow}>
-            <div style={styles.filterPillsArea}>
+          <div style={styles.filterAndLegendRow} className="calendar-filter-and-legend-row">
+            <div style={styles.filterPillsArea} className="calendar-filter-pills-area">
               {/* Priority Filters */}
               <div style={styles.filterGroup}>
                 <span style={styles.filterLabel}>Priority:</span>
@@ -502,18 +502,18 @@ export default function TaskCalendar({
         {/* VIEW 1: MONTH VIEW (Conventional 7-column calendar grid)           */}
         {/* ------------------------------------------------------------------ */}
         {calendarView === 'month' && (
-          <div style={styles.monthViewWrapper} className="digital-card" id="calendar-month-grid">
+          <div style={styles.monthViewWrapper} className="digital-card calendar-month-card" id="calendar-month-grid">
             {/* Day of Week Headers */}
-            <div style={styles.gridHeaderRow} role="row">
+            <div style={styles.gridHeaderRow} className="calendar-grid-header-row" role="row">
               {WEEK_DAY_LABELS.map((name) => (
-                <div key={name} style={styles.gridHeaderCell} role="columnheader">
+                <div key={name} style={styles.gridHeaderCell} className="calendar-grid-header-cell" role="columnheader">
                   {name}
                 </div>
               ))}
             </div>
 
             {/* Grid Days */}
-            <div style={styles.gridBody} role="grid">
+            <div style={styles.gridBody} className="calendar-grid-body" role="grid">
               {monthGrid.map((cell) => {
                 const cellTasks = (dateMap.get(cell.dateStr) || []).filter(filterTask);
                 const isSelected = cell.dateStr === selectedDate;
@@ -524,6 +524,7 @@ export default function TaskCalendar({
                     key={cell.dateStr}
                     data-date={cell.dateStr}
                     onClick={() => setSelectedDate(cell.dateStr)}
+                    className="calendar-grid-cell"
                     style={{
                       ...styles.gridCell,
                       ...(cell.isCurrentMonth ? {} : styles.gridCellOutside),
@@ -534,8 +535,9 @@ export default function TaskCalendar({
                     aria-label={`${cell.dateStr}, ${cellTasks.length} task${cellTasks.length === 1 ? '' : 's'}`}
                   >
                     {/* Date Cell Header */}
-                    <div style={styles.cellHeader}>
+                    <div style={styles.cellHeader} className="calendar-cell-header">
                       <span
+                        className="calendar-cell-day-num"
                         style={{
                           ...styles.cellDayNumber,
                           ...(cell.isToday ? styles.cellDayTodayBadge : {}),
@@ -554,6 +556,7 @@ export default function TaskCalendar({
                             e.stopPropagation();
                             handleOpenQuickAdd(cell.dateStr);
                           }}
+                          className="calendar-cell-add-btn"
                           style={styles.cellAddBtn}
                           title={`Add task for ${cell.dateStr}`}
                           aria-label={`Add task on ${cell.dateStr}`}
@@ -564,7 +567,7 @@ export default function TaskCalendar({
                     </div>
 
                     {/* Task Chips inside cell (compact, priority-colored) */}
-                    <div style={styles.cellTaskContainer}>
+                    <div style={styles.cellTaskContainer} className="calendar-cell-task-container">
                       {cellTasks.slice(0, 3).map((task) => {
                         const palette = getPriorityPalette(task.priority, task.completed);
                         const isTaskOverdue = isPast && !task.completed;
@@ -572,6 +575,7 @@ export default function TaskCalendar({
                         return (
                           <div
                             key={task.id}
+                            className="calendar-task-chip"
                             style={{
                               ...styles.taskChip,
                               backgroundColor: palette.chipBg,
@@ -586,18 +590,20 @@ export default function TaskCalendar({
                             tabIndex={0}
                             aria-label={`${task.title}, ${task.priority} priority${task.completed ? ', completed' : ''}`}
                           >
-                            <span style={styles.taskChipIcon}>
+                            <span style={styles.taskChipIcon} className="calendar-task-chip-icon">
                               {task.completed ? '✓' : isTaskOverdue ? '⚠️' : palette.icon}
                             </span>
-                            <span style={styles.taskChipTitle}>{task.title}</span>
+                            <span style={styles.taskChipTitle} className="calendar-task-chip-title">{task.title}</span>
                             {stickyNotesMap[task.id]?.length > 0 && (
-                              <TaskStickyTab
-                                notes={stickyNotesMap[task.id]}
-                                taskTitle={task.title}
-                                onOpen={() => onOpenStickyNotes && onOpenStickyNotes(task)}
-                                compact={true}
-                                showAddPrompt={false}
-                              />
+                              <span className="calendar-task-chip-sticky">
+                                <TaskStickyTab
+                                  notes={stickyNotesMap[task.id]}
+                                  taskTitle={task.title}
+                                  onOpen={() => onOpenStickyNotes && onOpenStickyNotes(task)}
+                                  compact={true}
+                                  showAddPrompt={false}
+                                />
+                              </span>
                             )}
                           </div>
                         );
@@ -611,6 +617,7 @@ export default function TaskCalendar({
                             e.stopPropagation();
                             setSelectedDate(cell.dateStr);
                           }}
+                          className="calendar-overflow-btn"
                           style={styles.overflowBtn}
                           aria-label={`View ${cellTasks.length - 3} more tasks for ${cell.dateStr}`}
                         >
@@ -629,8 +636,8 @@ export default function TaskCalendar({
         {/* VIEW 2: WEEK VIEW (7-day columns with all-day & timed sessions)    */}
         {/* ------------------------------------------------------------------ */}
         {calendarView === 'week' && (
-          <div style={styles.weekViewWrapper} className="digital-card" id="calendar-week-grid">
-            <div style={styles.weekGridHeader}>
+          <div style={styles.weekViewWrapper} className="digital-card calendar-week-card" id="calendar-week-grid">
+            <div style={styles.weekGridHeader} className="calendar-week-header-row">
               {weekDays.map((d) => {
                 const isSelected = d.dateStr === selectedDate;
                 return (
@@ -658,7 +665,7 @@ export default function TaskCalendar({
             </div>
 
             {/* Week Columns Body */}
-            <div style={styles.weekColumnsRow}>
+            <div style={styles.weekColumnsRow} className="calendar-week-columns-row">
               {weekDays.map((d) => {
                 const dayTasks = (dateMap.get(d.dateStr) || []).filter(filterTask);
                 const isSelected = d.dateStr === selectedDate;
@@ -745,8 +752,8 @@ export default function TaskCalendar({
         {/* VIEW 3: DAY VIEW (Focused single-date layout)                       */}
         {/* ------------------------------------------------------------------ */}
         {calendarView === 'day' && (
-          <div style={styles.dayViewWrapper} className="digital-card" id="calendar-day-grid">
-            <div style={styles.dayViewHeader}>
+          <div style={styles.dayViewWrapper} className="digital-card calendar-day-card" id="calendar-day-grid">
+            <div style={styles.dayViewHeader} className="calendar-day-header">
               <div>
                 <h3 style={styles.dayViewDateTitle}>{formatFullDateHeading(selectedDate)}</h3>
                 <span style={styles.dayViewMeta}>
