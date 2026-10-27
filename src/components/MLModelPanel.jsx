@@ -94,7 +94,7 @@ export default function MLModelPanel({
             <h2 style={styles.title}>
               THE <span className={`hl hl-sage ${isVisible ? 'hl-sweep' : ''}`}>SMART</span> PART
             </h2>
-            <p style={styles.subtitle}>
+            <p className="mlmodel-subtitle" style={styles.subtitle}>
               Supervised Random Forest baseline evaluated on synthetic historical task dataset
             </p>
           </div>

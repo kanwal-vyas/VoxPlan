@@ -81,7 +81,7 @@ export default function BehavioralHistoryPanel({ tasks }) {
             <h2 style={styles.title}>
               HOW YOU <span className={`hl hl-lilac ${isVisible ? 'hl-sweep' : ''}`}>ACTUALLY</span> WORK
             </h2>
-            <p style={styles.subtitle}>
+            <p className="behavioral-subtitle" style={styles.subtitle}>
               Transparent productivity metrics calculated directly from your local task timers and completion history
             </p>
           </div>

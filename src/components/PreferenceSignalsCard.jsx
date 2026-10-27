@@ -56,7 +56,7 @@ export default function PreferenceSignalsCard({ events = [], tasks = [] }) {
             </span>
           </div>
           <h4 style={styles.title}>EMPIRICAL FRICTION PROFILING & PREFERENCE SIGNALS</h4>
-          <p style={styles.subtitle}>
+          <p className="signals-subtitle" style={styles.subtitle}>
             Descriptive analysis of user scheduling friction, postponement tendencies, and category pacing
           </p>
         </div>

@@ -68,7 +68,7 @@ export default function TaskList({
             <h2 style={styles.title}>
               THE <span className={`hl hl-terracotta ${isVisible ? 'hl-sweep' : ''}`}>RISK</span> LANDSCAPE
             </h2>
-            <p style={styles.subtitle}>
+            <p className="tasklist-subtitle" style={styles.subtitle}>
               Continuous machine learning delay-risk estimates mapped across active initiatives
             </p>
           </div>

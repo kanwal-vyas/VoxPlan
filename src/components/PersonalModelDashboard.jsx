@@ -92,7 +92,7 @@ export default function PersonalModelDashboard({ events = [], tasks = [] }) {
             <h2 style={styles.title}>
               HOW VOXPLAN <span className={`hl hl-mint ${isVisible ? 'hl-sweep' : ''}`}>LEARNS</span> YOUR PACE
             </h2>
-            <p style={styles.subtitle}>
+            <p className="pmd-subtitle" style={styles.subtitle}>
               Transparent local effort-bias modeling with Bayesian shrinkage, chronological holdout evaluation, and honest sample accounting
             </p>
           </div>

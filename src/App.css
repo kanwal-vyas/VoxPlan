@@ -754,21 +754,21 @@ a:focus-visible {
   #intelligence > div,
   #calendar-workspace > div,
   #command > div {
-    padding: 20px 16px !important;
-    border-radius: 18px !important;
-    gap: 20px !important;
+    padding: 14px 12px !important;
+    border-radius: 14px !important;
+    gap: 14px !important;
   }
 
   /* Header Optimization */
   header {
-    top: 8px !important;
+    top: 4px !important;
     padding: 0 4px !important;
   }
 
   header > div {
-    padding: 8px 14px !important;
-    border-radius: 20px !important;
-    gap: 8px !important;
+    padding: 5px 8px !important;
+    border-radius: 12px !important;
+    gap: 4px !important;
     justify-content: space-between !important;
   }
 
@@ -780,27 +780,39 @@ a:focus-visible {
     width: 100% !important;
     order: 3 !important;
     justify-content: space-between !important;
-    padding: 4px 6px !important;
+    padding: 2px !important;
     overflow-x: auto !important;
   }
 
   nav[aria-label="Sections"] button {
-    padding: 6px 10px !important;
-    min-height: 38px !important;
+    padding: 4px 6px !important;
+    min-height: 32px !important;
     font-size: 12px !important;
     flex: 1 !important;
     text-align: center !important;
   }
 
+  /* Hide verbose explanatory paragraphs and redundant subtitles on mobile */
+  .hero-editorial-tagline,
+  .hero-statement,
+  .tasklist-subtitle,
+  .pmd-subtitle,
+  .mlmodel-subtitle,
+  .readiness-subtitle,
+  .behavioral-subtitle,
+  .signals-subtitle {
+    display: none !important;
+  }
+
   /* Hero Section Mobile */
   .hero-section {
-    padding: 18px 0 12px 0 !important;
+    padding: 12px 0 8px 0 !important;
     min-height: auto !important;
   }
 
   .hero-composition {
     grid-template-columns: 1fr !important;
-    gap: 16px !important;
+    gap: 12px !important;
   }
 
   .hero-preview-cards {
@@ -808,13 +820,9 @@ a:focus-visible {
   }
 
   .hero-headline {
-    font-size: clamp(26px, 6.5vw, 34px) !important;
+    font-size: clamp(24px, 6vw, 30px) !important;
     line-height: 1.15 !important;
-  }
-
-  .hero-statement {
-    font-size: 14px !important;
-    line-height: 1.5 !important;
+    margin-bottom: 4px !important;
   }
 
   /* Full-width CTA with touch target */

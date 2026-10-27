@@ -473,8 +473,8 @@
     width: auto !important;
     max-width: calc(100vw - 32px) !important;
     transform: none !important;
-    padding: 12px 14px !important;
-    max-height: min(44vh, 320px) !important;
+    padding: 10px 12px !important;
+    max-height: min(38vh, 270px) !important;
     overflow-y: auto !important;
     border-radius: 14px !important;
     box-shadow: 0 8px 24px rgba(32, 30, 35, 0.28) !important;
@@ -488,7 +488,7 @@
 
   /* Compact Header */
   .voxplan-tour-header {
-    margin-bottom: 6px !important;
+    margin-bottom: 4px !important;
     gap: 6px !important;
   }
 
@@ -497,14 +497,10 @@
     padding: 2px 7px !important;
   }
 
-  .voxplan-tour-category-tag {
-    font-size: 10px !important;
-    padding: 2px 6px !important;
-  }
-
+  /* Hide secondary badges on mobile to keep focus on step number and target */
+  .voxplan-tour-category-tag,
   .voxplan-tour-target-found-chip {
-    font-size: 10px !important;
-    padding: 2px 6px !important;
+    display: none !important;
   }
 
   .voxplan-tour-close-btn {
@@ -517,36 +513,39 @@
 
   /* Compact Mode Banner */
   .voxplan-tour-mode-banner {
-    padding: 4px 8px !important;
-    margin-bottom: 8px !important;
+    padding: 3px 6px !important;
+    margin-bottom: 6px !important;
     font-size: 11px !important;
   }
 
   .voxplan-tour-mode-btn {
     font-size: 10px !important;
-    padding: 3px 6px !important;
+    padding: 2px 5px !important;
   }
 
   /* Compact Title & Description */
   .voxplan-tour-title {
-    font-size: 15px !important;
+    font-size: 14px !important;
     line-height: 1.25 !important;
-    margin-bottom: 4px !important;
+    margin-bottom: 3px !important;
   }
 
   .voxplan-tour-desc {
-    font-size: 13px !important;
-    line-height: 1.4 !important;
-    margin-bottom: 8px !important;
+    font-size: 12px !important;
+    line-height: 1.35 !important;
+    margin-bottom: 6px !important;
   }
 
-  /* Compact Hint & Limit Boxes */
-  .voxplan-tour-action-box,
-  .voxplan-tour-limits-box {
-    padding: 6px 10px !important;
-    margin-bottom: 8px !important;
+  /* Compact Hint Box and hide secondary limits box on mobile */
+  .voxplan-tour-action-box {
+    padding: 4px 8px !important;
+    margin-bottom: 6px !important;
     font-size: 11px !important;
-    border-radius: 8px !important;
+    border-radius: 6px !important;
+  }
+
+  .voxplan-tour-limits-box {
+    display: none !important;
   }
 
   /* Compact Footer */

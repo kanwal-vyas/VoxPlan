@@ -86,8 +86,8 @@ export default function Header({
           aria-label={onNavigate ? 'Back to VoxPlan product landing page' : 'VoxPlan home, scroll to top'}
           title={onNavigate ? 'Back to Product Landing Page' : 'Scroll to top'}
         >
-          <BrandBadge size={28} />
-          <span style={styles.brandName}>VOXPLAN</span>
+          <BrandBadge size={isMobile ? 22 : 28} />
+          <span style={{ ...styles.brandName, fontSize: isMobile ? '16px' : '18px' }}>VOXPLAN</span>
         </button>
 
           {/* Center Navigation on Desktop */}
@@ -187,18 +187,27 @@ export default function Header({
           {/* Right Controls: Status & Actions */}
           <div style={styles.rightGroup}>
             {/* Concise Status Indicator */}
-            <div style={styles.statusPill} title={isBackendOnline ? (isTrained ? 'Model trained & ready' : 'Local planner active') : 'Offline'}>
+            <div
+              style={{
+                ...styles.statusPill,
+                padding: isMobile ? '4px 6px' : '4px 10px',
+              }}
+              title={isBackendOnline ? (isTrained ? 'Model trained & ready' : 'Local planner active') : 'Offline'}
+              aria-label={isBackendOnline ? (isTrained ? 'Brain active' : 'Ready') : 'Offline'}
+            >
               <span
                 style={{
                   ...styles.statusDot,
                   backgroundColor: isBackendOnline ? '#2D6A4F' : '#D9383A',
                 }}
               />
-              <span style={styles.statusText}>
-                {isBackendOnline
-                  ? (isTrained ? 'Brain active' : 'Ready')
-                  : 'Offline'}
-              </span>
+              {!isMobile && (
+                <span style={styles.statusText}>
+                  {isBackendOnline
+                    ? (isTrained ? 'Brain active' : 'Ready')
+                    : 'Offline'}
+                </span>
+              )}
             </div>
 
             {/* Notification Bell & Center Dropdown */}
@@ -497,25 +506,25 @@ export default function Header({
 const styles = {
   header: {
     position: 'sticky',
-    top: '10px',
+    top: '6px',
     zIndex: 100,
     width: '100%',
-    padding: '0 8px',
+    padding: '0 6px',
     transition: 'top 0.2s ease',
   },
   headerScrolled: {
-    top: '6px',
+    top: '4px',
   },
   headerInner: {
     maxWidth: '1120px',
     margin: '0 auto',
     display: 'flex',
     flexDirection: 'column',
-    gap: '6px',
-    padding: '8px 14px',
+    gap: '4px',
+    padding: '6px 10px',
     backgroundColor: 'rgba(252, 250, 246, 0.95)',
     backdropFilter: 'blur(12px)',
-    borderRadius: '16px',
+    borderRadius: '14px',
     border: '1px solid rgba(61, 38, 69, 0.10)',
     boxShadow: '0 2px 10px rgba(61, 38, 69, 0.04)',
   },
@@ -524,7 +533,7 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
-    gap: '10px',
+    gap: '8px',
   },
   brand: {
     display: 'flex',
@@ -598,10 +607,10 @@ const styles = {
   navMobile: {
     display: 'grid',
     gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: '4px',
+    gap: '3px',
     width: '100%',
     backgroundColor: '#F4F1EA',
-    padding: '3px',
+    padding: '2px',
     borderRadius: '10px',
     border: '1px solid rgba(61, 38, 69, 0.08)',
     overflowX: 'auto',
@@ -611,11 +620,11 @@ const styles = {
     background: 'transparent',
     border: 'none',
     color: '#5E5B66',
-    fontSize: '13px',
+    fontSize: '12px',
     fontWeight: '600',
     cursor: 'pointer',
-    padding: '8px 0',
-    minHeight: '40px',
+    padding: '5px 0',
+    minHeight: '32px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',

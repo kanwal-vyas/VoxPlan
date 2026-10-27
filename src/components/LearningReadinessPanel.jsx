@@ -93,7 +93,7 @@ export default function LearningReadinessPanel({ events = [], tasks = [] }) {
             </span>
           </div>
           <h3 style={styles.title}>SCHEDULE ADAPTATION READINESS</h3>
-          <p style={styles.subtitle}>
+          <p className="readiness-subtitle" style={styles.subtitle}>
             Deterministic evidence maturity evaluation before any personal preference learning is unlocked
           </p>
         </div>

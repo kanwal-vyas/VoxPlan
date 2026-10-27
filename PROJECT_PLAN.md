@@ -8032,3 +8032,44 @@ Optimize the ENTIRE VoxPlan application for mobile screens (320px–430px phones
   - 390 × 844 & 430 × 932 (Modern & Large phones): Optimal whitespace, touch targets $\ge 44\text{px}$, smooth scrolling.
   - 768 × 1024 (Tablet): Clean multi-column adaptation.
   - 1280 × 800 & 1440 × 900 (Desktop regression): Confirmed desktop grid layouts, floating ribbons, and desktop headers remain intact with zero visual regressions.
+
+---
+
+## [2026-10-27] — Phase 8.6: Mobile Header & Content Density Refinement
+
+### Primary Objective
+Execute a focused follow-up refinement to make the mobile experience substantially more minimal and uncluttered:
+1. **Header Aggressive Simplification**:
+   - Scaled brand badge to `22px` on mobile with `fontSize: 16px` for wordmark.
+   - Replaced textual status pill ("Brain active" / "Ready") on mobile with a discrete 7px pulsing status dot indicator (`padding: 4px 6px`), saving ~55px of horizontal space.
+   - Reduced mobile header outer padding (`padding: 0 4px`) and inner container padding (`padding: 5px 8px`, `border-radius: 12px`, `gap: 4px`).
+   - Streamlined mobile 4-tab bar to `minHeight: 32px`, `padding: 4px 6px`, `fontSize: 12px` without horizontal scroll squishing.
+   - Preserved 100% of secondary action functionality (`✦ Product Tour`, `← Return to Overview`, `🔐 Encrypted Backup`, `🔔 Notifications`, `⚙️ Notification Settings`, `⚡ Load Demo Seed`, `↺ Reset Workspace`) within the mobile `•••` overflow menu (`#header-actions-menu-btn`).
+
+2. **Main Content Density & Explanation Removal**:
+   - Hidden verbose explanatory helper paragraphs and redundant subtitles on mobile (`@media (max-width: 768px)`):
+     - `.hero-editorial-tagline` & `.hero-statement` in Hero.
+     - `.tasklist-subtitle` in TaskList.
+     - `.pmd-subtitle` in PersonalModelDashboard.
+     - `.mlmodel-subtitle` in MLModelPanel.
+     - `.readiness-subtitle` in LearningReadinessPanel.
+     - `.behavioral-subtitle` in BehavioralHistoryPanel.
+     - `.signals-subtitle` in PreferenceSignalsCard.
+   - Reduced section container padding on mobile from `20px 16px` to `14px 12px` and `gap: 14px`, pulling key actions ("Today's Focus & Workload ↓") immediately above the fold.
+   - Retained all essential task titles, priority badges, risk indicators, due dates, timer controls, and sticky notes triggers.
+
+3. **Product Tour Concise & Compact Styling**:
+   - Shortened tour descriptions and action prompts across all 20 steps by >50% while preserving 100% of asserted keywords and concepts.
+   - Compacted mobile bottom-sheet callout (`max-height: min(38vh, 270px)`, `padding: 10px 12px`, hid secondary limit and category chips on mobile).
+   - Preserved all 20 steps, sequential order, demo isolation, and completion flags.
+
+### Verification Results
+- `node --test tests/product_tour/product_tour.test.js tests/overview_restoration.test.js tests/overview_enhancement_and_tour_promotion.test.js`: 99/99 passing.
+- `node --test tests/workflow_polish.test.js tests/typography_system.test.js tests/accessibility.test.js`: 69/69 passing.
+- `npm test`: 1,300/1,300 tests passing across 286 suites.
+- `python -m pytest backend/tests/`: 29/29 passing.
+- `npm run lint`: 0 errors.
+- `npm run build`: Production bundle built successfully (0 errors).
+- `node scripts/secretScanner.mjs`: Clean (0 secrets).
+- `git diff --check`: 0 whitespace errors.
+- Browser verification across 375px mobile and 1280x800 desktop regression confirmed.
