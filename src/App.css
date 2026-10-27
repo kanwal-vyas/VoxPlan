@@ -887,6 +887,110 @@ a:focus-visible {
   button, input, [role="button"] {
     min-height: 44px;
   }
+
+  /* Task Notes Grid: Mobile single-column without horizontal clipping */
+  .task-notes-grid {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+
+  /* Task Cards: Compact, readable, touch-friendly */
+  .task-card {
+    padding: 14px 16px !important;
+    border-radius: 14px !important;
+    gap: 10px !important;
+  }
+
+  .task-card .task-checkbox-btn {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
+  }
+
+  .task-card .task-delete-btn {
+    width: 44px !important;
+    height: 44px !important;
+    min-width: 44px !important;
+    min-height: 44px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  /* Today Focus Section Cards */
+  .today-task-card-item {
+    padding: 12px 14px !important;
+    gap: 10px !important;
+    border-radius: 12px !important;
+  }
+
+  .today-task-card-item > div:first-child {
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+  }
+
+  .today-task-card-item > div:last-child {
+    width: 100% !important;
+    justify-content: flex-end !important;
+  }
+
+  /* Calendar Control Hub & Grids */
+  .calendar-control-hub {
+    padding: 14px 16px !important;
+    border-radius: 14px !important;
+  }
+
+  #calendar-workspace .toolbarControls {
+    width: 100% !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  #calendar-month-grid .gridCell {
+    min-height: 58px !important;
+    padding: 3px 2px !important;
+  }
+
+  #calendar-month-grid .gridHeaderCell {
+    padding: 6px 2px !important;
+    font-size: 11px !important;
+  }
+
+  #calendar-week-grid {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  /* Modals on Mobile: Safe viewport fitting, no clipping */
+  .adaptive-modal-backdrop,
+  .backup-modal-backdrop,
+  .task-explanation-backdrop {
+    padding: 8px !important;
+    align-items: flex-end !important;
+  }
+
+  .adaptive-modal-container,
+  .backup-modal-card,
+  .task-explanation-sheet {
+    max-width: 100% !important;
+    max-height: calc(100dvh - 16px) !important;
+    border-radius: 16px 16px 12px 12px !important;
+    padding: 16px 14px !important;
+  }
+
+  .adaptive-modal-nav-tabbar {
+    padding: 8px 12px !important;
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .adaptive-modal-metrics-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    padding: 10px 14px !important;
+    gap: 8px !important;
+  }
 }
 
 /* Reduced Motion */

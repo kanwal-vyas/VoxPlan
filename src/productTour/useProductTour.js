@@ -181,11 +181,12 @@ function findVisibleElement(selector) {
     const timer = setTimeout(() => {
       updateTargetRect();
 
-      // Scroll target into view gently if found
+      // Scroll target into view gently if found (center vertically on mobile to clear docked panels)
       if (targetElementRef.current) {
+        const isMobileScreen = typeof window !== 'undefined' && window.innerWidth <= 768;
         targetElementRef.current.scrollIntoView({
           behavior: 'smooth',
-          block: 'nearest',
+          block: isMobileScreen ? 'center' : 'nearest',
           inline: 'nearest',
         });
       }
@@ -207,6 +208,7 @@ function findVisibleElement(selector) {
 
     window.addEventListener('resize', handleWindowChange, { passive: true });
     window.addEventListener('scroll', handleWindowChange, { passive: true });
+    window.addEventListener('orientationchange', handleWindowChange, { passive: true });
 
     // Observe DOM mutations to adjust if elements appear or layout shifts
     if (typeof MutationObserver !== 'undefined') {
@@ -225,6 +227,7 @@ function findVisibleElement(selector) {
       clearTimeout(settleTimer);
       window.removeEventListener('resize', handleWindowChange);
       window.removeEventListener('scroll', handleWindowChange);
+      window.removeEventListener('orientationchange', handleWindowChange);
       if (mutationObserverRef.current) {
         mutationObserverRef.current.disconnect();
         mutationObserverRef.current = null;

@@ -397,7 +397,13 @@ export default function Header({
 
         {/* Mobile Navigation Tabs: Compact 2nd row */}
         {isMobile && (
-          <nav style={styles.navMobile} aria-label="Sections">
+          <nav
+            style={{
+              ...styles.navMobile,
+              gridTemplateColumns: onSelectView ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)',
+            }}
+            aria-label="Sections"
+          >
             {onSelectView ? (
               <>
                 <button
@@ -608,7 +614,11 @@ const styles = {
     fontSize: '13px',
     fontWeight: '600',
     cursor: 'pointer',
-    padding: '7px 0',
+    padding: '8px 0',
+    minHeight: '40px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
     textAlign: 'center',
     borderRadius: '8px',
     transition: 'all 0.15s ease',

@@ -48,7 +48,22 @@ export function computeSpotlightRect(targetRect, padding = SPOTLIGHT_PADDING) {
  * @returns {object} { isCenter: boolean, style: object }
  */
 export function computeCalloutPosition(targetRect, preferredPlacement, isMobile) {
-  if (isMobile || !targetRect) {
+  if (isMobile) {
+    if (!targetRect || preferredPlacement === 'center') {
+      return { isCenter: true, isMobileTop: false, style: {} };
+    }
+    const winHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
+    const isTargetInLowerHalf = targetRect.top > winHeight * 0.45;
+    return {
+      isCenter: false,
+      isMobileTop: isTargetInLowerHalf,
+      style: isTargetInLowerHalf
+        ? { top: 'max(12px, env(safe-area-inset-top, 12px))', bottom: 'auto' }
+        : { bottom: 'max(12px, env(safe-area-inset-bottom, 12px))', top: 'auto' },
+    };
+  }
+
+  if (!targetRect) {
     return { isCenter: true, style: {} };
   }
 

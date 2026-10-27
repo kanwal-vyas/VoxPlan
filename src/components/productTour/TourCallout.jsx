@@ -23,9 +23,9 @@ export default function TourCallout({
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
   const isLastStep = stepIndex === totalSteps - 1;
 
-  const { isCenter, style } = useMemo(() => {
+  const { isCenter, isMobileTop, style } = useMemo(() => {
     if (step.placement === 'center' || !isTargetFound) {
-      return { isCenter: true, style: {} };
+      return { isCenter: true, isMobileTop: false, style: {} };
     }
     return computeCalloutPosition(targetRect, step.placement, isMobile);
   }, [targetRect, step.placement, isTargetFound, isMobile]);
@@ -38,7 +38,7 @@ export default function TourCallout({
       aria-modal="true"
       aria-labelledby="voxplan-tour-title"
       aria-describedby="voxplan-tour-desc"
-      className={`voxplan-tour-callout ${isCenter ? 'voxplan-tour-callout-center' : ''}`}
+      className={`voxplan-tour-callout ${isCenter ? 'voxplan-tour-callout-center' : ''} ${isMobileTop ? 'voxplan-tour-callout-top-mobile' : ''}`}
       style={style}
       tabIndex={-1}
       id="voxplan-tour-callout-card"

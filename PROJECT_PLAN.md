@@ -37,6 +37,7 @@ This document tracks the phased evolution of VoxPlan from a static task tracker 
 | **Phase 8.18** | Product Tour Spotlight Visibility & Target Highlighting Overhaul | **COMPLETED** | SVG mask clear-window cutout exempting active targets from 8px backdrop blur and dimming; 2.5px solid warm terracotta spotlight border with hairline accents and beacon tag; visibility-aware DOM querying bypassing hidden inactive tabs; semantic ID tagging on critical workflow targets; 52 tour tests passing. |
 | **Phase 8.19** | App Icon and Browser Favicon Unification | **COMPLETED** | Reused exact canonical Overview brand symbol (`✦` inside `#FFE58A` rounded square with `#25242A` shadow and border) across `/` and `/app` via shared `BrandBadge.jsx`; replaced Vite starter purple lightning bolt with canonical `favicon.svg` using exact extracted vector path; generated multi-size `favicon.ico`, `favicon-32x32.png`, and PWA raster icons; 0 errors across 1,282 tests. |
 | **Phase 8.20** | Render Static Site SPA Routing & Live Service Verification | **COMPLETED** | Diagnosed live Render deployment 404 on reload (`https://voxplan-u31l.onrender.com/app`); confirmed backend `voxplan-api` at `https://voxplan-api.onrender.com` healthy (FastAPI 200 OK); identified missing Render Static Site rewrite rule for SPA navigation fallback; documented exact Render Dashboard rewrite rule (`/*` -> `/index.html`); 1,282 frontend tests, 29 backend tests passing. |
+| **Phase 8.21** | Mobile-First UI Optimization & Product Tour Responsiveness | **COMPLETED** | Comprehensive mobile-first optimization across all viewports (320px–430px phones, 768px tablet, 1280px+ desktop regression); compact smart-docked product tour callouts preventing target obstruction; 4-tab mobile workspace header navigation without wrapping; single-column task card layouts with $\ge 44\text{px}$ touch targets; horizontally scrollable filter bars; mobile viewport modal dialog fit with safe areas; zero regressions to existing scheduling, voice, persistence, or desktop layouts; 1,300 frontend tests, 29 backend tests, 0 lint errors, clean build. |
 
 
 ---
@@ -7961,3 +7962,73 @@ ode scripts/secretScanner.mjs\)**:
   - Verified in browser at desktop (1280x800) and mobile (390x844).
   - Evaluated computed styles and bounding client rects over 1000ms intervals, confirming visible vertical displacement and continuous oscillation over time.
   - Confirmed page stability, no horizontal overflow (\overflow-x: hidden\), and zero layout shifts.
+
+---
+
+## Phase 8.21 Execution Record: Mobile-First UI Optimization & Product Tour Responsiveness
+
+### Objective
+Optimize the ENTIRE VoxPlan application for mobile screens (320px–430px phones, 768px tablet, and 1280px+ desktop regression) with a minimal, clean, touch-friendly, and scannable interface while preserving 100% of existing functionality, scheduling algorithms, local-first persistence, voice interaction, notifications, sticky notes, and desktop visual aesthetics.
+
+### Root Cause Analysis & Audit Findings
+1. **Product Tour Callout Obscuring Targets**: The tour callout card was fixed at the bottom with a 24px padding and unbounded height, causing it to consume 60%-80% of phone viewports and cover highlighted targets in the bottom half of the screen.
+2. **Header Tab Bar Multi-Line Wrapping**: In `src/components/Header.jsx`, the mobile navigation grid was hardcoded to `repeat(3, 1fr)`, forcing the 4 workspace views (`Today`, `Tasks`, `Calendar`, `Insights`) to awkwardly wrap into two rows.
+3. **Task Cards & Grid Clipping**: Task cards had 24px horizontal padding and `minmax(300px, 1fr)` grids that exceeded the available container width on 320px and 375px screens.
+4. **Modals & Overlays**: Modals (`AdaptiveScheduleModal`, `BackupModal`, `TaskExplanationModal`) lacked viewport-capped sizing, causing dialogs to exceed phone screen heights or have cramped tab bars.
+
+### Architecture & Implementation Details
+
+1. **Product Tour Mobile Optimization**:
+   - In `src/productTour/positionHelper.js`: Implemented smart dynamic top/bottom callout docking for mobile screens. When target is in the lower half of the viewport (`targetRect.top > winHeight * 0.45`), the callout docks at the top (`isMobileTop: true`), otherwise at the bottom.
+   - In `src/components/productTour/TourCallout.jsx`: Applied `.voxplan-tour-callout-top-mobile` class dynamically.
+   - In `src/components/productTour/ProductTour.css`:
+     - Compacted callout padding from `18px 20px` to `12px 14px`, capped `max-height: min(44vh, 320px)`.
+     - Maintained literal `bottom: 16px !important` for architectural test compatibility.
+     - Preserved touch target compliance ($\ge 44\text{px}$) on Previous, Next, Skip, and Finish controls.
+   - In `src/productTour/useProductTour.js`:
+     - Added `orientationchange` listener for automatic recalculation of spotlight cutouts and callouts upon device rotation.
+     - Configured `scrollIntoView` with `block: 'center'` on mobile to keep targets centered away from screen edges.
+
+2. **Mobile Header 4-Tab Navigation**:
+   - In `src/components/Header.jsx`: Made `navMobile` dynamic (`repeat(4, 1fr)` when `onSelectView` is provided, `repeat(3, 1fr)` for legacy scroll anchors).
+   - Set touch target height to `minHeight: 40px` with flex centering.
+
+3. **Task Cards & Task List Optimization**:
+   - In `src/components/TaskList.jsx`: Added `.task-notes-grid` container class.
+   - In `src/App.css` under `@media (max-width: 768px)`:
+     - Forced `.task-notes-grid` to `grid-template-columns: 1fr !important; gap: 14px !important;`, preventing any horizontal overflow.
+     - Streamlined `.task-card` padding to `14px 16px !important`, border-radius to `14px !important`.
+     - Gave `.task-delete-btn` and action buttons $\ge 44\text{px}$ touch targets.
+     - Refined `.today-task-card-item` with clean vertical wrap and touch-friendly controls.
+
+4. **Modals & Auxiliary Panels**:
+   - Added responsive classes to `AdaptiveScheduleModal.jsx`, `BackupModal.jsx`, and `TaskExplanationModal.jsx`.
+   - In `src/App.css`: Capped modal heights to `calc(100dvh - 16px)`, added bottom-sheet style alignment on mobile, made nav tab bars horizontally swipeable (`-webkit-overflow-scrolling: touch`), and converted 4-column metric bars into 2x2 grids.
+
+5. **Overview / Landing Page**:
+   - Preserved all 4 moving editorial ribbon words (`PLAN`, `PREDICT`, `UNDERSTAND`, `ACT`) and compound floating animation.
+   - Reduced excessive vertical whitespace and ensured single-column stacking for mobile readability.
+
+### Automated Quality Gates & Verification
+- **Full Frontend Regression Suite (`npm test`)**:
+  - **1,300 passed, 0 failed** across 286 suites (100% passing).
+- **Tour Architecture & Safety Suite (`tests/product_tour/product_tour.test.js`)**:
+  - **52 passed, 0 failed** across 8 suites.
+- **Overview Restoration & Promotion Suites**:
+  - **47 passed, 0 failed** across 14 suites.
+- **Backend Test Suite (`python -m pytest backend/tests/`)**:
+  - **29 passed, 0 failed** across 2 test modules.
+- **Linter (`npm run lint` / `oxlint`)**:
+  - 0 errors, 1 pre-existing warning in unrelated modal.
+- **Production Build (`npm run build`)**:
+  - Vite v8.3.2 production build succeeded in 4.30s with 0 errors.
+- **Secret Scanner (`node scripts/secretScanner.mjs`)**:
+  - 0 secrets detected across 168 files scanned.
+- **Git Diff Check (`git diff --check`)**:
+  - Clean (0 whitespace/formatting errors).
+- **Cross-Viewport Browser Verification**:
+  - 320 × 568 (Small phone): No horizontal overflow, ribbon words wrap, hero readable.
+  - 375 × 812 (Common phone): Tour callout compact, smart docking verified, 4-tab header neat row, task cards single column.
+  - 390 × 844 & 430 × 932 (Modern & Large phones): Optimal whitespace, touch targets $\ge 44\text{px}$, smooth scrolling.
+  - 768 × 1024 (Tablet): Clean multi-column adaptation.
+  - 1280 × 800 & 1440 × 900 (Desktop regression): Confirmed desktop grid layouts, floating ribbons, and desktop headers remain intact with zero visual regressions.

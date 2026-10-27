@@ -138,7 +138,7 @@ export default function TaskList({
         </div>
 
         {/* Clean Modern Cards Grid */}
-        <div style={styles.notesGrid}>
+        <div style={styles.notesGrid} className="task-notes-grid">
           {filteredTasks.map((task, index) => {
             // Find global index in original tasks array for reordering
             const globalIndex = tasks.findIndex((t) => t.id === task.id);

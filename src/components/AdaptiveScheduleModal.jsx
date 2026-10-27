@@ -538,8 +538,8 @@ export default function AdaptiveScheduleModal({
   const badge = getFeasibilityBadge();
 
   return (
-    <div style={styles.backdrop} onClick={() => handleDiscard('user_closed')} role="dialog" aria-modal="true" aria-labelledby="modal-title">
-      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+    <div style={styles.backdrop} className="adaptive-modal-backdrop" onClick={() => handleDiscard('user_closed')} role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div style={styles.modal} className="adaptive-modal-container" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div style={styles.header}>
           <div style={styles.headerTitleGroup}>
@@ -567,6 +567,7 @@ export default function AdaptiveScheduleModal({
         {/* Tab Navigation */}
         <div
           style={styles.navTabBar}
+          className="adaptive-modal-nav-tabbar"
           role="tablist"
           aria-label="Adaptive Schedule Navigation"
           onKeyDown={(e) => {
@@ -780,7 +781,7 @@ export default function AdaptiveScheduleModal({
             </div>
 
             {/* Metrics Ribbon */}
-            <div style={styles.metricsGrid}>
+            <div style={styles.metricsGrid} className="adaptive-modal-metrics-grid">
               <div style={styles.metricCard}>
                 <span style={styles.metricVal}>
                   {summary.scheduledCount || summary.scheduledTasksCount || 0} / {summary.totalEligibleTasks || 0}

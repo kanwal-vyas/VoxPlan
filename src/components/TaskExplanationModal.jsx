@@ -64,12 +64,13 @@ export default function TaskExplanationModal({ task, prediction, onClose }) {
   return (
     <div
       style={styles.backdrop}
+      className="task-explanation-backdrop"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-labelledby="task-explanation-title"
     >
-      <div style={styles.sheet} onClick={(e) => e.stopPropagation()}>
+      <div style={styles.sheet} className="task-explanation-sheet" onClick={(e) => e.stopPropagation()}>
         {/* Modal Top Row */}
         <div style={styles.topRow}>
           <div style={styles.badgeGroup}>

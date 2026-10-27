@@ -222,12 +222,13 @@ export default function BackupModal({
   if (!isOpen) return null;
 
   return (
-    <div style={styles.backdrop} onClick={handleClose}>
+    <div style={styles.backdrop} className="backup-modal-backdrop" onClick={handleClose}>
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="backup-modal-title"
         style={styles.modal}
+        className="backup-modal-card"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

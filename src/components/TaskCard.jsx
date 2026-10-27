@@ -297,6 +297,7 @@ export default function TaskCard({
           {/* Custom modern checkbox */}
           <button
             type="button"
+            className="task-checkbox-btn"
             onClick={handleCheckboxClick}
             style={{
               ...styles.checkbox,
