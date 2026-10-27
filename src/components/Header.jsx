@@ -86,129 +86,127 @@ export default function Header({
           aria-label={onNavigate ? 'Back to VoxPlan product landing page' : 'VoxPlan home, scroll to top'}
           title={onNavigate ? 'Back to Product Landing Page' : 'Scroll to top'}
         >
-          <BrandBadge size={isMobile ? 22 : 28} />
-          <span style={{ ...styles.brandName, fontSize: isMobile ? '16px' : '18px' }}>VOXPLAN</span>
+          <BrandBadge size={isMobile ? 18 : 28} />
+          <span style={{ ...styles.brandName, fontSize: isMobile ? '13px' : '18px' }}>VOXPLAN</span>
         </button>
 
-          {/* Center Navigation on Desktop */}
-          {!isMobile && (
-            <nav style={styles.nav} aria-label="Sections">
-              {onNavigate && (
+          {/* Center Navigation (Unified Single Row on both Desktop and Mobile) */}
+          <nav
+            style={isMobile ? styles.navMobileSingleRow : styles.nav}
+            aria-label="Sections"
+          >
+            {onNavigate && !isMobile && (
+              <button
+                type="button"
+                id="header-nav-landing-btn"
+                onClick={() => onNavigate('/')}
+                style={styles.navLandingLink}
+                title="Return to Product Landing Page"
+              >
+                ← Overview
+              </button>
+            )}
+
+            {onSelectView ? (
+              <>
                 <button
                   type="button"
-                  id="header-nav-landing-btn"
-                  onClick={() => onNavigate('/')}
-                  style={styles.navLandingLink}
-                  title="Return to Product Landing Page"
+                  id="nav-tab-today"
+                  onClick={() => onSelectView('today')}
+                  aria-current={currentView === 'today' ? 'page' : undefined}
+                  style={{
+                    ...(currentView === 'today' ? styles.activeNavLink : styles.navLink),
+                    ...(isMobile ? (currentView === 'today' ? styles.activeNavLinkMobileSingleRow : styles.navLinkMobileSingleRow) : {}),
+                  }}
                 >
-                  ← Overview
+                  Today
                 </button>
-              )}
-
-              {onSelectView ? (
-                <>
-                  <button
-                    type="button"
-                    id="nav-tab-today"
-                    onClick={() => onSelectView('today')}
-                    aria-current={currentView === 'today' ? 'page' : undefined}
-                    style={{
-                      ...styles.navLink,
-                      ...(currentView === 'today' ? styles.activeNavLink : {}),
-                    }}
-                  >
-                    Today
-                  </button>
-                  <button
-                    type="button"
-                    id="nav-tab-tasks"
-                    onClick={() => onSelectView('tasks')}
-                    aria-current={currentView === 'tasks' ? 'page' : undefined}
-                    style={{
-                      ...styles.navLink,
-                      ...(currentView === 'tasks' ? styles.activeNavLink : {}),
-                    }}
-                  >
-                    Tasks
-                  </button>
-                  <button
-                    type="button"
-                    id="nav-tab-calendar"
-                    onClick={() => onSelectView('calendar')}
-                    aria-current={currentView === 'calendar' ? 'page' : undefined}
-                    style={{
-                      ...styles.navLink,
-                      ...(currentView === 'calendar' ? styles.activeNavLink : {}),
-                    }}
-                  >
-                    Calendar
-                  </button>
-                  <button
-                    type="button"
-                    id="nav-tab-insights"
-                    onClick={() => onSelectView('insights')}
-                    aria-current={currentView === 'insights' ? 'page' : undefined}
-                    style={{
-                      ...styles.navLink,
-                      ...(currentView === 'insights' ? styles.activeNavLink : {}),
-                    }}
-                  >
-                    Insights
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => onScrollToSection && onScrollToSection('pulse')}
-                    style={styles.navLink}
-                  >
-                    Today
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onScrollToSection && onScrollToSection('landscape')}
-                    style={styles.navLink}
-                  >
-                    Tasks
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onScrollToSection && onScrollToSection('intelligence')}
-                    style={styles.navLink}
-                  >
-                    Baseline
-                  </button>
-                </>
-              )}
-            </nav>
-          )}
+                <button
+                  type="button"
+                  id="nav-tab-tasks"
+                  onClick={() => onSelectView('tasks')}
+                  aria-current={currentView === 'tasks' ? 'page' : undefined}
+                  style={{
+                    ...(currentView === 'tasks' ? styles.activeNavLink : styles.navLink),
+                    ...(isMobile ? (currentView === 'tasks' ? styles.activeNavLinkMobileSingleRow : styles.navLinkMobileSingleRow) : {}),
+                  }}
+                >
+                  Tasks
+                </button>
+                <button
+                  type="button"
+                  id="nav-tab-calendar"
+                  onClick={() => onSelectView('calendar')}
+                  aria-current={currentView === 'calendar' ? 'page' : undefined}
+                  style={{
+                    ...(currentView === 'calendar' ? styles.activeNavLink : styles.navLink),
+                    ...(isMobile ? (currentView === 'calendar' ? styles.activeNavLinkMobileSingleRow : styles.navLinkMobileSingleRow) : {}),
+                  }}
+                >
+                  Calendar
+                </button>
+                <button
+                  type="button"
+                  id="nav-tab-insights"
+                  onClick={() => onSelectView('insights')}
+                  aria-current={currentView === 'insights' ? 'page' : undefined}
+                  style={{
+                    ...(currentView === 'insights' ? styles.activeNavLink : styles.navLink),
+                    ...(isMobile ? (currentView === 'insights' ? styles.activeNavLinkMobileSingleRow : styles.navLinkMobileSingleRow) : {}),
+                  }}
+                >
+                  Insights
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onScrollToSection && onScrollToSection('pulse')}
+                  style={isMobile ? styles.navLinkMobileSingleRow : styles.navLink}
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onScrollToSection && onScrollToSection('landscape')}
+                  style={isMobile ? styles.navLinkMobileSingleRow : styles.navLink}
+                >
+                  Tasks
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onScrollToSection && onScrollToSection('intelligence')}
+                  style={isMobile ? styles.navLinkMobileSingleRow : styles.navLink}
+                >
+                  {isMobile ? 'Insights' : 'Baseline'}
+                </button>
+              </>
+            )}
+          </nav>
 
           {/* Right Controls: Status & Actions */}
           <div style={styles.rightGroup}>
-            {/* Concise Status Indicator */}
-            <div
-              style={{
-                ...styles.statusPill,
-                padding: isMobile ? '4px 6px' : '4px 10px',
-              }}
-              title={isBackendOnline ? (isTrained ? 'Model trained & ready' : 'Local planner active') : 'Offline'}
-              aria-label={isBackendOnline ? (isTrained ? 'Brain active' : 'Ready') : 'Offline'}
-            >
-              <span
-                style={{
-                  ...styles.statusDot,
-                  backgroundColor: isBackendOnline ? '#2D6A4F' : '#D9383A',
-                }}
-              />
-              {!isMobile && (
+            {/* Desktop Status Indicator (Moved to Overflow Menu on Mobile) */}
+            {!isMobile && (
+              <div
+                style={styles.statusPill}
+                title={isBackendOnline ? (isTrained ? 'Model trained & ready' : 'Local planner active') : 'Offline'}
+                aria-label={isBackendOnline ? (isTrained ? 'Brain active' : 'Ready') : 'Offline'}
+              >
+                <span
+                  style={{
+                    ...styles.statusDot,
+                    backgroundColor: isBackendOnline ? '#2D6A4F' : '#D9383A',
+                  }}
+                />
                 <span style={styles.statusText}>
                   {isBackendOnline
                     ? (isTrained ? 'Brain active' : 'Ready')
                     : 'Offline'}
                 </span>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Notification Bell & Center Dropdown */}
             <div style={{ position: 'relative' }}>
@@ -309,6 +307,19 @@ export default function Header({
                 {/* Mobile Dropdown Menu */}
                 {isMenuOpen && (
                   <div id="header-overflow-menu" style={styles.dropdownMenu}>
+                    <div style={styles.menuStatusHeader}>
+                      <span
+                        style={{
+                          ...styles.statusDot,
+                          backgroundColor: isBackendOnline ? '#2D6A4F' : '#D9383A',
+                        }}
+                      />
+                      <span>
+                        {isBackendOnline
+                          ? (isTrained ? 'Brain active · Ready' : 'Local planner active')
+                          : 'Offline'}
+                      </span>
+                    </div>
                     {onStartTour && (
                       <button
                         type="button"
@@ -403,94 +414,6 @@ export default function Header({
             )}
           </div>
         </div>
-
-        {/* Mobile Navigation Tabs: Compact 2nd row */}
-        {isMobile && (
-          <nav
-            style={{
-              ...styles.navMobile,
-              gridTemplateColumns: onSelectView ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)',
-            }}
-            aria-label="Sections"
-          >
-            {onSelectView ? (
-              <>
-                <button
-                  type="button"
-                  id="nav-tab-today"
-                  onClick={() => onSelectView('today')}
-                  aria-current={currentView === 'today' ? 'page' : undefined}
-                  style={{
-                    ...styles.navLinkMobile,
-                    ...(currentView === 'today' ? styles.activeNavLinkMobile : {}),
-                  }}
-                >
-                  Today
-                </button>
-                <button
-                  type="button"
-                  id="nav-tab-tasks"
-                  onClick={() => onSelectView('tasks')}
-                  aria-current={currentView === 'tasks' ? 'page' : undefined}
-                  style={{
-                    ...styles.navLinkMobile,
-                    ...(currentView === 'tasks' ? styles.activeNavLinkMobile : {}),
-                  }}
-                >
-                  Tasks
-                </button>
-                <button
-                  type="button"
-                  id="nav-tab-calendar"
-                  onClick={() => onSelectView('calendar')}
-                  aria-current={currentView === 'calendar' ? 'page' : undefined}
-                  style={{
-                    ...styles.navLinkMobile,
-                    ...(currentView === 'calendar' ? styles.activeNavLinkMobile : {}),
-                  }}
-                >
-                  Calendar
-                </button>
-                <button
-                  type="button"
-                  id="nav-tab-insights"
-                  onClick={() => onSelectView('insights')}
-                  aria-current={currentView === 'insights' ? 'page' : undefined}
-                  style={{
-                    ...styles.navLinkMobile,
-                    ...(currentView === 'insights' ? styles.activeNavLinkMobile : {}),
-                  }}
-                >
-                  Insights
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={() => onScrollToSection && onScrollToSection('pulse')}
-                  style={styles.navLinkMobile}
-                >
-                  Today
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onScrollToSection && onScrollToSection('landscape')}
-                  style={styles.navLinkMobile}
-                >
-                  Tasks
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onScrollToSection && onScrollToSection('intelligence')}
-                  style={styles.navLinkMobile}
-                >
-                  Insights
-                </button>
-              </>
-            )}
-          </nav>
-        )}
       </div>
       {/* Notification Preferences Modal */}
       {isNotificationSettingsOpen && (
@@ -519,14 +442,14 @@ const styles = {
     maxWidth: '1120px',
     margin: '0 auto',
     display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-    padding: '6px 10px',
+    alignItems: 'center',
+    padding: '4px 10px',
     backgroundColor: 'rgba(252, 250, 246, 0.95)',
     backdropFilter: 'blur(12px)',
-    borderRadius: '14px',
+    borderRadius: '12px',
     border: '1px solid rgba(61, 38, 69, 0.10)',
     boxShadow: '0 2px 10px rgba(61, 38, 69, 0.04)',
+    minHeight: '42px',
   },
   topRow: {
     display: 'flex',
@@ -604,6 +527,40 @@ const styles = {
     flexShrink: 0,
     whiteSpace: 'nowrap',
   },
+  navMobileSingleRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '2px',
+    backgroundColor: '#F4F1EA',
+    padding: '2px',
+    borderRadius: '8px',
+    border: '1px solid rgba(61, 38, 69, 0.08)',
+    overflowX: 'auto',
+    maxWidth: '100%',
+    scrollbarWidth: 'none',
+    WebkitOverflowScrolling: 'touch',
+    flexShrink: 1,
+  },
+  navLinkMobileSingleRow: {
+    background: 'transparent',
+    border: 'none',
+    color: '#5E5B66',
+    fontSize: '11px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    padding: '3px 6px',
+    borderRadius: '6px',
+    transition: 'all 0.15s ease',
+    flexShrink: 0,
+    whiteSpace: 'nowrap',
+    minHeight: '26px',
+  },
+  activeNavLinkMobileSingleRow: {
+    backgroundColor: '#201E23',
+    color: '#FFFFFF',
+    fontWeight: '700',
+    boxShadow: '0 1px 3px rgba(32, 30, 35, 0.15)',
+  },
   navMobile: {
     display: 'grid',
     gridTemplateColumns: 'repeat(3, 1fr)',
@@ -640,10 +597,21 @@ const styles = {
     fontWeight: '700',
     boxShadow: '0 1px 4px rgba(32, 30, 35, 0.15)',
   },
+  menuStatusHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '6px 10px',
+    fontSize: '11px',
+    fontWeight: '700',
+    color: '#5E5B66',
+    borderBottom: '1px solid rgba(30, 30, 34, 0.08)',
+    marginBottom: '2px',
+  },
   rightGroup: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    gap: '6px',
     flexShrink: 0,
   },
   statusPill: {

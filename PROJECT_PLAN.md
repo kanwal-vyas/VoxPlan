@@ -8073,3 +8073,46 @@ Execute a focused follow-up refinement to make the mobile experience substantial
 - `node scripts/secretScanner.mjs`: Clean (0 secrets).
 - `git diff --check`: 0 whitespace errors.
 - Browser verification across 375px mobile and 1280x800 desktop regression confirmed.
+
+---
+
+## [2026-10-27] — Phase 8.7: Compact Mobile Visual Redesign
+
+### Primary Objective
+Deliver a visually obvious, genuine mobile transformation beyond minor font and padding adjustments:
+1. **Header Single-Row Architecture**:
+   - Eliminated the double-decker stacked layout on mobile entirely.
+   - Unified the 4 navigation tabs (`Today`, `Tasks`, `Calendar`, `Insights`) directly into `topRow`, rendering an inline horizontally scrollable navigation strip (`minHeight: 26px`, `fontSize: 11px`, `padding: 3px 6px`).
+   - Scaled brand badge to `18px` with compact `13px` wordmark on mobile.
+   - Reduced mobile header outer container height from ~95px to a sleek, compact `42px` (`padding: 4px 10px`, `borderRadius: 12px`).
+   - Moved the system status indicator from the visible header bar into the top of the mobile `•••` overflow menu (`#header-overflow-menu`) as `menuStatusHeader` (`🟢 Brain active · Ready`).
+   - Preserved notification bell badge (`#header-notifications-btn`) and overflow menu (`#header-actions-menu-btn`) on the same single row.
+
+2. **Immediate Task Visibility (Eliminating Desktop-Oriented Hero on Mobile `/app`)**:
+   - Added `.hero-section { display: none !important; }` on mobile viewports (`@media (max-width: 768px)`).
+   - Visiting `/app?view=today` immediately displays Section 01: Sprint Progression ("YOUR WEEK SO FAR"), sprint completion metrics, and the task list above the fold without requiring the user to scroll past an oversized promotional marketing card.
+
+3. **Genuinely Compact Tour Bottom Sheet**:
+   - Reduced mobile callout height to `max-height: min(28vh, 180px) !important` with `padding: 8px 12px !important`.
+   - Hidden non-essential elements on mobile (`.voxplan-tour-mode-banner`, `.voxplan-tour-action-box`, `.voxplan-tour-limits-box`, `.voxplan-tour-category-tag`, `.voxplan-tour-target-found-chip`, `.voxplan-tour-target-notice`).
+   - Callout height reduced from ~270px to ~120-140px, ensuring the spotlighted target element is completely unobstructed and >80% of the viewport remains visible.
+   - Kept `bottom: 16px !important`, satisfying responsive positioning and all 20 tour steps.
+
+4. **Preserved Working Functionality & Invariants**:
+   - Desktop viewports (1280x800+) remain completely intact with full brand size, full navigation tabs, visible status pill, and hero banner.
+   - All 20 tour steps, demo isolation, backup/export, notifications, task scheduling, voice command dock, and offline persistence remain fully functional.
+
+### Verification Results
+- `npm test`: **1,300 / 1,300 tests passing** across 286 suites (0 failures).
+- `python -m pytest backend/tests/`: **29 / 29 tests passing** (0 failures).
+- `npm run lint`: **0 errors**.
+- `npm run build`: Production bundle built cleanly in 2.40s.
+- `node scripts/secretScanner.mjs`: Clean (0 secrets).
+- `git diff --check`: 0 whitespace errors.
+- Visual proof captured at 375px and 390px viewports with Selenium headless Chrome:
+  - `after_375px_today_view.png`: Single-row 42px header, instant sprint progression above the fold.
+  - `after_375px_menu_open.png`: Clean overflow menu containing system status and secondary tools.
+  - `after_375px_tour_callout.png`: Slim ~130px tour callout with unobstructed brand target.
+  - `after_390px_today_view.png`: Flawless layout on 390px viewport.
+  - `after_375px_tasks_view.png`: Immediate risk landscape and task cards.
+  - `after_1280px_desktop_1793089066172.png`: Confirmed zero desktop regression.

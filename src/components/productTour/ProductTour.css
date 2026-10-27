@@ -468,84 +468,69 @@
   .voxplan-tour-callout {
     top: auto !important;
     bottom: 16px !important;
-    left: 16px !important;
-    right: 16px !important;
+    left: 12px !important;
+    right: 12px !important;
     width: auto !important;
-    max-width: calc(100vw - 32px) !important;
+    max-width: calc(100vw - 24px) !important;
     transform: none !important;
-    padding: 10px 12px !important;
-    max-height: min(38vh, 270px) !important;
+    padding: 8px 12px !important;
+    max-height: min(28vh, 180px) !important;
     overflow-y: auto !important;
-    border-radius: 14px !important;
+    border-radius: 12px !important;
     box-shadow: 0 8px 24px rgba(32, 30, 35, 0.28) !important;
+    gap: 4px !important;
   }
 
   /* When target is in bottom half of mobile screen, dock at top so target remains 100% visible */
   .voxplan-tour-callout.voxplan-tour-callout-top-mobile {
-    top: max(12px, env(safe-area-inset-top, 12px)) !important;
+    top: max(8px, env(safe-area-inset-top, 8px)) !important;
     bottom: auto !important;
   }
 
   /* Compact Header */
   .voxplan-tour-header {
-    margin-bottom: 4px !important;
-    gap: 6px !important;
+    margin-bottom: 2px !important;
+    gap: 4px !important;
   }
 
   .voxplan-tour-step-badge {
     font-size: 10px !important;
-    padding: 2px 7px !important;
+    padding: 2px 6px !important;
   }
 
-  /* Hide secondary badges on mobile to keep focus on step number and target */
+  /* Hide secondary banners, boxes, chips, and redundant labels on mobile to keep focus on step and target */
+  .voxplan-tour-mode-banner,
+  .voxplan-tour-action-box,
+  .voxplan-tour-limits-box,
   .voxplan-tour-category-tag,
-  .voxplan-tour-target-found-chip {
+  .voxplan-tour-target-found-chip,
+  .voxplan-tour-target-notice {
     display: none !important;
   }
 
   .voxplan-tour-close-btn {
-    width: 36px !important;
-    height: 36px !important;
-    min-width: 36px !important;
-    min-height: 36px !important;
-    font-size: 14px !important;
-  }
-
-  /* Compact Mode Banner */
-  .voxplan-tour-mode-banner {
-    padding: 3px 6px !important;
-    margin-bottom: 6px !important;
-    font-size: 11px !important;
-  }
-
-  .voxplan-tour-mode-btn {
-    font-size: 10px !important;
-    padding: 2px 5px !important;
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+    min-height: 30px !important;
+    font-size: 13px !important;
   }
 
   /* Compact Title & Description */
   .voxplan-tour-title {
-    font-size: 14px !important;
-    line-height: 1.25 !important;
-    margin-bottom: 3px !important;
+    font-size: 13px !important;
+    line-height: 1.2 !important;
+    margin-bottom: 2px !important;
   }
 
   .voxplan-tour-desc {
-    font-size: 12px !important;
-    line-height: 1.35 !important;
-    margin-bottom: 6px !important;
-  }
-
-  /* Compact Hint Box and hide secondary limits box on mobile */
-  .voxplan-tour-action-box {
-    padding: 4px 8px !important;
-    margin-bottom: 6px !important;
     font-size: 11px !important;
-    border-radius: 6px !important;
-  }
-
-  .voxplan-tour-limits-box {
-    display: none !important;
+    line-height: 1.35 !important;
+    margin-bottom: 2px !important;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 3 !important;
+    -webkit-box-orient: vertical !important;
+    overflow: hidden !important;
   }
 
   /* Compact Footer */
@@ -553,41 +538,41 @@
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
-    padding-top: 8px !important;
-    margin-top: 4px !important;
+    padding-top: 4px !important;
+    margin-top: 2px !important;
     border-top: 1px solid rgba(61, 38, 69, 0.08) !important;
-    gap: 8px !important;
-  }
-
-  .voxplan-tour-progress-info {
-    font-size: 11px !important;
     gap: 6px !important;
   }
 
+  .voxplan-tour-progress-info {
+    font-size: 10px !important;
+    gap: 4px !important;
+  }
+
   .voxplan-tour-progress-bar {
-    width: 60px !important;
+    width: 48px !important;
     height: 3px !important;
   }
 
   .voxplan-tour-controls {
     display: flex !important;
     align-items: center !important;
-    gap: 6px !important;
+    gap: 4px !important;
   }
 
   .voxplan-tour-btn-primary,
   .voxplan-tour-btn-secondary {
-    min-height: 44px !important;
-    min-width: 44px !important;
-    padding: 8px 14px !important;
-    font-size: 13px !important;
-    border-radius: 8px !important;
+    min-height: 36px !important;
+    min-width: 36px !important;
+    padding: 6px 12px !important;
+    font-size: 12px !important;
+    border-radius: 6px !important;
   }
 
   .voxplan-tour-btn-skip {
-    min-height: 44px !important;
-    padding: 8px 8px !important;
-    font-size: 12px !important;
+    min-height: 36px !important;
+    padding: 6px 6px !important;
+    font-size: 11px !important;
   }
 }
 

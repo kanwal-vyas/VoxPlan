@@ -754,21 +754,21 @@ a:focus-visible {
   #intelligence > div,
   #calendar-workspace > div,
   #command > div {
-    padding: 14px 12px !important;
-    border-radius: 14px !important;
-    gap: 14px !important;
+    padding: 12px 10px !important;
+    border-radius: 12px !important;
+    gap: 12px !important;
   }
 
-  /* Header Optimization */
+  /* Header Optimization: Single Unified 42px Row on Mobile */
   header {
     top: 4px !important;
     padding: 0 4px !important;
   }
 
   header > div {
-    padding: 5px 8px !important;
+    padding: 4px 8px !important;
     border-radius: 12px !important;
-    gap: 4px !important;
+    min-height: 42px !important;
     justify-content: space-between !important;
   }
 
@@ -777,19 +777,23 @@ a:focus-visible {
   }
 
   nav[aria-label="Sections"] {
-    width: 100% !important;
-    order: 3 !important;
-    justify-content: space-between !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 2px !important;
     padding: 2px !important;
     overflow-x: auto !important;
+    max-width: 100% !important;
+    flex-shrink: 1 !important;
   }
 
   nav[aria-label="Sections"] button {
-    padding: 4px 6px !important;
-    min-height: 32px !important;
-    font-size: 12px !important;
-    flex: 1 !important;
-    text-align: center !important;
+    padding: 3px 6px !important;
+    min-height: 26px !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    border-radius: 6px !important;
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
   }
 
   /* Hide verbose explanatory paragraphs and redundant subtitles on mobile */
@@ -804,25 +808,9 @@ a:focus-visible {
     display: none !important;
   }
 
-  /* Hero Section Mobile */
+  /* On mobile app view, hide marketing hero banner so real tasks appear immediately */
   .hero-section {
-    padding: 12px 0 8px 0 !important;
-    min-height: auto !important;
-  }
-
-  .hero-composition {
-    grid-template-columns: 1fr !important;
-    gap: 12px !important;
-  }
-
-  .hero-preview-cards {
     display: none !important;
-  }
-
-  .hero-headline {
-    font-size: clamp(24px, 6vw, 30px) !important;
-    line-height: 1.15 !important;
-    margin-bottom: 4px !important;
   }
 
   /* Full-width CTA with touch target */
