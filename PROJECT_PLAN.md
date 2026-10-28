@@ -8248,3 +8248,49 @@ Deliver a visually obvious, genuine mobile transformation beyond minor font and 
   - `after_tasks_375x812.png`: Substantially less bulky task cards on 375px.
   - `after_calendar_1280x800.png` vs `before_calendar_1280x800.png`: Verified pixel-for-pixel desktop identical.
   - `after_tasks_1280x800.png` vs `before_tasks_1280x800.png`: Verified pixel-for-pixel desktop identical.
+
+---
+
+## [2026-10-28] — Phase 8.24: Mobile Task Card Density & Compact Layout Optimization
+
+### Primary Objectives & Requirements
+
+1. **Drastically Reduce Mobile Task Card Height**:
+   - Card height reduced by over 60% (from ~190px down to ~70px on mobile viewports like 375×812), allowing 8+ tasks to fit above the fold instead of only 1.5–2 cards previously.
+   - Vertical padding minimized to `6px 10px` (desktop remains untouched at `22px 24px`), row gap reduced to `2px`, column gap `6px`, and task container vertical gap reduced to `6px`.
+   - Removed oversized containers, unnecessary empty space, and vertical stacking without introducing fixed heights that could clip content.
+
+2. **Streamlined 3-Row Grid Layout**:
+   - **Row 1 (Title & Primary Controls)**: Title area (`.task-card-title-area`) with natural word-wrapping at `13.5px` font size and `1.25` line height on the left; completion checkbox, reorder drag handle, and quick delete buttons scaled down to compact sizes (22px, 18px, 20px) on the right.
+   - **Row 2 (Essential Metadata & Status)**: Left column (`.task-card-left-tags`) houses the compact priority badge (8.5px font, 18px height) and sticky note memo trigger; right column (`.task-card-footer`) contains risk percentage / completed status badge and quick details link with zero border-top or extra padding.
+   - **Row 3 (Secondary Meta & Timer)**: `.task-card-middle-meta` spans full width with a subtle hairline top border (`padding-top: 2px`), placing due date and effort estimate on the left, and the active stopwatch timer button on the right.
+
+3. **Elimination of Visual Clutter**:
+   - Redundant "model offline" status placeholder text hidden on mobile (`.task-card-footer > span:last-child:not([class]) { display: none !important; }`), preventing awkward multi-line badge wrapping on 320px screens.
+   - Preserved natural title wrapping, essential warnings, risk indicators, and task notes.
+
+4. **100% Interaction & Functional Parity**:
+   - Preserved all interactive operations: task completion, inline title editing, deletion, timer start/stop, priority cycling (Low -> Med -> High -> Urgent), sticky note viewing, and duration prompts.
+   - Retained accessible touch targets (>= 28px touch target areas via button padding) and full keyboard accessibility.
+   - Zero changes to task data models, persistence, IndexedDB, or scheduling logic.
+
+5. **Strict Desktop Invariant Preservation**:
+   - Desktop styles, base JSX styles in `TaskCard.jsx`, flex direction, and `22px 24px` card padding strictly preserved.
+   - Desktop viewport screenshots at 1280×800 and 1440×900 verified 100% pixel-identical to baseline.
+
+### Automated Test Suite & Verification Results
+- **Automated Regression Suite (`tests/mobile_calendar_navigation_cards.test.js`)**:
+  - Validated 2-column grid layout, `6px 10px` padding, 13.5px title scaling, suppressed redundant footer text, compact button heights, and desktop invariant preservation.
+- **Frontend Test Suite (`npm test`)**:
+  - **1,314 passed, 0 failed** across 291 test suites.
+- **Linter (`npm run lint`)**:
+  - **0 errors** (1 pre-existing warning in `AdaptiveScheduleModal.jsx`).
+- **Production Build (`npm run build`)**:
+  - Built cleanly in 5.42s with zero errors.
+- **Visual Evidence Verified**:
+  - `mobile_320x750_1793121644533.png`: Zero overflow, clean 3-row layout on narrow 320px screen.
+  - `mobile_375x812_1793121636411.png`: Clean 70px card height, 8+ cards visible above the fold on 375px.
+  - `mobile_390x844_1793121651879.png`: Compact, high-density layout on 390px.
+  - `desktop_1280x800_loaded_1793121615162.png`: 1280×800 desktop layout verified 100% unchanged.
+  - `desktop_1440x900_1793121625833.png`: 1440×900 desktop layout verified 100% unchanged.
+  - `priority_cycled_card_1793121684530.png`: Interactive priority cycling and completion prompt confirmed operational.

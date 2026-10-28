@@ -338,7 +338,7 @@ export default function TaskCard({
       {/* Task Title Area */}
       <div style={styles.titleArea} className="task-card-title-area">
         {isEditing ? (
-          <div style={styles.editRow} onClick={(e) => e.stopPropagation()}>
+          <div style={styles.editRow} className="task-card-edit-row" onClick={(e) => e.stopPropagation()}>
             <input
               type="text"
               value={editTitle}
@@ -377,7 +377,7 @@ export default function TaskCard({
             </button>
           </div>
         ) : (
-          <div style={styles.titleDisplay}>
+          <div style={styles.titleDisplay} className="task-card-title-display">
             <h3
               className="task-card-title"
               style={{
@@ -397,6 +397,7 @@ export default function TaskCard({
                 e.stopPropagation();
                 setIsEditing(true);
               }}
+              className="task-card-edit-trigger"
               style={styles.editTrigger}
               title={`Edit title for "${task.title}"`}
               aria-label={`Edit title for "${task.title}"`}
@@ -409,7 +410,7 @@ export default function TaskCard({
 
       {/* Optional Completion Duration Prompt Modal / Banner */}
       {showDurationPrompt && (
-        <div style={styles.durationPromptBanner} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.durationPromptBanner} className="task-duration-prompt-banner" onClick={(e) => e.stopPropagation()}>
           <div style={styles.durationPromptText}>
             <strong>Task complete!</strong> Log working time?
           </div>

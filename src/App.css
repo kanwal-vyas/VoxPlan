@@ -956,138 +956,284 @@ a:focus-visible {
     gap: 8px !important;
   }
 
-  /* Task Cards: Substantially less bulky, scannable, compact */
-  .task-card {
-    padding: 10px 12px !important;
-    border-radius: 12px !important;
-    gap: 6px !important;
-  }
-
-  .task-card-top-row {
-    gap: 6px !important;
-  }
-
-  .task-card-left-tags {
-    gap: 6px !important;
-    flex-wrap: wrap !important;
-  }
-
-  .task-card-category {
-    font-size: 9.5px !important;
-    letter-spacing: 0.04em !important;
-  }
-
-  .task-card-priority-btn {
-    font-size: 9.5px !important;
+  /* Task Cards: Ultra-compact, highly scannable, mobile-optimized density */
+  #landscape .task-card button,
+  .task-card button {
+    min-height: 20px !important;
     padding: 2px 6px !important;
-    min-height: 24px !important;
-    border-radius: 4px !important;
+    flex-shrink: 0 !important;
   }
 
-  .task-card-action-buttons {
-    gap: 4px !important;
-  }
-
-  .task-card-reorder-btn {
-    width: 26px !important;
-    height: 26px !important;
-    min-width: 26px !important;
-    min-height: 26px !important;
-    font-size: 9px !important;
-  }
-
-  .task-card .task-checkbox-btn {
-    width: 28px !important;
-    height: 28px !important;
-    min-width: 28px !important;
-    min-height: 28px !important;
-  }
-
-  .task-card .task-delete-btn {
-    width: 28px !important;
-    height: 28px !important;
-    min-width: 28px !important;
-    min-height: 28px !important;
-    font-size: 13px !important;
-    padding: 0 !important;
-  }
-
-  /* Title: prominent, readable, naturally wrapped */
-  .task-card-title-area {
-    margin: 1px 0 !important;
-  }
-
-  .task-card-title {
-    font-size: 14.5px !important;
-    line-height: 1.25 !important;
-    letter-spacing: 0.01em !important;
-    margin: 0 !important;
-  }
-
-  /* Middle Meta: Compact row */
-  .task-card-middle-meta {
-    gap: 6px !important;
+  .task-card {
+    display: grid !important;
+    grid-template-columns: 1fr auto !important;
+    padding: 6px 10px !important;
+    border-radius: 10px !important;
+    row-gap: 2px !important;
+    column-gap: 6px !important;
     align-items: center !important;
   }
 
+  .task-card-top-row {
+    display: contents !important;
+  }
+
+  /* Row 1 Left: Task Title Area (prominent, natural wrapping) */
+  .task-card-title-area {
+    grid-column: 1 / 2 !important;
+    grid-row: 1 !important;
+    margin: 0 !important;
+    min-width: 0 !important;
+    flex: none !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  .task-card-title-display {
+    display: flex !important;
+    align-items: baseline !important;
+    gap: 4px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .task-card-title {
+    font-size: 13.5px !important;
+    line-height: 1.25 !important;
+    letter-spacing: 0.01em !important;
+    margin: 0 !important;
+    font-weight: 700 !important;
+    word-break: break-word !important;
+  }
+
+  .task-card-edit-trigger {
+    font-size: 10.5px !important;
+    padding: 0 3px !important;
+    min-height: 18px !important;
+    opacity: 0.65 !important;
+  }
+
+  /* Row 1 Right: Primary Task Actions (reorder, completion checkbox, delete) */
+  .task-card-action-buttons {
+    grid-column: 2 / 3 !important;
+    grid-row: 1 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    gap: 3px !important;
+    flex-shrink: 0 !important;
+    margin: 0 !important;
+  }
+
+  #landscape .task-card .task-checkbox-btn,
+  .task-card .task-checkbox-btn {
+    width: 22px !important;
+    height: 22px !important;
+    min-width: 22px !important;
+    min-height: 22px !important;
+    padding: 0 !important;
+    border-radius: 5px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer !important;
+  }
+
+  #landscape .task-card .task-delete-btn,
+  .task-card .task-delete-btn {
+    width: 20px !important;
+    height: 20px !important;
+    min-width: 20px !important;
+    min-height: 20px !important;
+    font-size: 11px !important;
+    padding: 0 !important;
+    border-radius: 4px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer !important;
+  }
+
+  #landscape .task-card .task-card-reorder-btn,
+  .task-card .task-card-reorder-btn {
+    width: 18px !important;
+    height: 18px !important;
+    min-width: 18px !important;
+    min-height: 18px !important;
+    font-size: 8px !important;
+    padding: 0 !important;
+    border-radius: 3px !important;
+    cursor: pointer !important;
+  }
+
+  /* Row 2 Left: Priority & Sticky Note */
+  .task-card-category {
+    display: none !important;
+  }
+
+  .task-card-left-tags {
+    grid-column: 1 / 2 !important;
+    grid-row: 2 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 3px !important;
+    flex-wrap: nowrap !important;
+    margin: 0 !important;
+    min-width: 0 !important;
+  }
+
+  #landscape .task-card .task-card-priority-btn,
+  .task-card-priority-btn {
+    font-size: 8.5px !important;
+    padding: 1px 4px !important;
+    min-height: 18px !important;
+    border-radius: 4px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.02em !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+  }
+
+  #landscape .task-card .task-sticky-empty-trigger,
+  #landscape .task-card .task-sticky-tab-trigger,
+  .task-card .task-sticky-empty-trigger,
+  .task-card .task-sticky-tab-trigger {
+    font-size: 8.5px !important;
+    padding: 1px 4px !important;
+    min-height: 18px !important;
+    border-radius: 4px !important;
+    white-space: nowrap !important;
+  }
+
+  /* Row 2 Right: Risk Status & Quick Details */
+  .task-card-footer {
+    grid-column: 2 / 3 !important;
+    grid-row: 2 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    gap: 3px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border-top: none !important;
+    flex-shrink: 0 !important;
+  }
+
+  .task-card-risk-wrap {
+    display: flex !important;
+    align-items: center !important;
+    gap: 3px !important;
+  }
+
+  .task-card-risk-wrap .annotated-circle {
+    font-size: 8.5px !important;
+    width: 17px !important;
+    height: 17px !important;
+    min-width: 17px !important;
+    min-height: 17px !important;
+    line-height: 17px !important;
+  }
+
+  .task-card-risk-label {
+    font-size: 8.5px !important;
+    letter-spacing: 0.02em !important;
+    font-weight: 700 !important;
+    white-space: nowrap !important;
+  }
+
+  .task-card-personal-pill {
+    font-size: 8px !important;
+    padding: 0.5px 2.5px !important;
+    border-radius: 3px !important;
+  }
+
+  #landscape .task-card .task-card-explain-btn,
+  .task-card-explain-btn {
+    font-size: 8.5px !important;
+    padding: 1px 4px !important;
+    min-height: 17px !important;
+    white-space: nowrap !important;
+  }
+
+  /* Compact pending & completed indicators; suppress redundant offline placeholder */
+  .task-card-risk-wrap span {
+    font-size: 8.5px !important;
+    white-space: nowrap !important;
+  }
+
+  .task-card-footer > span:last-child:not([class]) {
+    display: none !important;
+  }
+
+  /* Row 3: Due Date, Effort & Timer */
+  .task-card-middle-meta {
+    grid-column: 1 / -1 !important;
+    grid-row: 3 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 4px !important;
+    margin: 0 !important;
+    padding-top: 2px !important;
+    border-top: 1px solid rgba(61, 38, 69, 0.04) !important;
+    flex-wrap: nowrap !important;
+  }
+
   .task-card-date-effort {
-    gap: 6px !important;
-    flex-wrap: wrap !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 3px !important;
+    flex-wrap: nowrap !important;
+    min-width: 0 !important;
   }
 
+  #landscape .task-card .task-card-due-btn,
   .task-card-due-btn {
-    font-size: 11px !important;
-    padding: 3px 7px !important;
-    min-height: 26px !important;
-    border-radius: 6px !important;
+    font-size: 9px !important;
+    padding: 1.5px 4px !important;
+    min-height: 18px !important;
+    border-radius: 4px !important;
+    white-space: nowrap !important;
   }
 
+  #landscape .task-card .task-card-effort-btn,
   .task-card-effort-btn {
-    font-size: 11px !important;
-    padding: 3px 7px !important;
-    min-height: 26px !important;
-    border-radius: 6px !important;
+    font-size: 9px !important;
+    padding: 1.5px 4px !important;
+    min-height: 18px !important;
+    border-radius: 4px !important;
+    white-space: nowrap !important;
   }
 
-  /* Secondary metadata badge hidden on phone */
   .task-card-obs-badge {
     display: none !important;
   }
 
+  #landscape .task-card .task-card-timer-wrap button,
   .task-card-timer-wrap button {
-    font-size: 11px !important;
-    padding: 3px 8px !important;
-    min-height: 26px !important;
-    border-radius: 6px !important;
-  }
-
-  /* Footer: Compact risk and explanation */
-  .task-card-footer {
-    padding-top: 4px !important;
-    border-top: 1px solid rgba(61, 38, 69, 0.06) !important;
-  }
-
-  .task-card-risk-wrap .annotated-circle {
-    font-size: 12px !important;
-    width: 24px !important;
-    height: 24px !important;
-    min-width: 24px !important;
-    min-height: 24px !important;
-  }
-
-  .task-card-risk-label {
-    font-size: 10px !important;
-  }
-
-  .task-card-personal-pill {
     font-size: 9px !important;
-    padding: 1px 4px !important;
+    padding: 1.5px 5px !important;
+    min-height: 18px !important;
+    border-radius: 4px !important;
+    white-space: nowrap !important;
   }
 
-  .task-card-explain-btn {
-    font-size: 10.5px !important;
-    padding: 2px 6px !important;
-    min-height: 24px !important;
+  /* Completion prompt banner & mobile form inputs */
+  .task-duration-prompt-banner {
+    grid-column: 1 / -1 !important;
+    padding: 6px 8px !important;
+    font-size: 11px !important;
+    border-radius: 6px !important;
+    margin: 2px 0 !important;
+  }
+
+  .task-card input[type="text"],
+  .task-card input[type="date"],
+  .task-card input[type="number"] {
+    font-size: 11px !important;
+    min-height: 22px !important;
+    padding: 2px 4px !important;
+    border-radius: 4px !important;
   }
 
   /* Today Focus Section Cards */

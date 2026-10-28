@@ -52,9 +52,11 @@ test('Mobile Navigation, Calendar & Task Card Optimization Suite', async (t) => 
     assert.ok(cardContent.includes('task-card-middle-meta'), 'Must have task-card-middle-meta');
     assert.ok(cardContent.includes('task-card-footer'), 'Must have task-card-footer');
 
-    // Verify CSS rules reduce bulkiness
-    assert.ok(appCss.includes('padding: 10px 12px !important;'), 'App.css must reduce task card padding to 10px 12px');
-    assert.ok(appCss.includes('font-size: 14.5px !important;'), 'App.css must scale task title on mobile');
+    // Verify CSS rules reduce bulkiness and establish compact density
+    assert.ok(appCss.includes('padding: 6px 10px !important;'), 'App.css must reduce task card padding to 6px 10px');
+    assert.ok(appCss.includes('font-size: 13.5px !important;'), 'App.css must scale task title on mobile');
+    assert.ok(appCss.includes('grid-template-columns: 1fr auto !important;'), 'App.css must use compact 2-column grid');
+    assert.ok(appCss.includes('#landscape .task-card button'), 'App.css must scope button heights inside task card');
     assert.ok(appCss.includes('.task-card-obs-badge'), 'App.css must style secondary obs badge');
   });
 
