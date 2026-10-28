@@ -8374,3 +8374,74 @@ Deliver a visually obvious, genuine mobile transformation beyond minor font and 
   - Built cleanly in 605ms. Code-split shared `motif-icons` chunk (22.55 kB) keeps `LandingPage` compact at 79.90 kB (< 80 kB budget).
 - **Git Diff Check (`git diff --check`)**:
   - Clean (0 whitespace/formatting errors).
+
+---
+
+## [2026-10-28] — Phase 8.26: Compact Mobile Calendar Header and Controls
+
+### Primary Objectives & Requirements
+
+1. **Mobile Calendar Height Reduction**:
+   - The calendar card control hub on mobile viewports previously consumed excessive vertical space (373px–407px) before reaching the calendar dates.
+   - Identified excessive wrapping, oversized padding, unconstrained filter pills, and loose control groupings as the root causes of the vertical bloat.
+   - Re-engineered the mobile header and control section into tightly grouped, logically structured rows with 28–32px control heights, zero horizontal blowout, and early visibility of calendar dates above the fold.
+
+2. **Targeted Mobile Enhancements (Scoped to `@media (max-width: 768px)`)**:
+   - **Month Heading**:
+     - Reduced heading font size from oversized clamp down to `16px` editorial serif typography with tightened margins.
+     - Preserved editorial heading typography (`Eagle Lake`), aligned with the compact `TODAY` indicator pill.
+   - **Date Navigation & View Switcher**:
+     - Grouped period navigation (`Today`, `‹`, `›`) and view switcher (`Month`, `Week`, `Day`) into a single compact horizontal flex row (`.calendar-nav-and-view-row`).
+     - Standardized control heights to `30px` with clear, accessible tap areas (`padding: 3px 8px` / `4px 9px`).
+   - **Action Buttons**:
+     - Grouped `Export .ics` and `Tasks List` into a dedicated 2-button symmetrical action bar (`.calendar-action-buttons`).
+     - Symmetrically distributed across the row (`flex: 1`, `height: 30px`) with centered motif icons and labels.
+   - **Priority & Status Filters**:
+     - Arranged priority filters (`All`, `Critical`, `High`, `Medium`, `Low`) into a tight, single-row pill group (`.calendar-priority-filter-group`) with 2px gaps and 28px height.
+     - Arranged status filters (`All`, `Incomplete`, `Completed`) and the `Unscheduled` button into a balanced shared flex row (`.calendar-status-and-unscheduled-group`).
+     - Prevented awkward extra lines on narrow screens while keeping full touch accessibility.
+   - **Unscheduled Tasks Toggle**:
+     - Positioned on the right side of the status filter row, keeping it immediately accessible without dedicating an entire standalone line to it.
+   - **Theme-Matched Legend**:
+     - Replaced bloated/hidden legend with a compact, 1-to-2 line theme-matched legend bar (`.calendar-legend-bar`).
+     - Reduced legend dots to `6px` circles with tight `2px 6px` gaps and 9.5px font size.
+   - **Container Padding**:
+     - Tightened `#calendar-workspace` padding to `6px 0 20px 0` and `.calendar-control-hub` internal padding to `8px 10px`, saving significant vertical margins.
+
+3. **Strict Desktop Layout Preservation**:
+   - Added semantic sub-container wrappers in JSX (`navAndViewRow`, `actionButtonGroup`, `statusAndUnscheduledGroup`) with base inline style `display: 'contents'`.
+   - On desktop viewports (`1280×800` and `1440×900`), `display: 'contents'` ensures zero DOM box-tree interference, keeping desktop positions, dimensions, typography, and spacing 100% pixel-identical.
+   - Confirmed desktop hub height (`231px`), heading height (`51px`), toolbar height (`35px`), and month card offset (`367px`) remain completely untouched.
+
+### Empirical Layout Measurement (Before vs. After)
+
+| Viewport | Control Hub Height (Before) | Control Hub Height (After) | Height Reduction | Month Card Top (Before) | Month Card Top (After) | Dates Position Delta |
+|---|---|---|---|---|---|---|
+| **Mobile 320×750** | 407px | **230px** | **-177px (-43.5%)** | 554px | **360px** | **+194px higher** |
+| **Mobile 375×812** | 373px | **230px** | **-143px (-38.3%)** | 521px | **360px** | **+161px higher** |
+| **Mobile 390×844** | 305px | **216px** | **-89px (-29.2%)** | 453px | **346px** | **+107px higher** |
+| **Desktop 1280×800** | 232px | **231px** | **0px (identical)** | 366px | **367px** | **Preserved (±1px subpixel)** |
+| **Desktop 1440×900** | 232px | **231px** | **0px (identical)** | 366px | **367px** | **Preserved (±1px subpixel)** |
+
+### Automated Test Suite & Verification Results
+
+- **Automated Regression Suite (`tests/mobile_calendar_compact_controls.test.js`)**:
+  - Validates semantic mobile container classes (`calendar-nav-and-view-row`, `calendar-action-buttons`, `calendar-status-and-unscheduled-group`, `calendar-legend-bar`).
+  - Verifies desktop style objects default to `display: 'contents'` to preserve desktop layout.
+  - Verifies mobile CSS media queries establish 28–32px control heights, compact padding, and 6px legend dots.
+  - Verifies all functional buttons and accessible names remain fully intact.
+- **Calendar & Mobile Test Suites**:
+  - `tests/calendar_view.test.js`: **22 passed, 0 failed**.
+  - `tests/mobile_calendar_navigation_cards.test.js`: **4 passed, 0 failed**.
+  - `tests/mobile_calendar_compact_controls.test.js`: **5 passed, 0 failed**.
+- **Full Test Suite (`npm test`)**:
+  - **1,322 passed, 0 failed** across 292 test suites.
+- **Linter (`npm run lint` / `oxlint`)**:
+  - **0 errors** across 144 files.
+- **Production Build (`npm run build` / `vite build`)**:
+  - Built cleanly in 554ms.
+- **Visual Screenshots Captured & Verified**:
+  - `mobile_320x750.png`, `mobile_375x812.png`, `mobile_390x844.png`: Calendar dates immediately visible without scrolling.
+  - `desktop_1280x800.png`, `desktop_1440x900.png`: Desktop calendar view pixel-identical.
+- **Git Diff Check (`git diff --check`)**:
+  - Clean (0 whitespace errors).

@@ -234,7 +234,7 @@ export default function TaskCalendar({
                   {calendarView === 'day' && formatFullDateHeading(selectedDate)}
                 </h2>
                 {selectedDate === todayStr && (
-                  <span style={styles.todayPill}>TODAY</span>
+                  <span style={styles.todayPill} className="calendar-today-pill">TODAY</span>
                 )}
               </div>
               <p style={styles.subHeading} className="calendar-subheading">
@@ -252,110 +252,116 @@ export default function TaskCalendar({
 
             {/* Right Toolbar Controls */}
             <div style={styles.toolbarControls} className="calendar-toolbar-controls">
-              {/* Navigation buttons */}
-              <div style={styles.navButtonGroup} className="calendar-nav-buttons" role="group" aria-label="Calendar navigation">
-                <button
-                  type="button"
-                  id="calendar-today-btn"
-                  onClick={handleToday}
-                  style={styles.todayBtn}
-                  title="Jump to today's date"
-                  aria-label="Jump to today"
-                >
-                  Today
-                </button>
-                <button
-                  type="button"
-                  id="calendar-prev-btn"
-                  onClick={handlePrev}
-                  style={styles.navArrowBtn}
-                  title="Previous period"
-                  aria-label="Previous period"
-                >
-                  ‹
-                </button>
-                <button
-                  type="button"
-                  id="calendar-next-btn"
-                  onClick={handleNext}
-                  style={styles.navArrowBtn}
-                  title="Next period"
-                  aria-label="Next period"
-                >
-                  ›
-                </button>
+              {/* Navigation & View Row */}
+              <div style={styles.navAndViewRow} className="calendar-nav-and-view-row">
+                {/* Navigation buttons */}
+                <div style={styles.navButtonGroup} className="calendar-nav-buttons" role="group" aria-label="Calendar navigation">
+                  <button
+                    type="button"
+                    id="calendar-today-btn"
+                    onClick={handleToday}
+                    style={styles.todayBtn}
+                    title="Jump to today's date"
+                    aria-label="Jump to today"
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    id="calendar-prev-btn"
+                    onClick={handlePrev}
+                    style={styles.navArrowBtn}
+                    title="Previous period"
+                    aria-label="Previous period"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    type="button"
+                    id="calendar-next-btn"
+                    onClick={handleNext}
+                    style={styles.navArrowBtn}
+                    title="Next period"
+                    aria-label="Next period"
+                  >
+                    ›
+                  </button>
+                </div>
+
+                {/* View Switcher: Month / Week / Day */}
+                <div style={styles.viewSwitcherGroup} className="calendar-view-switcher" role="group" aria-label="Calendar view switcher">
+                  <button
+                    type="button"
+                    id="calendar-view-month-btn"
+                    onClick={() => setCalendarView('month')}
+                    style={{
+                      ...styles.viewBtn,
+                      ...(calendarView === 'month' ? styles.activeViewBtn : {}),
+                    }}
+                    aria-pressed={calendarView === 'month'}
+                  >
+                    Month
+                  </button>
+                  <button
+                    type="button"
+                    id="calendar-view-week-btn"
+                    onClick={() => setCalendarView('week')}
+                    style={{
+                      ...styles.viewBtn,
+                      ...(calendarView === 'week' ? styles.activeViewBtn : {}),
+                    }}
+                    aria-pressed={calendarView === 'week'}
+                  >
+                    Week
+                  </button>
+                  <button
+                    type="button"
+                    id="calendar-view-day-btn"
+                    onClick={() => setCalendarView('day')}
+                    style={{
+                      ...styles.viewBtn,
+                      ...(calendarView === 'day' ? styles.activeViewBtn : {}),
+                    }}
+                    aria-pressed={calendarView === 'day'}
+                  >
+                    Day
+                  </button>
+                </div>
               </div>
 
-              {/* View Switcher: Month / Week / Day */}
-              <div style={styles.viewSwitcherGroup} className="calendar-view-switcher" role="group" aria-label="Calendar view switcher">
-                <button
-                  type="button"
-                  id="calendar-view-month-btn"
-                  onClick={() => setCalendarView('month')}
-                  style={{
-                    ...styles.viewBtn,
-                    ...(calendarView === 'month' ? styles.activeViewBtn : {}),
-                  }}
-                  aria-pressed={calendarView === 'month'}
-                >
-                  Month
-                </button>
-                <button
-                  type="button"
-                  id="calendar-view-week-btn"
-                  onClick={() => setCalendarView('week')}
-                  style={{
-                    ...styles.viewBtn,
-                    ...(calendarView === 'week' ? styles.activeViewBtn : {}),
-                  }}
-                  aria-pressed={calendarView === 'week'}
-                >
-                  Week
-                </button>
-                <button
-                  type="button"
-                  id="calendar-view-day-btn"
-                  onClick={() => setCalendarView('day')}
-                  style={{
-                    ...styles.viewBtn,
-                    ...(calendarView === 'day' ? styles.activeViewBtn : {}),
-                  }}
-                  aria-pressed={calendarView === 'day'}
-                >
-                  Day
-                </button>
+              {/* Action buttons (Export .ics, Tasks List) */}
+              <div style={styles.actionButtonGroup} className="calendar-action-buttons" role="group" aria-label="Calendar actions">
+                {/* RFC 5545 iCalendar (.ics) Export Button */}
+                {onExportCalendar && (
+                  <button
+                    type="button"
+                    id="calendar-export-btn"
+                    data-action="export-calendar"
+                    onClick={() => onExportCalendar()}
+                    style={styles.exportBtn}
+                    title="Export scheduled tasks to RFC 5545 .ics calendar"
+                    aria-label="Export scheduled tasks to RFC 5545 .ics calendar"
+                  >
+                    <MotifIcon name="calendar" size={14} style={{ marginRight: '6px' }} />
+                    <span>Export .ics</span>
+                  </button>
+                )}
+
+                {/* Shortcut back to Tasks workspace */}
+                {onSelectView && (
+                  <button
+                    type="button"
+                    id="calendar-back-to-tasks-btn"
+                    onClick={() => onSelectView('tasks')}
+                    style={styles.backTasksBtn}
+                    title="Return to Tasks list"
+                    aria-label="Return to Tasks list view"
+                  >
+                    <MotifIcon name="arrow-left" size={13} style={{ marginRight: '6px' }} />
+                    <span>Tasks List</span>
+                  </button>
+                )}
               </div>
-
-              {/* RFC 5545 iCalendar (.ics) Export Button */}
-              {onExportCalendar && (
-                <button
-                  type="button"
-                  id="calendar-export-btn"
-                  data-action="export-calendar"
-                  onClick={() => onExportCalendar()}
-                  style={styles.exportBtn}
-                  title="Export scheduled tasks to RFC 5545 .ics calendar"
-                  aria-label="Export scheduled tasks to RFC 5545 .ics calendar"
-                >
-                  <MotifIcon name="calendar" size={14} style={{ marginRight: '6px' }} />
-                  <span>Export .ics</span>
-                </button>
-              )}
-
-              {/* Shortcut back to Tasks workspace */}
-              {onSelectView && (
-                <button
-                  type="button"
-                  id="calendar-back-to-tasks-btn"
-                  onClick={() => onSelectView('tasks')}
-                  style={styles.backTasksBtn}
-                  title="Return to Tasks list"
-                  aria-label="Return to Tasks list view"
-                >
-                  <MotifIcon name="arrow-left" size={13} style={{ marginRight: '6px' }} />
-                  <span>Tasks List</span>
-                </button>
-              )}
             </div>
           </div>
 
@@ -366,13 +372,14 @@ export default function TaskCalendar({
           <div style={styles.filterAndLegendRow} className="calendar-filter-and-legend-row">
             <div style={styles.filterPillsArea} className="calendar-filter-pills-area">
               {/* Priority Filters */}
-              <div style={styles.filterGroup}>
-                <span style={styles.filterLabel}>Priority:</span>
+              <div style={styles.filterGroup} className="calendar-filter-group calendar-priority-filter-group">
+                <span style={styles.filterLabel} className="calendar-filter-label">Priority:</span>
                 {['all', 'critical', 'high', 'medium', 'low'].map((p) => (
                   <button
                     key={p}
                     type="button"
                     id={`calendar-filter-priority-${p}`}
+                    className="calendar-filter-pill"
                     onClick={() => setPriorityFilter(p)}
                     style={{
                       ...styles.filterPill,
@@ -385,64 +392,69 @@ export default function TaskCalendar({
                 ))}
               </div>
 
-              {/* Status Filter */}
-              <div style={styles.filterGroup}>
-                <span style={styles.filterLabel}>Status:</span>
-                {['all', 'incomplete', 'completed'].map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    id={`calendar-filter-status-${s}`}
-                    onClick={() => setStatusFilter(s)}
-                    style={{
-                      ...styles.filterPill,
-                      ...(statusFilter === s ? styles.activeFilterPill : {}),
-                    }}
-                    aria-pressed={statusFilter === s}
-                  >
-                    {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
-                  </button>
-                ))}
-              </div>
+              {/* Status Filter & Unscheduled Button Row */}
+              <div style={styles.statusAndUnscheduledGroup} className="calendar-status-and-unscheduled-group">
+                {/* Status Filter */}
+                <div style={styles.filterGroup} className="calendar-filter-group calendar-status-filter-group">
+                  <span style={styles.filterLabel} className="calendar-filter-label">Status:</span>
+                  {['all', 'incomplete', 'completed'].map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      id={`calendar-filter-status-${s}`}
+                      className="calendar-filter-pill"
+                      onClick={() => setStatusFilter(s)}
+                      style={{
+                        ...styles.filterPill,
+                        ...(statusFilter === s ? styles.activeFilterPill : {}),
+                      }}
+                      aria-pressed={statusFilter === s}
+                    >
+                      {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
+                    </button>
+                  ))}
+                </div>
 
-              {/* Unscheduled Drawer Toggle */}
-              <button
-                type="button"
-                id="calendar-toggle-unscheduled-btn"
-                onClick={() => setShowUnscheduled(!showUnscheduled)}
-                style={{
-                  ...styles.unscheduledBtn,
-                  ...(showUnscheduled ? styles.activeUnscheduledBtn : {}),
-                }}
-                title="View tasks without scheduled deadlines"
-                aria-expanded={showUnscheduled}
-              >
-                <MotifIcon name="task-sheet" size={13} style={{ marginRight: '6px' }} />
-                <span>Unscheduled ({unscheduled.length})</span>
-              </button>
+                {/* Unscheduled Drawer Toggle */}
+                <button
+                  type="button"
+                  id="calendar-toggle-unscheduled-btn"
+                  className="calendar-unscheduled-btn"
+                  onClick={() => setShowUnscheduled(!showUnscheduled)}
+                  style={{
+                    ...styles.unscheduledBtn,
+                    ...(showUnscheduled ? styles.activeUnscheduledBtn : {}),
+                  }}
+                  title="View tasks without scheduled deadlines"
+                  aria-expanded={showUnscheduled}
+                >
+                  <MotifIcon name="task-sheet" size={13} style={{ marginRight: '6px' }} />
+                  <span>Unscheduled ({unscheduled.length})</span>
+                </button>
+              </div>
             </div>
 
             {/* Priority Legend */}
-            <div style={styles.legendBar} aria-label="Task priority color legend">
-              <span style={styles.legendLabel}>Legend:</span>
-              <span style={styles.legendItem}>
-                <span style={{ ...styles.legendDot, backgroundColor: '#D9383A' }} />
+            <div style={styles.legendBar} className="calendar-legend-bar" aria-label="Task priority color legend">
+              <span style={styles.legendLabel} className="calendar-legend-label">Legend:</span>
+              <span style={styles.legendItem} className="calendar-legend-item">
+                <span style={{ ...styles.legendDot, backgroundColor: '#D9383A' }} className="calendar-legend-dot" />
                 Critical / Urgent
               </span>
-              <span style={styles.legendItem}>
-                <span style={{ ...styles.legendDot, backgroundColor: '#E5A83B' }} />
+              <span style={styles.legendItem} className="calendar-legend-item">
+                <span style={{ ...styles.legendDot, backgroundColor: '#E5A83B' }} className="calendar-legend-dot" />
                 High
               </span>
-              <span style={styles.legendItem}>
-                <span style={{ ...styles.legendDot, backgroundColor: '#8E5FA8' }} />
+              <span style={styles.legendItem} className="calendar-legend-item">
+                <span style={{ ...styles.legendDot, backgroundColor: '#8E5FA8' }} className="calendar-legend-dot" />
                 Medium
               </span>
-              <span style={styles.legendItem}>
-                <span style={{ ...styles.legendDot, backgroundColor: '#2D6A4F' }} />
+              <span style={styles.legendItem} className="calendar-legend-item">
+                <span style={{ ...styles.legendDot, backgroundColor: '#2D6A4F' }} className="calendar-legend-dot" />
                 Low
               </span>
-              <span style={styles.legendItem}>
-                <span style={{ ...styles.legendDot, backgroundColor: '#706D73' }} />
+              <span style={styles.legendItem} className="calendar-legend-item">
+                <span style={{ ...styles.legendDot, backgroundColor: '#706D73' }} className="calendar-legend-dot" />
                 Completed <MotifIcon name="check" size={11} style={{ marginLeft: '3px' }} />
               </span>
             </div>
@@ -1331,6 +1343,12 @@ const styles = {
     flexWrap: 'wrap',
     gap: '12px',
   },
+  navAndViewRow: {
+    display: 'contents',
+  },
+  actionButtonGroup: {
+    display: 'contents',
+  },
   navButtonGroup: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -1423,6 +1441,9 @@ const styles = {
     alignItems: 'center',
     gap: '6px',
     flexWrap: 'wrap',
+  },
+  statusAndUnscheduledGroup: {
+    display: 'contents',
   },
   filterLabel: {
     fontSize: '12px',
