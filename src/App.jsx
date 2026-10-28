@@ -3,6 +3,7 @@ import RouteLoadingFallback from './components/RouteLoadingFallback';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
 import OfflineBanner from './components/OfflineBanner';
 import UpdateNotification from './components/UpdateNotification';
+import MotifIcon from './components/MotifIcon';
 import { registerServiceWorker, initInstallPromptListener } from './utils/pwaManager';
 
 // Dynamic route-level code splitting (Phase 8, Stage 8.3)
@@ -105,7 +106,8 @@ export default function App() {
         >
           <div style={styles.unknownRouteInner}>
             <span style={styles.unknownRouteText}>
-              ℹ️ Route <code>{currentPath}</code> was not recognized. Showing VoxPlan home.
+              <MotifIcon name="info" size={14} style={{ marginRight: '6px' }} />
+              Route <code>{currentPath}</code> was not recognized. Showing VoxPlan home.
             </span>
             <div style={styles.unknownRouteActions}>
               <button
@@ -114,7 +116,7 @@ export default function App() {
                 style={styles.unknownRouteActionBtn}
                 id="unknown-route-to-app-btn"
               >
-                Go to Workspace (/app) →
+                Go to Workspace (/app) <MotifIcon name="arrow-right" size={13} style={{ marginLeft: '4px' }} />
               </button>
               <button
                 type="button"
@@ -122,7 +124,7 @@ export default function App() {
                 style={styles.unknownRouteDismissBtn}
                 aria-label="Dismiss route notice"
               >
-                ✕
+                <MotifIcon name="close" size={13} />
               </button>
             </div>
           </div>

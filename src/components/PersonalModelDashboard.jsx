@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import MotifIcon from './MotifIcon';
 import {
   buildPersonalDurationModel,
   evaluatePersonalDurationModel,
@@ -97,8 +98,8 @@ export default function PersonalModelDashboard({ events = [], tasks = [] }) {
             </p>
           </div>
 
-          <div style={styles.privacyCapsule}>
-            <span style={styles.privacyDot}>✦</span>
+          <div style={{ ...styles.privacyCapsule, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <MotifIcon name="sparkle" size={12} color="#15803D" />
             <span>100% on-device inference · Zero cloud upload</span>
           </div>
         </div>
@@ -181,7 +182,9 @@ export default function PersonalModelDashboard({ events = [], tasks = [] }) {
                 />
                 h
               </span>
-              <span style={styles.simArrow}>→</span>
+              <span style={styles.simArrow}>
+                <MotifIcon name="arrow-right" size={14} />
+              </span>
               <span style={styles.simPredicted}>~{simulatedAdjustedHours}h</span>
             </div>
             <span style={styles.metricCaption}>
@@ -263,7 +266,9 @@ export default function PersonalModelDashboard({ events = [], tasks = [] }) {
           <div style={styles.riskSignalsGrid}>
             <div style={styles.riskSignalCard}>
               <div style={styles.riskSignalHead}>
-                <span style={styles.riskSignalIcon}>📅</span>
+                <span style={styles.riskSignalIcon}>
+                  <MotifIcon name="calendar" size={16} color="#8E5FA8" />
+                </span>
                 <span style={styles.riskSignalTitle}>Task Postponement Friction</span>
               </div>
               <p style={styles.riskSignalDesc}>
@@ -273,7 +278,9 @@ export default function PersonalModelDashboard({ events = [], tasks = [] }) {
 
             <div style={styles.riskSignalCard}>
               <div style={styles.riskSignalHead}>
-                <span style={styles.riskSignalIcon}>⚡</span>
+                <span style={styles.riskSignalIcon}>
+                  <MotifIcon name="bolt" size={16} color="#E5A83B" />
+                </span>
                 <span style={styles.riskSignalTitle}>Personal Estimation-Bias Stress</span>
               </div>
               <p style={styles.riskSignalDesc}>
@@ -283,7 +290,9 @@ export default function PersonalModelDashboard({ events = [], tasks = [] }) {
 
             <div style={styles.riskSignalCard}>
               <div style={styles.riskSignalHead}>
-                <span style={styles.riskSignalIcon}>🔁</span>
+                <span style={styles.riskSignalIcon}>
+                  <MotifIcon name="refresh" size={16} color="#2D6A4F" />
+                </span>
                 <span style={styles.riskSignalTitle}>Task Reopening Churn</span>
               </div>
               <p style={styles.riskSignalDesc}>
@@ -329,7 +338,9 @@ export default function PersonalModelDashboard({ events = [], tasks = [] }) {
 
           {evaluation.status !== 'evaluated' ? (
             <div style={styles.coldStartBox}>
-              <div style={styles.coldStartIcon}>⏱️</div>
+              <div style={styles.coldStartIcon}>
+                <MotifIcon name="timer" size={28} color="#8E5FA8" />
+              </div>
               <div style={styles.coldStartContent}>
                 <h4 style={styles.coldStartTitle}>Evaluation Requires at Least 5 Held-Out Predictions (8 Total Tasks)</h4>
                 <p style={styles.coldStartText}>
@@ -402,7 +413,10 @@ export default function PersonalModelDashboard({ events = [], tasks = [] }) {
 
               {/* Explanatory Banner */}
               <div style={styles.evalSummaryBanner}>
-                <span>✓ {evaluation.explanation}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <MotifIcon name="check" size={14} color="#166534" />
+                  <span>{evaluation.explanation}</span>
+                </span>
                 <span style={styles.winRateBadge}>
                   Win rate: {evaluation.metrics.better_predictions_count}/{evaluation.metrics.total_test_count} tasks closer to actual duration
                 </span>
@@ -446,9 +460,21 @@ export default function PersonalModelDashboard({ events = [], tasks = [] }) {
                                 ...styles.outcomeBadge,
                                 backgroundColor: isBetter ? '#DCFCE7' : isEqual ? '#F3F4F6' : '#FEE2E2',
                                 color: isBetter ? '#166534' : isEqual ? '#4B5563' : '#991B1B',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
                               }}
                             >
-                              {isBetter ? '✓ Improved' : isEqual ? '= Tied' : '△ Baseline Closer'}
+                              {isBetter ? (
+                                <>
+                                  <MotifIcon name="check" size={11} color="#166534" />
+                                  <span>Improved</span>
+                                </>
+                              ) : isEqual ? (
+                                'Tied'
+                              ) : (
+                                'Baseline Closer'
+                              )}
                             </span>
                           </td>
                         </tr>
@@ -468,7 +494,9 @@ export default function PersonalModelDashboard({ events = [], tasks = [] }) {
         <div style={styles.honestyGrid}>
           <div style={styles.honestyCard}>
             <div style={styles.honestyHeader}>
-              <span style={styles.honestyIcon}>📐</span>
+              <span style={styles.honestyIcon}>
+                <MotifIcon name="ruler" size={18} color="#8E5FA8" />
+              </span>
               <h4 style={styles.honestyTitle}>Interpretable Bias Correction</h4>
             </div>
             <p style={styles.honestyDesc}>
@@ -478,7 +506,9 @@ export default function PersonalModelDashboard({ events = [], tasks = [] }) {
 
           <div style={styles.honestyCard}>
             <div style={styles.honestyHeader}>
-              <span style={styles.honestyIcon}>🛡️</span>
+              <span style={styles.honestyIcon}>
+                <MotifIcon name="shield" size={18} color="#2D6A4F" />
+              </span>
               <h4 style={styles.honestyTitle}>Baseline Risk Distinction</h4>
             </div>
             <p style={styles.honestyDesc}>
@@ -488,7 +518,9 @@ export default function PersonalModelDashboard({ events = [], tasks = [] }) {
 
           <div style={styles.honestyCard}>
             <div style={styles.honestyHeader}>
-              <span style={styles.honestyIcon}>🔒</span>
+              <span style={styles.honestyIcon}>
+                <MotifIcon name="lock" size={18} color="#25242A" />
+              </span>
               <h4 style={styles.honestyTitle}>Durable Local Privacy</h4>
             </div>
             <p style={styles.honestyDesc}>

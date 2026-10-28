@@ -1,4 +1,5 @@
 import React from 'react';
+import MotifIcon from './MotifIcon';
 
 /**
  * VoxPlan Brand Badge Component
@@ -48,7 +49,7 @@ export default function BrandBadge({
       }}
       aria-hidden="true"
     >
-      <span style={{ display: 'inline-block', lineHeight: 1 }}>✦</span>
+      <MotifIcon name="sparkle" size={fontSize} color="#25242A" strokeWidth={2} />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import BrandBadge from './BrandBadge';
+import MotifIcon from './MotifIcon';
 import NotificationBell from './notifications/NotificationBell';
 import NotificationCenter from './notifications/NotificationCenter';
 import NotificationPreferencesModal from './notifications/NotificationPreferencesModal';
@@ -108,7 +109,8 @@ export default function Header({
                 style={styles.navLandingLink}
                 title="Return to Product Landing Page"
               >
-                ← Overview
+                <MotifIcon name="arrow-left" size={13} style={{ marginRight: '6px' }} />
+                <span>Overview</span>
               </button>
             )}
 
@@ -247,7 +249,7 @@ export default function Header({
                     style={styles.tourBtn}
                     aria-label="Launch interactive VoxPlan product tour"
                   >
-                    <span style={{ color: '#E5A83B' }}>✦</span>
+                    <MotifIcon name="sparkle" size={12} color="#E5A83B" />
                     <span>Tour</span>
                   </button>
                 )}
@@ -261,7 +263,7 @@ export default function Header({
                     style={styles.backupBtn}
                     aria-label="Open Encrypted Workspace Backup and Restore dialog"
                   >
-                    <span>🔐</span>
+                    <MotifIcon name="lock" size={14} style={{ marginRight: '4px' }} />
                     <span>Backup</span>
                   </button>
                 )}
@@ -335,7 +337,7 @@ export default function Header({
                         }}
                         style={styles.menuItem}
                       >
-                        <span style={{ color: '#E5A83B', marginRight: '6px' }}>✦</span>
+                        <MotifIcon name="sparkle" size={12} color="#E5A83B" style={{ marginRight: '6px' }} />
                         <span>Product Tour</span>
                       </button>
                     )}
@@ -349,7 +351,8 @@ export default function Header({
                         }}
                         style={styles.menuItem}
                       >
-                        <span>← Return to Overview</span>
+                        <MotifIcon name="arrow-left" size={14} style={{ marginRight: '8px' }} />
+                        <span>Return to Overview</span>
                       </button>
                     )}
                     {onOpenBackup && (
@@ -362,7 +365,8 @@ export default function Header({
                         }}
                         style={styles.menuItem}
                       >
-                        <span>🔐 Encrypted Backup</span>
+                        <MotifIcon name="lock" size={14} style={{ marginRight: '8px' }} />
+                        <span>Encrypted Backup</span>
                       </button>
                     )}
                     <button
@@ -374,7 +378,8 @@ export default function Header({
                       }}
                       style={styles.menuItem}
                     >
-                      <span>🔔 Notifications {unreadNotificationsCount > 0 ? `(${unreadNotificationsCount})` : ''}</span>
+                      <MotifIcon name="bell" size={14} style={{ marginRight: '8px' }} />
+                      <span>Notifications {unreadNotificationsCount > 0 ? `(${unreadNotificationsCount})` : ''}</span>
                     </button>
                     <button
                       type="button"
@@ -385,7 +390,8 @@ export default function Header({
                       }}
                       style={styles.menuItem}
                     >
-                      <span>⚙️ Notification Settings</span>
+                      <MotifIcon name="settings" size={14} style={{ marginRight: '8px' }} />
+                      <span>Notification Settings</span>
                     </button>
                     {onSeedDemo && (
                       <button
@@ -397,7 +403,8 @@ export default function Header({
                         }}
                         style={styles.menuItem}
                       >
-                        <span>⚡ Load Demo Seed</span>
+                        <MotifIcon name="bolt" size={14} style={{ marginRight: '8px' }} />
+                        <span>Load Demo Seed</span>
                       </button>
                     )}
                     {onClearDemo && (
@@ -410,7 +417,8 @@ export default function Header({
                         }}
                         style={{ ...styles.menuItem, color: '#D9383A' }}
                       >
-                        <span>↺ Reset Workspace</span>
+                        <MotifIcon name="refresh" size={14} style={{ marginRight: '8px' }} />
+                        <span>Reset Workspace</span>
                       </button>
                     )}
                   </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import MotifIcon from './MotifIcon';
 import { formatTaskDueDate } from '../conversation/compoundCommandParser';
 import TaskStickyTab from './stickyNotes/TaskStickyTab';
 
@@ -171,7 +172,8 @@ export default function TaskCard({
         textColor: '#2D6A4F',
         circleBorder: '#2D6A4F',
         riskText: '#2D6A4F',
-        noteTag: 'completed ✓',
+        noteTag: 'completed',
+        noteMotif: 'check',
       };
     }
     if (!prediction) {
@@ -182,7 +184,8 @@ export default function TaskCard({
         textColor: '#5E5B66',
         circleBorder: '#D4CEBC',
         riskText: '#5E5B66',
-        noteTag: 'awaiting analysis ⏳',
+        noteTag: 'awaiting analysis',
+        noteMotif: 'clock',
       };
     }
     switch (riskCategory) {
@@ -194,7 +197,8 @@ export default function TaskCard({
           textColor: '#D9383A',
           circleBorder: '#D9383A',
           riskText: '#D9383A',
-          noteTag: 'high delay risk ↗',
+          noteTag: 'high delay risk',
+          noteMotif: 'trending-up',
         };
       case 'MEDIUM':
         return {
@@ -204,7 +208,8 @@ export default function TaskCard({
           textColor: '#B45309',
           circleBorder: '#E5A83B',
           riskText: '#B45309',
-          noteTag: 'medium priority ⚡',
+          noteTag: 'medium priority',
+          noteMotif: 'bolt',
         };
       case 'LOW':
       default:
@@ -215,7 +220,8 @@ export default function TaskCard({
           textColor: '#2D6A4F',
           circleBorder: '#2D6A4F',
           riskText: '#2D6A4F',
-          noteTag: 'on schedule 🌱',
+          noteTag: 'on schedule',
+          noteMotif: 'leaf',
         };
     }
   };
@@ -277,7 +283,7 @@ export default function TaskCard({
               title={`Move "${task.title}" up`}
               aria-label={`Move task "${task.title}" up`}
             >
-              ▲
+              <MotifIcon name="chevron-up" size={13} />
             </button>
           )}
           {canMoveDown && onMoveDown && (
@@ -292,7 +298,7 @@ export default function TaskCard({
               title={`Move "${task.title}" down`}
               aria-label={`Move task "${task.title}" down`}
             >
-              ▼
+              <MotifIcon name="chevron-down" size={13} />
             </button>
           )}
 
@@ -310,9 +316,7 @@ export default function TaskCard({
             aria-label={task.completed ? `Mark "${task.title}" as incomplete` : `Mark "${task.title}" as complete`}
           >
             {task.completed && (
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
+              <MotifIcon name="check" size={12} color="#FFFFFF" strokeWidth={3} />
             )}
           </button>
 
@@ -330,7 +334,7 @@ export default function TaskCard({
             title={`Delete "${task.title}" (with undo)`}
             aria-label={`Delete task "${task.title}"`}
           >
-            ✕
+            <MotifIcon name="close" size={13} />
           </button>
         </div>
       </div>
@@ -361,7 +365,7 @@ export default function TaskCard({
               style={styles.saveBtn}
               aria-label={`Save title for "${task.title}"`}
             >
-              ✓
+              <MotifIcon name="check" size={13} />
             </button>
             <button
               type="button"
@@ -373,7 +377,7 @@ export default function TaskCard({
               style={styles.cancelBtn}
               aria-label={`Cancel editing title for "${task.title}"`}
             >
-              ✕
+              <MotifIcon name="close" size={13} />
             </button>
           </div>
         ) : (
@@ -402,7 +406,7 @@ export default function TaskCard({
               title={`Edit title for "${task.title}"`}
               aria-label={`Edit title for "${task.title}"`}
             >
-              ✎
+              <MotifIcon name="pencil" size={12} />
             </button>
           </div>
         )}
@@ -451,7 +455,7 @@ export default function TaskCard({
               title="Cancel"
               aria-label={`Cancel completion prompt for "${task.title}"`}
             >
-              ✕
+              <MotifIcon name="close" size={13} />
             </button>
           </div>
         </div>
@@ -476,7 +480,7 @@ export default function TaskCard({
                 style={styles.smallSaveBtn}
                 aria-label={`Save new due date for "${task.title}"`}
               >
-                ✓
+                <MotifIcon name="check" size={12} />
               </button>
               <button
                 type="button"
@@ -484,7 +488,7 @@ export default function TaskCard({
                 style={styles.smallCancelBtn}
                 aria-label={`Cancel rescheduling for "${task.title}"`}
               >
-                ✕
+                <MotifIcon name="close" size={12} />
               </button>
             </div>
           ) : (
@@ -499,7 +503,8 @@ export default function TaskCard({
               title="Click to reschedule due date"
               aria-label={`Reschedule due date for "${task.title}". Current due date is ${formatDueDate(task.dueDate)}`}
             >
-              📅 {formatDueDate(task.dueDate)}
+              <MotifIcon name="calendar" size={12} style={{ marginRight: '4px' }} />
+              <span>{formatDueDate(task.dueDate)}</span>
             </button>
           )}
 
@@ -522,7 +527,7 @@ export default function TaskCard({
                 style={styles.smallSaveBtn}
                 aria-label={`Save effort estimate for "${task.title}"`}
               >
-                ✓
+                <MotifIcon name="check" size={12} />
               </button>
               <button
                 type="button"
@@ -530,7 +535,7 @@ export default function TaskCard({
                 style={styles.smallCancelBtn}
                 aria-label={`Cancel editing effort for "${task.title}"`}
               >
-                ✕
+                <MotifIcon name="close" size={12} />
               </button>
             </div>
           ) : task.estimatedEffort != null ? (
@@ -548,12 +553,13 @@ export default function TaskCard({
                 (durationEstimate.personalization_status === 'sparse' ||
                  durationEstimate.personalization_status === 'developing' ||
                  durationEstimate.personalization_status === 'supported')
-                  ? `Estimate: ${task.estimatedEffort}h → Adjusted to ~${durationEstimate.predicted_duration_hours}h (${durationEstimate.explanation}) ${durationEstimate.uncertainty ? `[${durationEstimate.uncertainty.range_label}: ${durationEstimate.uncertainty.low_hours}h - ${durationEstimate.uncertainty.high_hours}h]` : ''}. Click to edit.`
+                  ? `Estimate: ${task.estimatedEffort}h -> Adjusted to ~${durationEstimate.predicted_duration_hours}h (${durationEstimate.explanation}) ${durationEstimate.uncertainty ? `[${durationEstimate.uncertainty.range_label}: ${durationEstimate.uncertainty.low_hours}h - ${durationEstimate.uncertainty.high_hours}h]` : ''}. Click to edit.`
                   : `Estimated effort: ${task.estimatedEffort}h · VoxPlan is learning your pace (requires measured completions). Click to edit.`
               }
             >
               <span style={styles.effortBadge}>
-                ⏱️ {task.estimatedEffort}h
+                <MotifIcon name="clock" size={12} style={{ marginRight: '4px' }} />
+                <span>{task.estimatedEffort}h</span>
               </span>
               {durationEstimate &&
                 (durationEstimate.personalization_status === 'sparse' ||
@@ -561,7 +567,8 @@ export default function TaskCard({
                  durationEstimate.personalization_status === 'supported') &&
                 durationEstimate.predicted_duration_hours !== null && (
                   <span style={styles.predictedDurationBadge} className="task-card-predicted-badge">
-                    → ~{durationEstimate.predicted_duration_hours}h
+                    <MotifIcon name="arrow-right" size={11} style={{ marginRight: '2px' }} />
+                    <span>~{durationEstimate.predicted_duration_hours}h</span>
                     <span style={styles.obsCountBadge} className="task-card-obs-badge" title={`Based on ${durationEstimate.eligible_observation_count} measured tasks`}>
                       ({durationEstimate.eligible_observation_count})
                     </span>
@@ -597,7 +604,8 @@ export default function TaskCard({
                 aria-label={`Pause active stopwatch for "${task.title}". Elapsed: ${formatDuration(liveSeconds)}`}
               >
                 <span style={styles.pulsingDot} />
-                <span>⏸ {formatDuration(liveSeconds)}</span>
+                <MotifIcon name="pause" size={12} style={{ marginRight: '4px' }} />
+                <span>{formatDuration(liveSeconds)}</span>
               </button>
             ) : isTimerPaused ? (
               <button
@@ -607,7 +615,8 @@ export default function TaskCard({
                 title="Resume working timer"
                 aria-label={`Resume working stopwatch for "${task.title}". Elapsed: ${formatDuration(liveSeconds)}`}
               >
-                <span>▶ {formatDuration(liveSeconds)}</span>
+                <MotifIcon name="play" size={12} style={{ marginRight: '4px' }} />
+                <span>{formatDuration(liveSeconds)}</span>
               </button>
             ) : (
               <button
@@ -617,7 +626,8 @@ export default function TaskCard({
                 title="Start working stopwatch for this task"
                 aria-label={`Start working stopwatch for "${task.title}"`}
               >
-                <span>▶ Timer</span>
+                <MotifIcon name="play" size={12} style={{ marginRight: '4px' }} />
+                <span>Timer</span>
               </button>
             )}
           </div>
@@ -626,7 +636,8 @@ export default function TaskCard({
         {/* Completed Task Duration Label */}
         {task.completed && (task.trackedDurationSeconds || task.selfReportedDurationSeconds) && (
           <span style={styles.completedDurationBadge}>
-            ⏱️ {formatDuration(task.trackedDurationSeconds || task.selfReportedDurationSeconds)}
+            <MotifIcon name="clock" size={12} style={{ marginRight: '4px' }} />
+            <span>{formatDuration(task.trackedDurationSeconds || task.selfReportedDurationSeconds)}</span>
           </span>
         )}
       </div>
@@ -635,7 +646,10 @@ export default function TaskCard({
       <div style={styles.cardFooter} className="task-card-footer">
         <div style={styles.riskWrap} className="task-card-risk-wrap">
           {task.completed ? (
-            <span style={styles.completedBadge}>Completed ✓</span>
+            <span style={styles.completedBadge}>
+              <span>Completed</span>
+              <MotifIcon name="check" size={12} style={{ marginLeft: '4px' }} />
+            </span>
           ) : prediction ? (
             <div style={styles.riskRow}>
               <span
@@ -679,7 +693,8 @@ export default function TaskCard({
             }}
             aria-label={`View delay risk prediction explanation for "${task.title}"`}
           >
-            view details →
+            <span>view details</span>
+            <MotifIcon name="arrow-right" size={12} style={{ marginLeft: '4px' }} />
           </button>
         ) : (
           <span style={styles.explainHint}>model offline</span>

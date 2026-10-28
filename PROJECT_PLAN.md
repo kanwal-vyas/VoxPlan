@@ -8294,3 +8294,83 @@ Deliver a visually obvious, genuine mobile transformation beyond minor font and 
   - `desktop_1280x800_loaded_1793121615162.png`: 1280×800 desktop layout verified 100% unchanged.
   - `desktop_1440x900_1793121625833.png`: 1440×900 desktop layout verified 100% unchanged.
   - `priority_cycled_card_1793121684530.png`: Interactive priority cycling and completion prompt confirmed operational.
+
+---
+
+## [2026-10-28] — Phase 8.25: Cohesive Theme-Matched Motif System (Zero Application Emojis)
+
+### Primary Objectives & Requirements
+
+1. **Complete Removal of Emoji-Based UI Elements**:
+   - Audited the entire frontend codebase (`src/`) for emojis, Unicode dingbats, and platform-dependent glyphs.
+   - Removed all emoji-based icons across all task cards, priority indicators, calendar controls, insights, modals, toasts, notifications, landing page, and navigation bars.
+   - Zero application-controlled emojis remain in any component or page.
+
+2. **Unified Theme-Aware Motif Design Language**:
+   - Designed a centralized, reusable SVG icon component (`src/components/MotifIcon.jsx`) following the clean outline design reference:
+     - Uniform 24×24 `viewBox` coordinates.
+     - Consistent `1.75px` stroke weight (`strokeWidth={strokeWidth}`).
+     - Rounded caps and joins (`strokeLinecap="round" strokeLinejoin="round"`).
+     - Strict outline illustration (`fill="none"`) inheriting theme colors dynamically via `stroke={color}` (defaulting to `currentColor`).
+     - Automatic light and dark mode contrast support without hardcoded incompatible colors.
+     - Accessible semantics: defaults to `aria-hidden="true"` when purely decorative; renders `<title>` and `aria-label` with `role="img"` when interactive.
+
+3. **Semantic Motifs for Core Product Features**:
+   - **Tasks & Backlog**: `check`, `close`, `plus`, `pencil`, `trash`, `task-sheet`, `clipboard`, `memo`.
+   - **Priorities & Urgency**: `flame` (Urgent), `bolt` (High), `flag` (Medium), `leaf` (Low).
+   - **Scheduling & Calendar**: `calendar`, `clock`, `timer`, `hourglass`, `time-block`.
+   - **Analytics & Intelligence**: `chart`, `trending-up`, `trending-down`, `target`, `scale`, `flask`, `ruler`, `sparkle`, `lightbulb`.
+   - **Data & Backups**: `cloud-upload`, `cloud-download`, `download`, `upload`, `refresh`, `history`, `lock`, `shield`.
+   - **Navigation & Controls**: `arrow-right`, `arrow-left`, `arrow-up`, `arrow-down`, `arrow-up-right`, `chevron-left`, `chevron-right`, `chevron-up`, `chevron-down`, `menu`, `close`, `bell`, `settings`, `sliders`.
+   - **Diagnostics & Status**: `warning`, `info`, `circle`, `droplet`, `prohibit`.
+
+4. **Component Migrations Completed**:
+   - `src/App.jsx`: Global route fallback notices and direct workspace links.
+   - `src/components/BrandBadge.jsx`: Clean droplet and gear SVG motifs.
+   - `src/components/FeedbackToast.jsx`: Check and warning toast motifs with accessible undo button.
+   - `src/components/OfflineBanner.jsx`: Signal and refresh motifs.
+   - `src/components/RouteErrorBoundary.jsx`: Alert circle motif.
+   - `src/components/UpdateNotification.jsx`: Cloud download motif.
+   - `src/components/Header.jsx`: Sparkle tour trigger and dropdown item motifs.
+   - `src/components/Hero.jsx`: Predictive intelligence sparkle badge, sprint risk preview badge, and directional action buttons.
+   - `src/components/ProjectOverview.jsx`: Milestone sparkle badge and adaptive schedule launcher.
+   - `src/components/TaskList.jsx`: Empty state sparkle, celebration streak, and quick-add plus motif.
+   - `src/components/TaskCard.jsx`: Task priority flame/bolt/flag/leaf motifs, completion checkmark, delete trash, timer play/pause, delay risk trend, sticky memo trigger.
+   - `src/utils/calendarUtils.js`: Added `motifName` priority palette tokens while preserving legacy unit test compatibility properties.
+   - `src/components/TaskCalendar.jsx`: Calendar navigation chevrons, day/week/month view icons, priority badges, focus window target motifs.
+   - `src/components/TaskExplanationModal.jsx`: Close motif, ML Gini importance chart icon, feature factor dots.
+   - `src/components/BackupModal.jsx`: Cloud upload/download backup motifs, format download motifs, confirmation checks.
+   - `src/components/BehavioralHistoryPanel.jsx`: Clock and history telemetry motifs.
+   - `src/components/MLModelPanel.jsx`: Chart and trending model metric motifs.
+   - `src/components/PersonalModelDashboard.jsx`: Sparkle privacy capsule, metric trend badges.
+   - `src/components/notifications/NotificationCenter.jsx`: Bell notification triggers, empty state sparkle, mark-all check motifs.
+   - `src/components/notifications/NotificationPreferencesModal.jsx`: Sliders, bell, clock notification setting motifs.
+   - `src/components/stickyNotes/TaskStickyNotesModal.jsx`: Memo, pencil, trash, sparkle kicker motifs.
+   - `src/components/productTour/TourCallout.jsx`: Target spotlight aperture, step navigation arrows, lightbulb prompt motif.
+   - `src/components/productTour/TourLauncher.jsx`: Sparkle interactive tour button motifs.
+   - `src/components/CommandBar.jsx`: Mic dictation, arrow-right placement diffs, check/discard confirmation motifs.
+   - `src/components/LearningReadinessPanel.jsx`: Lock, shield, check gate indicators.
+   - `src/components/PreferenceSignalsCard.jsx`: Check/circle evaluation eligibility pills.
+   - `src/components/AdaptiveScheduleModal.jsx`: Scale, chart, calendar tabs, close motif, warning cycle alerts, undo/revert history motifs, inline edit pencil/check/close motifs.
+   - `src/components/AdaptationSandboxCard.jsx`: Lock shadow isolation badges, flask simulation fixtures, shield governance callouts, search audit findings, chart uncertainty pills.
+   - `src/pages/LandingPage.jsx`: Mobile hamburger toggle, CTA arrow motifs, micro-tag checkmarks, tour pillar target/eye/shield motifs, stopwatch play/pause controls.
+   - `src/pages/ProductivityApp.jsx`: Today focus priority tags, calendar due tags, stopwatch timer play/pause motifs, risk trending motifs, empty state sparkle.
+
+5. **Layout & Interaction Invariant Preservation**:
+   - Desktop view geometry, spacing, component dimensions, and typography remain strictly unchanged.
+   - All mobile card optimizations (60% height reduction, 3-row grid, 320px–430px viewports) preserved without clipping or overflow.
+   - Core application logic, heuristic scheduling, Bayesian shrinkage, persistence, and telemetry remain 100% untouched.
+
+### Automated Test Suite & Verification Results
+- **Automated Regression Suite (`tests/motif_icons_system.test.js`)**:
+  - Validates MotifIcon outline SVG structure, 24×24 viewBox, rounded caps/joins, and `currentColor` inheritance.
+  - Confirms all 50+ semantic functional motifs exist in the MOTIFS registry.
+  - Verifies zero application UI emojis exist across all frontend JSX components in `src/`.
+- **Frontend Test Suite (`npm test`)**:
+  - **1,317 passed, 0 failed** across 292 test suites.
+- **Linter (`npm run lint` / `oxlint`)**:
+  - **0 errors** (1 pre-existing warning in `AdaptiveScheduleModal.jsx`).
+- **Production Build (`npm run build` / `vite build`)**:
+  - Built cleanly in 605ms. Code-split shared `motif-icons` chunk (22.55 kB) keeps `LandingPage` compact at 79.90 kB (< 80 kB budget).
+- **Git Diff Check (`git diff --check`)**:
+  - Clean (0 whitespace/formatting errors).

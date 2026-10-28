@@ -1,4 +1,5 @@
 import React from 'react';
+import MotifIcon from './MotifIcon';
 
 /**
  * Global Floating Feedback Toast
@@ -19,7 +20,7 @@ export default function FeedbackToast({ feedback, onDismiss }) {
       text: '#166534',
       badgeBg: '#BFE8D0',
       badgeText: '#166534',
-      icon: '✓',
+      motifName: 'check',
     },
     error: {
       bg: '#FFE8E5',
@@ -27,7 +28,7 @@ export default function FeedbackToast({ feedback, onDismiss }) {
       text: '#991B1B',
       badgeBg: '#FFB5A7',
       badgeText: '#991B1B',
-      icon: '!',
+      motifName: 'alert-circle',
     },
     warning: {
       bg: '#FFF4E5',
@@ -35,7 +36,7 @@ export default function FeedbackToast({ feedback, onDismiss }) {
       text: '#B45309',
       badgeBg: '#FFE0B2',
       badgeText: '#B45309',
-      icon: '⚠️',
+      motifName: 'warning',
     },
     info: {
       bg: '#F3EEFF',
@@ -43,7 +44,7 @@ export default function FeedbackToast({ feedback, onDismiss }) {
       text: '#5B44BA',
       badgeBg: '#C9B6FF',
       badgeText: '#5B44BA',
-      icon: 'ℹ',
+      motifName: 'info',
     },
   }[type] || {
     bg: '#FFFFFF',
@@ -51,7 +52,7 @@ export default function FeedbackToast({ feedback, onDismiss }) {
     text: '#25242A',
     badgeBg: '#EAE8E4',
     badgeText: '#25242A',
-    icon: '✦',
+    motifName: 'sparkle',
   };
 
   return (
@@ -75,7 +76,7 @@ export default function FeedbackToast({ feedback, onDismiss }) {
           }}
           aria-hidden="true"
         >
-          {typeStyles.icon}
+          <MotifIcon name={typeStyles.motifName} size={14} color={typeStyles.badgeText} />
         </span>
         <div style={styles.messageWrap}>
           <span style={styles.messageText}>{feedback.message}</span>
@@ -97,7 +98,7 @@ export default function FeedbackToast({ feedback, onDismiss }) {
             title="Undo this action"
             aria-label="Undo this action"
           >
-            <span>↺</span>
+            <MotifIcon name="history" size={13} style={{ marginRight: '4px' }} />
             <span>Undo</span>
           </button>
         )}
@@ -109,7 +110,7 @@ export default function FeedbackToast({ feedback, onDismiss }) {
           title="Dismiss notification"
           aria-label="Dismiss notification"
         >
-          ✕
+          <MotifIcon name="close" size={13} />
         </button>
       </div>
     </div>

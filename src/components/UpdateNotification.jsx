@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { subscribeServiceWorkerUpdate, applyServiceWorkerUpdate } from '../utils/pwaManager';
+import MotifIcon from './MotifIcon';
 
 /**
  * Accessible Service Worker Update Notification.
@@ -32,7 +33,9 @@ export default function UpdateNotification() {
     >
       <div style={styles.card}>
         <div style={styles.content}>
-          <span style={styles.icon} aria-hidden="true">✨</span>
+          <span style={styles.icon} aria-hidden="true">
+            <MotifIcon name="sparkle" size={18} color="#8E5FA8" />
+          </span>
           <div style={styles.textGroup}>
             <strong style={styles.title}>Update Available</strong>
             <span style={styles.description}>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import MotifIcon from './MotifIcon';
 import { telemetry } from '../telemetry/telemetryManager';
 import { dialogueManager } from '../conversation/dialogueManager';
 
@@ -93,7 +94,8 @@ export default function BehavioralHistoryPanel({ tasks }) {
               style={styles.secondaryBtn}
               title="Download your complete raw behavioral event stream as JSON"
             >
-              <span>📥 Export Event Log (.json)</span>
+              <MotifIcon name="download" size={14} style={{ marginRight: '6px' }} />
+              <span>Export Event Log (.json)</span>
             </button>
             <button
               type="button"
@@ -101,7 +103,8 @@ export default function BehavioralHistoryPanel({ tasks }) {
               style={styles.dangerOutlineBtn}
               title="Permanently erase your behavioral history"
             >
-              <span>🗑️ Clear History</span>
+              <MotifIcon name="trash" size={14} style={{ marginRight: '6px' }} />
+              <span>Clear History</span>
             </button>
           </div>
         </div>
@@ -109,7 +112,8 @@ export default function BehavioralHistoryPanel({ tasks }) {
         {/* Feedback Banner */}
         {feedbackMsg && (
           <div style={styles.feedbackBanner}>
-            <span>✓ {feedbackMsg}</span>
+            <MotifIcon name="check" size={13} style={{ marginRight: '6px' }} />
+            <span>{feedbackMsg}</span>
           </div>
         )}
 
@@ -196,8 +200,9 @@ export default function BehavioralHistoryPanel({ tasks }) {
           <div style={styles.privacyPanel} className="digital-card">
             <div style={styles.panelHeader}>
               <span style={styles.panelTitle}>LOCAL-FIRST PRIVACY PROMISE</span>
-              <span className="note-tag" style={{ color: '#166534' }}>
-                100% on-device ✓
+              <span className="note-tag" style={{ color: '#166534', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <span>100% on-device</span>
+                <MotifIcon name="check" size={12} color="#166534" />
               </span>
             </div>
 

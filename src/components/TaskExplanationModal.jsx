@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import MotifIcon from './MotifIcon';
 
 export default function TaskExplanationModal({ task, prediction, onClose }) {
   useEffect(() => {
@@ -85,7 +86,7 @@ export default function TaskExplanationModal({ task, prediction, onClose }) {
             style={styles.closeBtn}
             aria-label={`Close explanation for "${task.title}"`}
           >
-            ✕
+            <MotifIcon name="close" size={14} />
           </button>
         </div>
 
@@ -200,14 +201,20 @@ export default function TaskExplanationModal({ task, prediction, onClose }) {
         {/* Recommendation if present */}
         {prediction.recommendation && (
           <div style={styles.recommendationBox}>
-            <span style={styles.recommendationHeading}>💡 Recommended Action</span>
+            <span style={styles.recommendationHeading}>
+              <MotifIcon name="lightbulb" size={14} style={{ marginRight: '6px' }} />
+              <span>Recommended Action</span>
+            </span>
             <p style={styles.recommendationText}>{prediction.recommendation}</p>
           </div>
         )}
 
         {/* Methodology Note */}
         <div style={styles.noteBox}>
-          <span style={styles.noteHeading}>🔒 Privacy & Guardrails</span>
+          <span style={styles.noteHeading}>
+            <MotifIcon name="lock" size={14} style={{ marginRight: '6px' }} />
+            <span>Privacy & Guardrails</span>
+          </span>
           <p style={styles.noteText}>
             Personal behavioural telemetry is stored strictly in your local browser IndexedDB. Baseline risk is trained on non-personal reference data and personal adjustments are clamped to ±15% with conservative Bayesian shrinkage.
           </p>

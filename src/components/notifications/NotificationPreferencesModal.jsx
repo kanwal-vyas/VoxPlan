@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import MotifIcon from '../MotifIcon.jsx';
 import {
   getNotificationPreferences,
   updateNotificationPreferences,
@@ -88,7 +89,9 @@ export default function NotificationPreferencesModal({ isOpen, onClose }) {
         {/* Header */}
         <div style={styles.header}>
           <div style={styles.titleWrap}>
-            <span style={styles.headerIcon} aria-hidden="true">⚙️</span>
+            <span style={styles.headerIcon} aria-hidden="true">
+              <MotifIcon name="settings" size={20} color="#8E5FA8" />
+            </span>
             <h2 id="notif-prefs-title" style={styles.title}>
               Notification Preferences
             </h2>
@@ -100,7 +103,7 @@ export default function NotificationPreferencesModal({ isOpen, onClose }) {
             style={styles.closeBtn}
             aria-label="Close notification settings"
           >
-            ✕
+            <MotifIcon name="close" size={14} />
           </button>
         </div>
 
@@ -133,12 +136,17 @@ export default function NotificationPreferencesModal({ isOpen, onClose }) {
 
             {!isSupported ? (
               <div style={styles.noticeWarning}>
-                <span>⚠️ Web notifications are not supported in this browser.</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <MotifIcon name="warning" size={14} color="#B45309" />
+                  <span>Web notifications are not supported in this browser.</span>
+                </span>
               </div>
             ) : browserPermission === 'granted' ? (
               <div>
                 <div style={styles.permissionGrantedBanner}>
-                  <span style={styles.checkIcon}>✓</span>
+                  <span style={styles.checkIcon}>
+                    <MotifIcon name="check" size={12} color="#166534" />
+                  </span>
                   <span>Browser notification permission is granted on this device.</span>
                 </div>
                 <div style={{ ...styles.settingRow, marginTop: '12px' }}>
@@ -157,7 +165,10 @@ export default function NotificationPreferencesModal({ isOpen, onClose }) {
               </div>
             ) : browserPermission === 'denied' ? (
               <div style={styles.noticeError}>
-                <strong>⚠️ Notifications are blocked in your browser.</strong>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <MotifIcon name="warning" size={14} color="#D9383A" />
+                  <strong>Notifications are blocked in your browser.</strong>
+                </div>
                 <p style={{ margin: '4px 0 0', fontSize: '13px' }}>
                   To enable, click the padlock/tune icon next to the URL in your browser address bar and change Notifications to "Allow".
                 </p>
@@ -165,7 +176,10 @@ export default function NotificationPreferencesModal({ isOpen, onClose }) {
             ) : (
               <div style={styles.permissionRequestBox}>
                 <div style={styles.privacyExplainer}>
-                  <strong style={{ display: 'block', marginBottom: '4px' }}>🔒 100% Local-First Privacy</strong>
+                  <strong style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                    <MotifIcon name="lock" size={14} color="#25242A" />
+                    <span>100% Local-First Privacy</span>
+                  </strong>
                   VoxPlan evaluates all reminders entirely inside your browser. No task titles or personal schedules are ever uploaded to cloud notification servers.
                 </div>
                 <button

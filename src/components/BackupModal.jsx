@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import MotifIcon from './MotifIcon';
 import {
   exportEncryptedBackup,
   validateAndPreviewBackup,
@@ -234,7 +235,9 @@ export default function BackupModal({
         {/* Header */}
         <div style={styles.header}>
           <div style={styles.headerTitleRow}>
-            <span style={styles.headerIcon}>🔐</span>
+            <span style={styles.headerIcon}>
+              <MotifIcon name="lock" size={20} color="#8E5FA8" />
+            </span>
             <div>
               <h2 id="backup-modal-title" style={styles.title}>
                 Encrypted Workspace Backup
@@ -250,7 +253,7 @@ export default function BackupModal({
             style={styles.closeBtn}
             aria-label="Close backup dialog"
           >
-            ✕
+            <MotifIcon name="close" size={14} />
           </button>
         </div>
 
@@ -298,10 +301,22 @@ export default function BackupModal({
             <div style={styles.scopeCard}>
               <h3 style={styles.scopeTitle}>What is included in this backup:</h3>
               <ul style={styles.scopeList}>
-                <li>✓ All genuine active and completed tasks with estimates and dependencies</li>
-                <li>✓ Accepted sprint schedule and custom time-block availability settings</li>
-                <li>✓ Local behavioral habit events and focused timer sessions</li>
-                <li>✓ User speech preferences and feedback settings</li>
+                <li>
+                  <MotifIcon name="check" size={13} color="#2D6A4F" style={{ marginRight: '6px' }} />
+                  <span>All genuine active and completed tasks with estimates and dependencies</span>
+                </li>
+                <li>
+                  <MotifIcon name="check" size={13} color="#2D6A4F" style={{ marginRight: '6px' }} />
+                  <span>Accepted sprint schedule and custom time-block availability settings</span>
+                </li>
+                <li>
+                  <MotifIcon name="check" size={13} color="#2D6A4F" style={{ marginRight: '6px' }} />
+                  <span>Local behavioral habit events and focused timer sessions</span>
+                </li>
+                <li>
+                  <MotifIcon name="check" size={13} color="#2D6A4F" style={{ marginRight: '6px' }} />
+                  <span>User speech preferences and feedback settings</span>
+                </li>
               </ul>
               <p style={styles.scopeNotice}>
                 <strong>Excluded:</strong> In-flight stopwatch state, demo markers, and cached ML calculations.
@@ -354,7 +369,9 @@ export default function BackupModal({
 
               {/* Warning Notice */}
               <div style={styles.warningBox}>
-                <span style={styles.warningIcon}>⚠️</span>
+                <span style={styles.warningIcon}>
+                  <MotifIcon name="warning" size={16} color="#B45309" />
+                </span>
                 <p style={styles.warningText}>
                   <strong>Zero-Knowledge Security:</strong> Your data is encrypted locally using PBKDF2 (SHA-256) and AES-GCM (256-bit). If you lose this password, this backup <strong>cannot be recovered</strong>. No backdoor exists.
                 </p>
@@ -473,7 +490,10 @@ export default function BackupModal({
               <div style={styles.previewCard}>
                 <div style={styles.previewHeader}>
                   <h4 style={styles.previewTitle}>Verified Backup Preview</h4>
-                  <span style={styles.verifiedBadge}>✓ Integrity Verified</span>
+                  <span style={styles.verifiedBadge}>
+                    <MotifIcon name="check" size={12} color="#166534" style={{ marginRight: '4px' }} />
+                    <span>Integrity Verified</span>
+                  </span>
                 </div>
 
                 <div style={styles.previewGrid}>

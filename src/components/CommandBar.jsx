@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import MotifIcon from './MotifIcon';
 import { formatTaskDueDate } from '../conversation/compoundCommandParser';
 
 export default function CommandBar({
@@ -123,22 +124,40 @@ export default function CommandBar({
             <div style={styles.drawerHeaderLeft}>
               <span style={styles.drawerBadge}>ASSISTANT DETAILS</span>
               {conversationState === 'AWAITING_CONFIRMATION' && (
-                <span style={styles.stateBadgeConfirmation}>⚠️ CONFIRMATION REQUIRED</span>
+                <span style={styles.stateBadgeConfirmation}>
+                  <MotifIcon name="warning" size={12} color="#991B1B" style={{ marginRight: '4px' }} />
+                  CONFIRMATION REQUIRED
+                </span>
               )}
               {conversationState === 'AWAITING_CLARIFICATION' && (
-                <span style={styles.stateBadgeClarification}>💬 CLARIFYING DETAILS</span>
+                <span style={styles.stateBadgeClarification}>
+                  <MotifIcon name="chat" size={12} color="#1E40AF" style={{ marginRight: '4px' }} />
+                  CLARIFYING DETAILS
+                </span>
               )}
               {conversationState === 'AWAITING_PROPOSAL_DECISION' && (
-                <span style={styles.stateBadgeProposal}>📋 PROPOSAL PENDING REVIEW</span>
+                <span style={styles.stateBadgeProposal}>
+                  <MotifIcon name="task-sheet" size={12} color="#5B44BA" style={{ marginRight: '4px' }} />
+                  PROPOSAL PENDING REVIEW
+                </span>
               )}
               {(recognitionState === 'LISTENING' || isListening) && (
-                <span style={styles.stateBadgeListening}>🎙️ LISTENING</span>
+                <span style={styles.stateBadgeListening}>
+                  <MotifIcon name="mic" size={12} color="#166534" style={{ marginRight: '4px' }} />
+                  LISTENING
+                </span>
               )}
               {recognitionState === 'STARTING' && (
-                <span style={styles.stateBadgeStarting}>⏳ CONNECTING</span>
+                <span style={styles.stateBadgeStarting}>
+                  <MotifIcon name="hourglass" size={12} color="#854D0E" style={{ marginRight: '4px' }} />
+                  CONNECTING
+                </span>
               )}
               {recognitionState === 'PROCESSING' && (
-                <span style={styles.stateBadgeProcessing}>⚙️ PROCESSING</span>
+                <span style={styles.stateBadgeProcessing}>
+                  <MotifIcon name="settings" size={12} color="#3730A3" style={{ marginRight: '4px' }} />
+                  PROCESSING
+                </span>
               )}
             </div>
 
@@ -153,7 +172,8 @@ export default function CommandBar({
               title="Minimize panel"
               aria-label="Minimize assistant panel"
             >
-              ✕ Minimize
+              <MotifIcon name="close" size={12} style={{ marginRight: '4px' }} />
+              <span>Minimize</span>
             </button>
           </div>
 
@@ -257,11 +277,22 @@ export default function CommandBar({
                           : '#166534',
                     }}
                   >
-                    {activeProposal.summary?.feasibilityStatus === 'infeasible_dependency'
-                      ? '🚫 Dependency Conflict'
-                      : activeProposal.summary?.feasibilityStatus === 'capacity_warning'
-                      ? '⚠️ Capacity Alert'
-                      : '✓ Feasible'}
+                    {activeProposal.summary?.feasibilityStatus === 'infeasible_dependency' ? (
+                      <>
+                        <MotifIcon name="prohibit" size={12} color="#991B1B" style={{ marginRight: '4px' }} />
+                        <span>Dependency Conflict</span>
+                      </>
+                    ) : activeProposal.summary?.feasibilityStatus === 'capacity_warning' ? (
+                      <>
+                        <MotifIcon name="warning" size={12} color="#B45309" style={{ marginRight: '4px' }} />
+                        <span>Capacity Alert</span>
+                      </>
+                    ) : (
+                      <>
+                        <MotifIcon name="check" size={12} color="#166534" style={{ marginRight: '4px' }} />
+                        <span>Feasible</span>
+                      </>
+                    )}
                   </span>
                 </div>
                 <span style={styles.proposalIdText} title={activeProposal.scheduleId}>
@@ -293,15 +324,21 @@ export default function CommandBar({
                                 borderRadius: '4px',
                                 marginLeft: '6px',
                                 fontWeight: '700',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
                               }}
                             >
-                              🎯 {p.focusWindowLabel || 'Focus'}
+                              <MotifIcon name="target" size={11} color="#92400E" />
+                              <span>{p.focusWindowLabel || 'Focus'}</span>
                             </span>
                           )}
                         </span>
                         <span style={styles.placementDates}>
                           <span style={styles.origDate}>{p.originalDueDate || 'No deadline'}</span>
-                          <span style={styles.arrowIcon}> ➜ </span>
+                          <span style={{ ...styles.arrowIcon, display: 'inline-flex', alignItems: 'center', margin: '0 4px' }}>
+                            <MotifIcon name="arrow-right" size={11} />
+                          </span>
                           <strong style={styles.propDate}>{p.proposedDate || 'Unscheduled'}</strong>
                           {p.startTime && p.endTime && (
                             <span style={{ marginLeft: '6px', fontSize: '11px', color: '#4F46E5', fontWeight: '600' }}>
@@ -359,7 +396,8 @@ export default function CommandBar({
                   style={styles.acceptProposalBtn}
                   aria-label="Accept schedule proposal"
                 >
-                  ✓ Apply Schedule
+                  <MotifIcon name="check" size={13} style={{ marginRight: '6px' }} />
+                  <span>Apply Schedule</span>
                 </button>
                 <button
                   id="proposal-discard-btn"
@@ -368,7 +406,8 @@ export default function CommandBar({
                   style={styles.discardProposalBtn}
                   aria-label="Discard schedule proposal"
                 >
-                  ✕ Discard
+                  <MotifIcon name="close" size={13} style={{ marginRight: '6px' }} />
+                  <span>Discard</span>
                 </button>
                 <span style={styles.proposalHelpHint}>
                   Say "Accept" to apply, "Discard" to cancel, or ask "What if..." to revise.
@@ -382,7 +421,10 @@ export default function CommandBar({
             <div id="clarification-card" style={styles.clarificationCard} aria-label="Clarification Needed">
               <div style={styles.clarificationHeader}>
                 <div style={styles.clarificationBadgeGroup}>
-                  <span style={styles.clarificationPill}>💬 CLARIFICATION NEEDED</span>
+                  <span style={styles.clarificationPill}>
+                    <MotifIcon name="chat" size={12} style={{ marginRight: '4px' }} />
+                    CLARIFICATION NEEDED
+                  </span>
                   {pendingClarification.candidates?.length > 0 && (
                     <span style={styles.candidateCountPill}>
                       {pendingClarification.candidates.length} Candidate Tasks
@@ -396,7 +438,8 @@ export default function CommandBar({
                   style={styles.cancelClarificationBtn}
                   aria-label="Cancel clarification"
                 >
-                  ✕ Cancel
+                  <MotifIcon name="close" size={12} style={{ marginRight: '4px' }} />
+                  <span>Cancel</span>
                 </button>
               </div>
 
@@ -444,9 +487,13 @@ export default function CommandBar({
                               backgroundColor: candidate.dueDate ? '#EBF8F1' : '#F1F5F9',
                               color: candidate.dueDate ? '#166534' : '#64748B',
                               borderColor: candidate.dueDate ? '#BFE8D0' : '#E2E8F0',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
                             }}
                           >
-                            📅 {formattedDue}
+                            <MotifIcon name="calendar" size={11} />
+                            <span>{formattedDue}</span>
                           </span>
                           {candidate.priority && (
                             <span
@@ -455,14 +502,19 @@ export default function CommandBar({
                                 backgroundColor: candidate.priority === 'high' ? '#FFE8E5' : candidate.priority === 'low' ? '#F1F5F9' : '#FFF4E5',
                                 color: candidate.priority === 'high' ? '#991B1B' : candidate.priority === 'low' ? '#64748B' : '#B45309',
                                 borderColor: candidate.priority === 'high' ? '#FFB5A7' : candidate.priority === 'low' ? '#E2E8F0' : '#FFE0B2',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
                               }}
                             >
-                              ⚡ {candidate.priority.toUpperCase()}
+                              <MotifIcon name="bolt" size={11} />
+                              <span>{candidate.priority.toUpperCase()}</span>
                             </span>
                           )}
                           {candidate.category && candidate.category !== 'General' && (
-                            <span style={styles.candidateCategoryBadge}>
-                              🏷️ {candidate.category}
+                            <span style={{ ...styles.candidateCategoryBadge, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <MotifIcon name="tag" size={11} />
+                              <span>{candidate.category}</span>
                             </span>
                           )}
                         </div>
@@ -474,7 +526,8 @@ export default function CommandBar({
 
               <div style={styles.clarificationFooter}>
                 <span style={styles.clarificationHelpHint}>
-                  💡 Say <em>"The one due today"</em>, <em>"The first one"</em>, click a card above, or type your answer below.
+                  <MotifIcon name="lightbulb" size={13} color="#B45309" style={{ marginRight: '6px' }} />
+                  <span>Say <em>"The one due today"</em>, <em>"The first one"</em>, click a card above, or type your answer below.</span>
                 </span>
               </div>
             </div>
@@ -490,7 +543,8 @@ export default function CommandBar({
                 style={styles.confirmBtn}
                 aria-label="Confirm pending action"
               >
-                ✓ Confirm
+                <MotifIcon name="check" size={13} style={{ marginRight: '6px' }} />
+                <span>Confirm</span>
               </button>
               <button
                 type="button"
@@ -498,7 +552,8 @@ export default function CommandBar({
                 style={styles.cancelBtn}
                 aria-label="Cancel pending action"
               >
-                ✕ Cancel
+                <MotifIcon name="close" size={13} style={{ marginRight: '6px' }} />
+                <span>Cancel</span>
               </button>
             </div>
           )}
@@ -528,7 +583,9 @@ export default function CommandBar({
 
           {/* Voice Privacy & Browser Compatibility Notice */}
           <div style={styles.privacyNote} aria-label="Voice privacy notice">
-            <span style={styles.privacyLockIcon}>🔒</span>
+            <span style={styles.privacyLockIcon}>
+              <MotifIcon name="lock" size={14} color="#8E5FA8" />
+            </span>
             <span style={styles.privacyText}>
               <strong>Voice Privacy:</strong> Spoken commands use your browser's native Web Speech API. Audio recognition is performed by your browser vendor (e.g. Google or Apple) and is never sent to third-party AI services or stored on VoxPlan servers.
             </span>
@@ -550,16 +607,33 @@ export default function CommandBar({
             style={styles.dockAlertPill}
             aria-label="Expand assistant details to view pending state"
           >
-            <span>
-              {pendingClarification
-                ? '💬 Clarification needed — Click to choose task'
-                : activeProposal
-                ? '📋 Schedule Proposal ready for review'
-                : conversationState === 'AWAITING_CONFIRMATION'
-                ? '⚠️ Confirmation required'
-                : '🎙️ Microphone listening...'}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <MotifIcon
+                name={
+                  pendingClarification
+                    ? 'chat'
+                    : activeProposal
+                    ? 'task-sheet'
+                    : conversationState === 'AWAITING_CONFIRMATION'
+                    ? 'warning'
+                    : 'mic'
+                }
+                size={14}
+              />
+              <span>
+                {pendingClarification
+                  ? 'Clarification needed — Click to choose task'
+                  : activeProposal
+                  ? 'Schedule Proposal ready for review'
+                  : conversationState === 'AWAITING_CONFIRMATION'
+                  ? 'Confirmation required'
+                  : 'Microphone listening...'}
+              </span>
             </span>
-            <span style={styles.dockAlertPillAction}>View Details ▲</span>
+            <span style={{ ...styles.dockAlertPillAction, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <span>View Details</span>
+              <MotifIcon name="chevron-up" size={12} />
+            </span>
           </button>
         )}
 
@@ -567,7 +641,17 @@ export default function CommandBar({
         <form onSubmit={handleSubmit} style={styles.form}>
           <div style={styles.inputRow}>
             <span className="prompt-icon-mobile" style={styles.promptIcon}>
-              {conversationState === 'AWAITING_CONFIRMATION' ? '⚠️' : conversationState === 'AWAITING_PROPOSAL_DECISION' ? '📋' : '💬'}
+              <MotifIcon
+                name={
+                  conversationState === 'AWAITING_CONFIRMATION'
+                    ? 'warning'
+                    : conversationState === 'AWAITING_PROPOSAL_DECISION'
+                    ? 'task-sheet'
+                    : 'chat'
+                }
+                size={15}
+                color="#8E5FA8"
+              />
             </span>
             <label htmlFor="command-input" className="sr-only">
               Planning command or task input
@@ -758,7 +842,7 @@ export default function CommandBar({
               title={showExpanded ? 'Minimize details' : 'Expand details and suggestions'}
               aria-label={showExpanded ? 'Minimize command assistant panel' : 'Expand command assistant panel'}
             >
-              {showExpanded ? '▼' : '▲'}
+              <MotifIcon name={showExpanded ? 'chevron-down' : 'chevron-up'} size={14} />
             </button>
           </div>
         </form>

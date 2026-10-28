@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import MotifIcon from './MotifIcon';
 import {
   analyzePreferenceSignals,
   EVIDENCE_LEVELS,
@@ -50,9 +51,14 @@ export default function PreferenceSignalsCard({ events = [], tasks = [] }) {
               }}
               role="status"
             >
-              {isReadinessMet
-                ? '● MATURE TELEMETRY — CANDIDATE SIGNALS DERIVED'
-                : '🔒 ADAPTATION LOCKED — PRELIMINARY AGGREGATES ONLY'}
+              {isReadinessMet ? (
+                '● MATURE TELEMETRY — CANDIDATE SIGNALS DERIVED'
+              ) : (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <MotifIcon name="lock" size={11} color="#92400E" />
+                  <span>ADAPTATION LOCKED — PRELIMINARY AGGREGATES ONLY</span>
+                </span>
+              )}
             </span>
           </div>
           <h4 style={styles.title}>EMPIRICAL FRICTION PROFILING & PREFERENCE SIGNALS</h4>
@@ -170,9 +176,13 @@ export default function PreferenceSignalsCard({ events = [], tasks = [] }) {
                           ...styles.signalLevelPill,
                           backgroundColor: isEligible ? '#DCFCE7' : '#FEF3C7',
                           color: isEligible ? '#166534' : '#92400E',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
                         }}
                       >
-                        {isEligible ? '✦ ELIGIBLE FOR EVALUATION' : '○ PRELIMINARY OBSERVATION'}
+                        <MotifIcon name={isEligible ? 'check' : 'circle'} size={11} color={isEligible ? '#166534' : '#92400E'} />
+                        {isEligible ? 'ELIGIBLE FOR EVALUATION' : 'PRELIMINARY OBSERVATION'}
                       </span>
                     </div>
                     <span style={styles.signalMetricBadge}>
@@ -194,7 +204,9 @@ export default function PreferenceSignalsCard({ events = [], tasks = [] }) {
                   </div>
 
                   <div style={styles.signalStatusBox}>
-                    <span style={styles.statusBoxIcon}>ℹ</span>
+                    <span style={styles.statusBoxIcon}>
+                      <MotifIcon name="info" size={13} color="#1E40AF" />
+                    </span>
                     <span style={styles.statusBoxText}>{sig.statusStatement}</span>
                   </div>
 
@@ -206,7 +218,10 @@ export default function PreferenceSignalsCard({ events = [], tasks = [] }) {
                       style={styles.confoundersBtn}
                       aria-expanded={isExpanded}
                     >
-                      <span>{isExpanded ? '▼ Hide Known Confounders' : '▶ Show Known Confounders & Limitations'}</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <MotifIcon name={isExpanded ? 'chevron-down' : 'chevron-right'} size={12} />
+                        <span>{isExpanded ? 'Hide Known Confounders' : 'Show Known Confounders & Limitations'}</span>
+                      </span>
                     </button>
 
                     {isExpanded && (
@@ -225,7 +240,9 @@ export default function PreferenceSignalsCard({ events = [], tasks = [] }) {
           </div>
         ) : (
           <div style={styles.emptySignalsBox}>
-            <span style={styles.emptySignalsIcon}>🔬</span>
+            <span style={styles.emptySignalsIcon}>
+              <MotifIcon name="flask" size={24} color="#8E5FA8" />
+            </span>
             <div style={styles.emptySignalsContent}>
               <strong style={styles.emptySignalsTitle}>No Candidate Preference Signals Confirmed</strong>
               <p style={styles.emptySignalsDesc}>
@@ -240,7 +257,9 @@ export default function PreferenceSignalsCard({ events = [], tasks = [] }) {
       {unavailableSignalFamilies?.length > 0 && (
         <div style={styles.unavailableBox}>
           <div style={styles.unavailHeader}>
-            <span style={styles.unavailIcon}>📡</span>
+            <span style={styles.unavailIcon}>
+              <MotifIcon name="antenna" size={16} color="#B45309" />
+            </span>
             <span style={styles.unavailTitle}>Telemetry Schema Gaps & Unavailable Signals</span>
           </div>
           <div style={styles.unavailList}>
@@ -261,7 +280,9 @@ export default function PreferenceSignalsCard({ events = [], tasks = [] }) {
 
       {/* Governance & Safety Note */}
       <div style={styles.governanceNote}>
-        <span style={styles.govIcon}>🛡️</span>
+        <span style={styles.govIcon}>
+          <MotifIcon name="shield" size={16} color="#2D6A4F" />
+        </span>
         <span style={styles.govText}>{governance.disclosure}</span>
       </div>
     </div>

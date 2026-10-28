@@ -1,4 +1,5 @@
 import React from 'react';
+import MotifIcon from './MotifIcon';
 
 /**
  * Error boundary protecting against dynamic chunk load errors and network failures.
@@ -30,7 +31,7 @@ export default class RouteErrorBoundary extends React.Component {
       return (
         <main id="main-content" tabIndex={-1} style={styles.container}>
           <div role="alert" style={styles.card}>
-            <span style={styles.icon}>⚠️</span>
+            <span style={styles.icon}><MotifIcon name="warning" size={32} color="#D9383A" /></span>
             <h1 style={styles.title}>Unable to Load View</h1>
             <p style={styles.description}>
               The requested view could not be loaded. This typically happens during an offline transition,

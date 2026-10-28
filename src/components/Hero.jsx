@@ -1,4 +1,5 @@
 import React from 'react';
+import MotifIcon from './MotifIcon';
 import { formatTaskDueDate } from '../conversation/compoundCommandParser';
 
 export default function Hero({
@@ -31,7 +32,8 @@ export default function Hero({
           dueDate: 'today',
           estimatedEffort: 10,
           demoRisk: 96.4,
-          demoTag: 'bottleneck ↗',
+          demoTagText: 'bottleneck',
+          demoTagMotif: 'trending-up',
         },
         {
           id: 'demo-2',
@@ -41,7 +43,8 @@ export default function Hero({
           dueDate: 'today',
           estimatedEffort: 6,
           demoRisk: 54.2,
-          demoTag: 'in progress →',
+          demoTagText: 'in progress',
+          demoTagMotif: 'arrow-right',
         },
         {
           id: 'demo-3',
@@ -51,7 +54,8 @@ export default function Hero({
           dueDate: 'tomorrow',
           estimatedEffort: 3.5,
           demoRisk: 18.7,
-          demoTag: 'on track ✓',
+          demoTagText: 'on track',
+          demoTagMotif: 'check',
         },
       ];
 
@@ -66,7 +70,7 @@ export default function Hero({
           {/* Left: Editorial Typography & Intent */}
           <div style={styles.leftColumn}>
             <div style={styles.eyebrowPill}>
-              <span style={styles.eyebrowIcon}>✦</span>
+              <MotifIcon name="sparkle" size={12} color="#D97706" style={{ marginRight: '4px' }} />
               <span style={styles.eyebrowText}>PREDICTIVE TASK INTELLIGENCE</span>
             </div>
 
@@ -93,7 +97,7 @@ export default function Hero({
                 style={styles.primaryBtn}
               >
                 <span>Today's Focus & Workload</span>
-                <span>↓</span>
+                <MotifIcon name="arrow-down" size={14} style={{ marginLeft: '6px' }} />
               </button>
 
               {onSelectView && (
@@ -102,7 +106,8 @@ export default function Hero({
                   onClick={() => onSelectView('tasks')}
                   style={styles.secondaryBtn}
                 >
-                  Manage Backlog →
+                  <span>Manage Backlog</span>
+                  <MotifIcon name="arrow-right" size={14} style={{ marginLeft: '6px' }} />
                 </button>
               )}
 
@@ -115,8 +120,9 @@ export default function Hero({
           {/* Right: Layered Preview / Live Focus Cards */}
           <div style={styles.rightColumn} className="hero-preview-cards">
             <div style={styles.previewHeader}>
-              <span style={styles.previewTag}>
-                {hasRealTasks ? '✦ SPRINT RISK SPOTLIGHT' : '✦ ILLUSTRATIVE PREVIEW'}
+              <span style={{ ...styles.previewTag, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                <MotifIcon name="sparkle" size={11} color="currentColor" />
+                {hasRealTasks ? 'SPRINT RISK SPOTLIGHT' : 'ILLUSTRATIVE PREVIEW'}
               </span>
               <span style={styles.previewSub}>
                 {hasRealTasks ? 'Active initiatives' : 'Design demonstration'}
@@ -170,8 +176,28 @@ export default function Hero({
                       {formattedDue}
                       {task.estimatedEffort ? ` · ${task.estimatedEffort}h effort` : ''}
                     </span>
-                    <span style={{ fontSize: '12px', color: textAccent, fontWeight: '600' }}>
-                      {task.demoTag || (isHigh ? 'bottleneck ↗' : isMedium ? 'in progress →' : 'on track ✓')}
+                    <span style={{ fontSize: '12px', color: textAccent, fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      {task.demoTagText ? (
+                        <>
+                          <span>{task.demoTagText}</span>
+                          <MotifIcon name={task.demoTagMotif} size={12} />
+                        </>
+                      ) : isHigh ? (
+                        <>
+                          <span>bottleneck</span>
+                          <MotifIcon name="trending-up" size={12} />
+                        </>
+                      ) : isMedium ? (
+                        <>
+                          <span>in progress</span>
+                          <MotifIcon name="arrow-right" size={12} />
+                        </>
+                      ) : (
+                        <>
+                          <span>on track</span>
+                          <MotifIcon name="check" size={12} />
+                        </>
+                      )}
                     </span>
                   </div>
                 </div>

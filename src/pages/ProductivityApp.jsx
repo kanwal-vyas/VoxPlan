@@ -13,6 +13,7 @@ import TaskCalendar from '../components/TaskCalendar';
 import LoadingScreen from '../components/LoadingScreen';
 import FeedbackToast from '../components/FeedbackToast';
 import EditorialBackground from '../components/EditorialBackground';
+import MotifIcon from '../components/MotifIcon';
 
 // Illustrated Sticky Notes (Memos)
 import '../components/stickyNotes/TaskStickyNotes.css';
@@ -1830,10 +1831,16 @@ export default function ProductivityApp({ onNavigate }) {
                     type="button"
                     id="today-view-all-tasks-btn"
                     onClick={() => handleSelectView('tasks')}
-                    style={styles.openTasksWorkspaceBtn}
+                    style={{
+                      ...styles.openTasksWorkspaceBtn,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
                     aria-label="Open Tasks workspace"
                   >
-                    Manage All Tasks →
+                    Manage All Tasks
+                    <MotifIcon name="arrow-right" size={13} />
                   </button>
                 </div>
               </div>
@@ -1879,13 +1886,23 @@ export default function ProductivityApp({ onNavigate }) {
                                     ...styles.todayPriorityTag,
                                     color: palette.text,
                                     backgroundColor: palette.bg,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
                                   }}
                                 >
-                                  {palette.icon} {task.priority.toUpperCase()}
+                                  <MotifIcon name={palette.motifName || 'flag'} size={12} color={palette.text} />
+                                  {task.priority.toUpperCase()}
                                 </span>
-                                <span style={styles.todayDueTag}>📅 {formattedDue}</span>
+                                <span style={{ ...styles.todayDueTag, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                  <MotifIcon name="calendar" size={12} />
+                                  {formattedDue}
+                                </span>
                                 {task.estimatedEffort && (
-                                  <span style={styles.todayEffortTag}>⏱ {task.estimatedEffort}h</span>
+                                  <span style={{ ...styles.todayEffortTag, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    <MotifIcon name="clock" size={12} />
+                                    {task.estimatedEffort}h
+                                  </span>
                                 )}
                                 <TaskStickyTab
                                   notes={stickyNotesMap[task.id] || []}
@@ -1911,10 +1928,14 @@ export default function ProductivityApp({ onNavigate }) {
                                 backgroundColor: isTimerRunning ? '#FFEFEA' : '#FFFFFF',
                                 borderColor: isTimerRunning ? '#FF8F82' : 'rgba(61, 38, 69, 0.15)',
                                 color: isTimerRunning ? '#D9383A' : '#5E5B66',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
                               }}
                               title={isTimerRunning ? 'Pause tracking timer' : 'Start stopwatch timer'}
                             >
-                              {isTimerRunning ? '⏸ Active' : '▶ Track'}
+                              <MotifIcon name={isTimerRunning ? 'pause' : 'play'} size={12} />
+                              {isTimerRunning ? 'Active' : 'Track'}
                             </button>
 
                             {pred ? (
@@ -1926,10 +1947,16 @@ export default function ProductivityApp({ onNavigate }) {
                                     pred,
                                   })
                                 }
-                                style={styles.todayRiskTag}
+                                style={{
+                                  ...styles.todayRiskTag,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                }}
                                 title="Inspect delay risk explanation"
                               >
-                                {Math.round((pred.delay_probability ?? pred.probability) * 100)}% risk ↗
+                                <span>{Math.round((pred.delay_probability ?? pred.probability) * 100)}% risk</span>
+                                <MotifIcon name="trending-up" size={12} />
                               </button>
                             ) : (
                               <span style={styles.todayAwaitingTag}>Awaiting scan</span>
@@ -1941,7 +1968,9 @@ export default function ProductivityApp({ onNavigate }) {
                 </div>
               ) : (
                 <div style={styles.todayEmptyState}>
-                  <span style={{ fontSize: '24px' }}>✨</span>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '36px', height: '36px', borderRadius: '8px', backgroundColor: 'rgba(142, 95, 168, 0.12)' }}>
+                    <MotifIcon name="sparkle" size={20} color="#8E5FA8" />
+                  </div>
                   <div>
                     <h4 style={styles.todayEmptyTitle}>All tasks completed or no tasks yet!</h4>
                     <p style={styles.todayEmptySub}>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import TaskCard from './TaskCard';
+import MotifIcon from './MotifIcon';
 import { estimateTaskDuration } from '../telemetry/personalModel';
 
 export default function TaskList({
@@ -82,10 +83,10 @@ export default function TaskList({
               role="group" aria-label="Task status filters"
             >
               {[
-                { id: 'all', label: 'All Tasks', emoji: '📝' },
-                { id: 'pending', label: 'Pending', emoji: '⏳' },
-                { id: 'high-risk', label: 'High Risk Alarms', emoji: '🚨' },
-                { id: 'completed', label: `Completed${completedCount > 0 ? ` (${completedCount})` : ''}`, emoji: '✨' },
+                { id: 'all', label: 'All Tasks', motifName: 'task-sheet' },
+                { id: 'pending', label: 'Pending', motifName: 'clock' },
+                { id: 'high-risk', label: 'High Risk Alarms', motifName: 'priority-urgent' },
+                { id: 'completed', label: `Completed${completedCount > 0 ? ` (${completedCount})` : ''}`, motifName: 'check-circle' },
               ].map((f) => (
                 <button
                   key={f.id}
@@ -99,7 +100,7 @@ export default function TaskList({
                     ...(activeFilter === f.id ? styles.activeFilterBtn : {}),
                   }}
                 >
-                  <span aria-hidden="true">{f.emoji}</span>
+                  <MotifIcon name={f.motifName} size={14} style={{ marginRight: '6px' }} />
                   <span>{f.label}</span>
                 </button>
               ))}
@@ -115,7 +116,7 @@ export default function TaskList({
                   title={`Clear all ${completedCount} completed task(s)`}
                   aria-label={`Clear all ${completedCount} completed task(s)`}
                 >
-                  <span>🗑️</span>
+                  <MotifIcon name="trash" size={14} style={{ marginRight: '6px' }} />
                   <span>Clear Completed ({completedCount})</span>
                 </button>
               )}
@@ -129,8 +130,9 @@ export default function TaskList({
                   title="Scroll to Command Assistant to add a new task"
                   aria-label="Add a new task via Command Assistant"
                 >
-                  <span>+</span>
-                  <span>New Task ↓</span>
+                  <MotifIcon name="plus" size={13} style={{ marginRight: '4px' }} />
+                  <span>New Task</span>
+                  <MotifIcon name="arrow-down" size={12} style={{ marginLeft: '4px' }} />
                 </button>
               )}
             </div>
@@ -177,9 +179,12 @@ export default function TaskList({
 
           {filteredTasks.length === 0 && (
             <div style={styles.emptyCard}>
-              <span style={styles.emptyEmoji}>{tasks.length === 0 ? '✨' : '🎉'}</span>
-              <span style={styles.emptyAccentPhrase}>
-                {tasks.length === 0 ? '✦ Fresh canvas awaits your vision' : '✦ Brilliant momentum · Keep the streak alive'}
+              <div style={styles.emptyEmoji}>
+                <MotifIcon name={tasks.length === 0 ? 'sparkle' : 'celebrate'} size={32} color="#8E5FA8" />
+              </div>
+              <span style={{ ...styles.emptyAccentPhrase, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <MotifIcon name="sparkle" size={13} color="#C85A32" />
+                {tasks.length === 0 ? 'Fresh canvas awaits your vision' : 'Brilliant momentum · Keep the streak alive'}
               </span>
               <h4 style={styles.emptyTitle}>
                 {tasks.length === 0
@@ -210,7 +215,11 @@ export default function TaskList({
                   title="Focus command dock to create a task"
                   aria-label="Create a task in the command dock"
                 >
-                  <span>{tasks.length === 0 ? '✦ Create Your First Task ↓' : '+ Add task in Command Assistant ↓'}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                    <MotifIcon name={tasks.length === 0 ? 'sparkle' : 'plus'} size={13} />
+                    {tasks.length === 0 ? 'Create Your First Task' : 'Add task in Command Assistant'}
+                  </span>
+                  <MotifIcon name="arrow-down" size={13} style={{ marginLeft: '4px' }} />
                 </button>
               )}
             </div>

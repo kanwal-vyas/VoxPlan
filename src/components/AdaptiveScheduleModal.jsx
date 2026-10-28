@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import MotifIcon from './MotifIcon';
 import { generateAdaptiveSchedule, formatDateISO } from '../scheduler/adaptiveScheduler';
 import { compareScheduleStrategies } from '../scheduler/scheduleEvaluator';
 import { BENCHMARK_SCENARIOS, runStabilityBenchmark } from '../scheduler/scheduleBenchmarks';
@@ -182,7 +183,7 @@ export default function AdaptiveScheduleModal({
     if (typeof telemetry.isPreferenceCollectionEnabled === 'function' && !telemetry.isPreferenceCollectionEnabled()) {
       setPreferenceFeedback({
         type: 'info',
-        text: `ℹ Explicit preference collection is disabled in Personal Settings. Strategy choices are not being recorded.`,
+        text: `Explicit preference collection is disabled in Personal Settings. Strategy choices are not being recorded.`,
       });
       return;
     }
@@ -234,18 +235,18 @@ export default function AdaptiveScheduleModal({
       if (recorded) {
         setPreferenceFeedback({
           type: 'success',
-          text: `✓ Explicit preference recorded: ${label} for "${benchmarkComparison.scenario}".`,
+          text: `Explicit preference recorded: ${label} for "${benchmarkComparison.scenario}".`,
         });
       } else {
         setPreferenceFeedback({
           type: 'info',
-          text: `ℹ Preference already recorded: ${label} for "${benchmarkComparison.scenario}" (deduplicated).`,
+          text: `Preference already recorded: ${label} for "${benchmarkComparison.scenario}" (deduplicated).`,
         });
       }
     } catch (err) {
       setPreferenceFeedback({
         type: 'error',
-        text: `⚠️ Failed to record preference for "${benchmarkComparison.scenario}": ${err?.message || 'storage error'}`,
+        text: `Failed to record preference for "${benchmarkComparison.scenario}": ${err?.message || 'storage error'}`,
       });
     }
   };
@@ -549,8 +550,9 @@ export default function AdaptiveScheduleModal({
                 {badge.label}
               </span>
               {personalDurationModel?.hasSufficientData && usePersonalModel && (
-                <span style={styles.mlActiveBadge}>
-                  ✦ Learned Pace Active
+                <span style={{ ...styles.mlActiveBadge, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <MotifIcon name="sparkle" size={11} color="#6B21A8" />
+                  Learned Pace Active
                 </span>
               )}
             </div>
@@ -560,7 +562,7 @@ export default function AdaptiveScheduleModal({
             <p style={styles.subtitle}>{badge.desc}</p>
           </div>
           <button type="button" onClick={() => handleDiscard('user_closed')} style={styles.closeBtn} aria-label="Close modal">
-            ✕
+            <MotifIcon name="close" size={14} />
           </button>
         </div>
 
@@ -599,7 +601,10 @@ export default function AdaptiveScheduleModal({
               ...(activeTab === 'proposal' ? styles.navTabBtnActive : styles.navTabBtnInactive),
             }}
           >
-            ✦ Schedule Proposal
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <MotifIcon name="sparkle" size={13} />
+              Schedule Proposal
+            </span>
           </button>
           <button
             type="button"
@@ -614,7 +619,10 @@ export default function AdaptiveScheduleModal({
               ...(activeTab === 'benchmark' ? styles.navTabBtnActive : styles.navTabBtnInactive),
             }}
           >
-            ⚖ Strategy Benchmark & Quality
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <MotifIcon name="scale" size={14} />
+              Strategy Benchmark & Quality
+            </span>
           </button>
           <button
             type="button"
@@ -629,7 +637,10 @@ export default function AdaptiveScheduleModal({
               ...(activeTab === 'feedback' ? styles.navTabBtnActive : styles.navTabBtnInactive),
             }}
           >
-            📈 Schedule Feedback & Outcomes
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <MotifIcon name="chart" size={14} />
+              Schedule Feedback & Outcomes
+            </span>
           </button>
           <button
             type="button"
@@ -647,7 +658,10 @@ export default function AdaptiveScheduleModal({
               ...(activeTab === 'export' ? styles.navTabBtnActive : styles.navTabBtnInactive),
             }}
           >
-            📅 Export Calendar (.ics)
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <MotifIcon name="calendar" size={14} />
+              Export Calendar (.ics)
+            </span>
           </button>
         </div>
 
@@ -662,12 +676,16 @@ export default function AdaptiveScheduleModal({
             {/* Stale Proposal Alert Banner */}
             {isStale && (
               <div style={styles.staleBanner}>
-                <div style={styles.staleText}>
-                  ⚠️ <strong>Task Data Changed:</strong> Your task backlog was modified while this proposal was open.
-                  Regenerate the proposal to reflect your current tasks before applying.
+                <div style={{ ...styles.staleText, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <MotifIcon name="warning" size={15} color="#92400E" />
+                  <div>
+                    <strong>Task Data Changed:</strong> Your task backlog was modified while this proposal was open.
+                    Regenerate the proposal to reflect your current tasks before applying.
+                  </div>
                 </div>
-                <button type="button" onClick={handleRegenerate} style={styles.regenerateBtn}>
-                  ↻ Regenerate Proposal
+                <button type="button" onClick={handleRegenerate} style={{ ...styles.regenerateBtn, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <MotifIcon name="refresh" size={12} />
+                  Regenerate Proposal
                 </button>
               </div>
             )}
@@ -724,7 +742,10 @@ export default function AdaptiveScheduleModal({
                       : 'Personal model still in cold start (insufficient data)'
                   }
                 >
-                  {usePersonalModel ? '✓ Learned Personal Duration' : '○ Original Estimates'}
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                    <MotifIcon name={usePersonalModel ? 'check' : 'circle'} size={12} />
+                    {usePersonalModel ? 'Learned Personal Duration' : 'Original Estimates'}
+                  </span>
                 </button>
               </div>
 
@@ -738,7 +759,10 @@ export default function AdaptiveScheduleModal({
                   }}
                   title="Partition tasks exceeding daily capacity across multiple scheduled work sessions"
                 >
-                  {enableChunking ? '✓ Multi-Day Chunking' : '○ Single Session Only'}
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                    <MotifIcon name={enableChunking ? 'check' : 'circle'} size={12} />
+                    {enableChunking ? 'Multi-Day Chunking' : 'Single Session Only'}
+                  </span>
                 </button>
               </div>
 
@@ -752,7 +776,10 @@ export default function AdaptiveScheduleModal({
                   }}
                   title="Schedule sessions within intraday available windows and respect meeting blackouts"
                 >
-                  {enableIntraday ? '✓ Intraday Windows' : '○ Daily Block Only'}
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                    <MotifIcon name={enableIntraday ? 'check' : 'circle'} size={12} />
+                    {enableIntraday ? 'Intraday Windows' : 'Daily Block Only'}
+                  </span>
                 </button>
               </div>
 
@@ -811,11 +838,14 @@ export default function AdaptiveScheduleModal({
             {/* Circular Dependency Warning Callout */}
             {cycles.length > 0 && (
               <div style={styles.cycleAlert}>
-                <strong>⚠️ Circular Dependency Detected:</strong>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                  <MotifIcon name="warning" size={14} color="#991B1B" />
+                  <strong>Circular Dependency Detected:</strong>
+                </div>
                 <ul style={{ margin: '4px 0 0', paddingLeft: '20px' }}>
                   {cycles.map((cycle, idx) => (
                     <li key={idx} style={{ fontFamily: 'monospace', fontSize: '11px' }}>
-                      Cycle {idx + 1}: {cycle.join(' ➔ ')}
+                      Cycle {idx + 1}: {cycle.join(' -> ')}
                     </li>
                   ))}
                 </ul>
@@ -829,12 +859,14 @@ export default function AdaptiveScheduleModal({
             <div style={styles.draftEditBar}>
               <div style={styles.draftEditLeft}>
                 {undoStack.length > 0 ? (
-                  <span style={styles.draftActiveBadge}>
-                    ✏️ <strong>Draft Modified:</strong> {undoStack.length} manual edit{undoStack.length === 1 ? '' : 's'} applied (pending acceptance)
+                  <span style={{ ...styles.draftActiveBadge, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                    <MotifIcon name="pencil" size={12} color="#1E40AF" />
+                    <span><strong>Draft Modified:</strong> {undoStack.length} manual edit{undoStack.length === 1 ? '' : 's'} applied (pending acceptance)</span>
                   </span>
                 ) : (
-                  <span style={styles.draftHint}>
-                    💡 Click <strong>"✏️ Edit"</strong> on any task to adjust its date or time window before accepting.
+                  <span style={{ ...styles.draftHint, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                    <MotifIcon name="lightbulb" size={13} color="#D97706" />
+                    <span>Click <strong>"Edit"</strong> on any task to adjust its date or time window before accepting.</span>
                   </span>
                 )}
               </div>
@@ -850,7 +882,10 @@ export default function AdaptiveScheduleModal({
                   aria-label="Undo last edit"
                   title="Undo most recent schedule edit"
                 >
-                  ↶ Undo Edit
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <MotifIcon name="history" size={12} />
+                    Undo Edit
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -863,7 +898,10 @@ export default function AdaptiveScheduleModal({
                   aria-label="Revert to original proposal"
                   title="Revert all edits to originally generated proposal"
                 >
-                  ↺ Revert Proposal
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <MotifIcon name="refresh" size={12} />
+                    Revert Proposal
+                  </span>
                 </button>
               </div>
             </div>
@@ -873,8 +911,9 @@ export default function AdaptiveScheduleModal({
               </div>
             )}
             {validationError && !editingPlacementId && (
-              <div style={{ margin: '8px 28px 0', ...styles.inlineErrorBox }} role="alert" aria-live="assertive">
-                ⚠️ <strong>Blocking Constraint:</strong> {validationError}
+              <div style={{ margin: '8px 28px 0', ...styles.inlineErrorBox, display: 'flex', alignItems: 'center', gap: '6px' }} role="alert" aria-live="assertive">
+                <MotifIcon name="warning" size={14} color="#991B1B" />
+                <span><strong>Blocking Constraint:</strong> {validationError}</span>
               </div>
             )}
 
@@ -966,10 +1005,14 @@ export default function AdaptiveScheduleModal({
                                     borderRadius: '4px',
                                     padding: '1px 6px',
                                     marginLeft: '4px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px',
                                   }}
                                   title={`Scheduled in ${p.focusWindowLabel || 'Focus Window'}`}
                                 >
-                                  🎯 {p.focusWindowLabel || 'Focus'}
+                                  <MotifIcon name="target" size={10} color="#92400E" />
+                                  {p.focusWindowLabel || 'Focus'}
                                 </span>
                               )}
                               {p.taskCategory && (
@@ -980,7 +1023,10 @@ export default function AdaptiveScheduleModal({
                               <span style={styles.explanationText}>{p.explanation}</span>
                             )}
                             {p.conflicts && p.conflicts.length > 0 && (
-                              <span style={styles.conflictText}>⚠️ {p.conflicts[0]}</span>
+                              <span style={{ ...styles.conflictText, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                <MotifIcon name="warning" size={11} color="#9E2A2B" />
+                                {p.conflicts[0]}
+                              </span>
                             )}
                           </div>
 
@@ -997,8 +1043,9 @@ export default function AdaptiveScheduleModal({
                                   <span>{p.proposedDate}</span>
                                 )}
                                 {p.startTime && p.endTime && (
-                                  <div style={{ fontSize: '11px', color: '#4F46E5', fontWeight: '600', marginTop: '2px' }}>
-                                    🕒 {p.startTime} – {p.endTime}
+                                  <div style={{ fontSize: '11px', color: '#4F46E5', fontWeight: '600', marginTop: '2px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                    <MotifIcon name="clock" size={11} color="#4F46E5" />
+                                    {p.startTime} – {p.endTime}
                                   </div>
                                 )}
                               </div>
@@ -1036,10 +1083,11 @@ export default function AdaptiveScheduleModal({
                               <button
                                 type="button"
                                 onClick={() => handleStartEdit(p)}
-                                style={styles.editRowBtn}
+                                style={{ ...styles.editRowBtn, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                                 aria-label={`Adjust date and time for ${p.taskTitle}${p.isChunk ? ` session ${p.chunkIndex + 1}` : ''}`}
                               >
-                                ✏️ Edit
+                                <MotifIcon name="pencil" size={11} />
+                                Edit
                               </button>
                             )}
                           </div>
@@ -1101,7 +1149,10 @@ export default function AdaptiveScheduleModal({
                                   style={styles.inlineSaveBtn}
                                   aria-label="Save placement edit"
                                 >
-                                  ✓ Save
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    <MotifIcon name="check" size={12} />
+                                    Save
+                                  </span>
                                 </button>
                                 <button
                                   type="button"
@@ -1109,14 +1160,18 @@ export default function AdaptiveScheduleModal({
                                   style={styles.inlineCancelBtn}
                                   aria-label="Cancel editing"
                                 >
-                                  ✕ Cancel
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    <MotifIcon name="close" size={12} />
+                                    Cancel
+                                  </span>
                                 </button>
                               </div>
                             </div>
 
                             {validationError && (
-                              <div style={styles.inlineErrorBox} role="alert" aria-live="assertive">
-                                ⚠️ <strong>Constraint Issue:</strong> {validationError}
+                              <div style={{ ...styles.inlineErrorBox, display: 'flex', alignItems: 'center', gap: '6px' }} role="alert" aria-live="assertive">
+                                <MotifIcon name="warning" size={13} color="#991B1B" />
+                                <span><strong>Constraint Issue:</strong> {validationError}</span>
                               </div>
                             )}
                           </div>
@@ -1130,8 +1185,9 @@ export default function AdaptiveScheduleModal({
 
             {/* Footer Actions */}
             <div style={styles.footer}>
-              <div style={styles.footerNote}>
-                🔒 <strong>Safe Proposal:</strong> VoxPlan will not alter any saved task until you click "Apply Schedule".
+              <div style={{ ...styles.footerNote, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <MotifIcon name="lock" size={13} color="#71717A" />
+                <span><strong>Safe Proposal:</strong> VoxPlan will not alter any saved task until you click "Apply Schedule".</span>
               </div>
               <div style={styles.btnRow}>
                 {acceptedSchedule && (
@@ -1144,7 +1200,10 @@ export default function AdaptiveScheduleModal({
                     style={styles.exportQuickBtn}
                     title="Export accepted schedule to .ics calendar file"
                   >
-                    📅 Export Calendar (.ics)
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      <MotifIcon name="calendar" size={13} />
+                      Export Calendar (.ics)
+                    </span>
                   </button>
                 )}
                 <button type="button" onClick={() => handleDiscard('user_discard')} style={styles.discardBtn}>
@@ -1220,7 +1279,10 @@ export default function AdaptiveScheduleModal({
               <div style={{ ...styles.stratCard, borderColor: '#27754E' }}>
                 <div style={{ ...styles.stratCardHeader, backgroundColor: '#E8F5E9', borderBottomColor: '#A5D6A7' }}>
                   <div style={styles.stratBadgeWrap}>
-                    <span style={styles.recommendedBadge}>✦ RECOMMENDED</span>
+                    <span style={{ ...styles.recommendedBadge, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <MotifIcon name="sparkle" size={11} color="#15803D" />
+                      RECOMMENDED
+                    </span>
                   </div>
                   <h4 style={styles.stratTitle}>Adaptive Engine</h4>
                   <span style={styles.stratSubtitle}>Multi-objective balancing</span>
@@ -1262,8 +1324,9 @@ export default function AdaptiveScheduleModal({
             {/* Explicit Strategy Preference Comparison Section */}
             <div style={styles.pairwisePreferenceBox}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontWeight: '800', fontSize: '13px', color: '#1E293B' }}>
-                  🎯 Explicit Schedule Preference (Offline Ranking Evidence)
+                <span style={{ fontWeight: '800', fontSize: '13px', color: '#1E293B', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <MotifIcon name="target" size={14} color="#1E293B" />
+                  Explicit Schedule Preference (Offline Ranking Evidence)
                 </span>
                 <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>
                   Local Evidence Collection Only
@@ -1276,8 +1339,9 @@ export default function AdaptiveScheduleModal({
                 Scope notice: Your selection represents preference for this specific backlog scenario only. It does not imply a general preference across all contexts, does not endorse individual task placements, and does not alter production schedule generation.
               </div>
               {typeof telemetry.isPreferenceCollectionEnabled === 'function' && !telemetry.isPreferenceCollectionEnabled() && (
-                <div style={styles.preferencePausedBanner} role="status">
-                  ⏸️ <strong>Preference Collection Paused:</strong> Explicit preference collection is disabled in Personal Settings. You can compare schedules freely, but choices will not be recorded to local telemetry.
+                <div style={{ ...styles.preferencePausedBanner, display: 'flex', alignItems: 'center', gap: '6px' }} role="status">
+                  <MotifIcon name="pause" size={14} color="#71717A" />
+                  <span><strong>Preference Collection Paused:</strong> Explicit preference collection is disabled in Personal Settings. You can compare schedules freely, but choices will not be recorded to local telemetry.</span>
                 </div>
               )}
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -1351,19 +1415,33 @@ export default function AdaptiveScheduleModal({
                     color:
                       preferenceFeedback.type === 'error' ? '#991B1B' :
                       preferenceFeedback.type === 'info' ? '#1E40AF' : '#166534',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
                   }}
                   role="status"
                   aria-live="polite"
                 >
-                  {typeof preferenceFeedback === 'string' ? preferenceFeedback : preferenceFeedback.text}
+                  <MotifIcon
+                    name={
+                      preferenceFeedback.type === 'error'
+                        ? 'warning'
+                        : preferenceFeedback.type === 'info'
+                        ? 'info'
+                        : 'check'
+                    }
+                    size={14}
+                  />
+                  <span>{typeof preferenceFeedback === 'string' ? preferenceFeedback : preferenceFeedback.text}</span>
                 </div>
               )}
             </div>
 
             {/* Trade-Off & Algorithmic Divergence Analysis */}
             <div style={styles.tradeoffBox}>
-              <div style={{ fontWeight: '800', marginBottom: '6px', fontSize: '13px' }}>
-                🔍 Trade-Off & Algorithmic Analysis:
+              <div style={{ fontWeight: '800', marginBottom: '6px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <MotifIcon name="search" size={14} />
+                Trade-Off & Algorithmic Analysis:
               </div>
               {benchmarkComparison.tradeoffs && benchmarkComparison.tradeoffs.length > 0 ? (
                 <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '12px', lineHeight: 1.5 }}>
@@ -1382,8 +1460,9 @@ export default function AdaptiveScheduleModal({
             {stabilityReport && (
               <div style={styles.stabilityBox}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <span style={{ fontWeight: '800', fontSize: '13px' }}>
-                    📊 Schedule Stability (Perturbation Churn Analysis):
+                  <span style={{ fontWeight: '800', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    <MotifIcon name="chart" size={14} />
+                    Schedule Stability (Perturbation Churn Analysis):
                   </span>
                   <span style={styles.churnScoreBadge}>
                     Avg Churn: {(stabilityReport.averageChurnRate * 100).toFixed(1)}%
@@ -1403,8 +1482,11 @@ export default function AdaptiveScheduleModal({
             )}
 
             {/* Scientific Notice / Disclosure */}
-            <div style={styles.disclosureBox}>
-              ℹ️ <strong>Benchmark Transparency:</strong> Benchmark results run against fixed fixtures and evaluate mathematical constraint compliance. They do not constitute real-world user validation or claim superiority in all contexts. Heuristic risk scores provide secondary urgency guidance, not calibrated probabilities.
+            <div style={{ ...styles.disclosureBox, display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+              <MotifIcon name="info" size={15} color="#1E40AF" style={{ flexShrink: 0, marginTop: '2px' }} />
+              <div>
+                <strong>Benchmark Transparency:</strong> Benchmark results run against fixed fixtures and evaluate mathematical constraint compliance. They do not constitute real-world user validation or claim superiority in all contexts. Heuristic risk scores provide secondary urgency guidance, not calibrated probabilities.
+              </div>
             </div>
 
             {/* Benchmark Footer */}
@@ -1414,7 +1496,7 @@ export default function AdaptiveScheduleModal({
                 onClick={() => setActiveTab('proposal')}
                 style={styles.discardBtn}
               >
-                ← Return to Schedule Proposal
+                Return to Schedule Proposal
               </button>
               <button type="button" onClick={onClose} style={styles.discardBtn}>
                 Close Modal
@@ -1435,14 +1517,14 @@ export default function AdaptiveScheduleModal({
             {/* Sufficiency Alert */}
             {!feedbackReport.summary.isSufficientData ? (
               <div style={styles.feedbackSufficiencyBanner}>
-                <span style={{ fontSize: '16px' }}>ℹ️</span>
+                <MotifIcon name="info" size={18} color="#1E40AF" style={{ flexShrink: 0 }} />
                 <div>
                   <strong>Insufficient Feedback Data (&lt; 3 observations):</strong> VoxPlan requires at least 3 decided proposals and completed task outcomes to evaluate scheduling usefulness reliably. Preliminary early observations are shown below without extrapolation.
                 </div>
               </div>
             ) : (
               <div style={styles.feedbackSufficiencyBannerPositive}>
-                <span style={{ fontSize: '16px' }}>✓</span>
+                <MotifIcon name="check" size={18} color="#166534" style={{ flexShrink: 0 }} />
                 <div>
                   <strong>Feedback Dataset Active:</strong> {feedbackReport.summary.decidedCount} decided proposals ({feedbackReport.summary.acceptedCount} accepted, {feedbackReport.summary.discardedCount} discarded) and {feedbackReport.summary.eligibleCompletedCount} unaltered task completion observations recorded locally.
                 </div>
@@ -1529,8 +1611,9 @@ export default function AdaptiveScheduleModal({
             <div style={styles.feedbackDetailsGrid}>
               {/* Box 1: Manual Overrides Log */}
               <div style={styles.feedbackDetailBox}>
-                <div style={styles.feedbackDetailBoxTitle}>
-                  📋 Subsequent Date Overrides ({feedbackReport.overrides.totalOverrideEvents})
+                <div style={{ ...styles.feedbackDetailBoxTitle, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <MotifIcon name="clipboard" size={14} color="#71717A" />
+                  <span>Subsequent Date Overrides ({feedbackReport.overrides.totalOverrideEvents})</span>
                 </div>
                 {feedbackReport.overrides.details.length === 0 ? (
                   <div style={styles.feedbackEmptyNotice}>
@@ -1550,8 +1633,10 @@ export default function AdaptiveScheduleModal({
                             {o.shiftDays > 0 ? `+${o.shiftDays}d postponed` : o.shiftDays < 0 ? `${o.shiftDays}d advanced` : 'same day'}
                           </span>
                         </div>
-                        <div style={{ fontSize: '10px', color: '#71717A' }}>
-                          Proposed: <code>{o.proposedDate}</code> → Overridden: <code>{o.overriddenDate}</code>
+                        <div style={{ fontSize: '10px', color: '#71717A', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span>Proposed: <code>{o.proposedDate}</code></span>
+                          <MotifIcon name="arrow-right" size={10} color="#9CA3AF" />
+                          <span>Overridden: <code>{o.overriddenDate}</code></span>
                         </div>
                       </div>
                     ))}
@@ -1561,8 +1646,9 @@ export default function AdaptiveScheduleModal({
 
               {/* Box 2: Verified Task Outcomes */}
               <div style={styles.feedbackDetailBox}>
-                <div style={styles.feedbackDetailBoxTitle}>
-                  🎯 Completion Outcomes ({feedbackReport.completionOutcomes.reliableObservations.length} eligible)
+                <div style={{ ...styles.feedbackDetailBoxTitle, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <MotifIcon name="target" size={14} color="#71717A" />
+                  <span>Completion Outcomes ({feedbackReport.completionOutcomes.reliableObservations.length} eligible)</span>
                 </div>
                 {feedbackReport.completionOutcomes.reliableObservations.length === 0 ? (
                   <div style={styles.feedbackEmptyNotice}>
@@ -1579,7 +1665,10 @@ export default function AdaptiveScheduleModal({
                             fontWeight: '700',
                             color: c.isOnTime ? '#1B5E3C' : '#9E2A2B',
                           }}>
-                            {c.isOnTime ? '✓ On Time' : '⚠️ Past Deadline'}
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                              <MotifIcon name={c.isOnTime ? 'check' : 'warning'} size={11} color={c.isOnTime ? '#1B5E3C' : '#9E2A2B'} />
+                              {c.isOnTime ? 'On Time' : 'Past Deadline'}
+                            </span>
                           </span>
                         </div>
                         <div style={{ fontSize: '10px', color: '#71717A' }}>
@@ -1595,8 +1684,9 @@ export default function AdaptiveScheduleModal({
             {/* Attribution Diagnostics & Exclusions Breakdown */}
             {feedbackReport.diagnostics && feedbackReport.diagnostics.totalExcludedObservations > 0 && (
               <div style={styles.diagnosticsBox}>
-                <div style={{ fontWeight: '800', fontSize: '11px', color: '#52525B', marginBottom: '4px' }}>
-                  🔍 Attribution Diagnostics ({feedbackReport.diagnostics.totalExcludedObservations} observation(s) excluded from scheduler timeliness):
+                <div style={{ fontWeight: '800', fontSize: '11px', color: '#52525B', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <MotifIcon name="search" size={13} color="#52525B" />
+                  <span>Attribution Diagnostics ({feedbackReport.diagnostics.totalExcludedObservations} observation(s) excluded from scheduler timeliness):</span>
                 </div>
                 <div style={styles.diagnosticsPillsRow}>
                   {feedbackReport.diagnostics.exclusionsByReason.overridden_prior_to_completion > 0 && (
@@ -1630,8 +1720,9 @@ export default function AdaptiveScheduleModal({
 
             {/* Cautious Learning Boundary Box */}
             <div style={styles.cautiousBoundaryBox}>
-              <div style={{ fontWeight: '800', fontSize: '12px', marginBottom: '4px', color: '#1B5E3C' }}>
-                🛡️ Cautious Learning Boundary & Governance Notice
+              <div style={{ fontWeight: '800', fontSize: '12px', marginBottom: '4px', color: '#1B5E3C', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <MotifIcon name="shield" size={14} color="#1B5E3C" />
+                <span>Cautious Learning Boundary & Governance Notice</span>
               </div>
               <div style={{ fontSize: '11px', color: '#374151', lineHeight: 1.45, marginBottom: '8px' }}>
                 {feedbackReport.cautiousLearningBoundary.reason}
@@ -1656,7 +1747,7 @@ export default function AdaptiveScheduleModal({
                 onClick={() => setActiveTab('proposal')}
                 style={styles.discardBtn}
               >
-                ← Return to Schedule Proposal
+                Return to Schedule Proposal
               </button>
               <button type="button" onClick={onClose} style={styles.discardBtn}>
                 Close Modal
@@ -1681,8 +1772,9 @@ export default function AdaptiveScheduleModal({
                   <h3 style={styles.exportTitle}>Export Accepted Schedule (.ics)</h3>
                 </div>
                 {acceptedSchedule && (
-                  <span style={styles.exportStatusBadge}>
-                    ✓ Ready to Export ({acceptedExportInfo?.validSessions?.length || 0} sessions)
+                  <span style={{ ...styles.exportStatusBadge, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                    <MotifIcon name="check" size={12} color="#15803D" />
+                    Ready to Export ({acceptedExportInfo?.validSessions?.length || 0} sessions)
                   </span>
                 )}
               </div>
@@ -1695,14 +1787,20 @@ export default function AdaptiveScheduleModal({
             {/* Disclaimer & Constraints Callout */}
             <div style={styles.exportNoticeGrid}>
               <div style={styles.exportNoticeBox}>
-                <div style={styles.exportNoticeTitle}>🔒 One-Time Snapshot Notice</div>
+                <div style={{ ...styles.exportNoticeTitle, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <MotifIcon name="lock" size={13} color="#1E40AF" />
+                  <span>One-Time Snapshot Notice</span>
+                </div>
                 <div style={styles.exportNoticeText}>
                   This export generates a static calendar snapshot at the moment of download.
                   VoxPlan is local-first and does <strong>not</strong> establish continuous background synchronization or request access to external calendar accounts.
                 </div>
               </div>
               <div style={styles.exportNoticeBox}>
-                <div style={styles.exportNoticeTitle}>🕒 Local Time-Blocking (Floating Time)</div>
+                <div style={{ ...styles.exportNoticeTitle, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <MotifIcon name="clock" size={13} color="#1E40AF" />
+                  <span>Local Time-Blocking (Floating Time)</span>
+                </div>
                 <div style={styles.exportNoticeText}>
                   Sessions are exported in RFC 5545 local wall-clock floating time (<code>FORM #1</code>), preserving your exact local work hours and avoiding timezone offset drift.
                 </div>
@@ -1711,8 +1809,9 @@ export default function AdaptiveScheduleModal({
 
             {/* Unapplied Draft Alert */}
             {isDraftModified && (
-              <div style={styles.exportDraftWarning}>
-                ⚠️ <strong>Unapplied Draft in Progress:</strong> You have edited a draft in the Schedule Proposal tab. Calendar export strictly exports your previously accepted schedule snapshot. To export your new edits, return to the Proposal tab and click <strong>Apply Schedule</strong> first.
+              <div style={{ ...styles.exportDraftWarning, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <MotifIcon name="warning" size={14} color="#92400E" />
+                <span><strong>Unapplied Draft in Progress:</strong> You have edited a draft in the Schedule Proposal tab. Calendar export strictly exports your previously accepted schedule snapshot. To export your new edits, return to the Proposal tab and click <strong>Apply Schedule</strong> first.</span>
               </div>
             )}
 
@@ -1780,8 +1879,18 @@ export default function AdaptiveScheduleModal({
                     role="alert"
                     aria-live="polite"
                   >
-                    {exportFeedback.type === 'success' ? '✓ ' : exportFeedback.type === 'warning' ? '⚠️ ' : '✕ '}
-                    {exportFeedback.message}
+                    <MotifIcon
+                      name={
+                        exportFeedback.type === 'success'
+                          ? 'check'
+                          : exportFeedback.type === 'warning'
+                          ? 'warning'
+                          : 'close'
+                      }
+                      size={14}
+                      style={{ marginRight: '6px' }}
+                    />
+                    <span>{exportFeedback.message}</span>
                   </div>
                 )}
 
@@ -1790,10 +1899,10 @@ export default function AdaptiveScheduleModal({
                   <button
                     type="button"
                     onClick={handleDownloadIcs}
-                    style={styles.downloadIcsBtn}
+                    style={{ ...styles.downloadIcsBtn, display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                     aria-label="Download accepted schedule as .ics file"
                   >
-                    <span>📅</span>
+                    <MotifIcon name="calendar" size={14} />
                     <span>Download Calendar (.ics)</span>
                   </button>
                   <span style={{ fontSize: '11px', color: '#71717A' }}>
@@ -1822,7 +1931,10 @@ export default function AdaptiveScheduleModal({
                           <tr key={s.uid || sIdx} style={styles.previewTr}>
                             <td style={styles.previewTdDate}><code>{s.date}</code></td>
                             <td style={styles.previewTdTime}>
-                              <span style={styles.timePill}>🕒 {s.startTime} – {s.endTime}</span>
+                              <span style={{ ...styles.timePill, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                <MotifIcon name="clock" size={11} color="#4F46E5" />
+                                {s.startTime} – {s.endTime}
+                              </span>
                             </td>
                             <td style={styles.previewTdTitle}>
                               <strong>{s.summary}</strong>
@@ -1842,7 +1954,9 @@ export default function AdaptiveScheduleModal({
               </div>
             ) : (
               <div style={styles.noAcceptedBox}>
-                <div style={styles.noAcceptedIcon}>📅</div>
+                <div style={{ ...styles.noAcceptedIcon, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <MotifIcon name="calendar" size={36} color="#71717A" />
+                </div>
                 <div style={styles.noAcceptedTitle}>No Accepted Schedule Available</div>
                 <div style={styles.noAcceptedText}>
                   Calendar export generates files strictly from an <strong>accepted</strong> schedule.
@@ -1858,7 +1972,7 @@ export default function AdaptiveScheduleModal({
                   onClick={() => setActiveTab('proposal')}
                   style={styles.reviewProposalBtn}
                 >
-                  ← Return to Schedule Proposal
+                  Return to Schedule Proposal
                 </button>
               </div>
             )}
@@ -1870,7 +1984,7 @@ export default function AdaptiveScheduleModal({
                 onClick={() => setActiveTab('proposal')}
                 style={styles.discardBtn}
               >
-                ← Return to Schedule Proposal
+                Return to Schedule Proposal
               </button>
               <button type="button" onClick={onClose} style={styles.discardBtn}>
                 Close Modal
@@ -1921,7 +2035,10 @@ function renderStrategyMetrics(evalReport) {
       <div style={styles.metricRow}>
         <span style={styles.metricRowLabel}>Dependency Integrity:</span>
         <span style={{ fontWeight: '700', color: dep.violatedCount === 0 ? '#1B5E3C' : '#9E2A2B' }}>
-          {dep.violatedCount === 0 ? '✓ 100% Satisfied' : `⚠️ ${dep.violatedCount} Violated`}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <MotifIcon name={dep.violatedCount === 0 ? 'check' : 'warning'} size={12} />
+            {dep.violatedCount === 0 ? '100% Satisfied' : `${dep.violatedCount} Violated`}
+          </span>
         </span>
       </div>
       <div style={styles.metricRow}>
@@ -1933,7 +2050,10 @@ function renderStrategyMetrics(evalReport) {
       <div style={styles.metricRow}>
         <span style={styles.metricRowLabel}>Overrun Violations:</span>
         <span style={{ fontWeight: '700', color: cap.overrunDaysCount === 0 ? '#1B5E3C' : '#9E2A2B' }}>
-          {cap.overrunDaysCount === 0 ? '✓ 0 Days Over' : `⚠️ ${cap.overrunDaysCount} Days Over`}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <MotifIcon name={cap.overrunDaysCount === 0 ? 'check' : 'warning'} size={12} />
+            {cap.overrunDaysCount === 0 ? '0 Days Over' : `${cap.overrunDaysCount} Days Over`}
+          </span>
         </span>
       </div>
       <div style={styles.metricRow}>

@@ -1,4 +1,5 @@
 import React from 'react';
+import MotifIcon from '../MotifIcon';
 
 /**
  * TourLauncher
@@ -42,7 +43,7 @@ export default function TourLauncher({
           ...style,
         }}
       >
-        <span style={{ color: '#E5A83B' }}>✦</span>
+        <MotifIcon name="sparkle" size={12} color="#E5A83B" />
         <span>{label}</span>
       </button>
     );
@@ -58,7 +59,7 @@ export default function TourLauncher({
       title="Start the interactive guided product tour"
       aria-label="Start interactive VoxPlan product tour"
     >
-      <span className="voxplan-tour-launcher-sparkle">✦</span>
+      <MotifIcon name="sparkle" size={13} color="currentColor" className="voxplan-tour-launcher-sparkle" />
       <span>{label}</span>
     </button>
   );

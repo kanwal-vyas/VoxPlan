@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import MotifIcon from '../MotifIcon.jsx';
 import {
   STATIONERY_STYLES,
   getStationeryById,
@@ -177,8 +178,9 @@ export default function TaskStickyNotesModal({
         {/* Modal Top Header */}
         <div className="task-sticky-modal-header">
           <div className="task-sticky-header-info">
-            <span className="task-sticky-kicker">
-              ✦ STICKY NOTES
+            <span className="task-sticky-kicker" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+              <MotifIcon name="sparkle" size={11} color="#C85A32" />
+              STICKY NOTES
             </span>
             <h3 id="sticky-modal-title" className="task-sticky-task-title">
               {task.title}
@@ -199,7 +201,7 @@ export default function TaskStickyNotesModal({
             aria-label="Close sticky notes"
             title="Close dialog (Escape)"
           >
-            ✕
+            <MotifIcon name="close" size={14} />
           </button>
         </div>
 
@@ -256,7 +258,8 @@ export default function TaskStickyNotesModal({
           {/* Validation Notice Banner */}
           {errorMessage && (
             <div className="task-sticky-error-banner" role="alert">
-              ⚠️ {errorMessage}
+              <MotifIcon name="warning" size={14} color="#D9383A" style={{ marginRight: '6px' }} />
+              <span>{errorMessage}</span>
             </div>
           )}
 
@@ -336,7 +339,7 @@ export default function TaskStickyNotesModal({
                             style={{ backgroundColor: style.accentColor }}
                             aria-hidden="true"
                           >
-                            ✓
+                            <MotifIcon name="check" size={10} color="#FFFFFF" strokeWidth={3} />
                           </div>
                         )}
                       </button>
@@ -455,7 +458,8 @@ export default function TaskStickyNotesModal({
                     borderColor: previewStationery.accentColor,
                   }}
                 >
-                  ✓ Save Memo
+                  <MotifIcon name="check" size={13} style={{ marginRight: '6px' }} />
+                  <span>Save Memo</span>
                 </button>
               </div>
             </form>
@@ -587,7 +591,8 @@ export default function TaskStickyNotesModal({
                         title="Delete this note"
                         aria-label={`Delete note "${activeNote.title || 'Memo'}"`}
                       >
-                        🗑️ Delete Note
+                        <MotifIcon name="trash" size={14} style={{ marginRight: '6px' }} />
+                        <span>Delete Note</span>
                       </button>
                     )}
                   </div>
@@ -599,7 +604,8 @@ export default function TaskStickyNotesModal({
                       onClick={() => handleStartEdit(activeNote)}
                       title="Edit this note's content or stationery"
                     >
-                      ✎ Edit Memo
+                      <MotifIcon name="pencil" size={13} style={{ marginRight: '6px' }} />
+                      <span>Edit Memo</span>
                     </button>
                   </div>
                 </div>

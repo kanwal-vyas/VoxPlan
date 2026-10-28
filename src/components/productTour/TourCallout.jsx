@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import MotifIcon from '../MotifIcon';
 import { TOUR_MODES } from '../../productTour/tourStorage';
 import { computeCalloutPosition } from '../../productTour/positionHelper';
 
@@ -65,14 +66,15 @@ export default function TourCallout({
           aria-label="Close product tour"
           title="Exit tour (Escape)"
         >
-          ✕
+          <MotifIcon name="close" size={14} />
         </button>
       </div>
 
       {/* 2. Mode Switcher Ribbon */}
       <div className="voxplan-tour-mode-banner">
-        <span className="voxplan-tour-mode-text">
-          {mode === TOUR_MODES.DEMO ? '🛠 Mode: Hands-on Demo' : '👁 Mode: Guided Observation'}
+        <span className="voxplan-tour-mode-text" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+          <MotifIcon name={mode === TOUR_MODES.DEMO ? 'tools' : 'eye'} size={13} />
+          <span>{mode === TOUR_MODES.DEMO ? 'Mode: Hands-on Demo' : 'Mode: Guided Observation'}</span>
         </span>
         <button
           type="button"
@@ -95,7 +97,7 @@ export default function TourCallout({
       {/* 4. Missing Target Notice (Graceful Fallback) */}
       {!isTargetFound && (
         <div className="voxplan-tour-target-notice" role="status">
-          <span>ℹ️</span>
+          <MotifIcon name="info" size={14} style={{ marginRight: '6px' }} />
           <span>Target control is in a background view or drawer. Follow the instructions below.</span>
         </div>
       )}
@@ -147,7 +149,8 @@ export default function TourCallout({
             disabled={stepIndex === 0}
             aria-label="Previous step"
           >
-            ← Back
+            <MotifIcon name="arrow-left" size={12} style={{ marginRight: '4px' }} />
+            <span>Back</span>
           </button>
 
           <button
@@ -157,7 +160,17 @@ export default function TourCallout({
             aria-label={isLastStep ? 'Finish product tour' : 'Next tour step'}
             id="voxplan-tour-next-btn"
           >
-            {isLastStep ? 'Finish Tour ✦' : 'Next →'}
+            {isLastStep ? (
+              <>
+                <span>Finish Tour</span>
+                <MotifIcon name="sparkle" size={12} style={{ marginLeft: '4px' }} />
+              </>
+            ) : (
+              <>
+                <span>Next</span>
+                <MotifIcon name="arrow-right" size={12} style={{ marginLeft: '4px' }} />
+              </>
+            )}
           </button>
         </div>
       </div>

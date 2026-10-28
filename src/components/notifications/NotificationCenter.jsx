@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import MotifIcon from '../MotifIcon.jsx';
 import { notificationStore } from '../../notifications/notificationStore.js';
 import { NOTIFICATION_CATEGORIES } from '../../notifications/types.js';
 
@@ -140,7 +141,7 @@ export default function NotificationCenter({
             title="Notification Settings"
             aria-label="Open notification preferences"
           >
-            ⚙️
+            <MotifIcon name="settings" size={14} />
           </button>
           <button
             type="button"
@@ -150,7 +151,7 @@ export default function NotificationCenter({
             title="Close notifications"
             aria-label="Close notification drawer"
           >
-            ✕
+            <MotifIcon name="close" size={14} />
           </button>
         </div>
       </div>
@@ -238,7 +239,9 @@ export default function NotificationCenter({
       <div style={styles.listContainer}>
         {filteredNotifications.length === 0 ? (
           <div style={styles.emptyState}>
-            <span style={styles.emptyIcon} aria-hidden="true">✦</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '36px', height: '36px', borderRadius: '8px', backgroundColor: 'rgba(142, 95, 168, 0.12)', marginBottom: '8px' }}>
+              <MotifIcon name="sparkle" size={20} color="#8E5FA8" />
+            </div>
             <strong style={styles.emptyTitle}>All caught up!</strong>
             <p style={styles.emptyText}>
               {activeFilter === 'unread'
@@ -298,7 +301,8 @@ export default function NotificationCenter({
                         style={styles.actionBtn}
                         aria-label={`Open ${item.title}`}
                       >
-                        <span>Open Details →</span>
+                        <span>Open Details</span>
+                        <MotifIcon name="arrow-right" size={12} style={{ marginLeft: '4px' }} />
                       </button>
                     )}
 
@@ -318,7 +322,7 @@ export default function NotificationCenter({
                         title="Dismiss notification"
                         aria-label={`Dismiss ${item.title}`}
                       >
-                        ✕
+                        <MotifIcon name="close" size={12} />
                       </button>
                     </div>
                   </div>
@@ -331,7 +335,10 @@ export default function NotificationCenter({
 
       {/* Footer Local Privacy Promise */}
       <div style={styles.footerNote}>
-        <span>🔒 Evaluated and stored 100% locally in your browser.</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+          <MotifIcon name="lock" size={13} />
+          <span>Evaluated and stored 100% locally in your browser.</span>
+        </span>
       </div>
     </div>
   );

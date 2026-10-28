@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
+import MotifIcon from './MotifIcon';
 import {
   getTodayDateString,
   parseDateComponents,
@@ -239,7 +240,8 @@ export default function TaskCalendar({
               <p style={styles.subHeading} className="calendar-subheading">
                 {overdueCount > 0 && (
                   <span style={styles.overdueNotice}>
-                    ⚠️ {overdueCount} overdue task{overdueCount === 1 ? '' : 's'} ·{' '}
+                    <MotifIcon name="warning" size={13} color="#D9383A" style={{ marginRight: '4px' }} />
+                    <span>{overdueCount} overdue task{overdueCount === 1 ? '' : 's'} · </span>
                   </span>
                 )}
                 {dueTodayCount > 0
@@ -335,7 +337,7 @@ export default function TaskCalendar({
                   title="Export scheduled tasks to RFC 5545 .ics calendar"
                   aria-label="Export scheduled tasks to RFC 5545 .ics calendar"
                 >
-                  <span aria-hidden="true">📅</span>
+                  <MotifIcon name="calendar" size={14} style={{ marginRight: '6px' }} />
                   <span>Export .ics</span>
                 </button>
               )}
@@ -350,7 +352,8 @@ export default function TaskCalendar({
                   title="Return to Tasks list"
                   aria-label="Return to Tasks list view"
                 >
-                  ← Tasks List
+                  <MotifIcon name="arrow-left" size={13} style={{ marginRight: '6px' }} />
+                  <span>Tasks List</span>
                 </button>
               )}
             </div>
@@ -414,7 +417,8 @@ export default function TaskCalendar({
                 title="View tasks without scheduled deadlines"
                 aria-expanded={showUnscheduled}
               >
-                <span>📋 Unscheduled ({unscheduled.length})</span>
+                <MotifIcon name="task-sheet" size={13} style={{ marginRight: '6px' }} />
+                <span>Unscheduled ({unscheduled.length})</span>
               </button>
             </div>
 
@@ -439,7 +443,7 @@ export default function TaskCalendar({
               </span>
               <span style={styles.legendItem}>
                 <span style={{ ...styles.legendDot, backgroundColor: '#706D73' }} />
-                Completed ✓
+                Completed <MotifIcon name="check" size={11} style={{ marginLeft: '3px' }} />
               </span>
             </div>
           </div>
@@ -451,14 +455,18 @@ export default function TaskCalendar({
           <div id="calendar-unscheduled-drawer" style={styles.unscheduledDrawer} className="digital-card">
             <div style={styles.unscheduledHeader}>
               <h4 style={styles.unscheduledTitle}>
-                📋 Tasks Without Deadlines ({unscheduled.length})
+                <MotifIcon name="task-sheet" size={16} style={{ marginRight: '6px' }} />
+                <span>Tasks Without Deadlines ({unscheduled.length})</span>
               </h4>
               <p style={styles.unscheduledSub}>
                 These tasks have no due date set. Assign a date or schedule them into your sprint calendar.
               </p>
             </div>
             {unscheduled.length === 0 ? (
-              <p style={styles.noUnscheduledText}>All tasks currently have scheduled deadlines! 🎉</p>
+              <p style={styles.noUnscheduledText}>
+                <span>All tasks currently have scheduled deadlines!</span>
+                <MotifIcon name="celebrate" size={15} style={{ marginLeft: '6px' }} />
+              </p>
             ) : (
               <div style={styles.unscheduledGrid}>
                 {unscheduled.map((task) => {
@@ -591,7 +599,13 @@ export default function TaskCalendar({
                             aria-label={`${task.title}, ${task.priority} priority${task.completed ? ', completed' : ''}`}
                           >
                             <span style={styles.taskChipIcon} className="calendar-task-chip-icon">
-                              {task.completed ? '✓' : isTaskOverdue ? '⚠️' : palette.icon}
+                              {task.completed ? (
+                                <MotifIcon name="check" size={11} />
+                              ) : isTaskOverdue ? (
+                                <MotifIcon name="warning" size={11} color="#D9383A" />
+                              ) : (
+                                <MotifIcon name={palette.motifName || 'circle'} size={11} color={palette.border} />
+                              )}
                             </span>
                             <span style={styles.taskChipTitle} className="calendar-task-chip-title">{task.title}</span>
                             {stickyNotesMap[task.id]?.length > 0 && (
@@ -717,7 +731,11 @@ export default function TaskCalendar({
                             >
                               <div style={styles.weekTaskCardHeader}>
                                 <span style={styles.taskChipIcon}>
-                                  {task.completed ? '✓' : palette.icon}
+                                  {task.completed ? (
+                                    <MotifIcon name="check" size={11} />
+                                  ) : (
+                                    <MotifIcon name={palette.motifName || 'circle'} size={11} color={palette.border} />
+                                  )}
                                 </span>
                                 <span style={styles.weekTaskPriorityLabel}>
                                   {task.priority.toUpperCase()}
@@ -734,7 +752,10 @@ export default function TaskCalendar({
                               </div>
                               <span style={styles.weekTaskTitle}>{task.title}</span>
                               {task.estimatedEffort && (
-                                <span style={styles.weekTaskEffort}>⏱ {task.estimatedEffort}h</span>
+                                <span style={styles.weekTaskEffort}>
+                                  <MotifIcon name="clock" size={11} style={{ marginRight: '3px' }} />
+                                  <span>{task.estimatedEffort}h</span>
+                                </span>
                               )}
                             </div>
                           );
@@ -757,7 +778,7 @@ export default function TaskCalendar({
               <div>
                 <h3 style={styles.dayViewDateTitle}>{formatFullDateHeading(selectedDate)}</h3>
                 <span style={styles.dayViewMeta}>
-                  {selectedDate === todayStr ? '✦ Today’s Agenda · ' : ''}
+                  {selectedDate === todayStr ? 'Today’s Agenda · ' : ''}
                   {selectedDateTasks.length} task{selectedDateTasks.length === 1 ? '' : 's'} scheduled
                 </span>
               </div>
@@ -773,7 +794,9 @@ export default function TaskCalendar({
 
             {selectedDateTasks.length === 0 ? (
               <div style={styles.dayEmptyState}>
-                <span style={styles.dayEmptyIcon}>📅</span>
+                <span style={styles.dayEmptyIcon}>
+                  <MotifIcon name="calendar" size={32} color="#8E5FA8" />
+                </span>
                 <h4 style={styles.dayEmptyTitle}>No tasks scheduled for this date</h4>
                 <p style={styles.dayEmptySub}>
                   Keep your sprint on track by assigning commitments or click below to create a new task.
@@ -815,17 +838,21 @@ export default function TaskCalendar({
                           }}
                           aria-label={`Mark "${task.title}" as ${task.completed ? 'incomplete' : 'complete'}`}
                         >
-                          {task.completed && <span style={{ color: '#FFF', fontSize: '13px' }}>✓</span>}
+                          {task.completed && <MotifIcon name="check" size={12} color="#FFF" strokeWidth={3} />}
                         </button>
 
                         <div style={styles.dayTaskContent}>
                           <div style={styles.dayTaskTopMeta}>
                             <span style={{ ...styles.dayTaskPriorityBadge, color: palette.text, backgroundColor: palette.bg }}>
-                              {palette.icon} {task.priority.toUpperCase()} PRIORITY
+                              <MotifIcon name={palette.motifName || 'circle'} size={11} style={{ marginRight: '4px' }} />
+                              <span>{task.priority.toUpperCase()} PRIORITY</span>
                             </span>
                             <span style={styles.dayTaskCategory}>{task.category || 'General'}</span>
                             {task.estimatedEffort && (
-                              <span style={styles.dayTaskEffort}>⏱ {task.estimatedEffort}h effort</span>
+                              <span style={styles.dayTaskEffort}>
+                                <MotifIcon name="clock" size={11} style={{ marginRight: '4px' }} />
+                                <span>{task.estimatedEffort}h effort</span>
+                              </span>
                             )}
                             <TaskStickyTab
                               notes={stickyNotesMap[task.id] || []}
@@ -867,7 +894,8 @@ export default function TaskCalendar({
                               style={styles.smallActionBtn}
                               title="View ML risk prediction"
                             >
-                              Details →
+                              <span>Details</span>
+                              <MotifIcon name="arrow-right" size={11} style={{ marginLeft: '3px' }} />
                             </button>
                           )}
                           {onDeleteTask && (
@@ -878,7 +906,7 @@ export default function TaskCalendar({
                               title="Delete task"
                               aria-label={`Delete "${task.title}"`}
                             >
-                              ✕
+                              <MotifIcon name="close" size={12} />
                             </button>
                           )}
                         </div>
@@ -915,7 +943,8 @@ export default function TaskCalendar({
                   onClick={() => setCalendarView('day')}
                   style={styles.viewDayFocusBtn}
                 >
-                  Focus Day View →
+                  <span>Focus Day View</span>
+                  <MotifIcon name="arrow-right" size={12} style={{ marginLeft: '4px' }} />
                 </button>
               </div>
             </div>
@@ -950,7 +979,7 @@ export default function TaskCalendar({
                         }}
                         aria-label={`Toggle completion for "${task.title}"`}
                       >
-                        {task.completed && <span style={{ color: '#FFF', fontSize: '11px' }}>✓</span>}
+                        {task.completed && <MotifIcon name="check" size={10} color="#FFF" strokeWidth={3} />}
                       </button>
                       <div style={styles.agendaTaskText}>
                         <span
@@ -963,10 +992,14 @@ export default function TaskCalendar({
                         </span>
                         <div style={styles.agendaTaskMetaRow}>
                           <span style={{ ...styles.priorityMiniBadge, color: palette.text, backgroundColor: palette.bg }}>
-                            {palette.icon} {task.priority.toUpperCase()}
+                            <MotifIcon name={palette.motifName || 'circle'} size={11} style={{ marginRight: '4px' }} />
+                            <span>{task.priority.toUpperCase()}</span>
                           </span>
                           {task.estimatedEffort && (
-                            <span style={styles.agendaEffortBadge}>⏱ {task.estimatedEffort}h</span>
+                            <span style={styles.agendaEffortBadge}>
+                              <MotifIcon name="clock" size={11} style={{ marginRight: '3px' }} />
+                              <span>{task.estimatedEffort}h</span>
+                            </span>
                           )}
                           {stickyNotesMap[task.id]?.length > 0 && (
                             <TaskStickyTab
@@ -998,7 +1031,7 @@ export default function TaskCalendar({
                   Add Task for {quickAddModalDate}
                 </h3>
                 <button type="button" onClick={handleCloseQuickAdd} style={styles.modalCloseBtn} aria-label="Close dialog">
-                  ✕
+                  <MotifIcon name="close" size={13} />
                 </button>
               </div>
 
@@ -1026,10 +1059,10 @@ export default function TaskCalendar({
                       onChange={(e) => setQuickAddPriority(e.target.value)}
                       style={styles.formSelect}
                     >
-                      <option value="critical">Critical / Urgent 🔥</option>
-                      <option value="high">High ⚡</option>
-                      <option value="medium">Medium ◆</option>
-                      <option value="low">Low 🌱</option>
+                      <option value="critical">Critical / Urgent</option>
+                      <option value="high">High</option>
+                      <option value="medium">Medium</option>
+                      <option value="low">Low</option>
                     </select>
                   </label>
 
@@ -1077,7 +1110,8 @@ export default function TaskCalendar({
                       backgroundColor: getPriorityPalette(selectedTask.priority).bg,
                     }}
                   >
-                    {getPriorityPalette(selectedTask.priority).icon} {selectedTask.priority.toUpperCase()} PRIORITY
+                    <MotifIcon name={getPriorityPalette(selectedTask.priority).motifName || 'circle'} size={12} style={{ marginRight: '4px' }} />
+                    <span>{selectedTask.priority.toUpperCase()} PRIORITY</span>
                   </span>
                   <TaskStickyTab
                     notes={stickyNotesMap[selectedTask.id] || []}
@@ -1090,7 +1124,7 @@ export default function TaskCalendar({
                   />
                 </div>
                 <button type="button" onClick={() => setSelectedTask(null)} style={styles.modalCloseBtn} aria-label="Close details">
-                  ✕
+                  <MotifIcon name="close" size={13} />
                 </button>
               </div>
 
@@ -1115,7 +1149,7 @@ export default function TaskCalendar({
                 <div style={styles.titleViewRow}>
                   <h3 id="task-detail-title" style={styles.detailTitle}>{selectedTask.title}</h3>
                   <button type="button" onClick={() => setIsEditingTitle(true)} style={styles.editTitleTrigger} title="Edit title">
-                    ✎
+                    <MotifIcon name="pencil" size={12} />
                   </button>
                 </div>
               )}
@@ -1165,7 +1199,17 @@ export default function TaskCalendar({
                       color: selectedTask.completed ? '#2D6A4F' : '#FFFFFF',
                     }}
                   >
-                    {selectedTask.completed ? 'Mark as Incomplete ↺' : 'Mark Complete ✓'}
+                    {selectedTask.completed ? (
+                      <>
+                        <span>Mark as Incomplete</span>
+                        <MotifIcon name="history" size={13} style={{ marginLeft: '6px' }} />
+                      </>
+                    ) : (
+                      <>
+                        <span>Mark Complete</span>
+                        <MotifIcon name="check" size={13} style={{ marginLeft: '6px' }} />
+                      </>
+                    )}
                   </button>
                 )}
 

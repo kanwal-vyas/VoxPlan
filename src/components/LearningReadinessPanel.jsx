@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import MotifIcon from './MotifIcon';
 import {
   evaluateLearningReadiness,
   READINESS_THRESHOLDS,
@@ -26,7 +27,7 @@ export default function LearningReadinessPanel({ events = [], tasks = [] }) {
   const statusConfig = {
     [READINESS_STATUS.READY]: {
       label: 'READY FOR PREFERENCE EVALUATION',
-      icon: '✓',
+      motifName: 'check',
       badgeBg: '#DCFCE7',
       badgeText: '#166534',
       badgeBorder: '#BBF7D0',
@@ -35,7 +36,7 @@ export default function LearningReadinessPanel({ events = [], tasks = [] }) {
     },
     [READINESS_STATUS.INSUFFICIENT_EVIDENCE]: {
       label: 'NOT YET READY — ADAPTATION LOCKED',
-      icon: '🔒',
+      motifName: 'lock',
       badgeBg: '#FEF3C7',
       badgeText: '#92400E',
       badgeBorder: '#FDE68A',
@@ -44,7 +45,7 @@ export default function LearningReadinessPanel({ events = [], tasks = [] }) {
     },
     [READINESS_STATUS.UNAVAILABLE]: {
       label: 'ASSESSMENT UNAVAILABLE',
-      icon: '⚠',
+      motifName: 'warning',
       badgeBg: '#FEE2E2',
       badgeText: '#991B1B',
       badgeBorder: '#FECACA',
@@ -53,7 +54,7 @@ export default function LearningReadinessPanel({ events = [], tasks = [] }) {
     },
   }[status] || {
     label: 'ASSESSMENT PENDING',
-    icon: '○',
+    motifName: 'circle',
     badgeBg: '#F3F4F6',
     badgeText: '#4B5563',
     badgeBorder: '#E5E7EB',
@@ -89,7 +90,8 @@ export default function LearningReadinessPanel({ events = [], tasks = [] }) {
               }}
               role="status"
             >
-              <span aria-hidden="true">{statusConfig.icon}</span> {statusConfig.label}
+              <MotifIcon name={statusConfig.motifName} size={12} color={statusConfig.badgeText} style={{ marginRight: '5px' }} />
+              <span>{statusConfig.label}</span>
             </span>
           </div>
           <h3 style={styles.title}>SCHEDULE ADAPTATION READINESS</h3>
@@ -152,9 +154,22 @@ export default function LearningReadinessPanel({ events = [], tasks = [] }) {
                 ...styles.gateStatusPill,
                 backgroundColor: gates.decidedProposals.passed ? '#DCFCE7' : '#F3F4F6',
                 color: gates.decidedProposals.passed ? '#166534' : '#4B5563',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px',
               }}
             >
-              {gates.decidedProposals.passed ? '✓ PASSED' : '○ UNMET'}
+              {gates.decidedProposals.passed ? (
+                <>
+                  <MotifIcon name="check" size={11} color="#166534" />
+                  <span>PASSED</span>
+                </>
+              ) : (
+                <>
+                  <MotifIcon name="circle" size={10} color="#4B5563" />
+                  <span>UNMET</span>
+                </>
+              )}
             </span>
           </div>
           <div style={styles.metricRow}>
@@ -192,9 +207,22 @@ export default function LearningReadinessPanel({ events = [], tasks = [] }) {
                 ...styles.gateStatusPill,
                 backgroundColor: gates.verifiedCompletions.passed ? '#DCFCE7' : '#F3F4F6',
                 color: gates.verifiedCompletions.passed ? '#166534' : '#4B5563',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px',
               }}
             >
-              {gates.verifiedCompletions.passed ? '✓ PASSED' : '○ UNMET'}
+              {gates.verifiedCompletions.passed ? (
+                <>
+                  <MotifIcon name="check" size={11} color="#166534" />
+                  <span>PASSED</span>
+                </>
+              ) : (
+                <>
+                  <MotifIcon name="circle" size={10} color="#4B5563" />
+                  <span>UNMET</span>
+                </>
+              )}
             </span>
           </div>
           <div style={styles.metricRow}>
@@ -232,9 +260,22 @@ export default function LearningReadinessPanel({ events = [], tasks = [] }) {
                 ...styles.gateStatusPill,
                 backgroundColor: gates.taskCategories.passed ? '#DCFCE7' : '#F3F4F6',
                 color: gates.taskCategories.passed ? '#166534' : '#4B5563',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px',
               }}
             >
-              {gates.taskCategories.passed ? '✓ PASSED' : '○ UNMET'}
+              {gates.taskCategories.passed ? (
+                <>
+                  <MotifIcon name="check" size={11} color="#166534" />
+                  <span>PASSED</span>
+                </>
+              ) : (
+                <>
+                  <MotifIcon name="circle" size={10} color="#4B5563" />
+                  <span>UNMET</span>
+                </>
+              )}
             </span>
           </div>
           <div style={styles.metricRow}>
@@ -261,8 +302,9 @@ export default function LearningReadinessPanel({ events = [], tasks = [] }) {
           <div style={styles.categoryChipsWrap}>
             {gates.taskCategories.categories?.length > 0 ? (
               gates.taskCategories.categories.map((c) => (
-                <span key={c} style={styles.categoryChip}>
-                  🏷️ {c}
+                <span key={c} style={{ ...styles.categoryChip, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <MotifIcon name="tag" size={11} />
+                  <span>{c}</span>
                 </span>
               ))
             ) : (
@@ -280,9 +322,22 @@ export default function LearningReadinessPanel({ events = [], tasks = [] }) {
                 ...styles.gateStatusPill,
                 backgroundColor: gates.activeDuration.passed ? '#DCFCE7' : '#F3F4F6',
                 color: gates.activeDuration.passed ? '#166534' : '#4B5563',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px',
               }}
             >
-              {gates.activeDuration.passed ? '✓ PASSED' : '○ UNMET'}
+              {gates.activeDuration.passed ? (
+                <>
+                  <MotifIcon name="check" size={11} color="#166534" />
+                  <span>PASSED</span>
+                </>
+              ) : (
+                <>
+                  <MotifIcon name="circle" size={10} color="#4B5563" />
+                  <span>UNMET</span>
+                </>
+              )}
             </span>
           </div>
           <div style={styles.metricRow}>
@@ -319,7 +374,9 @@ export default function LearningReadinessPanel({ events = [], tasks = [] }) {
       {(warnings?.length > 0 || exclusions.excludedCompletions > 0 || exclusions.conflictingProposals > 0) && (
         <div style={styles.warningBox}>
           <div style={styles.warningHeader}>
-            <span style={styles.warningIcon}>🛡️</span>
+            <span style={styles.warningIcon}>
+              <MotifIcon name="shield" size={16} color="#B45309" />
+            </span>
             <span style={styles.warningTitle}>Data Integrity & Provenance Diagnostics</span>
           </div>
           <ul style={styles.warningList}>
@@ -346,7 +403,9 @@ export default function LearningReadinessPanel({ events = [], tasks = [] }) {
       {/* Governance & Privacy Disclosure Footer */}
       <div style={styles.governanceFooter}>
         <div style={styles.govRow}>
-          <span style={styles.govIcon}>🔒</span>
+          <span style={styles.govIcon}>
+            <MotifIcon name="lock" size={16} color="#8E5FA8" />
+          </span>
           <div style={styles.govText}>
             <strong>Local-Only Read-Only Diagnostics:</strong> {governance.disclosure}
           </div>

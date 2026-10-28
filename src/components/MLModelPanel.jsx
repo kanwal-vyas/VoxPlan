@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import MotifIcon from './MotifIcon';
 
 export default function MLModelPanel({
   modelStatus,
@@ -116,7 +117,7 @@ export default function MLModelPanel({
             ) : (
               <>
                 <span>{isTrained ? 'Retrain baseline' : 'Train baseline model'}</span>
-                <span>→</span>
+                <MotifIcon name="arrow-right" size={13} style={{ marginLeft: '4px' }} />
               </>
             )}
           </button>
@@ -126,7 +127,8 @@ export default function MLModelPanel({
         {!isTrained && !isTraining && (
           <div style={styles.untrainedNotice}>
             <span style={styles.untrainedNoticeText}>
-              ℹ️ Baseline model is currently offline or untrained. No predictions or evaluation metrics are fabricated. Click <strong>Train baseline model</strong> above to fit the Random Forest classifier and generate authentic evaluation metrics.
+              <MotifIcon name="info" size={14} style={{ marginRight: '6px' }} />
+              Baseline model is currently offline or untrained. No predictions or evaluation metrics are fabricated. Click <strong>Train baseline model</strong> above to fit the Random Forest classifier and generate authentic evaluation metrics.
             </span>
           </div>
         )}
@@ -135,7 +137,8 @@ export default function MLModelPanel({
         {isTraining && (
           <div style={styles.trainingBox}>
             <span style={styles.trainingStepText}>
-              ⚙️ {trainingStep || 'Synthesizing historical dataset · Fitting Random Forest model · Computing validation scores...'}
+              <MotifIcon name="settings" size={14} style={{ marginRight: '6px' }} />
+              {trainingStep || 'Synthesizing historical dataset · Fitting Random Forest model · Computing validation scores...'}
             </span>
           </div>
         )}
@@ -211,8 +214,15 @@ export default function MLModelPanel({
               <span style={styles.panelTitle}>
                 WHAT MAKES A TASK <span className={`hl hl-butter ${isVisible ? 'hl-sweep' : ''}`} style={{ padding: '0 4px' }}>PANIC?</span>
               </span>
-              <span className="note-tag" style={{ color: '#D9483B' }}>
-                {featureImportances.length > 0 ? 'gini importance ↗' : 'awaiting training'}
+              <span className="note-tag" style={{ color: '#D9483B', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                {featureImportances.length > 0 ? (
+                  <>
+                    <span>gini importance</span>
+                    <MotifIcon name="trending-up" size={12} color="#D9483B" />
+                  </>
+                ) : (
+                  'awaiting training'
+                )}
               </span>
             </div>
 
@@ -276,7 +286,10 @@ export default function MLModelPanel({
                     }}
                   >
                     <span style={styles.cellVal}>{cmCounts.tn ?? 0}</span>
-                    <span style={{ ...styles.cellTag, color: '#166534' }}>Nice prediction ✓</span>
+                    <span style={{ ...styles.cellTag, color: '#166534', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                      <span>Nice prediction</span>
+                      <MotifIcon name="check" size={11} color="#166534" />
+                    </span>
                   </div>
                   <div
                     className="cm-cell-item"
@@ -287,7 +300,10 @@ export default function MLModelPanel({
                     }}
                   >
                     <span style={styles.cellVal}>{cmCounts.fp ?? 0}</span>
-                    <span style={{ ...styles.cellTag, color: '#92400E' }}>False alarm ⚡</span>
+                    <span style={{ ...styles.cellTag, color: '#92400E', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                      <span>False alarm</span>
+                      <MotifIcon name="bolt" size={11} color="#92400E" />
+                    </span>
                   </div>
                 </div>
 
@@ -303,7 +319,10 @@ export default function MLModelPanel({
                     }}
                   >
                     <span style={styles.cellVal}>{cmCounts.fn ?? 0}</span>
-                    <span style={{ ...styles.cellTag, color: '#991B1B' }}>Missed risk 🌧️</span>
+                    <span style={{ ...styles.cellTag, color: '#991B1B', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                      <span>Missed risk</span>
+                      <MotifIcon name="cloud-rain" size={11} color="#991B1B" />
+                    </span>
                   </div>
                   <div
                     className="cm-cell-item"
@@ -314,7 +333,10 @@ export default function MLModelPanel({
                     }}
                   >
                     <span style={styles.cellVal}>{cmCounts.tp ?? 0}</span>
-                    <span style={{ ...styles.cellTag, color: '#166534' }}>Correct warning 🚨</span>
+                    <span style={{ ...styles.cellTag, color: '#166534', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                      <span>Correct warning</span>
+                      <MotifIcon name="warning" size={11} color="#166534" />
+                    </span>
                   </div>
                 </div>
               </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { subscribeNetworkStatus, isOnline } from '../utils/pwaManager';
+import MotifIcon from './MotifIcon';
 
 /**
  * Accessible Offline Banner.
@@ -31,7 +32,9 @@ export default function OfflineBanner() {
       style={styles.container}
     >
       <div style={styles.content}>
-        <span style={styles.icon} aria-hidden="true">📡</span>
+        <span style={styles.icon} aria-hidden="true">
+          <MotifIcon name="antenna" size={16} />
+        </span>
         <div style={styles.textGroup}>
           <strong style={styles.title}>Working Offline</strong>
           <span style={styles.description}>
@@ -44,7 +47,7 @@ export default function OfflineBanner() {
           style={styles.dismissBtn}
           aria-label="Dismiss offline notice"
         >
-          ✕
+          <MotifIcon name="close" size={14} />
         </button>
       </div>
     </aside>

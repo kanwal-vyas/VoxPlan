@@ -226,6 +226,7 @@ export function getPriorityPalette(priority, completed = false) {
       chipBg: '#FDF0ED',
       accentStrip: '#D9383A',
       icon: '🔥',
+      motifName: 'priority-urgent',
     };
   } else if (norm === 'high') {
     base = {
@@ -237,6 +238,7 @@ export function getPriorityPalette(priority, completed = false) {
       chipBg: '#FFF9EB',
       accentStrip: '#E5A83B',
       icon: '⚡',
+      motifName: 'priority-high',
     };
   } else if (norm === 'low') {
     base = {
@@ -248,6 +250,7 @@ export function getPriorityPalette(priority, completed = false) {
       chipBg: '#F0F8F3',
       accentStrip: '#2D6A4F',
       icon: '🌱',
+      motifName: 'priority-low',
     };
   } else {
     // Medium is default
@@ -260,6 +263,7 @@ export function getPriorityPalette(priority, completed = false) {
       chipBg: '#F8F3FA',
       accentStrip: '#8E5FA8',
       icon: '◆',
+      motifName: 'priority-medium',
     };
   }
 

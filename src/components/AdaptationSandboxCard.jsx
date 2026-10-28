@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import MotifIcon from './MotifIcon';
 import {
   computeBoundedCandidateWeights,
   DEFAULT_K_PRIOR,
@@ -119,14 +120,14 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
       setPreferenceFeedback({
         type: 'success',
         text: nextVal
-          ? '✓ Explicit preference collection is active. Choices made in Sprint Planner will be saved locally.'
-          : '⏸ Explicit preference collection paused. No new comparison events will be recorded.',
+          ? 'Explicit preference collection is active. Choices made in Sprint Planner will be saved locally.'
+          : 'Explicit preference collection paused. No new comparison events will be recorded.',
       });
       setTimeout(() => setPreferenceFeedback(null), 5000);
     } else {
       setPreferenceFeedback({
         type: 'error',
-        text: '⚠️ Failed to save preference collection setting to local storage.',
+        text: 'Failed to save preference collection setting to local storage.',
       });
     }
   };
@@ -145,19 +146,19 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
         setSelectedSnapshotId(snap.snapshotId);
         setSnapshotFeedback({
           type: 'success',
-          text: `✓ Saved configuration snapshot "${snap.snapshotId}" (Rev ${snap.revision}, Checksum: ${snap.integrityChecksum}). Production adaptation remains disabled.`,
+          text: `Saved configuration snapshot "${snap.snapshotId}" (Rev ${snap.revision}, Checksum: ${snap.integrityChecksum}). Production adaptation remains disabled.`,
         });
         setTimeout(() => setSnapshotFeedback(null), 6000);
       } else {
         setSnapshotFeedback({
           type: 'error',
-          text: `⚠️ Failed to save snapshot: ${res.error || 'Validation error'}`,
+          text: `Failed to save snapshot: ${res.error || 'Validation error'}`,
         });
       }
     } catch (err) {
       setSnapshotFeedback({
         type: 'error',
-        text: `⚠️ Snapshot error: ${err.message}`,
+        text: `Snapshot error: ${err.message}`,
       });
     }
   };
@@ -167,7 +168,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
     if (!selectedSnapshotId) {
       setSnapshotFeedback({
         type: 'error',
-        text: '⚠️ Please select a snapshot to rollback to.',
+        text: 'Please select a snapshot to rollback to.',
       });
       return;
     }
@@ -182,13 +183,13 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
       setSimCandidateWeights({ ...res.restoredWeights });
       setSnapshotFeedback({
         type: 'success',
-        text: `✓ Rolled back configuration record to "${selectedSnapshotId}" (Revision ${res.activeConfig.revision}). Note: Production scheduler remains locked to factory weights.`,
+        text: `Rolled back configuration record to "${selectedSnapshotId}" (Revision ${res.activeConfig.revision}). Note: Production scheduler remains locked to factory weights.`,
       });
       setTimeout(() => setSnapshotFeedback(null), 6000);
     } else {
       setSnapshotFeedback({
         type: 'error',
-        text: `⚠️ Rollback failed: ${res.error || 'Validation or revision conflict'}`,
+        text: `Rollback failed: ${res.error || 'Validation or revision conflict'}`,
       });
     }
   };
@@ -207,13 +208,13 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
       setShowRestoreConfirm(false);
       setSnapshotFeedback({
         type: 'success',
-        text: `✓ Restored configuration record to canonical factory defaults (Revision ${res.activeConfig.revision}). Production scheduler remains locked to factory weights.`,
+        text: `Restored configuration record to canonical factory defaults (Revision ${res.activeConfig.revision}). Production scheduler remains locked to factory weights.`,
       });
       setTimeout(() => setSnapshotFeedback(null), 6000);
     } else {
       setSnapshotFeedback({
         type: 'error',
-        text: `⚠️ Factory restore failed: ${res.error || 'Storage or revision error'}`,
+        text: `Factory restore failed: ${res.error || 'Storage or revision error'}`,
       });
     }
   };
@@ -434,14 +435,19 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                 backgroundColor: '#FEF3C7',
                 color: '#92400E',
                 borderColor: '#FDE68A',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
               }}
               role="status"
             >
-              🔒 ADAPTATION LOCKED — SHADOW EVALUATION ONLY
+              <MotifIcon name="lock" size={12} color="#92400E" />
+              ADAPTATION LOCKED — SHADOW EVALUATION ONLY
             </span>
             {showSyntheticDemo && (
-              <span style={styles.demoBadge}>
-                🧪 SYNTHETIC SIMULATION FIXTURE ACTIVE
+              <span style={{ ...styles.demoBadge, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                <MotifIcon name="flask" size={12} color="#4338CA" />
+                SYNTHETIC SIMULATION FIXTURE ACTIVE
               </span>
             )}
           </div>
@@ -477,7 +483,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
       {/* Synthetic Demonstration Warning Banner */}
       {showSyntheticDemo && (
         <div style={styles.syntheticWarningBanner} role="alert">
-          <span style={styles.syntheticWarningIcon}>⚠️</span>
+          <span style={styles.syntheticWarningIcon}><MotifIcon name="warning" size={16} color="#D97706" /></span>
           <div style={styles.syntheticWarningText}>
             <strong>Synthetic Demonstration — Not Your History:</strong> This simulation evaluates in-memory diagnostic fixtures with simulated maturity. It never modifies your real IndexedDB telemetry, never alters readiness gates, and cannot activate production adaptation.
           </div>
@@ -486,7 +492,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
 
       {/* Production Safety Banner */}
       <div style={styles.safetyCallout}>
-        <span style={styles.safetyIcon}>🛡️</span>
+        <span style={styles.safetyIcon}><MotifIcon name="shield" size={18} color="#15803D" /></span>
         <div style={styles.safetyContent}>
           <strong style={styles.safetyHeadline}>Strict Production Scheduling Governance:</strong>
           <span style={styles.safetyText}>
@@ -504,14 +510,17 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
       <div style={styles.statusPanel} aria-label="Scheduler Mode & Personalization Status">
         <div style={styles.statusPanelHeader}>
           <div style={styles.statusBadgesGroup}>
-            <span style={styles.statusPillActive} title="Production scheduling proposals use immutable factory baseline weights">
-              🛡️ Factory Scheduler: Active
+            <span style={{ ...styles.statusPillActive, display: 'inline-flex', alignItems: 'center', gap: '4px' }} title="Production scheduling proposals use immutable factory baseline weights">
+              <MotifIcon name="shield" size={11} color="#15803D" />
+              Factory Scheduler: Active
             </span>
-            <span style={styles.statusPillLocked} title="Production adaptation is disabled (isAdaptationUnlocked: false, productionApplied: false)">
-              🔒 Adaptation: Disabled
+            <span style={{ ...styles.statusPillLocked, display: 'inline-flex', alignItems: 'center', gap: '4px' }} title="Production adaptation is disabled (isAdaptationUnlocked: false, productionApplied: false)">
+              <MotifIcon name="lock" size={11} color="#92400E" />
+              Adaptation: Disabled
             </span>
-            <span style={styles.statusPillShadow} title="All candidate evaluation occurs in isolated shadow simulation">
-              🔬 Evaluation: Shadow-Only
+            <span style={{ ...styles.statusPillShadow, display: 'inline-flex', alignItems: 'center', gap: '4px' }} title="All candidate evaluation occurs in isolated shadow simulation">
+              <MotifIcon name="flask" size={11} color="#4338CA" />
+              Evaluation: Shadow-Only
             </span>
           </div>
           <div style={styles.statusTimestamp}>
@@ -589,7 +598,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
         <div style={styles.preferenceControlBox}>
           <div style={styles.prefControlLeft}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '15px' }}>⚙️</span>
+              <MotifIcon name="sliders" size={15} color="#52525B" />
               <strong style={{ fontSize: '13px', color: '#1E293B' }}>Explicit Preference Evidence Collection</strong>
               <span style={preferenceCollectionEnabled ? styles.tagActive : styles.tagPaused}>
                 {preferenceCollectionEnabled ? 'Active (Collecting)' : 'Paused (Blocked)'}
@@ -624,10 +633,14 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
               backgroundColor: preferenceFeedback.type === 'error' ? '#FEE2E2' : '#EFF6FF',
               color: preferenceFeedback.type === 'error' ? '#991B1B' : '#1E40AF',
               borderColor: preferenceFeedback.type === 'error' ? '#FCA5A5' : '#BFDBFE',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
             }}
             role="status"
           >
-            {preferenceFeedback.text}
+            <MotifIcon name={preferenceFeedback.type === 'error' ? 'warning' : 'check'} size={14} />
+            <span>{preferenceFeedback.text}</span>
           </div>
         )}
 
@@ -635,7 +648,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
         <div style={styles.configRollbackBox} aria-label="Configuration Snapshots & Rollback Safety">
           <div style={styles.prefControlLeft}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '15px' }}>🛡️</span>
+              <MotifIcon name="shield" size={15} color="#15803D" />
               <strong style={{ fontSize: '13px', color: '#1E293B' }}>Configuration Snapshots & Rollback Safety</strong>
               <span style={activeConfigRecord.isFactoryBaseline ? styles.tagActive : styles.tagCandidate}>
                 {activeConfigRecord.isFactoryBaseline
@@ -643,7 +656,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                   : `Active Record: Candidate ${activeConfigRecord.sourceSnapshotId.slice(0, 14)}... (Rev ${activeConfigRecord.revision})`}
               </span>
               <span style={styles.statusPillLocked} title="Production adaptation remains locked">
-                🔒 Production Adaptation Disabled
+                Production Adaptation Disabled
               </span>
             </div>
             <div style={styles.prefControlDesc}>
@@ -674,7 +687,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                   <option value="">-- Select Saved Snapshot ({snapshotsList.length}) --</option>
                   {snapshotsList.map(({ snapshot, isValid }) => (
                     <option key={snapshot.snapshotId} value={snapshot.snapshotId}>
-                      {snapshot.snapshotId} (Rev {snapshot.revision}) {isValid ? '✓' : '⚠️ Invalid'}
+                      {snapshot.snapshotId} (Rev {snapshot.revision}) {isValid ? '[Valid]' : '[Invalid]'}
                     </option>
                   ))}
                 </select>
@@ -687,7 +700,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                 style={styles.saveSnapshotBtn}
                 title="Save current candidate slider weights as a validated versioned snapshot"
               >
-                📸 Save Candidate Snapshot
+                Save Candidate Snapshot
               </button>
 
               {snapshotsList.length > 0 && selectedSnapshotId && (
@@ -698,7 +711,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                   style={styles.rollbackBtn}
                   title="Roll back active configuration record to selected snapshot"
                 >
-                  ↺ Rollback to Snapshot
+                  Rollback to Snapshot
                 </button>
               )}
 
@@ -710,7 +723,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                   style={styles.restoreFactoryBtn}
                   title="Restore active configuration to canonical factory baseline defaults"
                 >
-                  ⏮ Restore Factory Defaults
+                  Restore Factory Defaults
                 </button>
               ) : (
                 <div style={styles.confirmRestoreGroup}>
@@ -744,10 +757,14 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
               color: snapshotFeedback.type === 'error' ? '#991B1B' : '#1E40AF',
               borderColor: snapshotFeedback.type === 'error' ? '#FCA5A5' : '#BFDBFE',
               marginTop: '10px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
             }}
             role="status"
           >
-            {snapshotFeedback.text}
+            <MotifIcon name={snapshotFeedback.type === 'error' ? 'warning' : 'check'} size={14} />
+            <span>{snapshotFeedback.text}</span>
           </div>
         )}
       </div>
@@ -761,7 +778,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
           onClick={() => setActiveTab('simulation')}
           style={activeTab === 'simulation' ? styles.tabButtonActive : styles.tabButton}
         >
-          🎮 Schedule Simulation (Shadow-Only)
+          Schedule Simulation (Shadow-Only)
         </button>
         <button
           type="button"
@@ -770,7 +787,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
           onClick={() => setActiveTab('weights')}
           style={activeTab === 'weights' ? styles.tabButtonActive : styles.tabButton}
         >
-          ⚖️ Weight Candidates ({showSyntheticDemo ? 'Synthetic Demo' : 'Factory Baseline'})
+          Weight Candidates ({showSyntheticDemo ? 'Synthetic Demo' : 'Factory Baseline'})
         </button>
         <button
           type="button"
@@ -779,7 +796,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
           onClick={() => setActiveTab('shrinkage')}
           style={activeTab === 'shrinkage' ? styles.tabButtonActive : styles.tabButton}
         >
-          📐 Bayesian Shrinkage & Bounds (K=10, ±20%)
+          Bayesian Shrinkage & Bounds (K=10, ±20%)
         </button>
         <button
           type="button"
@@ -788,7 +805,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
           onClick={() => setActiveTab('shadow')}
           style={activeTab === 'shadow' ? styles.tabButtonActive : styles.tabButton}
         >
-          🔬 Shadow Evaluation & Regression Gates
+          Shadow Evaluation & Regression Gates
         </button>
         <button
           type="button"
@@ -797,7 +814,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
           onClick={() => setActiveTab('ranking')}
           style={activeTab === 'ranking' ? styles.tabButtonActive : styles.tabButton}
         >
-          🎯 Preference Ranking (Offline)
+          Preference Ranking (Offline)
         </button>
         <button
           type="button"
@@ -807,7 +824,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
           onClick={() => setActiveTab('activation_gate')}
           style={activeTab === 'activation_gate' ? styles.tabButtonActive : styles.tabButton}
         >
-          ⚖️ Activation Gate (Shadow-Only)
+          Activation Gate (Shadow-Only)
         </button>
         <button
           type="button"
@@ -816,7 +833,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
           onClick={() => setActiveTab('unsupported')}
           style={activeTab === 'unsupported' ? styles.tabButtonActive : styles.tabButton}
         >
-          ⚠️ Unsupported Mappings & Disclosures
+          Unsupported Mappings & Disclosures
         </button>
       </div>
 
@@ -833,8 +850,9 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                 All calculations run strictly in-memory. Your production schedule, task due dates, and factory weights remain 100% unchanged.
               </p>
             </div>
-            <div style={styles.simSafetyBadge}>
-              🛡️ PRODUCTION SCHEDULE UNTOUCHED
+            <div style={{ ...styles.simSafetyBadge, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <MotifIcon name="shield" size={13} color="#15803D" />
+              PRODUCTION SCHEDULE UNTOUCHED
             </div>
           </div>
 
@@ -884,7 +902,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                   style={styles.simResetBtn}
                   title="Restore all candidate sliders to factory defaults"
                 >
-                  ↺ Reset to Factory Baseline
+                  Reset to Factory Baseline
                 </button>
               </div>
             </div>
@@ -967,13 +985,13 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
               <div style={styles.simTradeoffCard}>
                 <div style={styles.simTradeoffHeader}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '18px' }}>🔍</span>
+                    <MotifIcon name="search" size={16} />
                     <strong style={{ fontSize: '14px', color: '#1E293B' }}>Trade-Off & Feasibility Verdict:</strong>
                   </div>
                   <span
                     style={simulationResult.isFeasible ? styles.simFeasibleBadge : styles.simInfeasibleBadge}
                   >
-                    {simulationResult.isFeasible ? '✓ 100% Feasible Schedule' : '⚠️ Constraint Violations Detected'}
+                    {simulationResult.isFeasible ? '100% Feasible Schedule' : 'Constraint Violations Detected'}
                   </span>
                 </div>
                 <p style={styles.simTradeoffText}>
@@ -982,7 +1000,10 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                 {simulationResult.violations?.length > 0 && (
                   <div style={styles.simViolationsList}>
                     {simulationResult.violations.map((v, i) => (
-                      <div key={i} style={styles.simViolationItem}>❌ {v}</div>
+                      <div key={i} style={{ ...styles.simViolationItem, display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <MotifIcon name="close" size={12} color="#DC2626" />
+                        <span>{v}</span>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -991,11 +1012,13 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
               {/* Side-by-Side Comparison Metrics Table */}
               <div style={styles.simTableCard}>
                 <div style={styles.simTableTitleRow}>
-                  <span style={styles.simTableTitle}>
-                    📊 Comparative Schedule Metrics (Factory Baseline vs. Candidate Configuration)
+                  <span style={{ ...styles.simTableTitle, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    <MotifIcon name="chart" size={14} />
+                    Comparative Schedule Metrics (Factory Baseline vs. Candidate Configuration)
                   </span>
-                  <span style={styles.simAuditNoticeBadge}>
-                    ✓ Audited Metric Definitions
+                  <span style={{ ...styles.simAuditNoticeBadge, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <MotifIcon name="check" size={11} color="#15803D" />
+                    Audited Metric Definitions
                   </span>
                 </div>
                 <table style={styles.simTable}>
@@ -1144,8 +1167,8 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                       </td>
                       <td style={styles.simTd}>
                         {simulationResult.comparison.churnCount === 0
-                          ? '✓ Identical Calendar (0 Churn)'
-                          : `⚠️ ${simulationResult.comparison.churnCount} placement shifts`}
+                          ? 'Identical Calendar (0 Churn)'
+                          : `${simulationResult.comparison.churnCount} placement shifts`}
                       </td>
                     </tr>
                     <tr style={styles.simTr}>
@@ -1154,17 +1177,17 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                         <div style={styles.metricSubtext}>DAG acyclicity, capacity ceilings, and dependency order</div>
                       </td>
                       <td style={styles.simTd}>
-                        ✓ 100% Feasible (0 Cycles, 0 Overruns)
+                        100% Feasible (0 Cycles, 0 Overruns)
                       </td>
                       <td style={styles.simTd}>
-                        {simulationResult.isFeasible ? '✓ 100% Feasible' : '❌ Infeasible (Violations)'}
+                        {simulationResult.isFeasible ? '100% Feasible' : 'Infeasible (Violations)'}
                       </td>
                       <td style={{
                         ...styles.simTd,
                         fontWeight: 700,
                         color: simulationResult.isFeasible ? '#166534' : '#991B1B'
                       }}>
-                        {simulationResult.isFeasible ? '✓ Passed Feasibility' : '❌ Infeasible Candidate'}
+                        {simulationResult.isFeasible ? 'Passed Feasibility' : 'Infeasible Candidate'}
                       </td>
                     </tr>
                   </tbody>
@@ -1175,13 +1198,17 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
               <div style={styles.simPreviewCard}>
                 <div style={styles.simPreviewHeader}>
                   <div>
-                    <h5 style={styles.simPreviewTitle}>📅 Read-Only Schedule Timeline Preview</h5>
+                    <h5 style={{ ...styles.simPreviewTitle, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      <MotifIcon name="calendar" size={14} />
+                      Read-Only Schedule Timeline Preview
+                    </h5>
                     <p style={styles.simPreviewSubtitle}>
                       Inspect day-by-day placements, multi-day work sessions, deadlines, and date shifts.
                     </p>
                   </div>
-                  <span style={styles.simReadOnlyBadge}>
-                    🔒 READ-ONLY PREVIEW — ISOLATED FROM PRODUCTION
+                  <span style={{ ...styles.simReadOnlyBadge, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <MotifIcon name="lock" size={11} color="#92400E" />
+                    READ-ONLY PREVIEW — ISOLATED FROM PRODUCTION
                   </span>
                 </div>
 
@@ -1198,7 +1225,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                       onClick={() => setSimViewMode('split')}
                       style={simViewMode === 'split' ? styles.simViewBtnActive : styles.simViewBtn}
                     >
-                      📊 Side-by-Side (Split)
+                      Side-by-Side (Split)
                     </button>
                     <button
                       type="button"
@@ -1207,7 +1234,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                       onClick={() => setSimViewMode('baseline')}
                       style={simViewMode === 'baseline' ? styles.simViewBtnActive : styles.simViewBtn}
                     >
-                      🛡️ Factory Baseline Only
+                      Factory Baseline Only
                     </button>
                     <button
                       type="button"
@@ -1216,7 +1243,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                       onClick={() => setSimViewMode('candidate')}
                       style={simViewMode === 'candidate' ? styles.simViewBtnActive : styles.simViewBtn}
                     >
-                      🔬 Candidate Simulation Only
+                      Candidate Simulation Only
                     </button>
                   </div>
                 </div>
@@ -1228,7 +1255,10 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                     <div style={styles.simCol}>
                       <div style={styles.simColHeader}>
                         <div>
-                          <div style={styles.simColTitle}>🛡️ Factory Baseline (Active)</div>
+                          <div style={{ ...styles.simColTitle, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                            <MotifIcon name="shield" size={13} color="#15803D" />
+                            Factory Baseline (Active)
+                          </div>
                           <div style={styles.simColWeightsText}>
                             Urgency: 50 | Priority: 100 | Unblock: 15 | Risk: 25
                           </div>
@@ -1298,17 +1328,17 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                                             )}
                                             {pInfo?.inFocusWindow && (
                                               <span style={styles.simTaskFocusBadge}>
-                                                🎯 {pInfo.focusWindowLabel || 'Focus'}
+                                                {pInfo.focusWindowLabel || 'Focus'}
                                               </span>
                                             )}
                                           </div>
                                           <div style={styles.simTaskMetaRow}>
                                             <span>
                                               {tAlloc.startTime && tAlloc.endTime
-                                                ? `⏰ ${tAlloc.startTime} – ${tAlloc.endTime}`
-                                                : '📅 Day Allocation'}
+                                                ? `${tAlloc.startTime} – ${tAlloc.endTime}`
+                                                : 'Day Allocation'}
                                             </span>
-                                            <span>⏱️ {(tAlloc.hours || 0).toFixed(1)}h</span>
+                                            <span>{(tAlloc.hours || 0).toFixed(1)}h</span>
                                             {pInfo?.originalDueDate ? (
                                               <span
                                                 style={{
@@ -1318,7 +1348,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                                                   borderColor: pInfo.status === 'on_time' ? '#86EFAC' : '#FCA5A5',
                                                 }}
                                               >
-                                                {pInfo.status === 'on_time' ? '✓ On-Time' : '⚠️ Late'} (Due: {pInfo.originalDueDate})
+                                                {pInfo.status === 'on_time' ? 'On-Time' : 'Late'} (Due: {pInfo.originalDueDate})
                                               </span>
                                             ) : (
                                               <span style={{ ...styles.simTaskDeadlinePill, backgroundColor: '#F1F5F9', color: '#64748B', borderColor: '#CBD5E1' }}>
@@ -1339,7 +1369,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                       {/* Unscheduled Tasks in Baseline */}
                       {simulationResult.baselineMetrics.unscheduledTasks > 0 && (
                         <div style={styles.simUnscheduledBox}>
-                          <strong>⚠️ Unscheduled Backlog Tasks ({simulationResult.baselineMetrics.unscheduledTasks}):</strong>
+                          <strong>Unscheduled Backlog Tasks ({simulationResult.baselineMetrics.unscheduledTasks}):</strong>
                           <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
                             {(simulationResult.baselineSchedule?.taskSummaries || [])
                               .filter((t) => !t.isScheduled)
@@ -1359,7 +1389,10 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                     <div style={styles.simCol}>
                       <div style={styles.simColHeader}>
                         <div>
-                          <div style={styles.simColTitle}>🔬 Candidate Simulation (Shadow)</div>
+                          <div style={{ ...styles.simColTitle, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                            <MotifIcon name="flask" size={13} color="#4338CA" />
+                            Candidate Simulation (Shadow)
+                          </div>
                           <div style={styles.simColWeightsText}>
                             Urgency: {simulationResult.candidateWeights?.urgencyWeight} | Priority: {simulationResult.candidateWeights?.priorityWeight} | Unblock: {simulationResult.candidateWeights?.unblockWeight} | Risk: {simulationResult.candidateWeights?.riskWeight}
                           </div>
@@ -1435,17 +1468,17 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                                             )}
                                             {pInfo?.inFocusWindow && (
                                               <span style={styles.simTaskFocusBadge}>
-                                                🎯 {pInfo.focusWindowLabel || 'Focus'}
+                                                {pInfo.focusWindowLabel || 'Focus'}
                                               </span>
                                             )}
                                           </div>
                                           <div style={styles.simTaskMetaRow}>
                                             <span>
                                               {tAlloc.startTime && tAlloc.endTime
-                                                ? `⏰ ${tAlloc.startTime} – ${tAlloc.endTime}`
-                                                : '📅 Day Allocation'}
+                                                ? `${tAlloc.startTime} – ${tAlloc.endTime}`
+                                                : 'Day Allocation'}
                                             </span>
-                                            <span>⏱️ {(tAlloc.hours || 0).toFixed(1)}h</span>
+                                            <span>{(tAlloc.hours || 0).toFixed(1)}h</span>
                                             {pInfo?.originalDueDate ? (
                                               <span
                                                 style={{
@@ -1455,7 +1488,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                                                   borderColor: pInfo.status === 'on_time' ? '#86EFAC' : '#FCA5A5',
                                                 }}
                                               >
-                                                {pInfo.status === 'on_time' ? '✓ On-Time' : '⚠️ Late'} (Due: {pInfo.originalDueDate})
+                                                {pInfo.status === 'on_time' ? 'On-Time' : 'Late'} (Due: {pInfo.originalDueDate})
                                               </span>
                                             ) : (
                                               <span style={{ ...styles.simTaskDeadlinePill, backgroundColor: '#F1F5F9', color: '#64748B', borderColor: '#CBD5E1' }}>
@@ -1471,7 +1504,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                                             </div>
                                           ) : (
                                             <div style={{ fontSize: '10px', color: '#16A34A', fontWeight: 600 }}>
-                                              ✓ Same date as factory baseline
+                                              Same date as factory baseline
                                             </div>
                                           )}
                                         </div>
@@ -1487,7 +1520,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                       {/* Unscheduled Tasks in Candidate */}
                       {simulationResult.candidateMetrics.unscheduledTasks > 0 && (
                         <div style={styles.simUnscheduledBox}>
-                          <strong>⚠️ Unscheduled Backlog Tasks ({simulationResult.candidateMetrics.unscheduledTasks}):</strong>
+                          <strong>Unscheduled Backlog Tasks ({simulationResult.candidateMetrics.unscheduledTasks}):</strong>
                           <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
                             {(simulationResult.candidateSchedule?.taskSummaries || [])
                               .filter((t) => !t.isScheduled)
@@ -1507,15 +1540,18 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
               {/* Shifted Placements Details Drawer */}
               {simulationResult.comparison.shiftedPlacements?.length > 0 && (
                 <div style={styles.simShiftedCard}>
-                  <div style={styles.simShiftedTitle}>
-                    📅 Placements Shifted by Candidate Weights ({simulationResult.comparison.shiftedPlacements.length})
+                  <div style={{ ...styles.simShiftedTitle, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    <MotifIcon name="calendar" size={14} />
+                    Placements Shifted by Candidate Weights ({simulationResult.comparison.shiftedPlacements.length})
                   </div>
                   <div style={styles.simShiftedGrid}>
                     {simulationResult.comparison.shiftedPlacements.map((p, idx) => (
                       <div key={idx} style={styles.simShiftedItem}>
                         <div style={{ fontWeight: 700, color: '#1E293B' }}>{p.title}</div>
-                        <div style={{ fontSize: '11px', color: '#64748B' }}>
-                          Baseline: <code>{p.baselineDate || 'Unscheduled'}</code> → Candidate: <code>{p.candidateDate || 'Unscheduled'}</code>
+                        <div style={{ fontSize: '11px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span>Baseline: <code>{p.baselineDate || 'Unscheduled'}</code></span>
+                          <MotifIcon name="arrow-right" size={10} color="#94A3B8" />
+                          <span>Candidate: <code>{p.candidateDate || 'Unscheduled'}</code></span>
                         </div>
                       </div>
                     ))}
@@ -1531,8 +1567,14 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                   style={styles.simDisclosureBtn}
                   aria-expanded={showMethodologyDisclosure}
                 >
-                  <span>ℹ️ Simulation Methodology & Limitations Disclosure</span>
-                  <span>{showMethodologyDisclosure ? '▲ Hide Details' : '▼ View Assumptions & Formulas'}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    <MotifIcon name="info" size={14} color="#1E40AF" />
+                    Simulation Methodology & Limitations Disclosure
+                  </span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <MotifIcon name={showMethodologyDisclosure ? 'chevron-up' : 'chevron-down'} size={12} />
+                    {showMethodologyDisclosure ? 'Hide Details' : 'View Assumptions & Formulas'}
+                  </span>
                 </button>
                 {showMethodologyDisclosure && (
                   <div style={styles.simDisclosureContent}>
@@ -1542,7 +1584,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                       </div>
                     ))}
                     <div style={styles.simDisclosureItem}>
-                      <strong>🔒 Simulation Isolation Guarantee:</strong> Baseline uses factory weights (Urgency: 50, Priority: 100, Unblock: 15, Risk: 25). Candidate uses isolated bounded weights. Both run the exact same deterministic topological heuristic scheduler. All simulation calculations occur strictly in memory without modifying production scheduler weights or active task dates.
+                      <strong>Simulation Isolation Guarantee:</strong> Baseline uses factory weights (Urgency: 50, Priority: 100, Unblock: 15, Risk: 25). Candidate uses isolated bounded weights. Both run the exact same deterministic topological heuristic scheduler. All simulation calculations occur strictly in memory without modifying production scheduler weights or active task dates.
                     </div>
                   </div>
                 )}
@@ -1550,14 +1592,14 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
 
               {/* Strict No-Application Guarantee Notice */}
               <div style={styles.simIsolationNotice}>
-                🔒 <strong>Simulation Isolation Guarantee:</strong> Candidate simulation is 100% non-destructive and isolated. VoxPlan does not permit candidate weights to be applied to production schedule generation in this stage.
+                <strong>Simulation Isolation Guarantee:</strong> Candidate simulation is 100% non-destructive and isolated. VoxPlan does not permit candidate weights to be applied to production schedule generation in this stage.
               </div>
             </div>
           )}
 
           {simulationResult && simulationResult.status === 'empty_backlog' && (
             <div style={styles.simEmptyBacklogAlert}>
-              ℹ️ <strong>{simulationResult.scenarioName}:</strong> {simulationResult.message}
+              <strong>{simulationResult.scenarioName}:</strong> {simulationResult.message}
             </div>
           )}
         </div>
@@ -1595,7 +1637,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                       <span style={styles.valLabel}>Active Production:</span>
                       <span style={styles.valBaseline}>{baseVal.toFixed(1)}</span>
                     </div>
-                    <div style={styles.valArrow}>➔</div>
+                    <div style={styles.valArrow}><MotifIcon name="arrow-right" size={14} color="#94A3B8" /></div>
                     <div style={styles.valCol}>
                       <span style={styles.valLabel}>Shadow Candidate:</span>
                       <span style={isDifferent ? styles.valCandidateAdapted : styles.valCandidateLocked}>
@@ -1612,7 +1654,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                   </div>
 
                   <div style={styles.diagRationale}>
-                    <span style={styles.diagIcon}>{diag.supported ? '📊' : '🔒'}</span>
+                    <span style={styles.diagIcon}><MotifIcon name={diag.supported ? 'chart' : 'lock'} size={13} color={diag.supported ? '#15803D' : '#92400E'} /></span>
                     <span style={styles.diagText}>{diag.rationale}</span>
                   </div>
                 </div>
@@ -1676,7 +1718,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                   color: activeShadow.regressionGate?.passed ? '#166534' : '#991B1B',
                 }}
               >
-                {activeShadow.regressionGate?.passed ? '✓ PASSED (0 Hard Regressions)' : '✖ FAILED'}
+                {activeShadow.regressionGate?.passed ? 'PASSED (0 Hard Regressions)' : 'FAILED'}
               </span>
             </div>
           </div>
@@ -1780,7 +1822,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
         <div style={styles.tabContent}>
           {showSyntheticDemo && (
             <div style={{ ...styles.syntheticWarningBanner, marginBottom: '16px' }} role="alert">
-              <span style={styles.syntheticWarningIcon}>⚠️</span>
+              <span style={styles.syntheticWarningIcon}><MotifIcon name="warning" size={16} color="#D97706" /></span>
               <div style={styles.syntheticWarningText}>
                 <strong>Synthetic Demonstration Active:</strong> The metrics below reflect in-memory mock scenario comparisons ({activeRanking.evidenceSummary?.eligibleCount || 0} synthetic pairs) for auditing statistical concordance. Real user telemetry has recorded {realAnalysis.preferenceEvidence.counts.eligibleCount || 0} eligible comparisons and cannot activate production adaptation.
               </div>
@@ -1788,8 +1830,9 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
           )}
 
           <div style={styles.rankingHeaderBanner}>
-            <div style={styles.rankingHeaderTitle}>
-              🎯 Explicit Preference Evidence & Offline Ranking Pipeline
+            <div style={{ ...styles.rankingHeaderTitle, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <MotifIcon name="target" size={15} color="#1E293B" />
+              Explicit Preference Evidence & Offline Ranking Pipeline
             </div>
             <div style={styles.rankingHeaderDesc}>
               Evaluates whether explicit pairwise user preferences align with offline schedule-quality objectives.
@@ -1821,8 +1864,9 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
           {/* Exclusions Breakdown if any */}
           {(activeRanking.evidenceSummary?.excludedCount ?? 0) > 0 && (
             <div style={styles.exclusionsBox}>
-              <span style={{ fontWeight: '700', fontSize: '12px', color: '#92400E' }}>
-                🔍 Excluded Evidence Audit:
+              <span style={{ fontWeight: '700', fontSize: '12px', color: '#92400E', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <MotifIcon name="search" size={13} color="#92400E" />
+                Excluded Evidence Audit:
               </span>
               <div style={styles.exclusionsPillWrap}>
                 {Object.entries(activeRanking.evidenceSummary?.byReason || {}).map(([reason, count]) => {
@@ -1840,7 +1884,10 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
           {/* Evaluation Outcome Panel */}
           {activeRanking.status === 'insufficient_evidence' ? (
             <div style={styles.insufficientEvidenceCard}>
-              <div style={styles.insufficientBadge}>🔒 INSUFFICIENT EVIDENCE FOR RANKING EVALUATION</div>
+              <div style={{ ...styles.insufficientBadge, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <MotifIcon name="lock" size={11} color="#92400E" />
+                INSUFFICIENT EVIDENCE FOR RANKING EVALUATION
+              </div>
               <h4 style={{ margin: '8px 0 4px 0', fontSize: '14px', color: '#92400E' }}>
                 Sample Below Minimum Statistical Threshold (N &lt; {MIN_EVALUATION_SAMPLE})
               </h4>
@@ -1848,7 +1895,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                 {activeRanking.message}
               </p>
               <div style={{ marginTop: '10px', fontSize: '12px', color: '#4B5563', lineHeight: 1.5 }}>
-                To record explicit preference evidence, open the <strong>Adaptive Sprint Planner</strong> modal, navigate to the <strong>⚖ Strategy Benchmark & Quality</strong> tab, and select which strategy schedule balance you prefer for your task backlog.
+                To record explicit preference evidence, open the <strong>Adaptive Sprint Planner</strong> modal, navigate to the <strong>Strategy Benchmark & Quality</strong> tab, and select which strategy schedule balance you prefer for your task backlog.
               </div>
             </div>
           ) : (
@@ -1891,7 +1938,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
 
               {/* Uncertainty and Split Validation Notice */}
               <div style={styles.uncertaintyNote}>
-                <strong>⚠️ Statistical Limitation & Data Maturity:</strong> {activeRanking.uncertainty?.disclaimer}
+                <strong>Statistical Limitation & Data Maturity:</strong> {activeRanking.uncertainty?.disclaimer}
                 <div style={{ marginTop: '4px' }}>
                   <strong>Grouped Partitioning Strategy:</strong>{' '}
                   {activeRanking.splitValidation?.isSplitDefensible
@@ -1904,8 +1951,9 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
 
           {/* Model Methodology & Decoupling Governance */}
           <div style={styles.methodologyBox}>
-            <div style={{ fontWeight: '700', fontSize: '12px', color: '#374151', marginBottom: '4px' }}>
-              🔬 Ranking Methodology & Governance Rules:
+            <div style={{ fontWeight: '700', fontSize: '12px', color: '#374151', marginBottom: '4px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+              <MotifIcon name="flask" size={13} color="#4338CA" />
+              Ranking Methodology & Governance Rules:
             </div>
             <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '11px', color: '#4B5563', lineHeight: 1.6 }}>
               <li><strong>Pairwise Loss:</strong> Uses strict binary concordance over explicit user choices. Ties and non-finite scores receive zero concordance credit.</li>
@@ -1921,7 +1969,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
         <div style={styles.tabContent} id="activation-gate-panel">
           {showSyntheticDemo && (
             <div style={{ ...styles.syntheticWarningBanner, marginBottom: '16px' }} role="alert">
-              <span style={styles.syntheticWarningIcon}>⚠️</span>
+              <span style={styles.syntheticWarningIcon}><MotifIcon name="warning" size={16} color="#D97706" /></span>
               <div style={styles.syntheticWarningText}>
                 <strong>Synthetic Demonstration Active:</strong> The activation gate below is evaluating in-memory synthetic fixture data. Synthetic demonstration data is strictly disqualified from meeting real-user activation criteria (Outcome: <code>{activeActivationGate.outcome}</code>).
               </div>
@@ -1929,8 +1977,9 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
           )}
 
           <div style={styles.rankingHeaderBanner}>
-            <div style={styles.rankingHeaderTitle}>
-              ⚖️ Shadow-Only Activation-Gate Audit
+            <div style={{ ...styles.rankingHeaderTitle, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <MotifIcon name="scale" size={15} color="#1E293B" />
+              Shadow-Only Activation-Gate Audit
             </div>
             <div style={styles.rankingHeaderDesc}>
               Converts VoxPlan&apos;s documented activation criteria into an executable, shadow-only evaluation protocol. Evaluates candidate scheduler weights against real operational evidence, paired schedule quality differences, hard feasibility constraints, and rollback preflight readiness.
@@ -1965,15 +2014,27 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '18px' }}>
-                  {activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.ELIGIBLE_FOR_SUPERVISED_REVIEW
-                    ? '✓'
-                    : activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.INFEASIBLE
-                    ? '✕'
-                    : activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR
-                    ? '⏸'
-                    : '🔒'}
-                </span>
+                <MotifIcon
+                  name={
+                    activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.ELIGIBLE_FOR_SUPERVISED_REVIEW
+                      ? 'check'
+                      : activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.INFEASIBLE
+                      ? 'close'
+                      : activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR
+                      ? 'pause'
+                      : 'lock'
+                  }
+                  size={18}
+                  color={
+                    activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.ELIGIBLE_FOR_SUPERVISED_REVIEW
+                      ? '#065F46'
+                      : activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.INFEASIBLE
+                      ? '#991B1B'
+                      : activeActivationGate.outcome === ACTIVATION_GATE_OUTCOMES.NOT_SUPERIOR
+                      ? '#374151'
+                      : '#92400E'
+                  }
+                />
                 <span
                   style={{
                     fontWeight: '800',
@@ -1994,7 +2055,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                 </span>
               </div>
               <span style={styles.statusPillLocked}>
-                🔒 Production Adaptation Disabled
+                Production Adaptation Disabled
               </span>
             </div>
             <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#374151', lineHeight: '1.5' }}>
@@ -2013,7 +2074,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
           {/* Cross-Cluster Leakage Alert */}
           {activeActivationGate.evidenceAssessment.crossClusterLeakageDetected && (
             <div style={{ ...styles.syntheticWarningBanner, marginBottom: '16px', backgroundColor: '#FEF2F2', borderColor: '#FCA5A5' }} role="alert">
-              <span style={styles.syntheticWarningIcon}>⚠️</span>
+              <span style={styles.syntheticWarningIcon}><MotifIcon name="warning" size={16} color="#D97706" /></span>
               <div style={styles.syntheticWarningText}>
                 <strong style={{ color: '#991B1B' }}>Cross-Cluster Backlog Leakage Detected:</strong> Overlapping task sets appear across distinct clusters, violating independent cluster sampling assumptions and precluding activation eligibility.
               </div>
@@ -2023,7 +2084,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
           {/* Critical Metric Regression or Outlier Cluster Dominance Alert */}
           {activeActivationGate.pairedComparison?.criticalMetricRegressionDetected && (
             <div style={{ ...styles.syntheticWarningBanner, marginBottom: '16px', backgroundColor: '#FEF2F2', borderColor: '#FCA5A5' }} role="alert">
-              <span style={styles.syntheticWarningIcon}>⚠️</span>
+              <span style={styles.syntheticWarningIcon}><MotifIcon name="warning" size={16} color="#D97706" /></span>
               <div style={styles.syntheticWarningText}>
                 <strong style={{ color: '#991B1B' }}>Critical Metric Regression Guardrail:</strong> Candidate composite score gain masks unacceptable degradation in primary scheduling metrics (on-time rate drop &gt; 5% or delay increase &gt; 1.0 day).
               </div>
@@ -2031,7 +2092,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
           )}
           {activeActivationGate.pairedComparison?.outlierClusterDominanceDetected && (
             <div style={{ ...styles.syntheticWarningBanner, marginBottom: '16px', backgroundColor: '#FEF2F2', borderColor: '#FCA5A5' }} role="alert">
-              <span style={styles.syntheticWarningIcon}>⚠️</span>
+              <span style={styles.syntheticWarningIcon}><MotifIcon name="warning" size={16} color="#D97706" /></span>
               <div style={styles.syntheticWarningText}>
                 <strong style={{ color: '#991B1B' }}>Outlier Cluster Dominance Guardrail:</strong> Positive grand mean difference is driven by extreme outlier cluster(s) while &gt; 50% of distinct scenario clusters regress.
               </div>
@@ -2057,7 +2118,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                 {activeActivationGate.pairedComparison.minMeaningfulDelta} pts
               </span>
               <span style={styles.rankingStatSub}>
-                {activeActivationGate.pairedComparison.meetsPracticalImprovement ? '✓ Met' : '✕ Unmet'} ·{' '}
+                {activeActivationGate.pairedComparison.meetsPracticalImprovement ? 'Met' : 'Unmet'} ·{' '}
                 {activeActivationGate.practicalThresholdMetadata?.comparisonRule === 'confidence_bound'
                   ? `Rule B (CI_lower ${activeActivationGate.uncertainty?.ciLower != null ? `[${activeActivationGate.uncertainty.ciLower}]` : ''} ≥ ε)`
                   : 'Rule A (Mean ≥ ε)'}
@@ -2069,7 +2130,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                 {activeActivationGate.evidenceAssessment.eligibleObservationsCount}
               </span>
               <span style={styles.rankingStatSub}>
-                Min 15 Required · {activeActivationGate.pairedComparison.componentMetricsAudited ? '✓ Component Metrics Audited' : '⚠️ No Component Breakdown'}
+                Min 15 Required · {activeActivationGate.pairedComparison.componentMetricsAudited ? 'Component Metrics Audited' : 'No Component Breakdown'}
               </span>
             </div>
             <div style={styles.rankingStatCard}>
@@ -2079,21 +2140,24 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
               </span>
               <span style={styles.rankingStatSub}>
                 {activeActivationGate.evidenceAssessment.crossClusterTaskOverlapDetected
-                  ? '⚠️ Task Overlap Detected'
+                  ? 'Task Overlap Detected'
                   : activeActivationGate.evidenceAssessment.crossClusterLeakageDetected
-                  ? '⚠️ Backlog Leakage Detected'
+                  ? 'Backlog Leakage Detected'
                   : activeActivationGate.evidenceAssessment.distinctClustersCount >= 5
                   ? (activeActivationGate.evidenceAssessment.clusterSamplingIndependenceVerified
-                      ? '✓ M ≥ 5 Disjoint (Sampling Independence Verified)'
-                      : '⚠️ M ≥ 5 Disjoint (Sampling Independence Unverified)')
-                  : '✕ Inadequate (< 5 Clusters)'}
+                      ? 'M ≥ 5 Disjoint (Sampling Independence Verified)'
+                      : 'M ≥ 5 Disjoint (Sampling Independence Unverified)')
+                  : 'Inadequate (< 5 Clusters)'}
               </span>
             </div>
           </div>
 
           {/* Uncertainty & Rigor Panel */}
           <div style={{ ...styles.rankingDetailCard, marginTop: '16px' }}>
-            <h4 style={styles.rankingDetailTitle}>📊 Clustered Uncertainty & Statistical Rigor</h4>
+            <h4 style={{ ...styles.rankingDetailTitle, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <MotifIcon name="chart" size={14} />
+              Clustered Uncertainty & Statistical Rigor
+            </h4>
             <div style={styles.uncertaintyContent}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', fontSize: '12px' }}>
                 <span style={{ fontWeight: 600, color: '#374151' }}>Uncertainty Estimation Method:</span>
@@ -2129,8 +2193,8 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                 <span style={{ fontWeight: 600, color: '#374151' }}>Evaluation Environment:</span>
                 <span style={{ color: '#1F2937', fontWeight: 600 }}>
                   {activeActivationGate.environment === 'simulation' || activeActivationGate.isSimulationDiagnostic
-                    ? '🧪 Simulation (Offline Diagnostic Only)'
-                    : '🏢 Production (Live Application)'}
+                    ? 'Simulation (Offline Diagnostic Only)'
+                    : 'Production (Live Application)'}
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', fontSize: '12px' }}>
@@ -2143,36 +2207,36 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                 <span style={{ fontWeight: 600, color: '#374151' }}>Evidence Integrity & Authenticity:</span>
                 <span style={{ color: activeActivationGate.evidenceAssessment.evidenceValidation?.isValidated ? '#065F46' : '#92400E', fontWeight: 600 }}>
                   {activeActivationGate.evidenceAssessment.evidenceValidation?.isValidated
-                    ? `✓ Integrity Verified (${activeActivationGate.evidenceAssessment.evidenceValidation?.provenanceSource || 'Validated'})`
+                    ? `Integrity Verified (${activeActivationGate.evidenceAssessment.evidenceValidation?.provenanceSource || 'Validated'})`
                     : (activeActivationGate.environment === 'production' || !activeActivationGate.environment)
-                    ? '⚠️ Unauthenticated (No Production Trust Anchor in Local Architecture)'
-                    : `⚠️ Unauthenticated (${activeActivationGate.evidenceAssessment.evidenceValidation?.reason || 'No Evidence Record'})`}
+                    ? 'Unauthenticated (No Production Trust Anchor in Local Architecture)'
+                    : `Unauthenticated (${activeActivationGate.evidenceAssessment.evidenceValidation?.reason || 'No Evidence Record'})`}
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', fontSize: '12px' }}>
                 <span style={{ fontWeight: 600, color: '#374151' }}>Sampling Independence Status:</span>
                 <span style={{ color: activeActivationGate.evidenceAssessment.clusterSamplingIndependenceVerified ? '#065F46' : '#92400E', fontWeight: 600 }}>
                   {activeActivationGate.evidenceAssessment.clusterSamplingIndependenceVerified
-                    ? '✓ Verified (Authenticated Evidence Record)'
+                    ? 'Verified (Authenticated Evidence Record)'
                     : activeActivationGate.evidenceAssessment.clusterIndependenceStatus === 'failed'
-                    ? '✕ Failed (Cross-Cluster Overlap/Leakage Detected)'
+                    ? 'Failed (Cross-Cluster Overlap/Leakage Detected)'
                     : activeActivationGate.evidenceAssessment.clusterIndependenceStatus === 'not_applicable'
-                    ? '✕ Not Applicable (Methodology Conflict)'
-                    : '⚠️ Unverified (Production Eligibility Blocked)'}
+                    ? 'Not Applicable (Methodology Conflict)'
+                    : 'Unverified (Production Eligibility Blocked)'}
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', fontSize: '12px' }}>
                 <span style={{ fontWeight: 600, color: '#374151' }}>Inference Decision Readiness:</span>
                 <span style={{ color: activeActivationGate.uncertainty.isDecisionReady ? '#065F46' : '#92400E', fontWeight: 600 }}>
                   {activeActivationGate.uncertainty.isDecisionReady
-                    ? '✓ Decision-Ready Inference'
-                    : '⚠️ Exploratory Diagnostic (Eligibility Blocked)'}
+                    ? 'Decision-Ready Inference'
+                    : 'Exploratory Diagnostic (Eligibility Blocked)'}
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', fontSize: '12px' }}>
                 <span style={{ fontWeight: 600, color: '#374151' }}>Clusters & Backlog Disjointness:</span>
                 <span style={{ color: '#1F2937' }}>
-                  {activeActivationGate.evidenceAssessment.distinctClustersCount} Nominal Cluster IDs · {activeActivationGate.evidenceAssessment.disjointTaskSetsVerified ? 'Disjoint Task Sets (Zero Leakage/Overlap)' : '⚠️ Task Overlap or Leakage Detected'}
+                  {activeActivationGate.evidenceAssessment.distinctClustersCount} Nominal Cluster IDs · {activeActivationGate.evidenceAssessment.disjointTaskSetsVerified ? 'Disjoint Task Sets (Zero Leakage/Overlap)' : 'Task Overlap or Leakage Detected'}
                 </span>
               </div>
               {activeActivationGate.uncertainty.bootstrapPercentile?.ciLower != null && (
@@ -2187,20 +2251,20 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', fontSize: '12px' }}>
                   <span style={{ fontWeight: 600, color: '#374151' }}>Evidence Policy Pillars:</span>
                   <span style={{ color: '#1F2937' }}>
-                    Exposure: {activeActivationGate.evidencePolicy.operationalExposurePassed ? '✓' : '✕'} |
-                    Evidence: {activeActivationGate.evidencePolicy.evaluationEvidencePassed ? '✓' : '✕'} |
-                    Statistical: {activeActivationGate.evidencePolicy.statisticalAdequacyPassed ? '✓' : '✕'}
+                    Exposure: {activeActivationGate.evidencePolicy.operationalExposurePassed ? 'Passed' : 'Failed'} |
+                    Evidence: {activeActivationGate.evidencePolicy.evaluationEvidencePassed ? 'Passed' : 'Failed'} |
+                    Statistical: {activeActivationGate.evidencePolicy.statisticalAdequacyPassed ? 'Passed' : 'Failed'}
                   </span>
                 </div>
               )}
               {!activeActivationGate.evidenceAssessment.evidenceValidation?.isValidated && (
                 <div style={{ marginTop: '8px', padding: '6px 10px', backgroundColor: '#FFFBEB', borderRadius: '4px', border: '1px solid #FDE68A', fontSize: '11px', color: '#92400E' }}>
-                  ⚠️ <strong>No Production Trust Anchor Configured:</strong> VoxPlan uses local-first client telemetry. Production cluster sampling assurance cannot currently be established, strictly blocking automated or supervised production adaptation.
+                  <strong>No Production Trust Anchor Configured:</strong> VoxPlan uses local-first client telemetry. Production cluster sampling assurance cannot currently be established, strictly blocking automated or supervised production adaptation.
                 </div>
               )}
               {activeActivationGate.uncertainty.isExploratoryOnly && activeActivationGate.evidenceAssessment.evidenceValidation?.isValidated && (
                 <div style={{ marginTop: '8px', padding: '6px 10px', backgroundColor: '#FFFBEB', borderRadius: '4px', border: '1px solid #FDE68A', fontSize: '11px', color: '#92400E' }}>
-                  ⚠️ <strong>Exploratory Simulation Diagnostic Only:</strong> {activeActivationGate.evidenceAssessment.clusterSamplingIndependenceVerified ? 'Small cluster sample (M < 5), task overlap, or leakage.' : 'Cluster sampling independence remains unverified in real telemetry.'} Formal decision-ready eligibility is strictly withheld.
+                  <strong>Exploratory Simulation Diagnostic Only:</strong> {activeActivationGate.evidenceAssessment.clusterSamplingIndependenceVerified ? 'Small cluster sample (M < 5), task overlap, or leakage.' : 'Cluster sampling independence remains unverified in real telemetry.'} Formal decision-ready eligibility is strictly withheld.
                 </div>
               )}
               <p style={{ margin: '8px 0 0 0', fontSize: '11px', color: '#6B7280', lineHeight: '1.4' }}>
@@ -2212,7 +2276,10 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
           {/* Audit Reasons List */}
           {activeActivationGate.reasons.length > 0 && (
             <div style={{ ...styles.rankingDetailCard, marginTop: '16px' }}>
-              <h4 style={styles.rankingDetailTitle}>🔍 Audit Findings & Gate Check Details</h4>
+              <h4 style={{ ...styles.rankingDetailTitle, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <MotifIcon name="search" size={14} />
+                Audit Findings & Gate Check Details
+              </h4>
               <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px', fontSize: '12px', color: '#4B5563', lineHeight: '1.6' }}>
                 {activeActivationGate.reasons.map((r, idx) => (
                   <li key={idx}>{r}</li>
@@ -2223,7 +2290,10 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
 
           {/* Methodology Disclosures */}
           <div style={{ ...styles.rankingDetailCard, marginTop: '16px', backgroundColor: '#F8FAFC' }}>
-            <h4 style={{ ...styles.rankingDetailTitle, color: '#334155' }}>📜 Methodological Disclosures & Safety Boundaries</h4>
+            <h4 style={{ ...styles.rankingDetailTitle, color: '#334155', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <MotifIcon name="memo" size={14} color="#334155" />
+              Methodological Disclosures & Safety Boundaries
+            </h4>
             <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px', fontSize: '11px', color: '#64748B', lineHeight: '1.5' }}>
               {activeActivationGate.methodologyDisclosures.map((disc, idx) => (
                 <li key={idx}>{disc}</li>
@@ -2236,7 +2306,7 @@ export default function AdaptationSandboxCard({ events = [], tasks = [] }) {
       {/* Footer Governance Tag */}
       <div style={styles.footerNote}>
         <div style={styles.footerLeft}>
-          <span style={styles.footerLock}>🔒</span>
+          <span style={{ ...styles.footerLock, display: 'inline-flex', alignItems: 'center' }}><MotifIcon name="lock" size={14} color="#6B7280" /></span>
           <span>
             <strong>Deterministic Shadow Isolation:</strong> Candidate evaluation is non-destructive,
             purely in-memory, and zero-telemetry. Factory weights remain 100% active in production schedule generation.

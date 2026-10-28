@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import BrandBadge from '../components/BrandBadge';
+import MotifIcon from '../components/MotifIcon';
 import { loadTourState, TOUR_MODES } from '../productTour/tourStorage';
 
 /**
@@ -10,6 +11,36 @@ import { loadTourState, TOUR_MODES } from '../productTour/tourStorage';
  */
 
 // Section palette stops for smooth scroll interpolation across Overview
+
+const MICRO_TAGS = [
+  'Local-First IndexedDB',
+  '0 Cloud LLM Calls',
+  'Topological DAG Solver',
+  'RFC 5545 .ics Export',
+  'Offline Resilient',
+];
+
+const TOUR_CURRICULUM = [
+  '01. Orientation & Workspace Layout',
+  '02. Today Focus Cockpit & Stopwatch',
+  '03. Natural Language Command Dock',
+  '04. Voice Dictation & Text-to-Speech',
+  '05. Backlog & Kahn DAG Dependencies',
+  '06. Adaptive Scheduler & Bin-Packing',
+  '07. Proposal Canvas & Manual Adjustments',
+  '08. Supervised ML Delay-Risk & Gini Importances',
+  '09. Empirical Bayesian Duration Model',
+  '10. Calendar View & RFC 5545 .ics Export',
+];
+
+const COMMAND_SHOWCASE = [
+  ['Task Creation', 'Add task Finish presentation due Friday estimated 3 hours'],
+  ['Batch Rescheduling', 'Push all overdue tasks to Monday'],
+  ['Time-Blocking', 'Set working hours 9am to 5pm with lunch blackout at 12pm'],
+  ['Decision Queries', 'Why was the architecture task split across two days?'],
+  ['Schedule Acceptance', 'Accept proposal'],
+];
+
 const SECTION_PALETTES = [
   { id: 'hero', color: '#FFF8EF', pos: 0.0 },
   { id: 'features', color: '#FFF9DB', pos: 0.25 },
@@ -335,8 +366,9 @@ export default function LandingPage({ onNavigate }) {
             <button type="button" onClick={() => scrollToSection('workspace-focus')} style={styles.navLink}>
               Focus
             </button>
-            <button type="button" onClick={() => scrollToSection('product-tour')} style={styles.navLinkTour}>
-              ✦ Product Tour
+            <button type="button" onClick={() => scrollToSection('product-tour')} style={{ ...styles.navLinkTour, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+              <MotifIcon name="sparkle" size={12} color="#8E5FA8" />
+              <span>Product Tour</span>
             </button>
             <button type="button" onClick={() => scrollToSection('features')} style={styles.navLink}>
               Features
@@ -365,7 +397,7 @@ export default function LandingPage({ onNavigate }) {
               }}
             >
               <span>Open App</span>
-              <span style={styles.btnArrow}>→</span>
+              <span style={styles.btnArrow}><MotifIcon name="arrow-right" size={13} /></span>
             </button>
 
             {/* Mobile Hamburger Toggle */}
@@ -381,7 +413,7 @@ export default function LandingPage({ onNavigate }) {
               aria-expanded={mobileMenuOpen}
               aria-controls="landing-mobile-menu"
             >
-              {mobileMenuOpen ? '✕' : '☰'}
+              <MotifIcon name={mobileMenuOpen ? 'close' : 'menu'} size={18} />
             </button>
           </div>
         </div>
@@ -392,8 +424,9 @@ export default function LandingPage({ onNavigate }) {
             <button type="button" onClick={() => scrollToSection('workspace-focus')} style={styles.mobileNavLink}>
               Today&apos;s Focus
             </button>
-            <button type="button" onClick={() => scrollToSection('product-tour')} style={styles.mobileNavLink}>
-              ✦ Interactive Tour
+            <button type="button" onClick={() => scrollToSection('product-tour')} style={{ ...styles.mobileNavLink, display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <MotifIcon name="sparkle" size={12} color="#8E5FA8" />
+              <span>Interactive Tour</span>
             </button>
             <button type="button" onClick={() => scrollToSection('features')} style={styles.mobileNavLink}>
               Features
@@ -410,9 +443,10 @@ export default function LandingPage({ onNavigate }) {
             <button
               type="button"
               onClick={handleOpenApp}
-              style={{ ...styles.openAppBtn, width: '100%', justifyContent: 'center', marginTop: '8px' }}
+              style={{ ...styles.openAppBtn, width: '100%', justifyContent: 'center', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}
             >
-              Launch App →
+              <span>Launch App</span>
+              <MotifIcon name="arrow-right" size={13} />
             </button>
             <button
               type="button"
@@ -426,9 +460,13 @@ export default function LandingPage({ onNavigate }) {
                 backgroundColor: 'transparent',
                 border: '1px solid var(--accent-terracotta, #C85A32)',
                 color: C_TERRA,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
               }}
             >
-              ✦ Guided Product Tour
+              <MotifIcon name="sparkle" size={12} color={C_TERRA} />
+              <span>Guided Product Tour</span>
             </button>
           </div>
         )}
@@ -441,7 +479,7 @@ export default function LandingPage({ onNavigate }) {
         <div style={styles.heroContainer}>
           {/* Eyebrow Pill */}
           <div style={styles.eyebrowPill}>
-            <span style={styles.eyebrowSparkle}>✦</span>
+            <MotifIcon name="sparkle" size={12} color="#8E5FA8" style={{ marginRight: '4px' }} />
             <span style={styles.eyebrowText}>PREDICTIVE TASK & SCHEDULE INTELLIGENCE</span>
           </div>
 
@@ -469,7 +507,7 @@ export default function LandingPage({ onNavigate }) {
               style={styles.heroPrimaryBtn}
             >
               <span>Launch VoxPlan App</span>
-              <span style={styles.primaryBtnArrow}>→</span>
+              <span style={styles.primaryBtnArrow}><MotifIcon name="arrow-right" size={14} /></span>
             </button>
             <button
               type="button"
@@ -483,7 +521,10 @@ export default function LandingPage({ onNavigate }) {
               }}
               title="Launch the interactive guided product tour"
             >
-              <span>✦ Product Tour</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                <MotifIcon name="sparkle" size={12} />
+                Product Tour
+              </span>
             </button>
             <button
               type="button"
@@ -491,27 +532,17 @@ export default function LandingPage({ onNavigate }) {
               style={styles.heroSecondaryBtn}
             >
               <span>Explore Capabilities</span>
-              <span>↓</span>
+              <MotifIcon name="arrow-down" size={12} />
             </button>
           </div>
 
           {/* Trust & Spec Micro-Tags */}
           <div style={styles.microTagsRow}>
-            <span style={styles.microTag}>
-              <span style={styles.microTagCheck}>✓</span> Local-First IndexedDB
-            </span>
-            <span style={styles.microTag}>
-              <span style={styles.microTagCheck}>✓</span> 0 Cloud LLM Calls
-            </span>
-            <span style={styles.microTag}>
-              <span style={styles.microTagCheck}>✓</span> Topological DAG Solver
-            </span>
-            <span style={styles.microTag}>
-              <span style={styles.microTagCheck}>✓</span> RFC 5545 .ics Export
-            </span>
-            <span style={styles.microTag}>
-              <span style={styles.microTagCheck}>✓</span> Offline Resilient
-            </span>
+            {MICRO_TAGS.map((t) => (
+              <span key={t} style={styles.microTag}>
+                <span style={styles.microTagCheck}><MotifIcon name="check" size={12} color="#2D6A4F" /></span> {t}
+              </span>
+            ))}
           </div>
         </div>
       </section>
@@ -521,7 +552,7 @@ export default function LandingPage({ onNavigate }) {
         <div style={styles.workspaceFocusContainer}>
           <div style={styles.workspaceFocusHeader}>
             <div style={styles.workspaceFocusBadge}>
-              <span style={styles.eyebrowSparkle}>✦</span>
+              <MotifIcon name="sparkle" size={12} color="#8E5FA8" style={{ marginRight: '4px' }} />
               <span>TODAY&apos;S WORKSPACE FOCUS</span>
             </div>
             <h2 style={styles.workspaceFocusTitle}>Your Active Work & Delivery State</h2>
@@ -627,7 +658,7 @@ export default function LandingPage({ onNavigate }) {
                   style={styles.workspacePrimaryActionBtn}
                 >
                   <span>Open Workspace Cockpit</span>
-                  <span style={styles.btnArrow}>→</span>
+                  <span style={styles.btnArrow}><MotifIcon name="arrow-right" size={13} /></span>
                 </button>
                 <button
                   type="button"
@@ -635,13 +666,15 @@ export default function LandingPage({ onNavigate }) {
                   style={styles.workspaceSecondaryActionBtn}
                 >
                   <span>View Full Task Backlog</span>
-                  <span>→</span>
+                  <MotifIcon name="arrow-right" size={13} />
                 </button>
               </div>
             </div>
           ) : (
             <div style={styles.workspaceZeroCard}>
-              <div style={styles.zeroCardIcon}>✦</div>
+              <div style={{ ...styles.zeroCardIcon, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <MotifIcon name="sparkle" size={28} color="#8E5FA8" />
+              </div>
               <h3 style={styles.zeroCardTitle}>Workspace Ready — Zero Tasks Queued</h3>
               <p style={styles.zeroCardDesc}>
                 Your browser storage currently has no tasks saved. VoxPlan is private and runs 100% in your browser.
@@ -654,8 +687,11 @@ export default function LandingPage({ onNavigate }) {
                   onClick={handleOpenTour}
                   style={styles.workspacePrimaryActionBtn}
                 >
-                  <span>✦ Take 20-Step Tour</span>
-                  <span style={styles.btnArrow}>→</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                    <MotifIcon name="sparkle" size={12} />
+                    Take 20-Step Tour
+                  </span>
+                  <span style={styles.btnArrow}><MotifIcon name="arrow-right" size={13} /></span>
                 </button>
                 <button
                   type="button"
@@ -663,7 +699,7 @@ export default function LandingPage({ onNavigate }) {
                   style={styles.workspaceSecondaryActionBtn}
                 >
                   <span>Open Blank Workspace</span>
-                  <span>→</span>
+                  <MotifIcon name="arrow-right" size={13} />
                 </button>
               </div>
             </div>
@@ -788,7 +824,7 @@ export default function LandingPage({ onNavigate }) {
 
                 <div style={styles.previewActions}>
                   <button type="button" onClick={handleOpenApp} style={styles.previewLaunchBtn}>
-                    Try Adaptive Scheduler in App →
+                    Try Adaptive Scheduler in App
                   </button>
                 </div>
               </div>
@@ -871,7 +907,10 @@ export default function LandingPage({ onNavigate }) {
                       style={previewTimerRunning ? styles.pauseBtn : styles.startBtn}
                       aria-label={previewTimerRunning ? 'Pause demonstration stopwatch' : 'Start demonstration stopwatch'}
                     >
-                      {previewTimerRunning ? '⏸ Pause Timer' : '▶ Start Tracking'}
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      <MotifIcon name={previewTimerRunning ? 'pause' : 'play'} size={12} />
+                      {previewTimerRunning ? 'Pause Timer' : 'Start Tracking'}
+                    </span>
                     </button>
                     <button
                       type="button"
@@ -921,7 +960,7 @@ export default function LandingPage({ onNavigate }) {
 
                   <div style={styles.previewCardCta}>
                     <button type="button" onClick={handleOpenApp} style={styles.previewLaunchBtn}>
-                      Inspect Full ML Model Panel in App →
+                      Inspect Full ML Model Panel in App
                     </button>
                   </div>
                 </div>
@@ -972,14 +1011,15 @@ export default function LandingPage({ onNavigate }) {
                     <span style={styles.commandBadge}>Supported Command Capabilities</span>
                   </div>
                   <ul style={styles.commandList}>
-                    <li>✦ <strong>Task Creation:</strong> &quot;Add task Finish presentation due Friday estimated 3 hours&quot;</li>
-                    <li>✦ <strong>Batch Rescheduling:</strong> &quot;Push all overdue tasks to Monday&quot;</li>
-                    <li>✦ <strong>Time-Blocking:</strong> &quot;Set working hours 9am to 5pm with lunch blackout at 12pm&quot;</li>
-                    <li>✦ <strong>Decision Queries:</strong> &quot;Why was the architecture task split across two days?&quot;</li>
-                    <li>✦ <strong>Schedule Acceptance:</strong> &quot;Accept proposal&quot; or &quot;Discard schedule&quot;</li>
+                    {COMMAND_SHOWCASE.map(([lbl, cmd]) => (
+                      <li key={lbl}>
+                        <MotifIcon name="sparkle" size={11} color="#8E5FA8" style={{ marginRight: '6px', verticalAlign: 'middle' }} />
+                        <strong>{lbl}:</strong> &quot;{cmd}&quot;
+                      </li>
+                    ))}
                   </ul>
                   <button type="button" onClick={handleOpenApp} style={styles.previewLaunchBtn}>
-                    Try Voice Commands in App →
+                    Try Voice Commands in App
                   </button>
                 </div>
               </div>
@@ -1004,7 +1044,7 @@ export default function LandingPage({ onNavigate }) {
           {/* Tour Section Header */}
           <div style={styles.sectionHeader}>
             <div style={styles.tourEyebrowBadge}>
-              <span style={styles.eyebrowSparkle}>✦</span>
+              <MotifIcon name="sparkle" size={12} color="#8E5FA8" style={{ marginRight: '4px' }} />
               <span>INTERACTIVE PRODUCT TOUR</span>
             </div>
             <h2 style={styles.tourSectionTitle}>Take the Interactive Tour</h2>
@@ -1026,11 +1066,16 @@ export default function LandingPage({ onNavigate }) {
                     : styles.tourStatusBadgeFresh
                 }
               >
-                {tourState.completed
-                  ? '✓ TOUR COMPLETED'
-                  : tourState.lastStepIndex > 0
-                  ? `IN PROGRESS • STEP ${tourState.lastStepIndex + 1} OF 20`
-                  : 'NEW USER ORIENTATION • 20 STEPS'}
+                {tourState.completed ? (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <MotifIcon name="check" size={11} color="#15803D" />
+                    TOUR COMPLETED
+                  </span>
+                ) : tourState.lastStepIndex > 0 ? (
+                  `IN PROGRESS • STEP ${tourState.lastStepIndex + 1} OF 20`
+                ) : (
+                  'NEW USER ORIENTATION • 20 STEPS'
+                )}
               </span>
               <span style={styles.tourStatusText}>
                 {tourState.completed
@@ -1047,12 +1092,23 @@ export default function LandingPage({ onNavigate }) {
                 onClick={handleOpenTour}
                 style={styles.tourPrimaryLaunchBtn}
               >
-                <span>
-                  {tourState.completed
-                    ? 'Retake Product Tour (20 Steps) ↺'
-                    : tourState.lastStepIndex > 0
-                    ? `Resume Tour (Step ${tourState.lastStepIndex + 1}) →`
-                    : 'Start Product Tour (20 Steps) →'}
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                  {tourState.completed ? (
+                    <>
+                      <span>Retake Product Tour (20 Steps)</span>
+                      <MotifIcon name="refresh" size={12} />
+                    </>
+                  ) : tourState.lastStepIndex > 0 ? (
+                    <>
+                      <span>Resume Tour (Step {tourState.lastStepIndex + 1})</span>
+                      <MotifIcon name="arrow-right" size={12} />
+                    </>
+                  ) : (
+                    <>
+                      <span>Start Product Tour (20 Steps)</span>
+                      <MotifIcon name="arrow-right" size={12} />
+                    </>
+                  )}
                 </span>
               </button>
               <button
@@ -1062,7 +1118,10 @@ export default function LandingPage({ onNavigate }) {
                 style={styles.tourDemoLaunchBtn}
                 title="Launch the tour populated with simulated tasks in an isolated demo sandbox"
               >
-                <span>🛠 Try Hands-on Demo Tour</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <MotifIcon name="tools" size={13} />
+                  <span>Try Hands-on Demo Tour</span>
+                </span>
               </button>
             </div>
           </div>
@@ -1090,10 +1149,16 @@ export default function LandingPage({ onNavigate }) {
                 <div style={styles.spotlightTargetBeacon}>
                   <span style={styles.beaconPing} />
                   <span style={styles.beaconDot} />
-                  <span style={styles.beaconText}>✦ Target: Adaptive Schedule Engine</span>
+                  <span style={{ ...styles.beaconText, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <MotifIcon name="sparkle" size={10} color="#6B21A8" />
+                    Target: Adaptive Schedule Engine
+                  </span>
                 </div>
                 <div style={styles.spotlightSimulatedBtn}>
-                  <span>⚡ Run Adaptive Schedule</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <MotifIcon name="bolt" size={12} color="#D97706" />
+                    Run Adaptive Schedule
+                  </span>
                 </div>
               </div>
 
@@ -1108,16 +1173,18 @@ export default function LandingPage({ onNavigate }) {
                   VoxPlan evaluates the Directed Acyclic Graph of prerequisites and bin-packs work into weekday working hours without weekend spillover.
                 </p>
                 <div style={styles.simCalloutPrompt}>
-                  <span style={styles.promptIcon}>💡</span>
+                  <MotifIcon name="lightbulb" size={14} color="#D97706" />
                   <span>Click &quot;Adaptive Schedule&quot; to inspect zero-conflict calendar allocations.</span>
                 </div>
                 <div style={styles.simCalloutFooter}>
-                  <button type="button" onClick={handleOpenTour} style={styles.simNavBtnSecondary}>
-                    ← Back
+                  <button type="button" onClick={handleOpenTour} style={{ ...styles.simNavBtnSecondary, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <MotifIcon name="arrow-left" size={12} />
+                    Back
                   </button>
                   <span style={styles.simNavCount}>Step 7 / 20</span>
-                  <button type="button" onClick={handleOpenTour} style={styles.simNavBtnPrimary}>
-                    Next (7/20) →
+                  <button type="button" onClick={handleOpenTour} style={{ ...styles.simNavBtnPrimary, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <span>Next (7/20)</span>
+                    <MotifIcon name="arrow-right" size={12} />
                   </button>
                 </div>
               </div>
@@ -1127,7 +1194,7 @@ export default function LandingPage({ onNavigate }) {
           {/* 3 Core Highlight Pillars */}
           <div style={styles.tourPillarsGrid}>
             <div style={styles.tourPillarCard}>
-              <div style={styles.tourPillarIcon}>🎯</div>
+              <div style={styles.tourPillarIcon}><MotifIcon name="target" size={24} color="#6B21A8" /></div>
               <h3 style={styles.tourPillarTitle}>Optical Spotlight Isolation</h3>
               <p style={styles.tourPillarDesc}>
                 A dynamic SVG aperture with high-contrast borders and backdrop blur isolates the active control on screen, eliminating visual clutter so you always know where to look.
@@ -1135,7 +1202,7 @@ export default function LandingPage({ onNavigate }) {
             </div>
 
             <div style={styles.tourPillarCard}>
-              <div style={styles.tourPillarIcon}>👁‍🗨</div>
+              <div style={styles.tourPillarIcon}><MotifIcon name="eye" size={24} color="#6B21A8" /></div>
               <h3 style={styles.tourPillarTitle}>Observation vs Hands-on Demo</h3>
               <p style={styles.tourPillarDesc}>
                 Tour your current workspace in guided observation mode, or toggle to hands-on demo mode to test scheduling, drag overrides, and time-tracking on isolated sample tasks.
@@ -1143,7 +1210,7 @@ export default function LandingPage({ onNavigate }) {
             </div>
 
             <div style={styles.tourPillarCard}>
-              <div style={styles.tourPillarIcon}>🛡</div>
+              <div style={styles.tourPillarIcon}><MotifIcon name="shield" size={24} color="#6B21A8" /></div>
               <h3 style={styles.tourPillarTitle}>100% Data Safety & Isolation</h3>
               <p style={styles.tourPillarDesc}>
                 The tour operates strictly within an isolated memory sandbox (<code style={styles.codeSnippet}>voxplan_product_tour_state</code>). It never alters, overwrites, or deletes your actual tasks, notes, or preferences.
@@ -1155,16 +1222,9 @@ export default function LandingPage({ onNavigate }) {
           <div style={styles.tourCurriculumBox}>
             <span style={styles.curriculumTitle}>Covered in the 20-Step Tour:</span>
             <div style={styles.curriculumTags}>
-              <span style={styles.curriculumTag}>01. Orientation & Workspace Layout</span>
-              <span style={styles.curriculumTag}>02. Today Focus Cockpit & Stopwatch</span>
-              <span style={styles.curriculumTag}>03. Natural Language Command Dock</span>
-              <span style={styles.curriculumTag}>04. Voice Dictation & Text-to-Speech</span>
-              <span style={styles.curriculumTag}>05. Backlog & Kahn DAG Dependencies</span>
-              <span style={styles.curriculumTag}>06. Adaptive Scheduler & Bin-Packing</span>
-              <span style={styles.curriculumTag}>07. Proposal Canvas & Manual Adjustments</span>
-              <span style={styles.curriculumTag}>08. Supervised ML Delay-Risk & Gini Importances</span>
-              <span style={styles.curriculumTag}>09. Empirical Bayesian Duration Model</span>
-              <span style={styles.curriculumTag}>10. Calendar View & RFC 5545 .ics Export</span>
+              {TOUR_CURRICULUM.map((t) => (
+                <span key={t} style={styles.curriculumTag}>{t}</span>
+              ))}
             </div>
           </div>
         </div>
@@ -1197,7 +1257,7 @@ export default function LandingPage({ onNavigate }) {
                 style={styles.featureActionBtn}
                 aria-label="Open Adaptive Scheduler in app"
               >
-                Launch Scheduler →
+                Launch Scheduler
               </button>
             </div>
           </div>
@@ -1218,7 +1278,7 @@ export default function LandingPage({ onNavigate }) {
                 style={styles.featureActionBtn}
                 aria-label="Inspect ML Delay Risk in app"
               >
-                Inspect Risk Models →
+                Inspect Risk Models
               </button>
             </div>
           </div>
@@ -1239,7 +1299,7 @@ export default function LandingPage({ onNavigate }) {
                 style={styles.featureActionBtn}
                 aria-label="View Pace Learning in app"
               >
-                View Pace Learning →
+                View Pace Learning
               </button>
             </div>
           </div>
@@ -1260,7 +1320,7 @@ export default function LandingPage({ onNavigate }) {
                 style={styles.featureActionBtn}
                 aria-label="Try Voice Dock in app"
               >
-                Try Voice Dock →
+                Try Voice Dock
               </button>
             </div>
           </div>
@@ -1281,7 +1341,7 @@ export default function LandingPage({ onNavigate }) {
                 style={styles.featureActionBtn}
                 aria-label="Explore Calendar in app"
               >
-                Explore Calendar →
+                Explore Calendar
               </button>
             </div>
           </div>
@@ -1302,7 +1362,7 @@ export default function LandingPage({ onNavigate }) {
                 style={styles.featureActionBtn}
                 aria-label="Export RFC 5545 Calendar in app"
               >
-                Export .ics Grid →
+                Export .ics Grid
               </button>
             </div>
           </div>
@@ -1398,7 +1458,12 @@ export default function LandingPage({ onNavigate }) {
               <tr style={styles.tableHeaderRow}>
                 <th style={styles.tableHeaderCell}>Architectural Dimension</th>
                 <th style={styles.tableHeaderCellBad}>Traditional Cloud SaaS Planners</th>
-                <th style={styles.tableHeaderCellGood}>✦ VoxPlan Local-First Architecture</th>
+                <th style={styles.tableHeaderCellGood}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
+                    <MotifIcon name="sparkle" size={12} color="#15803D" />
+                    VoxPlan Local-First Architecture
+                  </span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -1453,7 +1518,7 @@ export default function LandingPage({ onNavigate }) {
           <div style={styles.ctaBadge}>GET STARTED IN SECONDS</div>
           <h2 style={styles.ctaTitle}>Experience Predictive Planning Today</h2>
           <p style={styles.ctaDesc}>
-            No registration required. Open the application and click <strong>⚡ Demo Seed</strong> to explore calibrated
+            No registration required. Open the application and click <strong>Demo Seed</strong> to explore calibrated
             historical telemetry, or start fresh with your own genuine commitments.
           </p>
           <div className="landing-cta-btn-group" style={styles.ctaBtnGroup}>
@@ -1464,7 +1529,7 @@ export default function LandingPage({ onNavigate }) {
               style={styles.ctaPrimaryBtn}
             >
               <span>Launch VoxPlan Productivity App</span>
-              <span style={styles.primaryBtnArrow}>→</span>
+              <span style={styles.primaryBtnArrow}><MotifIcon name="arrow-right" size={14} /></span>
             </button>
             <button
               type="button"
@@ -1472,8 +1537,11 @@ export default function LandingPage({ onNavigate }) {
               onClick={handleOpenTour}
               style={styles.ctaTourBtn}
             >
-              <span>✦ Take 20-Step Product Tour</span>
-              <span style={styles.primaryBtnArrow}>→</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <MotifIcon name="sparkle" size={13} />
+                Take 20-Step Product Tour
+              </span>
+              <span style={styles.primaryBtnArrow}><MotifIcon name="arrow-right" size={14} /></span>
             </button>
           </div>
         </div>
@@ -1523,7 +1591,7 @@ export default function LandingPage({ onNavigate }) {
               rel="noopener noreferrer"
               style={styles.footerLink}
             >
-              GitHub Repository ↗
+              GitHub Repository
             </a>
             <button type="button" onClick={() => scrollToSection('safety')} style={styles.footerLinkBtn}>
               Safety & ML Architecture
@@ -1533,7 +1601,7 @@ export default function LandingPage({ onNavigate }) {
 
         <div style={styles.footerBottom}>
           <p style={styles.copyrightText}>
-            © 2026 VoxPlan. Open source personal productivity software under the MIT license.
+            &copy; 2026 VoxPlan. Open source personal productivity software under the MIT license.
           </p>
         </div>
       </footer>
@@ -1818,6 +1886,8 @@ const styles = {
   microTagCheck: {
     color: '#3EA370',
     fontWeight: 'bold',
+    display: 'inline-flex',
+    alignItems: 'center',
   },
 
   /* Preview Section */

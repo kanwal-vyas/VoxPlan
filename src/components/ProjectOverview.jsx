@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import MotifIcon from './MotifIcon';
 
 export default function ProjectOverview({
   tasks = [],
@@ -78,7 +79,7 @@ export default function ProjectOverview({
                 style={styles.scheduleBtn}
                 title="Open Adaptive Sprint Scheduler"
               >
-                <span>✦</span>
+                <MotifIcon name="sparkle" size={13} />
                 <span>Adaptive Schedule</span>
               </button>
             )}
@@ -100,7 +101,7 @@ export default function ProjectOverview({
               ) : (
                 <>
                   <span>Run predictions</span>
-                  <span>→</span>
+                  <MotifIcon name="arrow-right" size={14} style={{ marginLeft: '4px' }} />
                 </>
               )}
             </button>
@@ -113,7 +114,10 @@ export default function ProjectOverview({
           <div style={styles.progressCard} className="digital-card">
             <div style={styles.progressHeader}>
               <span style={styles.progressLabel}>Sprint Completion</span>
-              <span className="note-tag" style={{ color: '#27754E' }}>✎ active cycle</span>
+              <span className="note-tag" style={{ color: '#27754E', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <MotifIcon name="pencil" size={11} color="#27754E" />
+                <span>active cycle</span>
+              </span>
             </div>
 
             <div style={styles.numeralRow}>
@@ -145,8 +149,9 @@ export default function ProjectOverview({
           <div style={styles.timelineCard} className="digital-card">
             <div style={styles.timelineHeader}>
               <span style={styles.timelineHeading}>TASK RISK PATHWAY</span>
-              <span className="note-tag">
-                {isTrained ? 'model-evaluated sequence →' : 'active initiatives →'}
+              <span className="note-tag" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <span>{isTrained ? 'model-evaluated sequence' : 'active initiatives'}</span>
+                <MotifIcon name="arrow-right" size={11} />
               </span>
             </div>
             
@@ -154,7 +159,7 @@ export default function ProjectOverview({
               {displayTasks.map((task, idx) => {
                 const pred = predictionsMap[task.id];
                 let nodeDotStyle = { backgroundColor: '#F3EEFF', border: '2px solid #C9B6FF' };
-                let emoji = '⏳';
+                let motifName = 'hourglass';
                 let riskColor = '#5B44BA';
                 let tagClass = 'hl hl-lilac';
                 let riskText = 'Awaiting ML scan';
@@ -162,19 +167,19 @@ export default function ProjectOverview({
                 if (pred) {
                   if (pred.risk === 'HIGH') {
                     nodeDotStyle = { backgroundColor: '#FFEFEA', border: '2px solid #FF8F82' };
-                    emoji = '🚨';
+                    motifName = 'priority-urgent';
                     riskColor = '#D9483B';
                     tagClass = 'hl hl-coral';
                     riskText = `${Math.round(pred.probability * 100)}% High Risk`;
                   } else if (pred.risk === 'MEDIUM') {
                     nodeDotStyle = { backgroundColor: '#FFF9DB', border: '2px solid #F59E0B' };
-                    emoji = '⚡';
+                    motifName = 'priority-high';
                     riskColor = '#B45309';
                     tagClass = 'hl hl-butter';
                     riskText = `${Math.round(pred.probability * 100)}% Med Risk`;
                   } else {
                     nodeDotStyle = { backgroundColor: '#EBF8F1', border: '2px solid #3EA370' };
-                    emoji = '✓';
+                    motifName = 'check';
                     riskColor = '#166534';
                     tagClass = 'hl hl-mint';
                     riskText = `${Math.round(pred.probability * 100)}% Low Risk`;
@@ -187,7 +192,7 @@ export default function ProjectOverview({
                   <React.Fragment key={task.id}>
                     <div className="pulse-node-item" style={styles.pathNode}>
                       <div style={{ ...styles.nodeDot, ...nodeDotStyle }}>
-                        <span>{emoji}</span>
+                        <MotifIcon name={motifName} size={14} color={riskColor} />
                       </div>
                       <div style={styles.nodeInfo}>
                         <span style={styles.nodeTitle} title={task.title}>{task.title}</span>
@@ -208,15 +213,16 @@ export default function ProjectOverview({
 
               {displayTasks.length === 0 && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '16px 0', color: '#7A7782' }}>
-                  <span style={{ fontSize: '20px' }}>✨</span>
+                  <MotifIcon name="sparkle" size={20} color="#8E5FA8" />
                   <span style={{ fontSize: '13px', fontWeight: '600' }}>
                     {totalCount === 0
                       ? 'No tasks yet. Create an initiative to visualize sprint risk.'
                       : 'All tasks completed for this sprint!'}
                   </span>
                   {totalCount > 0 && (
-                    <span style={{ fontFamily: "var(--font-accent, 'Bigelow Rules', cursive)", fontSize: '22px', color: '#C85A32', letterSpacing: '0.04em' }}>
-                      ✦ Sprint Milestone Achieved
+                    <span style={{ fontFamily: "var(--font-accent, 'Bigelow Rules', cursive)", fontSize: '22px', color: '#C85A32', letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      <MotifIcon name="sparkle" size={14} color="#C85A32" />
+                      Sprint Milestone Achieved
                     </span>
                   )}
                 </div>
