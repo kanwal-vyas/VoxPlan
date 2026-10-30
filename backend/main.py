@@ -3,9 +3,13 @@ VoxPlan FastAPI Application.
 Exposes REST endpoints for real machine learning training, live delay risk predictions, and explainability.
 """
 
-from typing import Any, Dict, List
-from fastapi import FastAPI, HTTPException, status
+import os
+import re
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from backend.ml.model import (
     BatchPredictionResponse,
@@ -32,23 +36,77 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-import os
-from pathlib import Path
+# Known allowed frontend origins
+DEFAULT_ALLOWED_ORIGINS = [
+    "https://voxplan-u31l.onrender.com",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:4173",
+    "http://127.0.0.1:4173",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
 
-# Enable CORS (configurable via CORS_ORIGINS environment variable)
-cors_origins_env = os.getenv("CORS_ORIGINS", "*").strip()
-if cors_origins_env == "*":
-    allowed_origins = ["*"]
-else:
-    allowed_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
+# Regex matching any deployed Render frontend
+RENDER_ORIGIN_REGEX = r"^https:\/\/(?:[a-zA-Z0-9-]+\.)?onrender\.com$"
+
+# Parse and merge custom origins from CORS_ORIGINS environment variable
+cors_origins_env = os.getenv("CORS_ORIGINS", "").strip()
+configured_origins = [
+    origin.strip() for origin in cors_origins_env.split(",") if origin.strip() and origin.strip() != "*"
+]
+allowed_origins = list(dict.fromkeys(DEFAULT_ALLOWED_ORIGINS + configured_origins))
+
+
+def is_allowed_origin(origin: str) -> bool:
+    """Helper to check if an origin is permitted by whitelist or regex."""
+    if not origin:
+        return False
+    if origin in allowed_origins:
+        return True
+    return bool(re.match(RENDER_ORIGIN_REGEX, origin))
+
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=RENDER_ORIGIN_REGEX,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=600,
 )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """
+    Guarantees that unhandled 500 exceptions include valid CORS headers so the browser
+    receives the actual diagnostic error payload rather than being blocked by CORS.
+    """
+    origin = request.headers.get("origin", "")
+    headers = {}
+    if origin and is_allowed_origin(origin):
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+        headers["Vary"] = "Origin"
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": f"Internal server error: {str(exc)}"},
+        headers=headers,
+    )
+
+
+@app.options("/api/{rest_of_path:path}", include_in_schema=False)
+async def preflight_options_catchall(rest_of_path: str):
+    """
+    Explicit fallback handler for direct or non-standard OPTIONS preflight requests
+    ensuring a 200 OK status.
+    """
+    return Response(status_code=status.HTTP_200_OK)
 
 
 @app.middleware("http")
@@ -69,7 +127,7 @@ async def add_security_headers(request, call_next):
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         "font-src 'self' https://fonts.gstatic.com",
         "img-src 'self' data: blob:",
-        "connect-src 'self' http://127.0.0.1:8000 http://localhost:8000 https://voxplan-u31l.onrender.com",
+        "connect-src 'self' http://127.0.0.1:8000 http://localhost:8000 https://voxplan-u31l.onrender.com https://voxplan-api.onrender.com",
         "worker-src 'self'",
         "manifest-src 'self'",
         "object-src 'none'",
@@ -264,4 +322,3 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", "8000"))
     reload_mode = os.getenv("ENVIRONMENT", "development") == "development"
     uvicorn.run("backend.main:app", host=host, port=port, reload=reload_mode)
-

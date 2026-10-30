@@ -39,6 +39,7 @@ This document tracks the phased evolution of VoxPlan from a static task tracker 
 | **Phase 8.20** | Render Static Site SPA Routing & Live Service Verification | **COMPLETED** | Diagnosed live Render deployment 404 on reload (`https://voxplan-u31l.onrender.com/app`); confirmed backend `voxplan-api` at `https://voxplan-api.onrender.com` healthy (FastAPI 200 OK); identified missing Render Static Site rewrite rule for SPA navigation fallback; documented exact Render Dashboard rewrite rule (`/*` -> `/index.html`); 1,282 frontend tests, 29 backend tests passing. |
 | **Phase 8.21** | Mobile-First UI Optimization & Product Tour Responsiveness | **COMPLETED** | Comprehensive mobile-first optimization across all viewports (320px–430px phones, 768px tablet, 1280px+ desktop regression); compact smart-docked product tour callouts preventing target obstruction; 4-tab mobile workspace header navigation without wrapping; single-column task card layouts with $\ge 44\text{px}$ touch targets; horizontally scrollable filter bars; mobile viewport modal dialog fit with safe areas; zero regressions to existing scheduling, voice, persistence, or desktop layouts; 1,300 frontend tests, 29 backend tests, 0 lint errors, clean build. |
 | **Phase 8.22** | Mobile Overflow Elimination & Brand Copy Refinement | **COMPLETED** | Systematic root-cause elimination of horizontal scroll overflow across all 5 standard mobile viewports (320px, 360px, 375px, 390px, 430px) in both open and closed interactive states; complete removal of gimmicky "playful intelligence" branding/copy across metadata, pages, components, and tests in favor of professional terminology ("predictive task planning", "adaptive scheduling", "task insights"); automated regression suite; 1,309 frontend tests, 29 backend tests passing. |
+| **Phase 8.27** | Training API CORS & 503 Preflight Failure Resolution | **COMPLETED** | Diagnosed browser network preflight 503/CORS error on POST /api/train; confirmed live root cause: Render Web Service voxplan-api in suspended state returning 503 HTML without CORS headers; hardened FastAPI backend CORS configuration with explicit frontend whitelist (https://voxplan-u31l.onrender.com), Render subdomain regex, direct OPTIONS preflight catch-all handler, global exception handler CORS wrapping, container-safe training worker concurrency (n_jobs=min(2, os.cpu_count())), and CSP connect-src updates; verified with 37 backend tests (8 new CORS/preflight tests) and 1,322 frontend tests. |
 
 
 ---
@@ -8445,3 +8446,98 @@ Deliver a visually obvious, genuine mobile transformation beyond minor font and 
   - `desktop_1280x800.png`, `desktop_1440x900.png`: Desktop calendar view pixel-identical.
 - **Git Diff Check (`git diff --check`)**:
   - Clean (0 whitespace errors).
+
+---
+
+## [2026-10-30] — Phase 8.27: Diagnose and Fix Training API CORS / 503 Preflight Failure
+
+### 1. Root Cause Diagnosis & Live Request Flow Analysis
+
+#### A. Observed Browser Behavior
+- **Trigger**: Client triggers model training in the workspace via `trainModel()` in `src/api/mlApi.js`.
+- **Target URL**: `https://voxplan-api.onrender.com/api/train` (via `VITE_API_BASE_URL`).
+- **HTTP Method**: `POST` with `Content-Type: application/json`.
+- **Browser Behavior**: Under W3C CORS specifications, non-simple POST requests with JSON content-type require a preflight check (`OPTIONS`).
+- **Network Panel Error**: `CORS error`, `OPTIONS 503 Service Unavailable`, zero response data returned.
+
+#### B. Live Environment Investigation
+- Executed direct external live probe outside sandbox:
+  `curl -i -X OPTIONS "https://voxplan-api.onrender.com/api/train" -H "Origin: https://voxplan-u31l.onrender.com" -H "Access-Control-Request-Method: POST" -H "Access-Control-Request-Headers: content-type"`
+- **Live HTTP Response**:
+  - `HTTP/1.1 503 Service Unavailable`
+  - `x-render-routing: suspend`
+  - `Server: cloudflare`
+  - Body: `<!DOCTYPE html><html><head><title>Service Suspended</title></head><body>This service has been suspended.</body></html>`
+- Probed `https://voxplan-api.onrender.com/health`: Returned identical `503 Service Unavailable` (`x-render-routing: suspend`).
+- Probed `https://voxplan-u31l.onrender.com/`: Returned `HTTP/1.1 200 OK` (Vite SPA frontend operational).
+- **Core Diagnosis**: The Render Web Service `voxplan-api` was placed into a **SUSPENDED** state on Render. When a service is suspended, Render's edge reverse-proxy / Cloudflare edge terminates all incoming HTTP traffic (including CORS preflight `OPTIONS`) with a plain 503 HTML error page and zero CORS headers (`Access-Control-Allow-Origin`). When the browser receives a 503 without CORS headers for a preflight request, the Fetch standard aborts the fetch with a generic `CORS error`, masking the fact that the backend web service is suspended.
+
+#### C. Backend Application Code Vulnerabilities
+Beyond the infrastructure suspension, inspection of `backend/main.py` revealed four critical CORS and reliability defects:
+1. **Unsafe Wildcard with Credentials**: `cors_origins_env = os.getenv("CORS_ORIGINS", "*")` resulted in `allowed_origins = ["*"]` combined with `allow_credentials=True`. According to the W3C CORS specification, wildcard origins are prohibited for credentialed requests. The deployed frontend origin (`https://voxplan-u31l.onrender.com`) was not explicitly guaranteed in `allowed_origins`.
+2. **Missing Render Subdomain Regex**: If preview deployments or staging instances on Render (`*.onrender.com`) attempted to reach the API, they were rejected if omitted from `CORS_ORIGINS`.
+3. **Missing Catch-All OPTIONS Handlers**: Plain manual or non-preflight `OPTIONS` requests to `/api/train` resulted in `405 Method Not Allowed` because FastAPI routes only registered `POST`.
+4. **Unhandled Server Exceptions Outside CORS Middleware**: Starlette's `ServerErrorMiddleware` handles unhandled exceptions outside `CORSMiddleware`. If an internal 500 error occurred during model training, the 500 response omitted CORS headers, causing the browser to mask internal server errors as CORS errors.
+5. **Worker Process Over-Allocation**: In `backend/ml/train.py`, `RandomForestClassifier` used `n_jobs=-1`, which on containerized multi-tenant nodes spawns processes matching the host physical core count (e.g. 32-128 workers), risking instantaneous out-of-memory (OOM) termination on resource-constrained containers.
+
+---
+
+### 2. Implementation & Code Fixes
+
+#### A. Backend Allowed Origins & CORS Hardening (`backend/main.py`)
+- Defined `DEFAULT_ALLOWED_ORIGINS` explicitly containing:
+  - `https://voxplan-u31l.onrender.com` (deployed production frontend)
+  - `http://localhost:5173`, `http://127.0.0.1:5173` (Vite dev)
+  - `http://localhost:4173`, `http://127.0.0.1:4173` (Vite preview)
+  - `http://localhost:8000`, `http://127.0.0.1:8000` (FastAPI local)
+  - `http://localhost:3000`, `http://127.0.0.1:3000` (Node alternate)
+- Added `RENDER_ORIGIN_REGEX = r"^https://(?:[a-zA-Z0-9-]+\.)?onrender\.com$"`.
+- Merged environment-supplied origins without defaulting to an unsafe `*` when credentials are active.
+- Configured `CORSMiddleware`:
+  - `allow_origins=allowed_origins`
+  - `allow_origin_regex=RENDER_ORIGIN_REGEX`
+  - `allow_credentials=True`
+  - `allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"]`
+  - `allow_headers=["*"]`
+  - `expose_headers=["*"]`
+  - `max_age=600`
+
+#### B. Explicit Preflight OPTIONS Catch-All (`backend/main.py`)
+- Added `@app.options("/api/{rest_of_path:path}", include_in_schema=False)` returning `Response(status_code=status.HTTP_200_OK)`.
+- Eliminates 405 errors for direct OPTIONS requests across all API routes.
+
+#### C. Exception Handler CORS Wrapping (`backend/main.py`)
+- Added `@app.exception_handler(Exception)` that checks incoming `Origin` against allowed origins and regex, attaching `Access-Control-Allow-Origin`, `Access-Control-Allow-Credentials: true`, and `Vary: Origin` to 500 responses.
+- Ensures application-level errors never get masked as browser CORS blocks.
+
+#### D. Content Security Policy (`backend/main.py`)
+- Added `https://voxplan-api.onrender.com` to `connect-src` in `add_security_headers`.
+
+#### E. Container-Safe Concurrency (`backend/ml/train.py`)
+- Replaced `n_jobs=-1` with `n_jobs=min(2, os.cpu_count() or 1)` in `RandomForestClassifier`.
+- Retains model performance while preventing memory spikes and OOM container kills.
+
+#### F. Automated CORS & Preflight Test Suite (`backend/tests/test_cors_preflight.py`)
+- Comprehensive test coverage verifying:
+  - `is_allowed_origin` correctly matches production URL and Render regex while rejecting unauthorized external domains.
+  - Browser preflight `OPTIONS /api/train` returns 200 OK with `Access-Control-Allow-Origin: https://voxplan-u31l.onrender.com` and credentials header.
+  - Render preview subdomain preflight returns 200 OK with matching CORS headers.
+  - Direct OPTIONS requests return 200 OK across `/api/train`, `/api/predict`, `/api/model/status`, `/api/telemetry/events`, and `/api/feature-importance`.
+  - Actual `POST /api/train` executes, trains the RandomForest model, returns 200 OK, and includes CORS headers.
+  - Unauthorized origins do not receive `Access-Control-Allow-Origin`.
+
+---
+
+### 3. Automated Verification Results
+
+- **Backend Pytest Suite (`python -m pytest backend/tests/ -v`)**:
+  - **37 passed, 0 failed** in 6.33s.
+  - 8 new CORS and preflight tests all passing.
+  - 18 date handling tests all passing.
+  - 11 ML backend and prediction tests all passing.
+- **Frontend Test Suite (`npm test`)**:
+  - **1,322 passed, 0 failed** across 292 test suites.
+- **Linter (`npm run lint` / `oxlint`)**:
+  - **0 errors** across 142 files.
+- **Production Build (`npm run build` / `vite build`)**:
+  - Clean production build in 4.61s (`dist/` generated).

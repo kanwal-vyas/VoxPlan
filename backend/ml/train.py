@@ -52,7 +52,8 @@ def train_model(num_samples: int = 1200, random_seed: int = 42) -> Dict[str, Any
         min_samples_leaf=2,
         class_weight='balanced',
         random_state=random_seed,
-        n_jobs=-1
+        # Restrict workers to prevent OOM in containerized cloud environments
+        n_jobs=min(2, os.cpu_count() or 1)
     )
 
     pipeline = Pipeline([
