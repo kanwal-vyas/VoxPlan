@@ -1,6 +1,4 @@
-# syntax=docker/dockerfile:1
-# VoxPlan Machine Learning Backend — Blitz.cloud Container Deployment
-FROM python:3.12-slim AS runner
+FROM python:3.12-slim
 
 WORKDIR /app
 
